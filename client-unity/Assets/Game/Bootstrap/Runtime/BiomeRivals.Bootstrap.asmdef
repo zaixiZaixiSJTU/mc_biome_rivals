@@ -1,0 +1,10 @@
+{
+  "name": "BiomeRivals.Bootstrap",
+  "rootNamespace": "BiomeRivals.Bootstrap",
+  "references": [
+    "BiomeRivals.Core",
+    "BiomeRivals.Networking",
+    "BiomeRivals.Presentation"
+  ],
+  "autoReferenced": true
+}

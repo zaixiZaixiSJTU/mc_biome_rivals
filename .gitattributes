@@ -1,0 +1,15 @@
+* text=auto
+*.cs text eol=lf
+*.ts text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.md text eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.psd binary
+*.fbx binary
+*.unity binary
+*.prefab text eol=lf
+*.asset text eol=lf

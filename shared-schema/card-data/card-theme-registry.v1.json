@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "layoutId": "standard_portrait_v1",
+  "themes": [
+    {
+      "id": "plains_forest",
+      "displayName": "平原 & 森林",
+      "frameBase": "#355B2C",
+      "frameDark": "#1D3319",
+      "accent": "#D6B94C",
+      "rulesSurface": "#F4F0D9",
+      "titleText": "#FFFFFF",
+      "bodyText": "#182116",
+      "motif": "oak_leaf"
+    },
+    {
+      "id": "desert_badlands",
+      "displayName": "沙漠 & 恶地",
+      "frameBase": "#7A3F20",
+      "frameDark": "#422313",
+      "accent": "#4CB0A8",
+      "rulesSurface": "#FFF0CE",
+      "titleText": "#FFFFFF",
+      "bodyText": "#2A1A10",
+      "motif": "sandstone_terracotta"
+    },
+    {
+      "id": "snow_ice",
+      "displayName": "雪山 & 冰原",
+      "frameBase": "#315B78",
+      "frameDark": "#1B3345",
+      "accent": "#B9EAF0",
+      "rulesSurface": "#F5FBFE",
+      "titleText": "#FFFFFF",
+      "bodyText": "#132733",
+      "motif": "packed_ice_spruce"
+    },
+    {
+      "id": "cave_dark_forest",
+      "displayName": "洞穴 & 黑森林",
+      "frameBase": "#1D3432",
+      "frameDark": "#101D1C",
+      "accent": "#35B9A2",
+      "rulesSurface": "#E8E8DA",
+      "titleText": "#FFFFFF",
+      "bodyText": "#111918",
+      "motif": "deepslate_sculk"
+    },
+    {
+      "id": "ocean_river",
+      "displayName": "海洋 & 河流",
+      "frameBase": "#14586B",
+      "frameDark": "#0B3340",
+      "accent": "#E1C352",
+      "rulesSurface": "#E8F9F6",
+      "titleText": "#FFFFFF",
+      "bodyText": "#0C2730",
+      "motif": "prismarine_coral"
+    },
+    {
+      "id": "nether",
+      "displayName": "下界",
+      "frameBase": "#652326",
+      "frameDark": "#351315",
+      "accent": "#F29A38",
+      "rulesSurface": "#F5E2D4",
+      "titleText": "#FFFFFF",
+      "bodyText": "#2A1111",
+      "motif": "blackstone_ember"
+    },
+    {
+      "id": "end",
+      "displayName": "末地",
+      "frameBase": "#49335E",
+      "frameDark": "#281C35",
+      "accent": "#B7D75B",
+      "rulesSurface": "#F1EAF5",
+      "titleText": "#FFFFFF",
+      "bodyText": "#1B1123",
+      "motif": "purpur_end_stone"
+    }
+  ]
+}

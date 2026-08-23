@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://biome-rivals.local/schema/match-command.schema.json",
+  "title": "MatchCommandEnvelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocolVersion", "rulesetVersion", "commandId", "expectedRevision", "type", "payload"],
+  "properties": {
+    "protocolVersion": { "const": 1 },
+    "rulesetVersion": { "type": "string", "minLength": 1 },
+    "commandId": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "expectedRevision": { "type": "integer", "minimum": 0 },
+    "type": { "enum": ["END_TURN", "CONCEDE"] },
+    "payload": { "type": "object" }
+  }
+}

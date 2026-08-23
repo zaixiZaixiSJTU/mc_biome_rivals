@@ -1,0 +1,17 @@
+{
+  "name": "minecraft-biome-rivals",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "server-nakama"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace server-nakama",
+    "test": "npm run test --workspace server-nakama",
+    "typecheck": "npm run typecheck --workspace server-nakama"
+  },
+  "engines": {
+    "node": ">=20 <21",
+    "npm": ">=10"
+  }
+}

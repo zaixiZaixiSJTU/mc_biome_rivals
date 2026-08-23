@@ -1,0 +1,2120 @@
+{
+    "schemaVersion":  1,
+    "contentVersion":  1,
+    "source":  "docs/design/Minecraft_Biome_Rivals_Prototype_Cards_v0.1.md",
+    "entries":  [
+                    {
+                        "id":  "pf_001",
+                        "designId":  "PF-001",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.pf_001.name",
+                        "rulesTextKey":  "card.pf_001.rules",
+                        "factionId":  "plains_forest",
+                        "themeId":  "plains_forest",
+                        "rarity":  "COMMON",
+                        "cardType":  "UNIT",
+                        "cost":  1,
+                        "hasAttack":  true,
+                        "attack":  1,
+                        "hasHealth":  true,
+                        "health":  2,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.pf_001",
+                        "tags":  [
+                                     "arthropod",
+                                     "animal"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.pf_001.01"
+                                      ]
+                    },
+                    {
+                        "id":  "pf_002",
+                        "designId":  "PF-002",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.pf_002.name",
+                        "rulesTextKey":  "card.pf_002.rules",
+                        "factionId":  "plains_forest",
+                        "themeId":  "plains_forest",
+                        "rarity":  "COMMON",
+                        "cardType":  "UNIT",
+                        "cost":  2,
+                        "hasAttack":  true,
+                        "attack":  2,
+                        "hasHealth":  true,
+                        "health":  3,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.pf_002",
+                        "tags":  [
+                                     "animal"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.pf_002.01"
+                                      ]
+                    },
+                    {
+                        "id":  "pf_003",
+                        "designId":  "PF-003",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.pf_003.name",
+                        "rulesTextKey":  "card.pf_003.rules",
+                        "factionId":  "plains_forest",
+                        "themeId":  "plains_forest",
+                        "rarity":  "COMMON",
+                        "cardType":  "UNIT",
+                        "cost":  2,
+                        "hasAttack":  true,
+                        "attack":  3,
+                        "hasHealth":  true,
+                        "health":  2,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.pf_003",
+                        "tags":  [
+                                     "animal"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.pf_003.01"
+                                      ]
+                    },
+                    {
+                        "id":  "pf_004",
+                        "designId":  "PF-004",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.pf_004.name",
+                        "rulesTextKey":  "card.pf_004.rules",
+                        "factionId":  "plains_forest",
+                        "themeId":  "plains_forest",
+                        "rarity":  "RARE",
+                        "cardType":  "UNIT",
+                        "cost":  3,
+                        "hasAttack":  true,
+                        "attack":  2,
+                        "hasHealth":  true,
+                        "health":  4,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.pf_004",
+                        "tags":  [
+                                     "villager",
+                                     "trade"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.pf_004.01"
+                                      ]
+                    },
+                    {
+                        "id":  "pf_005",
+                        "designId":  "PF-005",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.pf_005.name",
+                        "rulesTextKey":  "card.pf_005.rules",
+                        "factionId":  "plains_forest",
+                        "themeId":  "plains_forest",
+                        "rarity":  "RARE",
+                        "cardType":  "BUILDING",
+                        "cost":  2,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  true,
+                        "health":  4,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  1,
+                        "artKey":  "card_art.pf_005",
+                        "tags":  [
+                                     "plant",
+                                     "production"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.pf_005.01"
+                                      ]
+                    },
+                    {
+                        "id":  "pf_006",
+                        "designId":  "PF-006",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.pf_006.name",
+                        "rulesTextKey":  "card.pf_006.rules",
+                        "factionId":  "plains_forest",
+                        "themeId":  "plains_forest",
+                        "rarity":  "RARE",
+                        "cardType":  "SPELL",
+                        "cost":  3,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  false,
+                        "health":  0,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.pf_006",
+                        "tags":  [
+                                     "breeding",
+                                     "nature"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.pf_006.01"
+                                      ]
+                    },
+                    {
+                        "id":  "pf_007",
+                        "designId":  "PF-007",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.pf_007.name",
+                        "rulesTextKey":  "card.pf_007.rules",
+                        "factionId":  "plains_forest",
+                        "themeId":  "plains_forest",
+                        "rarity":  "EPIC",
+                        "cardType":  "SPELL",
+                        "cost":  4,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  false,
+                        "health":  0,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.pf_007",
+                        "tags":  [
+                                     "nature"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.pf_007.01"
+                                      ]
+                    },
+                    {
+                        "id":  "pf_008",
+                        "designId":  "PF-008",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.pf_008.name",
+                        "rulesTextKey":  "card.pf_008.rules",
+                        "factionId":  "plains_forest",
+                        "themeId":  "plains_forest",
+                        "rarity":  "LEGENDARY",
+                        "cardType":  "UNIT",
+                        "cost":  6,
+                        "hasAttack":  true,
+                        "attack":  5,
+                        "hasHealth":  true,
+                        "health":  7,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.pf_008",
+                        "tags":  [
+                                     "golem"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.pf_008.01"
+                                      ]
+                    },
+                    {
+                        "id":  "db_001",
+                        "designId":  "DB-001",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.db_001.name",
+                        "rulesTextKey":  "card.db_001.rules",
+                        "factionId":  "desert_badlands",
+                        "themeId":  "desert_badlands",
+                        "rarity":  "COMMON",
+                        "cardType":  "UNIT",
+                        "cost":  1,
+                        "hasAttack":  true,
+                        "attack":  2,
+                        "hasHealth":  true,
+                        "health":  1,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.db_001",
+                        "tags":  [
+                                     "undead",
+                                     "zombie"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.db_001.01"
+                                      ]
+                    },
+                    {
+                        "id":  "db_002",
+                        "designId":  "DB-002",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.db_002.name",
+                        "rulesTextKey":  "card.db_002.rules",
+                        "factionId":  "desert_badlands",
+                        "themeId":  "desert_badlands",
+                        "rarity":  "COMMON",
+                        "cardType":  "MATERIAL",
+                        "cost":  1,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  false,
+                        "health":  0,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.db_002",
+                        "tags":  [
+                                     "archaeology",
+                                     "material"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.db_002.01"
+                                      ]
+                    },
+                    {
+                        "id":  "db_003",
+                        "designId":  "DB-003",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.db_003.name",
+                        "rulesTextKey":  "card.db_003.rules",
+                        "factionId":  "desert_badlands",
+                        "themeId":  "desert_badlands",
+                        "rarity":  "COMMON",
+                        "cardType":  "UNIT",
+                        "cost":  2,
+                        "hasAttack":  true,
+                        "attack":  2,
+                        "hasHealth":  true,
+                        "health":  3,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.db_003",
+                        "tags":  [
+                                     "villager",
+                                     "archaeology"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.db_003.01"
+                                      ]
+                    },
+                    {
+                        "id":  "db_004",
+                        "designId":  "DB-004",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.db_004.name",
+                        "rulesTextKey":  "card.db_004.rules",
+                        "factionId":  "desert_badlands",
+                        "themeId":  "desert_badlands",
+                        "rarity":  "RARE",
+                        "cardType":  "BUILDING",
+                        "cost":  2,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  true,
+                        "health":  5,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  1,
+                        "artKey":  "card_art.db_004",
+                        "tags":  [
+                                     "plant",
+                                     "defense"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.db_004.01"
+                                      ]
+                    },
+                    {
+                        "id":  "db_005",
+                        "designId":  "DB-005",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.db_005.name",
+                        "rulesTextKey":  "card.db_005.rules",
+                        "factionId":  "desert_badlands",
+                        "themeId":  "desert_badlands",
+                        "rarity":  "RARE",
+                        "cardType":  "UNIT",
+                        "cost":  3,
+                        "hasAttack":  true,
+                        "attack":  4,
+                        "hasHealth":  true,
+                        "health":  3,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.db_005",
+                        "tags":  [
+                                     "illager"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.db_005.01"
+                                      ]
+                    },
+                    {
+                        "id":  "db_006",
+                        "designId":  "DB-006",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.db_006.name",
+                        "rulesTextKey":  "card.db_006.rules",
+                        "factionId":  "desert_badlands",
+                        "themeId":  "desert_badlands",
+                        "rarity":  "COMMON",
+                        "cardType":  "SPELL",
+                        "cost":  3,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  false,
+                        "health":  0,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.db_006",
+                        "tags":  [
+                                     "nature"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.db_006.01"
+                                      ]
+                    },
+                    {
+                        "id":  "db_007",
+                        "designId":  "DB-007",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.db_007.name",
+                        "rulesTextKey":  "card.db_007.rules",
+                        "factionId":  "desert_badlands",
+                        "themeId":  "desert_badlands",
+                        "rarity":  "EPIC",
+                        "cardType":  "STRUCTURE",
+                        "cost":  5,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  true,
+                        "health":  8,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  2,
+                        "artKey":  "card_art.db_007",
+                        "tags":  [
+                                     "structure",
+                                     "archaeology"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.db_007.01"
+                                      ]
+                    },
+                    {
+                        "id":  "db_008",
+                        "designId":  "DB-008",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.db_008.name",
+                        "rulesTextKey":  "card.db_008.rules",
+                        "factionId":  "desert_badlands",
+                        "themeId":  "desert_badlands",
+                        "rarity":  "LEGENDARY",
+                        "cardType":  "UNIT",
+                        "cost":  5,
+                        "hasAttack":  true,
+                        "attack":  4,
+                        "hasHealth":  true,
+                        "health":  7,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.db_008",
+                        "tags":  [
+                                     "animal",
+                                     "trade"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.db_008.01"
+                                      ]
+                    },
+                    {
+                        "id":  "si_001",
+                        "designId":  "SI-001",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.si_001.name",
+                        "rulesTextKey":  "card.si_001.rules",
+                        "factionId":  "snow_ice",
+                        "themeId":  "snow_ice",
+                        "rarity":  "COMMON",
+                        "cardType":  "MATERIAL",
+                        "cost":  0,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  false,
+                        "health":  0,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.si_001",
+                        "tags":  [
+                                     "material",
+                                     "frostbite"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.si_001.01"
+                                      ]
+                    },
+                    {
+                        "id":  "si_002",
+                        "designId":  "SI-002",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.si_002.name",
+                        "rulesTextKey":  "card.si_002.rules",
+                        "factionId":  "snow_ice",
+                        "themeId":  "snow_ice",
+                        "rarity":  "COMMON",
+                        "cardType":  "UNIT",
+                        "cost":  2,
+                        "hasAttack":  true,
+                        "attack":  1,
+                        "hasHealth":  true,
+                        "health":  4,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.si_002",
+                        "tags":  [
+                                     "golem"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.si_002.01"
+                                      ]
+                    },
+                    {
+                        "id":  "si_003",
+                        "designId":  "SI-003",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.si_003.name",
+                        "rulesTextKey":  "card.si_003.rules",
+                        "factionId":  "snow_ice",
+                        "themeId":  "snow_ice",
+                        "rarity":  "RARE",
+                        "cardType":  "UNIT",
+                        "cost":  3,
+                        "hasAttack":  true,
+                        "attack":  3,
+                        "hasHealth":  true,
+                        "health":  3,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.si_003",
+                        "tags":  [
+                                     "undead",
+                                     "skeleton",
+                                     "frostbite"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.si_003.01"
+                                      ]
+                    },
+                    {
+                        "id":  "si_004",
+                        "designId":  "SI-004",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.si_004.name",
+                        "rulesTextKey":  "card.si_004.rules",
+                        "factionId":  "snow_ice",
+                        "themeId":  "snow_ice",
+                        "rarity":  "COMMON",
+                        "cardType":  "UNIT",
+                        "cost":  2,
+                        "hasAttack":  true,
+                        "attack":  3,
+                        "hasHealth":  true,
+                        "health":  2,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.si_004",
+                        "tags":  [
+                                     "animal"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.si_004.01"
+                                      ]
+                    },
+                    {
+                        "id":  "si_005",
+                        "designId":  "SI-005",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.si_005.name",
+                        "rulesTextKey":  "card.si_005.rules",
+                        "factionId":  "snow_ice",
+                        "themeId":  "snow_ice",
+                        "rarity":  "RARE",
+                        "cardType":  "UNIT",
+                        "cost":  4,
+                        "hasAttack":  true,
+                        "attack":  3,
+                        "hasHealth":  true,
+                        "health":  6,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.si_005",
+                        "tags":  [
+                                     "animal"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.si_005.01"
+                                      ]
+                    },
+                    {
+                        "id":  "si_006",
+                        "designId":  "SI-006",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.si_006.name",
+                        "rulesTextKey":  "card.si_006.rules",
+                        "factionId":  "snow_ice",
+                        "themeId":  "snow_ice",
+                        "rarity":  "COMMON",
+                        "cardType":  "SPELL",
+                        "cost":  2,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  false,
+                        "health":  0,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.si_006",
+                        "tags":  [
+                                     "frostbite"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.si_006.01"
+                                      ]
+                    },
+                    {
+                        "id":  "si_007",
+                        "designId":  "SI-007",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.si_007.name",
+                        "rulesTextKey":  "card.si_007.rules",
+                        "factionId":  "snow_ice",
+                        "themeId":  "snow_ice",
+                        "rarity":  "RARE",
+                        "cardType":  "BUILDING",
+                        "cost":  3,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  true,
+                        "health":  5,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  1,
+                        "artKey":  "card_art.si_007",
+                        "tags":  [
+                                     "healing"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.si_007.01"
+                                      ]
+                    },
+                    {
+                        "id":  "si_008",
+                        "designId":  "SI-008",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.si_008.name",
+                        "rulesTextKey":  "card.si_008.rules",
+                        "factionId":  "snow_ice",
+                        "themeId":  "snow_ice",
+                        "rarity":  "LEGENDARY",
+                        "cardType":  "STRUCTURE",
+                        "cost":  6,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  true,
+                        "health":  10,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  2,
+                        "artKey":  "card_art.si_008",
+                        "tags":  [
+                                     "structure",
+                                     "frostbite"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.si_008.01"
+                                      ]
+                    },
+                    {
+                        "id":  "cd_001",
+                        "designId":  "CD-001",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.cd_001.name",
+                        "rulesTextKey":  "card.cd_001.rules",
+                        "factionId":  "cave_dark_forest",
+                        "themeId":  "cave_dark_forest",
+                        "rarity":  "COMMON",
+                        "cardType":  "UNIT",
+                        "cost":  1,
+                        "hasAttack":  true,
+                        "attack":  1,
+                        "hasHealth":  true,
+                        "health":  2,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.cd_001",
+                        "tags":  [
+                                     "animal"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.cd_001.01"
+                                      ]
+                    },
+                    {
+                        "id":  "cd_002",
+                        "designId":  "CD-002",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.cd_002.name",
+                        "rulesTextKey":  "card.cd_002.rules",
+                        "factionId":  "cave_dark_forest",
+                        "themeId":  "cave_dark_forest",
+                        "rarity":  "COMMON",
+                        "cardType":  "UNIT",
+                        "cost":  2,
+                        "hasAttack":  true,
+                        "attack":  2,
+                        "hasHealth":  true,
+                        "health":  3,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.cd_002",
+                        "tags":  [
+                                     "arthropod"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.cd_002.01"
+                                      ]
+                    },
+                    {
+                        "id":  "cd_003",
+                        "designId":  "CD-003",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.cd_003.name",
+                        "rulesTextKey":  "card.cd_003.rules",
+                        "factionId":  "cave_dark_forest",
+                        "themeId":  "cave_dark_forest",
+                        "rarity":  "COMMON",
+                        "cardType":  "UNIT",
+                        "cost":  2,
+                        "hasAttack":  true,
+                        "attack":  3,
+                        "hasHealth":  true,
+                        "health":  2,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.cd_003",
+                        "tags":  [
+                                     "undead",
+                                     "skeleton"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.cd_003.01"
+                                      ]
+                    },
+                    {
+                        "id":  "cd_004",
+                        "designId":  "CD-004",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.cd_004.name",
+                        "rulesTextKey":  "card.cd_004.rules",
+                        "factionId":  "cave_dark_forest",
+                        "themeId":  "cave_dark_forest",
+                        "rarity":  "RARE",
+                        "cardType":  "BUILDING",
+                        "cost":  2,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  true,
+                        "health":  4,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  1,
+                        "artKey":  "card_art.cd_004",
+                        "tags":  [
+                                     "sculk",
+                                     "deep_dark"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.cd_004.01"
+                                      ]
+                    },
+                    {
+                        "id":  "cd_005",
+                        "designId":  "CD-005",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.cd_005.name",
+                        "rulesTextKey":  "card.cd_005.rules",
+                        "factionId":  "cave_dark_forest",
+                        "themeId":  "cave_dark_forest",
+                        "rarity":  "COMMON",
+                        "cardType":  "UNIT",
+                        "cost":  3,
+                        "hasAttack":  true,
+                        "attack":  4,
+                        "hasHealth":  true,
+                        "health":  3,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.cd_005",
+                        "tags":  [
+                                     "illager"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.cd_005.01"
+                                      ]
+                    },
+                    {
+                        "id":  "cd_006",
+                        "designId":  "CD-006",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.cd_006.name",
+                        "rulesTextKey":  "card.cd_006.rules",
+                        "factionId":  "cave_dark_forest",
+                        "themeId":  "cave_dark_forest",
+                        "rarity":  "RARE",
+                        "cardType":  "SPELL",
+                        "cost":  2,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  false,
+                        "health":  0,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.cd_006",
+                        "tags":  [
+                                     "deep_dark"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.cd_006.01"
+                                      ]
+                    },
+                    {
+                        "id":  "cd_007",
+                        "designId":  "CD-007",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.cd_007.name",
+                        "rulesTextKey":  "card.cd_007.rules",
+                        "factionId":  "cave_dark_forest",
+                        "themeId":  "cave_dark_forest",
+                        "rarity":  "EPIC",
+                        "cardType":  "STRUCTURE",
+                        "cost":  4,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  true,
+                        "health":  7,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  2,
+                        "artKey":  "card_art.cd_007",
+                        "tags":  [
+                                     "structure",
+                                     "production"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.cd_007.01"
+                                      ]
+                    },
+                    {
+                        "id":  "cd_008",
+                        "designId":  "CD-008",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.cd_008.name",
+                        "rulesTextKey":  "card.cd_008.rules",
+                        "factionId":  "cave_dark_forest",
+                        "themeId":  "cave_dark_forest",
+                        "rarity":  "LEGENDARY",
+                        "cardType":  "STRUCTURE",
+                        "cost":  7,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  true,
+                        "health":  11,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  3,
+                        "artKey":  "card_art.cd_008",
+                        "tags":  [
+                                     "structure",
+                                     "illager"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.cd_008.01"
+                                      ]
+                    },
+                    {
+                        "id":  "or_001",
+                        "designId":  "OR-001",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.or_001.name",
+                        "rulesTextKey":  "card.or_001.rules",
+                        "factionId":  "ocean_river",
+                        "themeId":  "ocean_river",
+                        "rarity":  "COMMON",
+                        "cardType":  "UNIT",
+                        "cost":  1,
+                        "hasAttack":  true,
+                        "attack":  1,
+                        "hasHealth":  true,
+                        "health":  2,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.or_001",
+                        "tags":  [
+                                     "aquatic",
+                                     "animal"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.or_001.01"
+                                      ]
+                    },
+                    {
+                        "id":  "or_002",
+                        "designId":  "OR-002",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.or_002.name",
+                        "rulesTextKey":  "card.or_002.rules",
+                        "factionId":  "ocean_river",
+                        "themeId":  "ocean_river",
+                        "rarity":  "COMMON",
+                        "cardType":  "UNIT",
+                        "cost":  2,
+                        "hasAttack":  true,
+                        "attack":  2,
+                        "hasHealth":  true,
+                        "health":  3,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.or_002",
+                        "tags":  [
+                                     "aquatic",
+                                     "animal"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.or_002.01"
+                                      ]
+                    },
+                    {
+                        "id":  "or_003",
+                        "designId":  "OR-003",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.or_003.name",
+                        "rulesTextKey":  "card.or_003.rules",
+                        "factionId":  "ocean_river",
+                        "themeId":  "ocean_river",
+                        "rarity":  "COMMON",
+                        "cardType":  "UNIT",
+                        "cost":  2,
+                        "hasAttack":  true,
+                        "attack":  3,
+                        "hasHealth":  true,
+                        "health":  2,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.or_003",
+                        "tags":  [
+                                     "undead",
+                                     "aquatic"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.or_003.01"
+                                      ]
+                    },
+                    {
+                        "id":  "or_004",
+                        "designId":  "OR-004",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.or_004.name",
+                        "rulesTextKey":  "card.or_004.rules",
+                        "factionId":  "ocean_river",
+                        "themeId":  "ocean_river",
+                        "rarity":  "RARE",
+                        "cardType":  "UNIT",
+                        "cost":  3,
+                        "hasAttack":  true,
+                        "attack":  3,
+                        "hasHealth":  true,
+                        "health":  4,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.or_004",
+                        "tags":  [
+                                     "aquatic",
+                                     "guardian"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.or_004.01"
+                                      ]
+                    },
+                    {
+                        "id":  "or_005",
+                        "designId":  "OR-005",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.or_005.name",
+                        "rulesTextKey":  "card.or_005.rules",
+                        "factionId":  "ocean_river",
+                        "themeId":  "ocean_river",
+                        "rarity":  "RARE",
+                        "cardType":  "UNIT",
+                        "cost":  4,
+                        "hasAttack":  true,
+                        "attack":  3,
+                        "hasHealth":  true,
+                        "health":  6,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.or_005",
+                        "tags":  [
+                                     "aquatic",
+                                     "animal"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.or_005.01"
+                                      ]
+                    },
+                    {
+                        "id":  "or_006",
+                        "designId":  "OR-006",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.or_006.name",
+                        "rulesTextKey":  "card.or_006.rules",
+                        "factionId":  "ocean_river",
+                        "themeId":  "ocean_river",
+                        "rarity":  "EPIC",
+                        "cardType":  "EQUIPMENT",
+                        "cost":  3,
+                        "hasAttack":  true,
+                        "attack":  2,
+                        "hasHealth":  false,
+                        "health":  0,
+                        "hasDurability":  true,
+                        "durability":  3,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.or_006",
+                        "tags":  [
+                                     "weapon",
+                                     "current"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.or_006.01"
+                                      ]
+                    },
+                    {
+                        "id":  "or_007",
+                        "designId":  "OR-007",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.or_007.name",
+                        "rulesTextKey":  "card.or_007.rules",
+                        "factionId":  "ocean_river",
+                        "themeId":  "ocean_river",
+                        "rarity":  "RARE",
+                        "cardType":  "BUILDING",
+                        "cost":  3,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  true,
+                        "health":  5,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  1,
+                        "artKey":  "card_art.or_007",
+                        "tags":  [
+                                     "aquatic",
+                                     "production"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.or_007.01"
+                                      ]
+                    },
+                    {
+                        "id":  "or_008",
+                        "designId":  "OR-008",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.or_008.name",
+                        "rulesTextKey":  "card.or_008.rules",
+                        "factionId":  "ocean_river",
+                        "themeId":  "ocean_river",
+                        "rarity":  "LEGENDARY",
+                        "cardType":  "STRUCTURE",
+                        "cost":  7,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  true,
+                        "health":  11,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  3,
+                        "artKey":  "card_art.or_008",
+                        "tags":  [
+                                     "structure",
+                                     "guardian"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.or_008.01"
+                                      ]
+                    },
+                    {
+                        "id":  "nt_001",
+                        "designId":  "NT-001",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.nt_001.name",
+                        "rulesTextKey":  "card.nt_001.rules",
+                        "factionId":  "nether",
+                        "themeId":  "nether",
+                        "rarity":  "COMMON",
+                        "cardType":  "UNIT",
+                        "cost":  1,
+                        "hasAttack":  true,
+                        "attack":  2,
+                        "hasHealth":  true,
+                        "health":  1,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.nt_001",
+                        "tags":  [
+                                     "magma"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.nt_001.01"
+                                      ]
+                    },
+                    {
+                        "id":  "nt_002",
+                        "designId":  "NT-002",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.nt_002.name",
+                        "rulesTextKey":  "card.nt_002.rules",
+                        "factionId":  "nether",
+                        "themeId":  "nether",
+                        "rarity":  "COMMON",
+                        "cardType":  "UNIT",
+                        "cost":  2,
+                        "hasAttack":  true,
+                        "attack":  2,
+                        "hasHealth":  true,
+                        "health":  2,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.nt_002",
+                        "tags":  [
+                                     "undead",
+                                     "piglin",
+                                     "magma"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.nt_002.01"
+                                      ]
+                    },
+                    {
+                        "id":  "nt_003",
+                        "designId":  "NT-003",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.nt_003.name",
+                        "rulesTextKey":  "card.nt_003.rules",
+                        "factionId":  "nether",
+                        "themeId":  "nether",
+                        "rarity":  "RARE",
+                        "cardType":  "UNIT",
+                        "cost":  3,
+                        "hasAttack":  true,
+                        "attack":  3,
+                        "hasHealth":  true,
+                        "health":  3,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.nt_003",
+                        "tags":  [
+                                     "fire"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.nt_003.01"
+                                      ]
+                    },
+                    {
+                        "id":  "nt_004",
+                        "designId":  "NT-004",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.nt_004.name",
+                        "rulesTextKey":  "card.nt_004.rules",
+                        "factionId":  "nether",
+                        "themeId":  "nether",
+                        "rarity":  "COMMON",
+                        "cardType":  "UNIT",
+                        "cost":  2,
+                        "hasAttack":  true,
+                        "attack":  2,
+                        "hasHealth":  true,
+                        "health":  4,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.nt_004",
+                        "tags":  [
+                                     "animal"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.nt_004.01"
+                                      ]
+                    },
+                    {
+                        "id":  "nt_005",
+                        "designId":  "NT-005",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.nt_005.name",
+                        "rulesTextKey":  "card.nt_005.rules",
+                        "factionId":  "nether",
+                        "themeId":  "nether",
+                        "rarity":  "EPIC",
+                        "cardType":  "UNIT",
+                        "cost":  4,
+                        "hasAttack":  true,
+                        "attack":  4,
+                        "hasHealth":  true,
+                        "health":  4,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.nt_005",
+                        "tags":  [
+                                     "undead",
+                                     "skeleton",
+                                     "wither"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.nt_005.01"
+                                      ]
+                    },
+                    {
+                        "id":  "nt_006",
+                        "designId":  "NT-006",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.nt_006.name",
+                        "rulesTextKey":  "card.nt_006.rules",
+                        "factionId":  "nether",
+                        "themeId":  "nether",
+                        "rarity":  "COMMON",
+                        "cardType":  "SPELL",
+                        "cost":  1,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  false,
+                        "health":  0,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.nt_006",
+                        "tags":  [
+                                     "fire"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.nt_006.01"
+                                      ]
+                    },
+                    {
+                        "id":  "nt_007",
+                        "designId":  "NT-007",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.nt_007.name",
+                        "rulesTextKey":  "card.nt_007.rules",
+                        "factionId":  "nether",
+                        "themeId":  "nether",
+                        "rarity":  "RARE",
+                        "cardType":  "BUILDING",
+                        "cost":  3,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  true,
+                        "health":  5,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  1,
+                        "artKey":  "card_art.nt_007",
+                        "tags":  [
+                                     "nether",
+                                     "redstone"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.nt_007.01"
+                                      ]
+                    },
+                    {
+                        "id":  "nt_008",
+                        "designId":  "NT-008",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.nt_008.name",
+                        "rulesTextKey":  "card.nt_008.rules",
+                        "factionId":  "nether",
+                        "themeId":  "nether",
+                        "rarity":  "LEGENDARY",
+                        "cardType":  "STRUCTURE",
+                        "cost":  7,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  true,
+                        "health":  10,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  3,
+                        "artKey":  "card_art.nt_008",
+                        "tags":  [
+                                     "structure",
+                                     "magma"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.nt_008.01"
+                                      ]
+                    },
+                    {
+                        "id":  "ed_001",
+                        "designId":  "ED-001",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.ed_001.name",
+                        "rulesTextKey":  "card.ed_001.rules",
+                        "factionId":  "end",
+                        "themeId":  "end",
+                        "rarity":  "COMMON",
+                        "cardType":  "UNIT",
+                        "cost":  1,
+                        "hasAttack":  true,
+                        "attack":  2,
+                        "hasHealth":  true,
+                        "health":  1,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.ed_001",
+                        "tags":  [
+                                     "ender",
+                                     "arthropod"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.ed_001.01"
+                                      ]
+                    },
+                    {
+                        "id":  "ed_002",
+                        "designId":  "ED-002",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.ed_002.name",
+                        "rulesTextKey":  "card.ed_002.rules",
+                        "factionId":  "end",
+                        "themeId":  "end",
+                        "rarity":  "COMMON",
+                        "cardType":  "MATERIAL",
+                        "cost":  1,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  false,
+                        "health":  0,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.ed_002",
+                        "tags":  [
+                                     "plant",
+                                     "material"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.ed_002.01"
+                                      ]
+                    },
+                    {
+                        "id":  "ed_003",
+                        "designId":  "ED-003",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.ed_003.name",
+                        "rulesTextKey":  "card.ed_003.rules",
+                        "factionId":  "end",
+                        "themeId":  "end",
+                        "rarity":  "RARE",
+                        "cardType":  "UNIT",
+                        "cost":  3,
+                        "hasAttack":  true,
+                        "attack":  4,
+                        "hasHealth":  true,
+                        "health":  3,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.ed_003",
+                        "tags":  [
+                                     "ender"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.ed_003.01"
+                                      ]
+                    },
+                    {
+                        "id":  "ed_004",
+                        "designId":  "ED-004",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.ed_004.name",
+                        "rulesTextKey":  "card.ed_004.rules",
+                        "factionId":  "end",
+                        "themeId":  "end",
+                        "rarity":  "RARE",
+                        "cardType":  "UNIT",
+                        "cost":  3,
+                        "hasAttack":  true,
+                        "attack":  2,
+                        "hasHealth":  true,
+                        "health":  4,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.ed_004",
+                        "tags":  [
+                                     "ender"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.ed_004.01"
+                                      ]
+                    },
+                    {
+                        "id":  "ed_005",
+                        "designId":  "ED-005",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.ed_005.name",
+                        "rulesTextKey":  "card.ed_005.rules",
+                        "factionId":  "end",
+                        "themeId":  "end",
+                        "rarity":  "COMMON",
+                        "cardType":  "SPELL",
+                        "cost":  2,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  false,
+                        "health":  0,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.ed_005",
+                        "tags":  [
+                                     "ender"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.ed_005.01"
+                                      ]
+                    },
+                    {
+                        "id":  "ed_006",
+                        "designId":  "ED-006",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.ed_006.name",
+                        "rulesTextKey":  "card.ed_006.rules",
+                        "factionId":  "end",
+                        "themeId":  "end",
+                        "rarity":  "EPIC",
+                        "cardType":  "SPELL",
+                        "cost":  3,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  false,
+                        "health":  0,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.ed_006",
+                        "tags":  [
+                                     "void",
+                                     "suspend"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.ed_006.01"
+                                      ]
+                    },
+                    {
+                        "id":  "ed_007",
+                        "designId":  "ED-007",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.ed_007.name",
+                        "rulesTextKey":  "card.ed_007.rules",
+                        "factionId":  "end",
+                        "themeId":  "end",
+                        "rarity":  "RARE",
+                        "cardType":  "BUILDING",
+                        "cost":  4,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  true,
+                        "health":  4,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  1,
+                        "artKey":  "card_art.ed_007",
+                        "tags":  [
+                                     "ender",
+                                     "ritual"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.ed_007.01"
+                                      ]
+                    },
+                    {
+                        "id":  "ed_008",
+                        "designId":  "ED-008",
+                        "contentVersion":  1,
+                        "collectible":  true,
+                        "nameKey":  "card.ed_008.name",
+                        "rulesTextKey":  "card.ed_008.rules",
+                        "factionId":  "end",
+                        "themeId":  "end",
+                        "rarity":  "LEGENDARY",
+                        "cardType":  "STRUCTURE",
+                        "cost":  8,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  true,
+                        "health":  12,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  3,
+                        "artKey":  "card_art.ed_008",
+                        "tags":  [
+                                     "structure",
+                                     "ritual"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.ed_008.01"
+                                      ]
+                    },
+                    {
+                        "id":  "tk_001",
+                        "designId":  "TK-001",
+                        "contentVersion":  1,
+                        "collectible":  false,
+                        "nameKey":  "card.tk_001.name",
+                        "rulesTextKey":  "card.tk_001.rules",
+                        "factionId":  "neutral",
+                        "themeId":  "plains_forest",
+                        "rarity":  "TOKEN",
+                        "cardType":  "MATERIAL",
+                        "cost":  0,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  false,
+                        "health":  0,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.tk_001",
+                        "tags":  [
+                                     "material",
+                                     "fiber"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.tk_001.01"
+                                      ]
+                    },
+                    {
+                        "id":  "tk_002",
+                        "designId":  "TK-002",
+                        "contentVersion":  1,
+                        "collectible":  false,
+                        "nameKey":  "card.tk_002.name",
+                        "rulesTextKey":  "card.tk_002.rules",
+                        "factionId":  "neutral",
+                        "themeId":  "plains_forest",
+                        "rarity":  "TOKEN",
+                        "cardType":  "MATERIAL",
+                        "cost":  0,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  false,
+                        "health":  0,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.tk_002",
+                        "tags":  [
+                                     "material",
+                                     "food"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.tk_002.01"
+                                      ]
+                    },
+                    {
+                        "id":  "tk_003",
+                        "designId":  "TK-003",
+                        "contentVersion":  1,
+                        "collectible":  false,
+                        "nameKey":  "card.tk_003.name",
+                        "rulesTextKey":  "card.tk_003.rules",
+                        "factionId":  "neutral",
+                        "themeId":  "plains_forest",
+                        "rarity":  "TOKEN",
+                        "cardType":  "UNIT",
+                        "cost":  1,
+                        "hasAttack":  true,
+                        "attack":  2,
+                        "hasHealth":  true,
+                        "health":  2,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.tk_003",
+                        "tags":  [
+                                     "animal",
+                                     "juvenile"
+                                 ],
+                        "effectImplementationStatus":  "NONE",
+                        "effectIds":  null
+                    },
+                    {
+                        "id":  "tk_004",
+                        "designId":  "TK-004",
+                        "contentVersion":  1,
+                        "collectible":  false,
+                        "nameKey":  "card.tk_004.name",
+                        "rulesTextKey":  "card.tk_004.rules",
+                        "factionId":  "neutral",
+                        "themeId":  "plains_forest",
+                        "rarity":  "TOKEN",
+                        "cardType":  "UNIT",
+                        "cost":  2,
+                        "hasAttack":  true,
+                        "attack":  2,
+                        "hasHealth":  true,
+                        "health":  2,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.tk_004",
+                        "tags":  [
+                                     "animal"
+                                 ],
+                        "effectImplementationStatus":  "NONE",
+                        "effectIds":  null
+                    },
+                    {
+                        "id":  "tk_005",
+                        "designId":  "TK-005",
+                        "contentVersion":  1,
+                        "collectible":  false,
+                        "nameKey":  "card.tk_005.name",
+                        "rulesTextKey":  "card.tk_005.rules",
+                        "factionId":  "neutral",
+                        "themeId":  "desert_badlands",
+                        "rarity":  "TOKEN",
+                        "cardType":  "MATERIAL",
+                        "cost":  0,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  false,
+                        "health":  0,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.tk_005",
+                        "tags":  [
+                                     "material",
+                                     "food"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.tk_005.01"
+                                      ]
+                    },
+                    {
+                        "id":  "tk_006",
+                        "designId":  "TK-006",
+                        "contentVersion":  1,
+                        "collectible":  false,
+                        "nameKey":  "card.tk_006.name",
+                        "rulesTextKey":  "card.tk_006.rules",
+                        "factionId":  "neutral",
+                        "themeId":  "desert_badlands",
+                        "rarity":  "TOKEN",
+                        "cardType":  "MATERIAL",
+                        "cost":  0,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  false,
+                        "health":  0,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.tk_006",
+                        "tags":  [
+                                     "material",
+                                     "archaeology"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.tk_006.01"
+                                      ]
+                    },
+                    {
+                        "id":  "tk_007",
+                        "designId":  "TK-007",
+                        "contentVersion":  1,
+                        "collectible":  false,
+                        "nameKey":  "card.tk_007.name",
+                        "rulesTextKey":  "card.tk_007.rules",
+                        "factionId":  "neutral",
+                        "themeId":  "desert_badlands",
+                        "rarity":  "TOKEN",
+                        "cardType":  "MATERIAL",
+                        "cost":  0,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  false,
+                        "health":  0,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.tk_007",
+                        "tags":  [
+                                     "archaeology"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.tk_007.01"
+                                      ]
+                    },
+                    {
+                        "id":  "tk_008",
+                        "designId":  "TK-008",
+                        "contentVersion":  1,
+                        "collectible":  false,
+                        "nameKey":  "card.tk_008.name",
+                        "rulesTextKey":  "card.tk_008.rules",
+                        "factionId":  "neutral",
+                        "themeId":  "desert_badlands",
+                        "rarity":  "TOKEN",
+                        "cardType":  "MATERIAL",
+                        "cost":  0,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  false,
+                        "health":  0,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.tk_008",
+                        "tags":  [
+                                     "archaeology",
+                                     "explosive"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.tk_008.01"
+                                      ]
+                    },
+                    {
+                        "id":  "tk_009",
+                        "designId":  "TK-009",
+                        "contentVersion":  1,
+                        "collectible":  false,
+                        "nameKey":  "card.tk_009.name",
+                        "rulesTextKey":  "card.tk_009.rules",
+                        "factionId":  "neutral",
+                        "themeId":  "snow_ice",
+                        "rarity":  "TOKEN",
+                        "cardType":  "MATERIAL",
+                        "cost":  0,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  false,
+                        "health":  0,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.tk_009",
+                        "tags":  [
+                                     "material"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.tk_009.01"
+                                      ]
+                    },
+                    {
+                        "id":  "tk_010",
+                        "designId":  "TK-010",
+                        "contentVersion":  1,
+                        "collectible":  false,
+                        "nameKey":  "card.tk_010.name",
+                        "rulesTextKey":  "card.tk_010.rules",
+                        "factionId":  "neutral",
+                        "themeId":  "cave_dark_forest",
+                        "rarity":  "TOKEN",
+                        "cardType":  "MATERIAL",
+                        "cost":  0,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  false,
+                        "health":  0,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.tk_010",
+                        "tags":  [
+                                     "material",
+                                     "stone"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.tk_010.01"
+                                      ]
+                    },
+                    {
+                        "id":  "tk_011",
+                        "designId":  "TK-011",
+                        "contentVersion":  1,
+                        "collectible":  false,
+                        "nameKey":  "card.tk_011.name",
+                        "rulesTextKey":  "card.tk_011.rules",
+                        "factionId":  "neutral",
+                        "themeId":  "cave_dark_forest",
+                        "rarity":  "TOKEN",
+                        "cardType":  "UNIT",
+                        "cost":  2,
+                        "hasAttack":  true,
+                        "attack":  2,
+                        "hasHealth":  true,
+                        "health":  2,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.tk_011",
+                        "tags":  [
+                                     "illager"
+                                 ],
+                        "effectImplementationStatus":  "NONE",
+                        "effectIds":  null
+                    },
+                    {
+                        "id":  "tk_012",
+                        "designId":  "TK-012",
+                        "contentVersion":  1,
+                        "collectible":  false,
+                        "nameKey":  "card.tk_012.name",
+                        "rulesTextKey":  "card.tk_012.rules",
+                        "factionId":  "neutral",
+                        "themeId":  "ocean_river",
+                        "rarity":  "TOKEN",
+                        "cardType":  "MATERIAL",
+                        "cost":  0,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  false,
+                        "health":  0,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.tk_012",
+                        "tags":  [
+                                     "material",
+                                     "prismarine"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.tk_012.01"
+                                      ]
+                    },
+                    {
+                        "id":  "tk_013",
+                        "designId":  "TK-013",
+                        "contentVersion":  1,
+                        "collectible":  false,
+                        "nameKey":  "card.tk_013.name",
+                        "rulesTextKey":  "card.tk_013.rules",
+                        "factionId":  "neutral",
+                        "themeId":  "nether",
+                        "rarity":  "TOKEN",
+                        "cardType":  "MATERIAL",
+                        "cost":  1,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  false,
+                        "health":  0,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.tk_013",
+                        "tags":  [
+                                     "material",
+                                     "fire"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.tk_013.01"
+                                      ]
+                    },
+                    {
+                        "id":  "tk_014",
+                        "designId":  "TK-014",
+                        "contentVersion":  1,
+                        "collectible":  false,
+                        "nameKey":  "card.tk_014.name",
+                        "rulesTextKey":  "card.tk_014.rules",
+                        "factionId":  "neutral",
+                        "themeId":  "nether",
+                        "rarity":  "TOKEN",
+                        "cardType":  "UNIT",
+                        "cost":  1,
+                        "hasAttack":  true,
+                        "attack":  1,
+                        "hasHealth":  true,
+                        "health":  1,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.tk_014",
+                        "tags":  [
+                                     "magma"
+                                 ],
+                        "effectImplementationStatus":  "NONE",
+                        "effectIds":  null
+                    },
+                    {
+                        "id":  "tk_015",
+                        "designId":  "TK-015",
+                        "contentVersion":  1,
+                        "collectible":  false,
+                        "nameKey":  "card.tk_015.name",
+                        "rulesTextKey":  "card.tk_015.rules",
+                        "factionId":  "neutral",
+                        "themeId":  "nether",
+                        "rarity":  "TOKEN",
+                        "cardType":  "UNIT",
+                        "cost":  3,
+                        "hasAttack":  true,
+                        "attack":  3,
+                        "hasHealth":  true,
+                        "health":  3,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.tk_015",
+                        "tags":  [
+                                     "undead",
+                                     "skeleton",
+                                     "wither"
+                                 ],
+                        "effectImplementationStatus":  "NONE",
+                        "effectIds":  null
+                    },
+                    {
+                        "id":  "tk_016",
+                        "designId":  "TK-016",
+                        "contentVersion":  1,
+                        "collectible":  false,
+                        "nameKey":  "card.tk_016.name",
+                        "rulesTextKey":  "card.tk_016.rules",
+                        "factionId":  "neutral",
+                        "themeId":  "end",
+                        "rarity":  "TOKEN",
+                        "cardType":  "MATERIAL",
+                        "cost":  1,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  false,
+                        "health":  0,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.tk_016",
+                        "tags":  [
+                                     "material",
+                                     "ender"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.tk_016.01"
+                                      ]
+                    },
+                    {
+                        "id":  "tk_017",
+                        "designId":  "TK-017",
+                        "contentVersion":  1,
+                        "collectible":  false,
+                        "nameKey":  "card.tk_017.name",
+                        "rulesTextKey":  "card.tk_017.rules",
+                        "factionId":  "neutral",
+                        "themeId":  "end",
+                        "rarity":  "TOKEN",
+                        "cardType":  "UNIT",
+                        "cost":  8,
+                        "hasAttack":  true,
+                        "attack":  8,
+                        "hasHealth":  true,
+                        "health":  8,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.tk_017",
+                        "tags":  [
+                                     "ender",
+                                     "dragon"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.tk_017.01"
+                                      ]
+                    },
+                    {
+                        "id":  "tk_018",
+                        "designId":  "TK-018",
+                        "contentVersion":  1,
+                        "collectible":  false,
+                        "nameKey":  "card.tk_018.name",
+                        "rulesTextKey":  "card.tk_018.rules",
+                        "factionId":  "neutral",
+                        "themeId":  "desert_badlands",
+                        "rarity":  "TOKEN",
+                        "cardType":  "MATERIAL",
+                        "cost":  1,
+                        "hasAttack":  false,
+                        "attack":  0,
+                        "hasHealth":  false,
+                        "health":  0,
+                        "hasDurability":  false,
+                        "durability":  0,
+                        "buildingSlots":  0,
+                        "artKey":  "card_art.tk_018",
+                        "tags":  [
+                                     "gem",
+                                     "trade"
+                                 ],
+                        "effectImplementationStatus":  "PENDING",
+                        "effectIds":  [
+                                          "effect.tk_018.01"
+                                      ]
+                    }
+                ]
+}

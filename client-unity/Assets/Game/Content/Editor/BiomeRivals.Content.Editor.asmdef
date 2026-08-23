@@ -1,0 +1,7 @@
+{
+  "name": "BiomeRivals.Content.Editor",
+  "rootNamespace": "BiomeRivals.Content.Editor",
+  "references": ["BiomeRivals.Content"],
+  "includePlatforms": ["Editor"],
+  "autoReferenced": true
+}

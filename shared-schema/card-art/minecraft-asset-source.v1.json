@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "edition": "Java",
+  "versionFolder": "1.21.10-Fabric",
+  "gameVersion": "1.21.10",
+  "validatedJarSha256": "E65CA028BC58DA12BF8413066C90ECD4D48C94FB351D9BBD22ECDFF5C87F9482",
+  "validatedJarSize": 30592168,
+  "sourcePolicy": "LOCAL_OWNED_INSTALLATION_ONLY",
+  "redistributionPolicy": "DO_NOT_COMMIT_EXTRACTED_ASSETS",
+  "usageGuidelines": "https://www.minecraft.net/usage-guidelines"
+}

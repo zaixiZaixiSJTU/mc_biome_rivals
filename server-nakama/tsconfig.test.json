@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "none",
+    "outFile": ".test-build/tests.js",
+    "strict": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "lib": ["ES2020", "DOM"]
+  },
+  "files": [
+    "src/rules/types.ts",
+    "src/rules/invariants.ts",
+    "src/rules/match-engine.ts",
+    "tests/test-harness.ts",
+    "tests/match-engine.test.ts"
+  ]
+}

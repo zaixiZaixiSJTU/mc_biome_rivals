@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://biome-rivals.local/schema/card-definition-registry.schema.json",
+  "title": "CardDefinitionRegistry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "contentVersion", "source", "entries"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "contentVersion": { "type": "integer", "minimum": 1 },
+    "source": { "type": "string", "minLength": 1 },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "card-definition.schema.json" }
+    }
+  }
+}

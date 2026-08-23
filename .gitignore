@@ -1,0 +1,42 @@
+# Local configuration and secrets
+.env
+*.local
+
+# Node / TypeScript
+node_modules/
+server-nakama/build/*
+!server-nakama/build/.gitkeep
+server-nakama/.test-build/
+coverage/
+*.tsbuildinfo
+npm-debug.log*
+
+# Unity generated files
+client-unity/[Ll]ibrary/
+client-unity/[Tt]emp/
+client-unity/[Oo]bj/
+client-unity/[Bb]uild/
+client-unity/[Bb]uilds/
+client-unity/[Ll]ogs/
+client-unity/[Uu]ser[Ss]ettings/
+client-unity/MemoryCaptures/
+client-unity/Recordings/
+client-unity/Assets/Generated/MinecraftCardIcons/*
+!client-unity/Assets/Generated/MinecraftCardIcons/.gitkeep
+*.csproj
+*.sln
+*.user
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vs/
+.vscode/settings.json

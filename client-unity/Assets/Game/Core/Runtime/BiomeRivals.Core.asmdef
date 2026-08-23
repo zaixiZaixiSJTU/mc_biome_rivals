@@ -1,0 +1,7 @@
+{
+  "name": "BiomeRivals.Core",
+  "rootNamespace": "BiomeRivals.Core",
+  "references": [],
+  "autoReferenced": true,
+  "noEngineReferences": true
+}

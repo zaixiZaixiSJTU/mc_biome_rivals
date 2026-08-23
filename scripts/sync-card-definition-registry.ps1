@@ -1,0 +1,141 @@
+﻿[CmdletBinding()]
+param(
+    [string]$SourceMarkdown = 'docs\design\Minecraft_Biome_Rivals_Prototype_Cards_v0.1.md',
+    [string]$DefinitionOutput = 'shared-schema\card-data\card-definition-registry.v1.json',
+    [string]$TextOutput = 'shared-schema\card-data\localization\card-text-registry.zh-CN.v1.json'
+)
+
+$ErrorActionPreference = 'Stop'
+$repoRoot = Split-Path -Parent $PSScriptRoot
+$sourcePath = Join-Path $repoRoot $SourceMarkdown
+if (-not (Test-Path -LiteralPath $sourcePath)) { throw "Card design source not found: $sourcePath" }
+
+$factionByPrefix = [ordered]@{
+    PF = 'plains_forest'; DB = 'desert_badlands'; SI = 'snow_ice'; CD = 'cave_dark_forest'
+    OR = 'ocean_river'; NT = 'nether'; ED = 'end'
+}
+$tokenThemeByNumber = @{
+    1='plains_forest'; 2='plains_forest'; 3='plains_forest'; 4='plains_forest'
+    5='desert_badlands'; 6='desert_badlands'; 7='desert_badlands'; 8='desert_badlands'
+    9='snow_ice'; 10='cave_dark_forest'; 11='cave_dark_forest'; 12='ocean_river'
+    13='nether'; 14='nether'; 15='nether'; 16='end'; 17='end'; 18='desert_badlands'
+}
+$rarityMap = [ordered]@{ '常见'='COMMON'; '稀有'='RARE'; '史诗'='EPIC'; '传说'='LEGENDARY' }
+$tagMap = [ordered]@{
+    '节肢'='arthropod'; '动物'='animal'; '村民'='villager'; '交易'='trade'; '植物'='plant'
+    '生产'='production'; '繁殖'='breeding'; '自然'='nature'; '傀儡'='golem'; '亡灵'='undead'
+    '僵尸'='zombie'; '考古'='archaeology'; '材料'='material'; '防御'='defense'; '灾厄'='illager'
+    '结构'='structure'; '冻伤'='frostbite'; '骷髅'='skeleton'; '回复'='healing'; '幽匿'='sculk'
+    '深暗'='deep_dark'; '水生'='aquatic'; '守卫者'='guardian'; '武器'='weapon'; '水流'='current'
+    '岩浆'='magma'; '猪灵'='piglin'; '火焰'='fire'; '凋灵'='wither'; '下界'='nether'
+    '红石'='redstone'; '末影'='ender'; '仪式'='ritual'; '虚空'='void'; '悬置'='suspend'
+    '纤维'='fiber'; '食物'='food'; '幼体'='juvenile'; '掩埋'='buried'; '爆炸'='explosive'
+    '石材'='stone'; '海晶'='prismarine'; '龙'='dragon'; '宝石'='gem'
+}
+
+function Normalize-RulesText([string]$Value) {
+    return $Value.Replace('**', '').Trim()
+}
+
+function Resolve-CardType([string]$TypeLabel) {
+    if ($TypeLabel -match '生物') { return 'UNIT' }
+    if ($TypeLabel -match '建筑') { return 'BUILDING' }
+    if ($TypeLabel -match '结构') { return 'STRUCTURE' }
+    if ($TypeLabel -match '装备') { return 'EQUIPMENT' }
+    if ($TypeLabel -match '法术') { return 'SPELL' }
+    return 'MATERIAL'
+}
+
+$definitions = [System.Collections.Generic.List[object]]::new()
+$texts = [System.Collections.Generic.List[object]]::new()
+$seenIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+
+foreach ($line in Get-Content -LiteralPath $sourcePath -Encoding UTF8) {
+    if ($line -notmatch '^\|\s*(?<designId>(?:PF|DB|SI|CD|OR|NT|ED|TK)-\d{3})\s*\|') { continue }
+    $cells = @($line.Trim().Trim('|').Split('|') | ForEach-Object { $_.Trim() })
+    $designId = $Matches['designId']
+    $cardId = $designId.ToLowerInvariant().Replace('-', '_')
+    if (-not $seenIds.Add($cardId)) { throw "Duplicate card id: $cardId" }
+
+    $isToken = $designId.StartsWith('TK-', [System.StringComparison]::Ordinal)
+    if ($isToken) {
+        if ($cells.Count -lt 7) { throw "Incomplete token row: $designId" }
+        $name, $typeLabel, $costText, $attributeText, $tagText, $rulesText = $cells[1..6]
+        $rarityLabel = '衍生'
+        $rarity = 'TOKEN'
+        $designNotes = '不可收集衍生牌'
+        $factionId = 'neutral'
+        $tokenNumber = [int]$designId.Substring(3)
+        $themeId = $tokenThemeByNumber[$tokenNumber]
+    }
+    else {
+        if ($cells.Count -lt 9) { throw "Incomplete collectible row: $designId" }
+        $name, $rarityLabel, $typeLabel, $costText, $attributeText, $tagText, $rulesText, $designNotes = $cells[1..8]
+        $rarity = $rarityMap[$rarityLabel]
+        if (-not $rarity) { throw "Unknown rarity '$rarityLabel' for $designId" }
+        $prefix = $designId.Substring(0, 2)
+        $factionId = $factionByPrefix[$prefix]
+        $themeId = $factionId
+    }
+
+    $cardType = Resolve-CardType $typeLabel
+    $cost = [int]$costText
+    $tags = @()
+    $tagLabels = @($tagText.Split('/') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    foreach ($tagLabel in $tagLabels) {
+        $tag = $tagMap[$tagLabel]
+        if (-not $tag) { throw "Unregistered tag '$tagLabel' for $designId" }
+        $tags += $tag
+    }
+
+    $hasAttack = $false; $attack = 0; $hasHealth = $false; $health = 0
+    $hasDurability = $false; $durability = 0; $buildingSlots = 0
+    if ($cardType -eq 'UNIT' -and $attributeText -match '^(\d+)\s*/\s*(\d+)$') {
+        $hasAttack = $true; $attack = [int]$Matches[1]; $hasHealth = $true; $health = [int]$Matches[2]
+    }
+    elseif ($cardType -eq 'BUILDING' -and $attributeText -match '^(\d+)$') {
+        $hasHealth = $true; $health = [int]$Matches[1]; $buildingSlots = 1
+    }
+    elseif ($cardType -eq 'STRUCTURE' -and $attributeText -match '^(\d+)\s*[；;]\s*(\d+)\s*格$') {
+        $hasHealth = $true; $health = [int]$Matches[1]; $buildingSlots = [int]$Matches[2]
+    }
+    elseif ($cardType -eq 'EQUIPMENT' -and $attributeText -match '^(\d+)\s*/\s*(\d+)$') {
+        $hasAttack = $true; $attack = [int]$Matches[1]; $hasDurability = $true; $durability = [int]$Matches[2]
+    }
+    elseif ($cardType -notin @('SPELL','MATERIAL')) {
+        throw "Unsupported attributes '$attributeText' for $designId ($cardType)"
+    }
+
+    $normalizedRules = Normalize-RulesText $rulesText
+    $hasEffect = $normalizedRules -and $normalizedRules -ne '无卡牌文本。'
+    [string[]]$effectIds = if ($hasEffect) { @("effect.$cardId.01") } else { @() }
+    $definitions.Add([ordered]@{
+        id=$cardId; designId=$designId; contentVersion=1; collectible=(-not $isToken)
+        nameKey="card.$cardId.name"; rulesTextKey="card.$cardId.rules"
+        factionId=$factionId; themeId=$themeId; rarity=$rarity; cardType=$cardType; cost=$cost
+        hasAttack=$hasAttack; attack=$attack; hasHealth=$hasHealth; health=$health
+        hasDurability=$hasDurability; durability=$durability; buildingSlots=$buildingSlots
+        artKey="card_art.$cardId"; tags=([string[]]$tags)
+        effectImplementationStatus=$(if ($hasEffect) { 'PENDING' } else { 'NONE' })
+        effectIds=$effectIds
+    })
+    $texts.Add([ordered]@{
+        id=$cardId; nameKey="card.$cardId.name"; name=$name
+        rulesTextKey="card.$cardId.rules"; rulesText=$normalizedRules
+        typeLabel=$typeLabel; rarityLabel=$rarityLabel; tagLabels=([string[]]$tagLabels); designNotes=$designNotes
+    })
+}
+
+if ($definitions.Count -ne 74) { throw "Expected 74 card definitions, found $($definitions.Count)." }
+$definitionDocument = [ordered]@{ schemaVersion=1; contentVersion=1; source=$SourceMarkdown.Replace('\','/'); entries=$definitions }
+$textDocument = [ordered]@{ schemaVersion=1; locale='zh-CN'; source=$SourceMarkdown.Replace('\','/'); entries=$texts }
+
+foreach ($output in @(
+    @((Join-Path $repoRoot $DefinitionOutput), $definitionDocument),
+    @((Join-Path $repoRoot $TextOutput), $textDocument)
+)) {
+    [System.IO.Directory]::CreateDirectory((Split-Path -Parent $output[0])) | Out-Null
+    $json = $output[1] | ConvertTo-Json -Depth 10
+    [System.IO.File]::WriteAllText($output[0], $json + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false))
+}
+Write-Output "Registered $($definitions.Count) complete card definitions and localized texts."

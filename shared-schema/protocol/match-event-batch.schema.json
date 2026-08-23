@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://biome-rivals.local/schema/match-event-batch.schema.json",
+  "title": "MatchEventBatch",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocolVersion", "rulesetVersion", "revision", "acknowledgedCommandId", "events"],
+  "properties": {
+    "protocolVersion": { "const": 1 },
+    "rulesetVersion": { "type": "string" },
+    "revision": { "type": "integer", "minimum": 0 },
+    "acknowledgedCommandId": { "type": "string" },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["eventId", "type", "payload"],
+        "properties": {
+          "eventId": { "type": "integer", "minimum": 1 },
+          "type": { "enum": ["TURN_ENDED", "TURN_STARTED", "PLAYER_CONCEDED", "MATCH_ENDED"] },
+          "payload": { "type": "object" }
+        }
+      }
+    }
+  }
+}

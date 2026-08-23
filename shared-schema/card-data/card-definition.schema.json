@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://biome-rivals.local/schema/card-definition.schema.json",
+  "title": "CardDefinition",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "designId", "contentVersion", "collectible", "nameKey", "rulesTextKey", "factionId", "themeId", "rarity", "cardType", "cost", "hasAttack", "attack", "hasHealth", "health", "hasDurability", "durability", "buildingSlots", "artKey", "tags", "effectImplementationStatus", "effectIds"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+    "designId": { "type": "string", "pattern": "^(PF|DB|SI|CD|OR|NT|ED|TK)-[0-9]{3}$" },
+    "contentVersion": { "type": "integer", "minimum": 1 },
+    "collectible": { "type": "boolean" },
+    "nameKey": { "type": "string", "minLength": 1 },
+    "rulesTextKey": { "type": "string", "minLength": 1 },
+    "factionId": {
+      "enum": [
+        "plains_forest",
+        "desert_badlands",
+        "snow_ice",
+        "cave_dark_forest",
+        "ocean_river",
+        "nether",
+        "end",
+        "neutral"
+      ]
+    },
+    "themeId": {
+      "enum": ["plains_forest", "desert_badlands", "snow_ice", "cave_dark_forest", "ocean_river", "nether", "end"]
+    },
+    "rarity": { "enum": ["COMMON", "RARE", "EPIC", "LEGENDARY", "TOKEN"] },
+    "cardType": {
+      "enum": ["UNIT", "SPELL", "BUILDING", "STRUCTURE", "EQUIPMENT", "MATERIAL"]
+    },
+    "cost": { "type": "integer", "minimum": 0 },
+    "hasAttack": { "type": "boolean" },
+    "attack": { "type": "integer", "minimum": 0 },
+    "hasHealth": { "type": "boolean" },
+    "health": { "type": "integer", "minimum": 0 },
+    "hasDurability": { "type": "boolean" },
+    "durability": { "type": "integer", "minimum": 0 },
+    "buildingSlots": { "type": "integer", "minimum": 0, "maximum": 7 },
+    "artKey": { "type": "string", "pattern": "^card_art\\.[a-z0-9_]+$" },
+    "tags": { "type": "array", "items": { "type": "string", "pattern": "^[a-z0-9_]+$" }, "uniqueItems": true },
+    "effectImplementationStatus": { "enum": ["NONE", "PENDING", "IMPLEMENTED"] },
+    "effectIds": { "type": "array", "items": { "type": "string", "pattern": "^effect\\.[a-z0-9_]+\\.[0-9]{2}$" }, "uniqueItems": true }
+  }
+}

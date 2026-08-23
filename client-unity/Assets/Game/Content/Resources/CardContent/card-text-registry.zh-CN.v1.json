@@ -1,0 +1,1020 @@
+{
+    "schemaVersion":  1,
+    "locale":  "zh-CN",
+    "source":  "docs/design/Minecraft_Biome_Rivals_Prototype_Cards_v0.1.md",
+    "entries":  [
+                    {
+                        "id":  "pf_001",
+                        "nameKey":  "card.pf_001.name",
+                        "name":  "蜜蜂",
+                        "rulesTextKey":  "card.pf_001.rules",
+                        "rulesText":  "战吼：为己方英雄恢复 1 点生命。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "常见",
+                        "tagLabels":  [
+                                          "节肢",
+                                          "动物"
+                                      ],
+                        "designNotes":  "低费站场与回复基线。"
+                    },
+                    {
+                        "id":  "pf_002",
+                        "nameKey":  "card.pf_002.name",
+                        "name":  "放牧绵羊",
+                        "rulesTextKey":  "card.pf_002.rules",
+                        "rulesText":  "掉落：羊毛。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "常见",
+                        "tagLabels":  [
+                                          "动物"
+                                      ],
+                        "designNotes":  "标准身材；让击杀与材料产生权衡。"
+                    },
+                    {
+                        "id":  "pf_003",
+                        "nameKey":  "card.pf_003.name",
+                        "name":  "驯服的狼",
+                        "rulesTextKey":  "card.pf_003.rules",
+                        "rulesText":  "战吼：若相邻位置有另一个己方动物，获得 +0/+1。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "常见",
+                        "tagLabels":  [
+                                          "动物"
+                                      ],
+                        "designNotes":  "教学相邻站位。"
+                    },
+                    {
+                        "id":  "pf_004",
+                        "nameKey":  "card.pf_004.name",
+                        "name":  "村民农夫",
+                        "rulesTextKey":  "card.pf_004.rules",
+                        "rulesText":  "战吼：将 1 张“小麦”置入手牌。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "稀有",
+                        "tagLabels":  [
+                                          "村民",
+                                          "交易"
+                                      ],
+                        "designNotes":  "村庄、动物和合成的接口。"
+                    },
+                    {
+                        "id":  "pf_005",
+                        "nameKey":  "card.pf_005.name",
+                        "name":  "林地苗圃",
+                        "rulesTextKey":  "card.pf_005.rules",
+                        "rulesText":  "每回合第一次召唤己方动物后，使其获得 +0/+1。",
+                        "typeLabel":  "建筑",
+                        "rarityLabel":  "稀有",
+                        "tagLabels":  [
+                                          "植物",
+                                          "生产"
+                                      ],
+                        "designNotes":  "可被攻击的长期成长引擎。"
+                    },
+                    {
+                        "id":  "pf_006",
+                        "nameKey":  "card.pf_006.name",
+                        "name":  "繁殖季节",
+                        "rulesTextKey":  "card.pf_006.rules",
+                        "rulesText":  "选择两个共享“动物”标签的己方生物，使其各获得 +0/+1；若有空单位格，再召唤一个 2/2 的“幼年动物”。",
+                        "typeLabel":  "法术",
+                        "rarityLabel":  "稀有",
+                        "tagLabels":  [
+                                          "繁殖",
+                                          "自然"
+                                      ],
+                        "designNotes":  "直接验证繁殖条件和满格边界。"
+                    },
+                    {
+                        "id":  "pf_007",
+                        "nameKey":  "card.pf_007.name",
+                        "name":  "林间集结",
+                        "rulesTextKey":  "card.pf_007.rules",
+                        "rulesText":  "召唤两个 2/2 的“林地伙伴”；每因单位格不足少召唤一个，改为抽 1 张牌。",
+                        "typeLabel":  "法术",
+                        "rarityLabel":  "史诗",
+                        "tagLabels":  [
+                                          "自然"
+                                      ],
+                        "designNotes":  "防止满场时完全卡手的中期铺场。"
+                    },
+                    {
+                        "id":  "pf_008",
+                        "nameKey":  "card.pf_008.name",
+                        "name":  "铁傀儡",
+                        "rulesTextKey":  "card.pf_008.rules",
+                        "rulesText":  "嘲讽。战吼：若己方控制建筑，获得 +1/+1。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "传说",
+                        "tagLabels":  [
+                                          "傀儡"
+                                      ],
+                        "designNotes":  "建筑体系的高费保护者。"
+                    },
+                    {
+                        "id":  "db_001",
+                        "nameKey":  "card.db_001.name",
+                        "name":  "尸壳",
+                        "rulesTextKey":  "card.db_001.rules",
+                        "rulesText":  "掉落：腐肉。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "常见",
+                        "tagLabels":  [
+                                          "亡灵",
+                                          "僵尸"
+                                      ],
+                        "designNotes":  "侵略性基础生物和掉落教学。"
+                    },
+                    {
+                        "id":  "db_002",
+                        "nameKey":  "card.db_002.name",
+                        "name":  "可疑的沙子",
+                        "rulesTextKey":  "card.db_002.rules",
+                        "rulesText":  "掩埋 1 张“陶片”；己方英雄获得 1 点护甲。",
+                        "typeLabel":  "材料",
+                        "rarityLabel":  "常见",
+                        "tagLabels":  [
+                                          "考古",
+                                          "材料"
+                                      ],
+                        "designNotes":  "用即时小收益补偿延迟。"
+                    },
+                    {
+                        "id":  "db_003",
+                        "nameKey":  "card.db_003.name",
+                        "name":  "沙漠考古学家",
+                        "rulesTextKey":  "card.db_003.rules",
+                        "rulesText":  "战吼：查看己方牌库顶 3 张牌；若其中有掩埋牌，抽取其中 1 张，其余牌保持相对顺序放回牌库顶。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "常见",
+                        "tagLabels":  [
+                                          "村民",
+                                          "考古"
+                                      ],
+                        "designNotes":  "主动挖掘组件。"
+                    },
+                    {
+                        "id":  "db_004",
+                        "nameKey":  "card.db_004.name",
+                        "name":  "仙人掌围栏",
+                        "rulesTextKey":  "card.db_004.rules",
+                        "rulesText":  "每回合第一次有敌方生物攻击己方英雄后，对攻击者造成 1 点伤害。",
+                        "typeLabel":  "建筑",
+                        "rarityLabel":  "稀有",
+                        "tagLabels":  [
+                                          "植物",
+                                          "防御"
+                                      ],
+                        "designNotes":  "不使用嘲讽的建筑防御方案。"
+                    },
+                    {
+                        "id":  "db_005",
+                        "nameKey":  "card.db_005.name",
+                        "name":  "恶地劫掠者",
+                        "rulesTextKey":  "card.db_005.rules",
+                        "rulesText":  "若本回合己方曾抽到掩埋牌，则本牌费用减少 1。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "稀有",
+                        "tagLabels":  [
+                                          "灾厄"
+                                      ],
+                        "designNotes":  "将考古收益转化为节奏。"
+                    },
+                    {
+                        "id":  "db_006",
+                        "nameKey":  "card.db_006.name",
+                        "name":  "沙尘暴",
+                        "rulesTextKey":  "card.db_006.rules",
+                        "rulesText":  "对所有生物造成 2 点伤害。",
+                        "typeLabel":  "法术",
+                        "rarityLabel":  "常见",
+                        "tagLabels":  [
+                                          "自然"
+                                      ],
+                        "designNotes":  "对称清场；惩罚过度铺场。"
+                    },
+                    {
+                        "id":  "db_007",
+                        "nameKey":  "card.db_007.name",
+                        "name":  "沙漠神殿",
+                        "rulesTextKey":  "card.db_007.rules",
+                        "rulesText":  "战吼：掩埋 1 张“藏宝图”和 1 张“炸药机关”。每当己方抽到掩埋牌，为本结构恢复 2 点生命。",
+                        "typeLabel":  "结构",
+                        "rarityLabel":  "史诗",
+                        "tagLabels":  [
+                                          "结构",
+                                          "考古"
+                                      ],
+                        "designNotes":  "用建筑空间换取两次延迟爆发。"
+                    },
+                    {
+                        "id":  "db_008",
+                        "nameKey":  "card.db_008.name",
+                        "name":  "商队领头骆驼",
+                        "rulesTextKey":  "card.db_008.rules",
+                        "rulesText":  "战吼：查看己方牌库顶 5 张牌，抽取其中 1 张掩埋牌；若没有，则将 1 张“绿宝石”置入手牌。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "传说",
+                        "tagLabels":  [
+                                          "动物",
+                                          "交易"
+                                      ],
+                        "designNotes":  "考古套牌的稳定器，避免完全落空。"
+                    },
+                    {
+                        "id":  "si_001",
+                        "nameKey":  "card.si_001.name",
+                        "name":  "雪球",
+                        "rulesTextKey":  "card.si_001.rules",
+                        "rulesText":  "使一个敌方生物本回合获得 -1 攻击力。",
+                        "typeLabel":  "材料",
+                        "rarityLabel":  "常见",
+                        "tagLabels":  [
+                                          "材料",
+                                          "冻伤"
+                                      ],
+                        "designNotes":  "零费材料与小型减攻工具。"
+                    },
+                    {
+                        "id":  "si_002",
+                        "nameKey":  "card.si_002.name",
+                        "name":  "雪傀儡",
+                        "rulesTextKey":  "card.si_002.rules",
+                        "rulesText":  "战吼：将 1 张“雪球”置入手牌。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "常见",
+                        "tagLabels":  [
+                                          "傀儡"
+                                      ],
+                        "designNotes":  "低攻击防守身材和材料来源。"
+                    },
+                    {
+                        "id":  "si_003",
+                        "nameKey":  "card.si_003.name",
+                        "name":  "流浪者",
+                        "rulesTextKey":  "card.si_003.rules",
+                        "rulesText":  "战吼：对一个敌方生物施加“缓慢”。掉落：骨头。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "稀有",
+                        "tagLabels":  [
+                                          "亡灵",
+                                          "骷髅",
+                                          "冻伤"
+                                      ],
+                        "designNotes":  "牺牲 1 点身材换一回合节奏。"
+                    },
+                    {
+                        "id":  "si_004",
+                        "nameKey":  "card.si_004.name",
+                        "name":  "山羊",
+                        "rulesTextKey":  "card.si_004.rules",
+                        "rulesText":  "战吼：可以将一个相邻己方生物移动到其另一侧的相邻空格；若成功移动，本牌本回合获得 +1 攻击力。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "常见",
+                        "tagLabels":  [
+                                          "动物"
+                                      ],
+                        "designNotes":  "位移教学和窄位收益。"
+                    },
+                    {
+                        "id":  "si_005",
+                        "nameKey":  "card.si_005.name",
+                        "name":  "北极熊",
+                        "rulesTextKey":  "card.si_005.rules",
+                        "rulesText":  "嘲讽。若己方英雄生命值不高于 15，本牌获得 +1 攻击力。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "稀有",
+                        "tagLabels":  [
+                                          "动物"
+                                      ],
+                        "designNotes":  "控制套牌的中期护卫。"
+                    },
+                    {
+                        "id":  "si_006",
+                        "nameKey":  "card.si_006.name",
+                        "name":  "粉雪桶",
+                        "rulesTextKey":  "card.si_006.rules",
+                        "rulesText":  "对一个敌方生物施加“缓慢”；在该状态移除前，它还具有 -2 攻击力。",
+                        "typeLabel":  "法术",
+                        "rarityLabel":  "常见",
+                        "tagLabels":  [
+                                          "冻伤"
+                                      ],
+                        "designNotes":  "控制高攻击目标但不直接解场。"
+                    },
+                    {
+                        "id":  "si_007",
+                        "nameKey":  "card.si_007.name",
+                        "name":  "雪屋",
+                        "rulesTextKey":  "card.si_007.rules",
+                        "rulesText":  "己方起始阶段，为一个受伤最重的己方生物恢复 1 点生命；并列时由己方选择。",
+                        "typeLabel":  "建筑",
+                        "rarityLabel":  "稀有",
+                        "tagLabels":  [
+                                          "回复"
+                                      ],
+                        "designNotes":  "迫使对手处理的持续恢复点。"
+                    },
+                    {
+                        "id":  "si_008",
+                        "nameKey":  "card.si_008.name",
+                        "name":  "冰刺之巅",
+                        "rulesTextKey":  "card.si_008.rules",
+                        "rulesText":  "敌方生物被召唤到其单位排当前最左或最右的空格时，对其施加“缓慢”。",
+                        "typeLabel":  "结构",
+                        "rarityLabel":  "传说",
+                        "tagLabels":  [
+                                          "结构",
+                                          "冻伤"
+                                      ],
+                        "designNotes":  "用边缘格规则制造可读的区域控制。"
+                    },
+                    {
+                        "id":  "cd_001",
+                        "nameKey":  "card.cd_001.name",
+                        "name":  "洞穴蝙蝠",
+                        "rulesTextKey":  "card.cd_001.rules",
+                        "rulesText":  "战吼：查看己方牌库顶牌；可以将其置于牌库底。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "常见",
+                        "tagLabels":  [
+                                          "动物"
+                                      ],
+                        "designNotes":  "低费抽牌质量调整。"
+                    },
+                    {
+                        "id":  "cd_002",
+                        "nameKey":  "card.cd_002.name",
+                        "name":  "洞穴蜘蛛",
+                        "rulesTextKey":  "card.cd_002.rules",
+                        "rulesText":  "本牌对生物造成普通攻击伤害后，对该生物施加“中毒”。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "常见",
+                        "tagLabels":  [
+                                          "节肢"
+                                      ],
+                        "designNotes":  "延迟伤害与净化需求测试。"
+                    },
+                    {
+                        "id":  "cd_003",
+                        "nameKey":  "card.cd_003.name",
+                        "name":  "地牢骷髅",
+                        "rulesTextKey":  "card.cd_003.rules",
+                        "rulesText":  "掉落：骨头。亡语：对随机敌方生物造成 1 点伤害；没有敌方生物时不触发。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "常见",
+                        "tagLabels":  [
+                                          "亡灵",
+                                          "骷髅"
+                                      ],
+                        "designNotes":  "击杀收益和亡语顺序测试。"
+                    },
+                    {
+                        "id":  "cd_004",
+                        "nameKey":  "card.cd_004.name",
+                        "name":  "幽匿感测体",
+                        "rulesTextKey":  "card.cd_004.rules",
+                        "rulesText":  "每个敌方回合，敌方打出其第二张牌后，对敌方玩家施加“黑暗”。",
+                        "typeLabel":  "建筑",
+                        "rarityLabel":  "稀有",
+                        "tagLabels":  [
+                                          "幽匿",
+                                          "深暗"
+                                      ],
+                        "designNotes":  "可被提前处理的行动惩罚。"
+                    },
+                    {
+                        "id":  "cd_005",
+                        "nameKey":  "card.cd_005.name",
+                        "name":  "林地卫道士",
+                        "rulesTextKey":  "card.cd_005.rules",
+                        "rulesText":  "战吼：若己方控制建筑，本牌本回合获得 +2 攻击力。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "常见",
+                        "tagLabels":  [
+                                          "灾厄"
+                                      ],
+                        "designNotes":  "建筑体系的短时爆发。"
+                    },
+                    {
+                        "id":  "cd_006",
+                        "nameKey":  "card.cd_006.name",
+                        "name":  "回响的黑暗",
+                        "rulesTextKey":  "card.cd_006.rules",
+                        "rulesText":  "对敌方玩家施加“黑暗”；抽 1 张牌。",
+                        "typeLabel":  "法术",
+                        "rarityLabel":  "稀有",
+                        "tagLabels":  [
+                                          "深暗"
+                                      ],
+                        "designNotes":  "黑暗机制的最低可用组件。"
+                    },
+                    {
+                        "id":  "cd_007",
+                        "nameKey":  "card.cd_007.name",
+                        "name":  "废弃矿井",
+                        "rulesTextKey":  "card.cd_007.rules",
+                        "rulesText":  "己方结束阶段，若己方本回合恰好打出 1 张牌，将 1 张“圆石”置入手牌。",
+                        "typeLabel":  "结构",
+                        "rarityLabel":  "史诗",
+                        "tagLabels":  [
+                                          "结构",
+                                          "生产"
+                                      ],
+                        "designNotes":  "奖励克制行动，呼应“保持安静”。"
+                    },
+                    {
+                        "id":  "cd_008",
+                        "nameKey":  "card.cd_008.name",
+                        "name":  "林地府邸",
+                        "rulesTextKey":  "card.cd_008.rules",
+                        "rulesText":  "己方结束阶段，若有空单位格，召唤一个 2/2 的“卫道士新兵”。",
+                        "typeLabel":  "结构",
+                        "rarityLabel":  "传说",
+                        "tagLabels":  [
+                                          "结构",
+                                          "灾厄"
+                                      ],
+                        "designNotes":  "极高占格成本的持续终局引擎。"
+                    },
+                    {
+                        "id":  "or_001",
+                        "nameKey":  "card.or_001.name",
+                        "name":  "鲑鱼群",
+                        "rulesTextKey":  "card.or_001.rules",
+                        "rulesText":  "战吼：水流。本牌可以立即移动至相邻空格；若成功移动，本回合获得 +1 攻击力。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "常见",
+                        "tagLabels":  [
+                                          "水生",
+                                          "动物"
+                                      ],
+                        "designNotes":  "最小水流教学牌。"
+                    },
+                    {
+                        "id":  "or_002",
+                        "nameKey":  "card.or_002.name",
+                        "name":  "海豚向导",
+                        "rulesTextKey":  "card.or_002.rules",
+                        "rulesText":  "每回合第一个成功移动的其他己方生物本回合获得 +1 攻击力。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "常见",
+                        "tagLabels":  [
+                                          "水生",
+                                          "动物"
+                                      ],
+                        "designNotes":  "把位移转为节奏收益。"
+                    },
+                    {
+                        "id":  "or_003",
+                        "nameKey":  "card.or_003.name",
+                        "name":  "溺尸",
+                        "rulesTextKey":  "card.or_003.rules",
+                        "rulesText":  "战吼：若相邻位置有己方水生生物，对一个敌方生物造成 1 点伤害。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "常见",
+                        "tagLabels":  [
+                                          "亡灵",
+                                          "水生"
+                                      ],
+                        "designNotes":  "相邻站位奖励。"
+                    },
+                    {
+                        "id":  "or_004",
+                        "nameKey":  "card.or_004.name",
+                        "name":  "守卫者",
+                        "rulesTextKey":  "card.or_004.rules",
+                        "rulesText":  "每回合第一次有敌方生物移动后，对其造成 1 点伤害。掉落：海晶碎片。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "稀有",
+                        "tagLabels":  [
+                                          "水生",
+                                          "守卫者"
+                                      ],
+                        "designNotes":  "公开的位移惩罚。"
+                    },
+                    {
+                        "id":  "or_005",
+                        "nameKey":  "card.or_005.name",
+                        "name":  "海龟",
+                        "rulesTextKey":  "card.or_005.rules",
+                        "rulesText":  "嘲讽。光环：相邻己方生物获得 +0/+1。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "稀有",
+                        "tagLabels":  [
+                                          "水生",
+                                          "动物"
+                                      ],
+                        "designNotes":  "让站位直接影响防守。"
+                    },
+                    {
+                        "id":  "or_006",
+                        "nameKey":  "card.or_006.name",
+                        "name":  "激流三叉戟",
+                        "rulesTextKey":  "card.or_006.rules",
+                        "rulesText":  "己方英雄攻击一个生物后，可以将该生物移动至其相邻空格；若两侧均为空，由己方选择。",
+                        "typeLabel":  "装备",
+                        "rarityLabel":  "史诗",
+                        "tagLabels":  [
+                                          "武器",
+                                          "水流"
+                                      ],
+                        "designNotes":  "以英雄生命换取持续站位控制。"
+                    },
+                    {
+                        "id":  "or_007",
+                        "nameKey":  "card.or_007.name",
+                        "name":  "珊瑚礁",
+                        "rulesTextKey":  "card.or_007.rules",
+                        "rulesText":  "每回合第一次召唤己方水生生物后，使其获得 +0/+1。",
+                        "typeLabel":  "建筑",
+                        "rarityLabel":  "稀有",
+                        "tagLabels":  [
+                                          "水生",
+                                          "生产"
+                                      ],
+                        "designNotes":  "海洋版成长引擎，可被建筑攻击克制。"
+                    },
+                    {
+                        "id":  "or_008",
+                        "nameKey":  "card.or_008.name",
+                        "name":  "海底神殿",
+                        "rulesTextKey":  "card.or_008.rules",
+                        "rulesText":  "己方结束阶段，对每个没有相邻友方生物的敌方生物造成 1 点伤害。",
+                        "typeLabel":  "结构",
+                        "rarityLabel":  "传说",
+                        "tagLabels":  [
+                                          "结构",
+                                          "守卫者"
+                                      ],
+                        "designNotes":  "迫使对手聚集，从而暴露于范围效果。"
+                    },
+                    {
+                        "id":  "nt_001",
+                        "nameKey":  "card.nt_001.name",
+                        "name":  "岩浆怪",
+                        "rulesTextKey":  "card.nt_001.rules",
+                        "rulesText":  "亡语：若有空单位格，召唤一个 1/1 的“小型岩浆怪”。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "常见",
+                        "tagLabels":  [
+                                          "岩浆"
+                                      ],
+                        "designNotes":  "黏性低费进攻生物。"
+                    },
+                    {
+                        "id":  "nt_002",
+                        "nameKey":  "card.nt_002.name",
+                        "name":  "僵尸猪灵",
+                        "rulesTextKey":  "card.nt_002.rules",
+                        "rulesText":  "每回合第一次己方英雄受到伤害后，本牌获得 +1/+1。岩浆：结束阶段若剩余至少 1 点红石能量，消耗 1 点并对敌方英雄造成 1 点伤害。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "常见",
+                        "tagLabels":  [
+                                          "亡灵",
+                                          "猪灵",
+                                          "岩浆"
+                                      ],
+                        "designNotes":  "同时验证自伤和剩余资源转化。"
+                    },
+                    {
+                        "id":  "nt_003",
+                        "nameKey":  "card.nt_003.name",
+                        "name":  "烈焰人",
+                        "rulesTextKey":  "card.nt_003.rules",
+                        "rulesText":  "本牌对生物造成普通攻击伤害后，对该生物施加“着火”。掉落：烈焰棒。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "稀有",
+                        "tagLabels":  [
+                                          "火焰"
+                                      ],
+                        "designNotes":  "持续伤害核心。"
+                    },
+                    {
+                        "id":  "nt_004",
+                        "nameKey":  "card.nt_004.name",
+                        "name":  "炽足兽",
+                        "rulesTextKey":  "card.nt_004.rules",
+                        "rulesText":  "战吼：移除一个己方角色的“着火”。若成功移除，为其恢复 1 点生命。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "常见",
+                        "tagLabels":  [
+                                          "动物"
+                                      ],
+                        "designNotes":  "防止阵营只会伤害自己。"
+                    },
+                    {
+                        "id":  "nt_005",
+                        "nameKey":  "card.nt_005.name",
+                        "name":  "凋灵骷髅",
+                        "rulesTextKey":  "card.nt_005.rules",
+                        "rulesText":  "本牌对生物造成普通攻击伤害后，对该生物施加“凋零”。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "史诗",
+                        "tagLabels":  [
+                                          "亡灵",
+                                          "骷髅",
+                                          "凋灵"
+                                      ],
+                        "designNotes":  "高威胁但身材偏低的交换单位。"
+                    },
+                    {
+                        "id":  "nt_006",
+                        "nameKey":  "card.nt_006.name",
+                        "name":  "熔岩献祭",
+                        "rulesTextKey":  "card.nt_006.rules",
+                        "rulesText":  "对己方英雄造成 2 点真实伤害；抽 1 张牌。",
+                        "typeLabel":  "法术",
+                        "rarityLabel":  "常见",
+                        "tagLabels":  [
+                                          "火焰"
+                                      ],
+                        "designNotes":  "自伤体系的低费启动器。"
+                    },
+                    {
+                        "id":  "nt_007",
+                        "nameKey":  "card.nt_007.name",
+                        "name":  "重生锚",
+                        "rulesTextKey":  "card.nt_007.rules",
+                        "rulesText":  "每回合第一次己方英雄在己方回合受到伤害后，获得 1 点临时红石能量。",
+                        "typeLabel":  "建筑",
+                        "rarityLabel":  "稀有",
+                        "tagLabels":  [
+                                          "下界",
+                                          "红石"
+                                      ],
+                        "designNotes":  "自伤与爆发回合的可攻击引擎。"
+                    },
+                    {
+                        "id":  "nt_008",
+                        "nameKey":  "card.nt_008.name",
+                        "name":  "下界要塞",
+                        "rulesTextKey":  "card.nt_008.rules",
+                        "rulesText":  "岩浆：己方结束阶段若剩余至少 1 点红石能量，消耗 1 点；若有空单位格，召唤一个 3/3 的“要塞凋灵骷髅”。没有空格时不消耗能量。",
+                        "typeLabel":  "结构",
+                        "rarityLabel":  "传说",
+                        "tagLabels":  [
+                                          "结构",
+                                          "岩浆"
+                                      ],
+                        "designNotes":  "用建筑空间和余能换持续军力。"
+                    },
+                    {
+                        "id":  "ed_001",
+                        "nameKey":  "card.ed_001.name",
+                        "name":  "末影螨",
+                        "rulesTextKey":  "card.ed_001.rules",
+                        "rulesText":  "战吼：若己方除外区有悬置牌，获得 +0/+2。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "常见",
+                        "tagLabels":  [
+                                          "末影",
+                                          "节肢"
+                                      ],
+                        "designNotes":  "最低费用的悬置收益牌。"
+                    },
+                    {
+                        "id":  "ed_002",
+                        "nameKey":  "card.ed_002.name",
+                        "name":  "紫颂果",
+                        "rulesTextKey":  "card.ed_002.rules",
+                        "rulesText":  "将一个己方生物移回拥有者手牌；它本回合费用减少 1，最低为 0。",
+                        "typeLabel":  "材料",
+                        "rarityLabel":  "常见",
+                        "tagLabels":  [
+                                          "植物",
+                                          "材料"
+                                      ],
+                        "designNotes":  "主动重用战吼并腾出单位格。"
+                    },
+                    {
+                        "id":  "ed_003",
+                        "nameKey":  "card.ed_003.name",
+                        "name":  "末影人",
+                        "rulesTextKey":  "card.ed_003.rules",
+                        "rulesText":  "战吼：可以悬置另一个己方生物。若如此做，本牌获得 +0/+1。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "稀有",
+                        "tagLabels":  [
+                                          "末影"
+                                      ],
+                        "designNotes":  "用时间换取战吼复用和保护。"
+                    },
+                    {
+                        "id":  "ed_004",
+                        "nameKey":  "card.ed_004.name",
+                        "name":  "潜影贝",
+                        "rulesTextKey":  "card.ed_004.rules",
+                        "rulesText":  "嘲讽。亡语：将 1 张“潜影壳”置入己方手牌。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "稀有",
+                        "tagLabels":  [
+                                          "末影"
+                                      ],
+                        "designNotes":  "防御和结构材料来源。"
+                    },
+                    {
+                        "id":  "ed_005",
+                        "nameKey":  "card.ed_005.name",
+                        "name":  "末影珍珠",
+                        "rulesTextKey":  "card.ed_005.rules",
+                        "rulesText":  "将一个己方生物移回拥有者手牌；它本回合费用减少 2，最低为 0。",
+                        "typeLabel":  "法术",
+                        "rarityLabel":  "常见",
+                        "tagLabels":  [
+                                          "末影"
+                                      ],
+                        "designNotes":  "高效但亏牌的节奏工具。"
+                    },
+                    {
+                        "id":  "ed_006",
+                        "nameKey":  "card.ed_006.name",
+                        "name":  "虚空凝视",
+                        "rulesTextKey":  "card.ed_006.rules",
+                        "rulesText":  "悬置一个敌方生物。",
+                        "typeLabel":  "法术",
+                        "rarityLabel":  "史诗",
+                        "tagLabels":  [
+                                          "虚空",
+                                          "悬置"
+                                      ],
+                        "designNotes":  "暂时移除，对手下回合可折价重放。"
+                    },
+                    {
+                        "id":  "ed_007",
+                        "nameKey":  "card.ed_007.name",
+                        "name":  "末影水晶",
+                        "rulesTextKey":  "card.ed_007.rules",
+                        "rulesText":  "己方结束阶段，对敌方英雄造成 2 点伤害。亡语：对己方英雄造成 2 点真实伤害。",
+                        "typeLabel":  "建筑",
+                        "rarityLabel":  "稀有",
+                        "tagLabels":  [
+                                          "末影",
+                                          "仪式"
+                                      ],
+                        "designNotes":  "高收益、低生命且带反噬的终结点。"
+                    },
+                    {
+                        "id":  "ed_008",
+                        "nameKey":  "card.ed_008.name",
+                        "name":  "末地传送门框架",
+                        "rulesTextKey":  "card.ed_008.rules",
+                        "rulesText":  "战吼：若己方本局已悬置至少 3 张牌，且有空单位格，召唤 8/8 的“末影龙化身”。",
+                        "typeLabel":  "结构",
+                        "rarityLabel":  "传说",
+                        "tagLabels":  [
+                                          "结构",
+                                          "仪式"
+                                      ],
+                        "designNotes":  "明确可追踪条件的仪式终局。"
+                    },
+                    {
+                        "id":  "tk_001",
+                        "nameKey":  "card.tk_001.name",
+                        "name":  "羊毛",
+                        "rulesTextKey":  "card.tk_001.rules",
+                        "rulesText":  "使一个己方生物本回合获得 +0/+1。",
+                        "typeLabel":  "材料",
+                        "rarityLabel":  "衍生",
+                        "tagLabels":  [
+                                          "材料",
+                                          "纤维"
+                                      ],
+                        "designNotes":  "不可收集衍生牌"
+                    },
+                    {
+                        "id":  "tk_002",
+                        "nameKey":  "card.tk_002.name",
+                        "name":  "小麦",
+                        "rulesTextKey":  "card.tk_002.rules",
+                        "rulesText":  "为一个己方生物恢复 1 点生命；若其具有“动物”标签，再使其本回合获得 +1 攻击力。",
+                        "typeLabel":  "材料",
+                        "rarityLabel":  "衍生",
+                        "tagLabels":  [
+                                          "材料",
+                                          "食物"
+                                      ],
+                        "designNotes":  "不可收集衍生牌"
+                    },
+                    {
+                        "id":  "tk_003",
+                        "nameKey":  "card.tk_003.name",
+                        "name":  "幼年动物",
+                        "rulesTextKey":  "card.tk_003.rules",
+                        "rulesText":  "无卡牌文本。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "衍生",
+                        "tagLabels":  [
+                                          "动物",
+                                          "幼体"
+                                      ],
+                        "designNotes":  "不可收集衍生牌"
+                    },
+                    {
+                        "id":  "tk_004",
+                        "nameKey":  "card.tk_004.name",
+                        "name":  "林地伙伴",
+                        "rulesTextKey":  "card.tk_004.rules",
+                        "rulesText":  "无卡牌文本。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "衍生",
+                        "tagLabels":  [
+                                          "动物"
+                                      ],
+                        "designNotes":  "不可收集衍生牌"
+                    },
+                    {
+                        "id":  "tk_005",
+                        "nameKey":  "card.tk_005.name",
+                        "name":  "腐肉",
+                        "rulesTextKey":  "card.tk_005.rules",
+                        "rulesText":  "为己方英雄恢复 2 点生命，然后对己方英雄造成 1 点真实伤害。",
+                        "typeLabel":  "材料",
+                        "rarityLabel":  "衍生",
+                        "tagLabels":  [
+                                          "材料",
+                                          "食物"
+                                      ],
+                        "designNotes":  "不可收集衍生牌"
+                    },
+                    {
+                        "id":  "tk_006",
+                        "nameKey":  "card.tk_006.name",
+                        "name":  "陶片",
+                        "rulesTextKey":  "card.tk_006.rules",
+                        "rulesText":  "出土：将本牌置入手牌；己方英雄获得 1 点护甲。",
+                        "typeLabel":  "材料 / 掩埋",
+                        "rarityLabel":  "衍生",
+                        "tagLabels":  [
+                                          "材料",
+                                          "考古"
+                                      ],
+                        "designNotes":  "不可收集衍生牌"
+                    },
+                    {
+                        "id":  "tk_007",
+                        "nameKey":  "card.tk_007.name",
+                        "name":  "藏宝图",
+                        "rulesTextKey":  "card.tk_007.rules",
+                        "rulesText":  "出土：将 1 张“绿宝石”置入手牌。",
+                        "typeLabel":  "掩埋",
+                        "rarityLabel":  "衍生",
+                        "tagLabels":  [
+                                          "考古"
+                                      ],
+                        "designNotes":  "不可收集衍生牌"
+                    },
+                    {
+                        "id":  "tk_008",
+                        "nameKey":  "card.tk_008.name",
+                        "name":  "炸药机关",
+                        "rulesTextKey":  "card.tk_008.rules",
+                        "rulesText":  "出土：对敌方英雄造成 3 点伤害，并对己方英雄造成 1 点真实伤害。",
+                        "typeLabel":  "掩埋",
+                        "rarityLabel":  "衍生",
+                        "tagLabels":  [
+                                          "考古",
+                                          "爆炸"
+                                      ],
+                        "designNotes":  "不可收集衍生牌"
+                    },
+                    {
+                        "id":  "tk_009",
+                        "nameKey":  "card.tk_009.name",
+                        "name":  "骨头",
+                        "rulesTextKey":  "card.tk_009.rules",
+                        "rulesText":  "使一个己方生物本回合获得 +1 攻击力。",
+                        "typeLabel":  "材料",
+                        "rarityLabel":  "衍生",
+                        "tagLabels":  [
+                                          "材料"
+                                      ],
+                        "designNotes":  "不可收集衍生牌"
+                    },
+                    {
+                        "id":  "tk_010",
+                        "nameKey":  "card.tk_010.name",
+                        "name":  "圆石",
+                        "rulesTextKey":  "card.tk_010.rules",
+                        "rulesText":  "为一个己方建筑或结构恢复 2 点生命。",
+                        "typeLabel":  "材料",
+                        "rarityLabel":  "衍生",
+                        "tagLabels":  [
+                                          "材料",
+                                          "石材"
+                                      ],
+                        "designNotes":  "不可收集衍生牌"
+                    },
+                    {
+                        "id":  "tk_011",
+                        "nameKey":  "card.tk_011.name",
+                        "name":  "卫道士新兵",
+                        "rulesTextKey":  "card.tk_011.rules",
+                        "rulesText":  "无卡牌文本。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "衍生",
+                        "tagLabels":  [
+                                          "灾厄"
+                                      ],
+                        "designNotes":  "不可收集衍生牌"
+                    },
+                    {
+                        "id":  "tk_012",
+                        "nameKey":  "card.tk_012.name",
+                        "name":  "海晶碎片",
+                        "rulesTextKey":  "card.tk_012.rules",
+                        "rulesText":  "使一个己方水生生物移动至相邻空格；若成功移动，为其恢复 1 点生命。",
+                        "typeLabel":  "材料",
+                        "rarityLabel":  "衍生",
+                        "tagLabels":  [
+                                          "材料",
+                                          "海晶"
+                                      ],
+                        "designNotes":  "不可收集衍生牌"
+                    },
+                    {
+                        "id":  "tk_013",
+                        "nameKey":  "card.tk_013.name",
+                        "name":  "烈焰棒",
+                        "rulesTextKey":  "card.tk_013.rules",
+                        "rulesText":  "对一个敌方生物造成 1 点伤害并施加“着火”。",
+                        "typeLabel":  "材料",
+                        "rarityLabel":  "衍生",
+                        "tagLabels":  [
+                                          "材料",
+                                          "火焰"
+                                      ],
+                        "designNotes":  "不可收集衍生牌"
+                    },
+                    {
+                        "id":  "tk_014",
+                        "nameKey":  "card.tk_014.name",
+                        "name":  "小型岩浆怪",
+                        "rulesTextKey":  "card.tk_014.rules",
+                        "rulesText":  "无卡牌文本。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "衍生",
+                        "tagLabels":  [
+                                          "岩浆"
+                                      ],
+                        "designNotes":  "不可收集衍生牌"
+                    },
+                    {
+                        "id":  "tk_015",
+                        "nameKey":  "card.tk_015.name",
+                        "name":  "要塞凋灵骷髅",
+                        "rulesTextKey":  "card.tk_015.rules",
+                        "rulesText":  "无卡牌文本。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "衍生",
+                        "tagLabels":  [
+                                          "亡灵",
+                                          "骷髅",
+                                          "凋灵"
+                                      ],
+                        "designNotes":  "不可收集衍生牌"
+                    },
+                    {
+                        "id":  "tk_016",
+                        "nameKey":  "card.tk_016.name",
+                        "name":  "潜影壳",
+                        "rulesTextKey":  "card.tk_016.rules",
+                        "rulesText":  "己方英雄获得 2 点护甲。",
+                        "typeLabel":  "材料",
+                        "rarityLabel":  "衍生",
+                        "tagLabels":  [
+                                          "材料",
+                                          "末影"
+                                      ],
+                        "designNotes":  "不可收集衍生牌"
+                    },
+                    {
+                        "id":  "tk_017",
+                        "nameKey":  "card.tk_017.name",
+                        "name":  "末影龙化身",
+                        "rulesTextKey":  "card.tk_017.rules",
+                        "rulesText":  "本牌不能被己方法术移回手牌或悬置。",
+                        "typeLabel":  "生物",
+                        "rarityLabel":  "衍生",
+                        "tagLabels":  [
+                                          "末影",
+                                          "龙"
+                                      ],
+                        "designNotes":  "不可收集衍生牌"
+                    },
+                    {
+                        "id":  "tk_018",
+                        "nameKey":  "card.tk_018.name",
+                        "name":  "绿宝石",
+                        "rulesTextKey":  "card.tk_018.rules",
+                        "rulesText":  "本回合下一次交易费用减少 1，最低为 0。",
+                        "typeLabel":  "材料",
+                        "rarityLabel":  "衍生",
+                        "tagLabels":  [
+                                          "宝石",
+                                          "交易"
+                                      ],
+                        "designNotes":  "不可收集衍生牌"
+                    }
+                ]
+}

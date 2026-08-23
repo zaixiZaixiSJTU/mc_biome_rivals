@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES5",
+    "module": "none",
+    "outFile": "build/index.js",
+    "strict": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "removeComments": true,
+    "skipLibCheck": true,
+    "lib": ["ES5", "ES2015.Core"]
+  },
+  "files": [
+    "../node_modules/nakama-runtime/index.d.ts",
+    "src/rules/types.ts",
+    "src/rules/invariants.ts",
+    "src/rules/match-engine.ts",
+    "src/matches/biome-rivals-match.ts",
+    "src/rpc/health.ts",
+    "src/main.ts"
+  ]
+}
