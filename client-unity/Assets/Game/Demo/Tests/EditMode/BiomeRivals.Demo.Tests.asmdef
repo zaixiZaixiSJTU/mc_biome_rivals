@@ -1,0 +1,9 @@
+{
+  "name": "BiomeRivals.Demo.Tests",
+  "rootNamespace": "BiomeRivals.Demo.Tests",
+  "references": ["BiomeRivals.Demo", "BiomeRivals.Demo.Editor", "BiomeRivals.Content"],
+  "optionalUnityReferences": ["TestAssemblies"],
+  "includePlatforms": ["Editor"],
+  "autoReferenced": false,
+  "defineConstraints": ["UNITY_INCLUDE_TESTS"]
+}

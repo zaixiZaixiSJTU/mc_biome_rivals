@@ -44,6 +44,30 @@ docker compose up --build
 
 卡面规范与七群系视觉样张见 [Card Face Design System](docs/design/Card_Face_Design_System_v0.1.md)，内容生成规则见 [Card Content Registry](docs/design/Card_Content_Registry_v0.1.md)。Minecraft 原版图标仅供本地原型验证，公开发布前需要重新核对当时有效的官方使用规范。
 
+## 最基础可玩 Demo
+
+Unity 中打开 `client-unity/Assets/Game/Demo/Scenes/Demo.unity` 后点击 Play。当前 Demo 支持：
+
+- 七个群系主题即时切换，每个群系装载 5 张已注册卡牌；
+- 选择手牌并部署到 4 个单位格或 3 个建筑格；
+- 多格结构检查连续建筑空间；
+- 法术、材料和装备的费用支付与效果占位释放；
+- 红石能量、结束回合、模拟对手回合和下一回合补充；
+- 本机提取过 Minecraft 图标时自动显示像素物品，否则使用无版权占位符。
+
+重新生成场景或额外构建 Windows 演示包：
+
+```powershell
+.\scripts\build-demo.ps1
+.\scripts\build-demo.ps1 -WithWindowsPlayer
+```
+
+Windows 构建输出位于忽略目录 `client-unity/Builds/DemoPreview/`，不会进入 Git。
+
+![Demo 实际运行预览](docs/design/assets/demo-runtime-preview-v1.png)
+
+布局、交互反馈、素材边界与背景生成记录见 [Demo UI 设计记录](docs/design/Demo_UI_Design_v0.1.md)。
+
 在 Unity Hub 中打开 `client-unity/`。若使用的编辑器补丁版本与 `ProjectVersion.txt` 不同，先在独立分支完成升级并提交由 Unity 产生的项目文件变化。
 
 ## 日常命令
@@ -55,6 +79,7 @@ docker compose up --build
 | `npm run build` | 构建 Nakama JavaScript 模块 |
 | `.\scripts\validate.ps1` | 执行仓库级静态检查、测试和构建 |
 | `.\scripts\validate.ps1 -WithUnity` | 在统一验证中追加 Unity 编译与 EditMode 测试 |
+| `.\scripts\build-demo.ps1` | 用锁定版本 Unity 重新生成可 Play 的 Demo 场景 |
 | `docker compose up --build` | 启动 PostgreSQL 与 Nakama |
 | `docker compose down` | 停止本地服务并保留数据库卷 |
 
