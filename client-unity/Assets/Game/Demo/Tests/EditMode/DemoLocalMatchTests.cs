@@ -69,14 +69,18 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(battlefield.BoardCamera.orthographic, Is.True);
                 Assert.That(root.transform.Find("BattlefieldGeometry"), Is.Not.Null);
                 Assert.That(root.transform.Find("BattlefieldPieces"), Is.Not.Null);
-                var unitMarker = root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Unit_0/SurfaceGrid");
-                var buildingMarker = root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Building_0/SurfaceGrid");
+                var unitMarker = root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Unit_0/InteractiveGround");
+                var buildingMarker = root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Building_0/InteractiveGround");
+                var unitRiser = root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Unit_0/GroundRiser");
                 Assert.That(unitMarker, Is.Not.Null);
                 Assert.That(buildingMarker, Is.Not.Null);
-                Assert.That(unitMarker.GetComponent<MeshFilter>().sharedMesh.vertexCount, Is.EqualTo(240));
+                Assert.That(unitRiser, Is.Not.Null);
+                Assert.That(unitMarker.GetComponent<MeshFilter>().sharedMesh.vertexCount, Is.EqualTo(60));
                 Assert.That(unitMarker.GetComponent<MeshRenderer>().enabled, Is.True);
-                Assert.That(buildingMarker.GetComponent<MeshRenderer>().enabled, Is.False);
-                Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.renderQueue, Is.EqualTo(3000));
+                Assert.That(buildingMarker.GetComponent<MeshRenderer>().enabled, Is.True);
+                Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.shader.name, Is.EqualTo("BiomeRivals/Demo/GroundSurface"));
+                Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.GreaterThan(0f));
+                Assert.That(buildingMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.Zero);
                 Assert.That(root.transform.Find("DemoCanvas"), Is.Not.Null);
                 Assert.That(GameObject.Find("EndTurn"), Is.Not.Null);
                 Assert.That(GameObject.Find("Faction_plains_forest"), Is.Not.Null);
@@ -91,9 +95,15 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(blazeTexture, Is.EqualTo("entity_blaze"));
                 battlefield.SetSlotState(true, DemoSlotKind.Unit, 0, true, false);
                 battlefield.SetSlotHovered(true, DemoSlotKind.Unit, 0, true);
-                Assert.That(unitMarker.parent.localPosition.y, Is.GreaterThan(0.29f));
+                Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.EqualTo(0.78f).Within(0.001f));
+                Assert.That(unitRiser.GetComponent<MeshRenderer>().enabled, Is.True);
+                battlefield.SetSlotPressed(true, DemoSlotKind.Unit, 0, true);
+                Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.EqualTo(0.92f).Within(0.001f));
+                Assert.That(unitRiser.GetComponent<MeshRenderer>().enabled, Is.False);
+                battlefield.SetSlotPressed(true, DemoSlotKind.Unit, 0, false);
                 battlefield.SetSlotState(true, DemoSlotKind.Unit, 0, false, true);
-                Assert.That(unitMarker.GetComponent<MeshRenderer>().enabled, Is.False);
+                Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.Zero);
+                Assert.That(unitRiser.GetComponent<MeshRenderer>().enabled, Is.False);
             }
             finally
             {

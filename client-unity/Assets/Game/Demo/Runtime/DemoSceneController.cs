@@ -68,6 +68,7 @@ namespace BiomeRivals.Demo
             if (HasCommandLineFlag("-disableLocalCardArt")) DemoCardArtProvider.LocalArtEnabled = false;
             if (HasCommandLineFlag("-disableLocalWorldAssets")) DemoWorldAssetProvider.LocalAssetsEnabled = false;
             BuildNow();
+            if (HasCommandLineFlag("-previewGroundHover")) _battlefield.SetSlotHovered(true, DemoSlotKind.Unit, 0, true);
             var capturePath = GetCommandLineValue("-captureDemo");
             if (!string.IsNullOrWhiteSpace(capturePath)) StartCoroutine(CaptureDemo(capturePath));
         }
@@ -188,9 +189,10 @@ namespace BiomeRivals.Demo
             var capturedIndex = index;
             button.onClick.AddListener(() => OnSlotClicked(capturedKind, capturedIndex));
             root.gameObject.AddComponent<DemoSlotPointerRelay>().Configure(
-                hovered => _battlefield.SetSlotHovered(true, capturedKind, capturedIndex, hovered));
+                hovered => _battlefield.SetSlotHovered(true, capturedKind, capturedIndex, hovered),
+                pressed => _battlefield.SetSlotPressed(true, capturedKind, capturedIndex, pressed));
             var content = CreateRect(root, "Content", Vector2.zero, size - new Vector2(12, 12));
-            var label = CreateText(content, "EmptyLabel", Vector2.zero, size - new Vector2(20, 20), kind == DemoSlotKind.Unit ? $"单位格 {index + 1}" : $"建筑格 {index + 1}", 13, new Color(Pale.r, Pale.g, Pale.b, 0.30f), TextAnchor.MiddleCenter, FontStyle.Bold);
+            var label = CreateText(content, "EmptyLabel", Vector2.zero, size - new Vector2(20, 20), kind == DemoSlotKind.Unit ? $"单位格 {index + 1}" : $"建筑格 {index + 1}", 13, Color.clear, TextAnchor.MiddleCenter, FontStyle.Bold);
             return new SlotView(kind, index, image, button, content, label);
         }
 
@@ -204,7 +206,6 @@ namespace BiomeRivals.Demo
             _battlefield.SetSlotState(false, kind, index, false, occupied);
             if (string.IsNullOrEmpty(cardId))
             {
-                CreateText(root, "Empty", Vector2.zero, size - new Vector2(20, 20), kind == DemoSlotKind.Unit ? "敌方单位格" : "敌方建筑格", 12, new Color(Pale.r, Pale.g, Pale.b, 0.24f), TextAnchor.MiddleCenter, FontStyle.Bold);
                 return;
             }
             CreateWorldPieceLabel(root, cardId, size - new Vector2(10, 10), true);
@@ -331,9 +332,7 @@ namespace BiomeRivals.Demo
             view.EmptyLabel.gameObject.SetActive(empty);
             var valid = empty && IsSelectedValidFor(view.Kind);
             view.Image.color = Color.clear;
-            view.EmptyLabel.color = valid
-                ? new Color(Cyan.r, Cyan.g, Cyan.b, 0.86f)
-                : new Color(Pale.r, Pale.g, Pale.b, 0.30f);
+            view.EmptyLabel.color = Color.clear;
             _battlefield.SetSlotState(true, view.Kind, view.Index, valid, !empty);
 
             if (!empty)
@@ -450,6 +449,7 @@ namespace BiomeRivals.Demo
         {
             yield return null;
             yield return null;
+            if (HasCommandLineFlag("-previewGroundHover")) yield return new WaitForSecondsRealtime(0.2f);
             var canvas = GetComponentInChildren<Canvas>();
             var camera = _battlefield.BoardCamera;
             if (camera == null) throw new InvalidOperationException("2.5D battlefield camera is not available.");

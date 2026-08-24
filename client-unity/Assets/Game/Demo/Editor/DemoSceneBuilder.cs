@@ -36,9 +36,11 @@ namespace BiomeRivals.Demo.Editor
             if (blockShader == null) throw new MissingReferenceException("A tracked block shader is required by the 2.5D demo.");
             var backdropShader = Shader.Find("Unlit/Texture");
             if (backdropShader == null) throw new MissingReferenceException("The unlit backdrop shader is required by the 2.5D demo.");
+            var groundSurfaceShader = Shader.Find("BiomeRivals/Demo/GroundSurface");
+            if (groundSurfaceShader == null) throw new MissingReferenceException("The interactive ground surface shader is required by the 2.5D demo.");
             var backdrop = AssetDatabase.LoadAssetAtPath<Texture2D>(BackgroundPath);
             if (backdrop == null) throw new FileNotFoundException("The illustrated battlefield backdrop is missing.", BackgroundPath);
-            battlefield.Configure(blockShader, backdropShader, backdrop);
+            battlefield.Configure(blockShader, backdropShader, groundSurfaceShader, backdrop);
             root.AddComponent<DemoSceneController>();
 
             if (!EditorSceneManager.SaveScene(scene, ScenePath))
