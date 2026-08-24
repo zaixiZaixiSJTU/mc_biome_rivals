@@ -119,7 +119,7 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
---- !u!1 &1062984473
+--- !u!1 &911991001
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -127,8 +127,8 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 1062984475}
-  - component: {fileID: 1062984474}
+  - component: {fileID: 911991003}
+  - component: {fileID: 911991002}
   m_Layer: 0
   m_Name: '[Demo] Biome Rivals Local Match'
   m_TagString: Untagged
@@ -136,26 +136,26 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1062984474
+--- !u!114 &911991002
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1062984473}
+  m_GameObject: {fileID: 911991001}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 84ed3e3ce94ba2b4fb74639d16b7f971, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   battlefieldBackground: {fileID: 21300000, guid: e793d11426f45254ba9de848fff085ca, type: 3}
---- !u!4 &1062984475
+--- !u!4 &911991003
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1062984473}
+  m_GameObject: {fileID: 911991001}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -168,4 +168,4 @@ Transform:
 SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
-  - {fileID: 1062984475}
+  - {fileID: 911991003}

@@ -15,13 +15,15 @@ namespace BiomeRivals.Demo
         private const float ReferenceWidth = 1920f;
         private const float ReferenceHeight = 1080f;
 
-        private static readonly Color Ink = Hex("#0C1212");
-        private static readonly Color Panel = Hex("#17201F");
-        private static readonly Color PanelRaised = Hex("#25302D");
-        private static readonly Color Pale = Hex("#EEE8D5");
-        private static readonly Color Muted = Hex("#9EAAA5");
-        private static readonly Color Cyan = Hex("#43C9B8");
-        private static readonly Color Ember = Hex("#F08A39");
+        private static readonly Color Ink = Hex("#0E100E");
+        private static readonly Color Panel = Hex("#20231F");
+        private static readonly Color PanelRaised = Hex("#34382F");
+        private static readonly Color Pale = Hex("#F1E6CB");
+        private static readonly Color Muted = Hex("#B2AA96");
+        private static readonly Color Cyan = Hex("#5AAE9F");
+        private static readonly Color Ember = Hex("#D98545");
+        private static readonly Color StoneEdge = Hex("#777263");
+        private static readonly Color OakEdge = Hex("#9A6A3A");
         private static readonly Color Danger = Hex("#E05A47");
 
         [SerializeField] private Sprite battlefieldBackground;
@@ -101,9 +103,11 @@ namespace BiomeRivals.Demo
             background.sprite = battlefieldBackground;
             background.type = Image.Type.Simple;
             background.raycastTarget = false;
-            CreateTintBand("OpponentTint", new Vector2(0, 270), new Vector2(ReferenceWidth, 540), new Color(0.18f, 0.03f, 0.03f, 0.18f));
-            CreateTintBand("PlayerTint", new Vector2(0, -270), new Vector2(ReferenceWidth, 540), new Color(0.02f, 0.12f, 0.07f, 0.12f));
-            CreatePanel(_canvasRoot, "CenterRiverGlow", new Vector2(0, 0), new Vector2(1540, 4), new Color(Cyan.r, Cyan.g, Cyan.b, 0.65f));
+            CreateTintBand("BackdropWash", Vector2.zero, new Vector2(ReferenceWidth, ReferenceHeight), new Color(0.02f, 0.025f, 0.02f, 0.16f));
+            CreateTintBand("OpponentTint", new Vector2(0, 270), new Vector2(ReferenceWidth, 540), new Color(0.16f, 0.035f, 0.025f, 0.10f));
+            CreateTintBand("PlayerTint", new Vector2(0, -270), new Vector2(ReferenceWidth, 540), new Color(0.035f, 0.10f, 0.045f, 0.08f));
+            CreatePanel(_canvasRoot, "CenterRiverBed", new Vector2(0, 0), new Vector2(1540, 6), new Color(Ink.r, Ink.g, Ink.b, 0.58f)).raycastTarget = false;
+            CreatePanel(_canvasRoot, "CenterRiverGlow", new Vector2(0, 0), new Vector2(1540, 2), new Color(Cyan.r, Cyan.g, Cyan.b, 0.56f)).raycastTarget = false;
 
             BuildTopChrome();
             BuildFactionRail();
@@ -117,7 +121,7 @@ namespace BiomeRivals.Demo
 
         private void BuildTopChrome()
         {
-            var titlePlate = CreateFramedPanel(_canvasRoot, "TitlePlate", new Vector2(0, 502), new Vector2(510, 58), Panel, Cyan);
+            var titlePlate = CreateFramedPanel(_canvasRoot, "TitlePlate", new Vector2(0, 502), new Vector2(510, 58), new Color(Panel.r, Panel.g, Panel.b, 0.90f), StoneEdge);
             CreateText(titlePlate, "Title", Vector2.zero, new Vector2(480, 44), "群系竞逐  ·  本地战场演示", 24, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
 
             var opponentHud = CreateFramedPanel(_canvasRoot, "OpponentHUD", new Vector2(-760, 455), new Vector2(315, 104), Panel, Ember);
@@ -135,7 +139,7 @@ namespace BiomeRivals.Demo
                 CreateText(back, "Rune", Vector2.zero, new Vector2(58, 80), "◇", 32, Ember, TextAnchor.MiddleCenter, FontStyle.Bold);
             }
 
-            _playerHud = CreateFramedPanel(_canvasRoot, "PlayerHUD", new Vector2(-782, -454), new Vector2(270, 105), Panel, Cyan);
+            _playerHud = CreateFramedPanel(_canvasRoot, "PlayerHUD", new Vector2(-782, -454), new Vector2(270, 105), new Color(Panel.r, Panel.g, Panel.b, 0.93f), OakEdge);
             CreatePanel(_playerHud, "Avatar", new Vector2(-92, 0), new Vector2(70, 70), Hex("#274C2D"));
             CreateText(_playerHud, "AvatarGlyph", new Vector2(-92, 1), new Vector2(60, 60), "▦", 34, Hex("#D3C35B"), TextAnchor.MiddleCenter, FontStyle.Bold);
             CreateText(_playerHud, "Name", new Vector2(35, 22), new Vector2(150, 30), "林地守护者", 18, Pale, TextAnchor.MiddleLeft, FontStyle.Bold);
@@ -144,14 +148,14 @@ namespace BiomeRivals.Demo
 
         private void BuildFactionRail()
         {
-            var rail = CreateFramedPanel(_canvasRoot, "FactionRail", new Vector2(-879, 45), new Vector2(150, 590), new Color(Panel.r, Panel.g, Panel.b, 0.92f), Cyan);
+            var rail = CreateFramedPanel(_canvasRoot, "FactionRail", new Vector2(-879, 45), new Vector2(150, 590), new Color(Panel.r, Panel.g, Panel.b, 0.86f), StoneEdge);
             CreateText(rail, "Header", new Vector2(0, 252), new Vector2(120, 48), "群 系", 18, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
 
             for (var i = 0; i < Factions.Length; i++)
             {
                 var spec = Factions[i];
                 _registry.TryGetTheme(spec.Id, out var theme);
-                var button = CreateButton(rail, "Faction_" + spec.Id, new Vector2(0, 188 - i * 67), new Vector2(116, 51), theme.FrameDark, theme.Accent, spec.Label, 16);
+                var button = CreateButton(rail, "Faction_" + spec.Id, new Vector2(0, 188 - i * 67), new Vector2(116, 51), new Color(Ink.r, Ink.g, Ink.b, 0.82f), Color.Lerp(theme.Accent, StoneEdge, 0.55f), spec.Label, 16);
                 var captured = spec.Id;
                 button.onClick.AddListener(() => SelectFaction(captured));
                 _factionButtons.Add(new FactionButtonView(spec.Id, button, button.targetGraphic as Image, theme));
@@ -181,24 +185,26 @@ namespace BiomeRivals.Demo
 
         private SlotView CreatePlayerSlot(DemoSlotKind kind, int index, Vector2 position, Vector2 size)
         {
-            var root = CreateFramedPanel(_canvasRoot, $"Player{kind}Slot{index}", position, size, new Color(PanelRaised.r, PanelRaised.g, PanelRaised.b, 0.78f), Cyan);
+            var slotEdge = Color.Lerp(Cyan, StoneEdge, 0.62f);
+            var slotFill = new Color(PanelRaised.r, PanelRaised.g, PanelRaised.b, 0.34f);
+            var root = CreateFramedPanel(_canvasRoot, $"Player{kind}Slot{index}", position, size, slotFill, slotEdge);
             var button = root.gameObject.AddComponent<Button>();
             button.targetGraphic = root.GetComponent<Image>();
-            ConfigureButtonColors(button, new Color(PanelRaised.r, PanelRaised.g, PanelRaised.b, 0.78f), Cyan);
+            ConfigureButtonColors(button, slotFill, Cyan);
             var capturedKind = kind;
             var capturedIndex = index;
             button.onClick.AddListener(() => OnSlotClicked(capturedKind, capturedIndex));
             var content = CreateRect(root, "Content", Vector2.zero, size - new Vector2(12, 12));
-            var label = CreateText(content, "EmptyLabel", Vector2.zero, size - new Vector2(20, 20), kind == DemoSlotKind.Unit ? $"单位格 {index + 1}" : $"建筑格 {index + 1}", 14, new Color(Pale.r, Pale.g, Pale.b, 0.56f), TextAnchor.MiddleCenter, FontStyle.Bold);
+            var label = CreateText(content, "EmptyLabel", Vector2.zero, size - new Vector2(20, 20), kind == DemoSlotKind.Unit ? $"单位格 {index + 1}" : $"建筑格 {index + 1}", 14, new Color(Pale.r, Pale.g, Pale.b, 0.46f), TextAnchor.MiddleCenter, FontStyle.Bold);
             return new SlotView(kind, index, root.GetComponent<Image>(), button, content, label);
         }
 
         private void CreateOpponentSlot(DemoSlotKind kind, int index, Vector2 position, Vector2 size, string cardId)
         {
-            var root = CreateFramedPanel(_canvasRoot, $"Opponent{kind}Slot{index}", position, size, new Color(0.16f, 0.08f, 0.07f, 0.74f), Ember);
+            var root = CreateFramedPanel(_canvasRoot, $"Opponent{kind}Slot{index}", position, size, new Color(0.15f, 0.085f, 0.065f, 0.19f), Color.Lerp(Ember, StoneEdge, 0.64f));
             if (string.IsNullOrEmpty(cardId))
             {
-                CreateText(root, "Empty", Vector2.zero, size - new Vector2(20, 20), kind == DemoSlotKind.Unit ? "敌方单位格" : "敌方建筑格", 13, new Color(Pale.r, Pale.g, Pale.b, 0.38f), TextAnchor.MiddleCenter, FontStyle.Bold);
+                CreateText(root, "Empty", Vector2.zero, size - new Vector2(20, 20), kind == DemoSlotKind.Unit ? "敌方单位格" : "敌方建筑格", 13, new Color(Pale.r, Pale.g, Pale.b, 0.32f), TextAnchor.MiddleCenter, FontStyle.Bold);
                 return;
             }
             CreateBoardPiece(root, cardId, size - new Vector2(10, 10), true);
@@ -206,20 +212,20 @@ namespace BiomeRivals.Demo
 
         private void BuildHandArea()
         {
-            var handPlate = CreateFramedPanel(_canvasRoot, "HandPlate", new Vector2(35, -418), new Vector2(1360, 232), new Color(Ink.r, Ink.g, Ink.b, 0.86f), Cyan);
+            var handPlate = CreateFramedPanel(_canvasRoot, "HandPlate", new Vector2(35, -418), new Vector2(1360, 232), new Color(Ink.r, Ink.g, Ink.b, 0.72f), OakEdge);
             _handRoot = CreateRect(handPlate, "HandCards", new Vector2(-20, 14), new Vector2(1250, 225));
             CreateText(_canvasRoot, "HandLabel", new Vector2(-584, -508), new Vector2(130, 25), "手牌  5/7", 13, Muted, TextAnchor.MiddleLeft, FontStyle.Bold);
         }
 
         private void BuildInspector()
         {
-            var panel = CreateFramedPanel(_canvasRoot, "InspectorPanel", new Vector2(785, 60), new Vector2(300, 715), new Color(Panel.r, Panel.g, Panel.b, 0.96f), Cyan);
+            var panel = CreateFramedPanel(_canvasRoot, "InspectorPanel", new Vector2(785, 60), new Vector2(300, 715), new Color(Panel.r, Panel.g, Panel.b, 0.92f), StoneEdge);
             _inspectorRoot = CreateRect(panel, "InspectorContent", Vector2.zero, new Vector2(280, 695));
         }
 
         private void BuildTurnControls()
         {
-            var energyPlate = CreateFramedPanel(_canvasRoot, "EnergyPlate", new Vector2(-570, -454), new Vector2(150, 72), Panel, Cyan);
+            var energyPlate = CreateFramedPanel(_canvasRoot, "EnergyPlate", new Vector2(-570, -454), new Vector2(150, 72), new Color(Panel.r, Panel.g, Panel.b, 0.92f), OakEdge);
             _energyText = CreateText(energyPlate, "Energy", Vector2.zero, new Vector2(130, 54), "◆ 6/6", 22, Cyan, TextAnchor.MiddleCenter, FontStyle.Bold);
 
             var roundPlate = CreateFramedPanel(_canvasRoot, "RoundPlate", new Vector2(710, 472), new Vector2(155, 54), Panel, Ember);
@@ -230,7 +236,7 @@ namespace BiomeRivals.Demo
             _endTurnButton.onClick.AddListener(OnEndTurn);
             _endTurnButton.gameObject.AddComponent<DemoHoverScale>().Configure(1.04f, 16f);
 
-            var statusPlate = CreateFramedPanel(_canvasRoot, "StatusPlate", new Vector2(780, -462), new Vector2(315, 94), new Color(Ink.r, Ink.g, Ink.b, 0.92f), Cyan);
+            var statusPlate = CreateFramedPanel(_canvasRoot, "StatusPlate", new Vector2(780, -462), new Vector2(315, 94), new Color(Ink.r, Ink.g, Ink.b, 0.86f), StoneEdge);
             _statusText = CreateText(statusPlate, "Status", Vector2.zero, new Vector2(285, 70), string.Empty, 14, Pale, TextAnchor.MiddleCenter, FontStyle.Normal);
         }
 
@@ -271,13 +277,15 @@ namespace BiomeRivals.Demo
             foreach (var view in _factionButtons)
             {
                 var active = view.Id == _activeFaction;
-                view.Image.color = active ? view.Theme.FrameBase : new Color(view.Theme.FrameDark.r, view.Theme.FrameDark.g, view.Theme.FrameDark.b, 0.92f);
+                view.Image.color = active
+                    ? Color.Lerp(view.Theme.FrameBase, PanelRaised, 0.22f)
+                    : new Color(Ink.r, Ink.g, Ink.b, 0.82f);
                 var outline = view.Button.GetComponent<Outline>();
                 if (active && outline == null) outline = view.Button.gameObject.AddComponent<Outline>();
                 if (outline != null)
                 {
                     outline.effectColor = view.Theme.Accent;
-                    outline.effectDistance = active ? new Vector2(3, -3) : Vector2.zero;
+                    outline.effectDistance = active ? new Vector2(1.5f, -1.5f) : Vector2.zero;
                     outline.enabled = active;
                 }
             }
@@ -303,7 +311,7 @@ namespace BiomeRivals.Demo
                     _registry.TryGetDefinition(cardId, out var definition);
                     _registry.TryGetTheme(definition.themeId, out var theme);
                     outline.effectColor = theme.Accent;
-                    outline.effectDistance = new Vector2(4, -4);
+                    outline.effectDistance = new Vector2(2, -2);
                     card.SetAsLastSibling();
                 }
             }
@@ -322,8 +330,8 @@ namespace BiomeRivals.Demo
             view.EmptyLabel.gameObject.SetActive(empty);
             var valid = empty && IsSelectedValidFor(view.Kind);
             view.Image.color = valid
-                ? new Color(Cyan.r, Cyan.g, Cyan.b, 0.52f)
-                : new Color(PanelRaised.r, PanelRaised.g, PanelRaised.b, empty ? 0.78f : 0.94f);
+                ? new Color(Cyan.r, Cyan.g, Cyan.b, 0.46f)
+                : new Color(PanelRaised.r, PanelRaised.g, PanelRaised.b, empty ? 0.34f : 0.92f);
 
             if (!empty)
             {
@@ -489,23 +497,26 @@ namespace BiomeRivals.Demo
                 throw new InvalidOperationException("Card content is not registered: " + cardId);
             _registry.TryGetTheme(definition.themeId, out var theme);
 
-            var root = CreateFramedPanel(parent, "Card_" + cardId, Vector2.zero, size, theme.FrameDark, theme.Accent);
+            var shell = Color.Lerp(theme.FrameDark, Ink, 0.28f);
+            var frame = Color.Lerp(theme.FrameBase, PanelRaised, 0.18f);
+            var cardEdge = Color.Lerp(theme.Accent, OakEdge, 0.34f);
+            var root = CreateFramedPanel(parent, "Card_" + cardId, Vector2.zero, size, shell, cardEdge);
             var image = root.GetComponent<Image>();
             if (onClick != null)
             {
                 var button = root.gameObject.AddComponent<Button>();
                 button.targetGraphic = image;
-                ConfigureButtonColors(button, theme.FrameDark, theme.Accent);
+                ConfigureButtonColors(button, shell, theme.Accent);
                 button.onClick.AddListener(() => onClick());
             }
 
-            var inner = CreatePanel(root, "Frame", Vector2.zero, size - new Vector2(9, 9), theme.FrameBase);
+            var inner = CreatePanel(root, "Frame", Vector2.zero, size - new Vector2(10, 10), frame);
             inner.raycastTarget = false;
             var h = size.y;
             var w = size.x;
             var titleHeight = compact ? 31f : 39f;
             var titleY = h * 0.5f - titleHeight * 0.72f;
-            CreatePanel(root, "TitleBand", new Vector2(0, titleY), new Vector2(w - 14, titleHeight), theme.FrameDark).raycastTarget = false;
+            CreatePanel(root, "TitleBand", new Vector2(0, titleY), new Vector2(w - 14, titleHeight), shell).raycastTarget = false;
             CreateText(root, "Name", new Vector2(7, titleY), new Vector2(w - 50, titleHeight - 4), text.name, compact ? 15 : 20, theme.TitleText, TextAnchor.MiddleCenter, FontStyle.Bold);
 
             var costSize = compact ? 34f : 43f;
@@ -514,7 +525,9 @@ namespace BiomeRivals.Demo
 
             var artHeight = compact ? h * 0.36f : h * 0.39f;
             var artY = compact ? h * 0.105f : h * 0.11f;
-            CreatePanel(root, "ArtWell", new Vector2(0, artY), new Vector2(w - 18, artHeight), new Color(theme.FrameDark.r, theme.FrameDark.g, theme.FrameDark.b, 0.9f)).raycastTarget = false;
+            var artWell = Color.Lerp(theme.FrameDark, Ink, 0.40f);
+            artWell.a = 0.94f;
+            CreatePanel(root, "ArtWell", new Vector2(0, artY), new Vector2(w - 18, artHeight), artWell).raycastTarget = false;
             var sprite = DemoCardArtProvider.Load(cardId);
             if (sprite != null)
             {
@@ -581,11 +594,16 @@ namespace BiomeRivals.Demo
             var image = root.gameObject.AddComponent<Image>();
             image.color = fill;
             var shadow = root.gameObject.AddComponent<Shadow>();
-            shadow.effectColor = new Color(0, 0, 0, 0.55f);
-            shadow.effectDistance = new Vector2(4, -4);
+            shadow.effectColor = new Color(0, 0, 0, 0.46f);
+            shadow.effectDistance = new Vector2(5, -5);
             var outline = root.gameObject.AddComponent<Outline>();
-            outline.effectColor = new Color(edge.r, edge.g, edge.b, 0.72f);
-            outline.effectDistance = new Vector2(2, -2);
+            outline.effectColor = new Color(edge.r, edge.g, edge.b, 0.58f);
+            outline.effectDistance = new Vector2(1.25f, -1.25f);
+
+            var topBevel = CreatePanel(root, "TopBevel", new Vector2(0, size.y * 0.5f - 1.5f), new Vector2(Mathf.Max(0, size.x - 4), 3), new Color(edge.r, edge.g, edge.b, 0.38f));
+            topBevel.raycastTarget = false;
+            var bottomBevel = CreatePanel(root, "BottomBevel", new Vector2(0, -size.y * 0.5f + 1.5f), new Vector2(Mathf.Max(0, size.x - 4), 3), new Color(0, 0, 0, 0.32f));
+            bottomBevel.raycastTarget = false;
             return root;
         }
 
