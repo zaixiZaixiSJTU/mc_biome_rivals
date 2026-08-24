@@ -9,7 +9,6 @@ namespace BiomeRivals.Demo.Editor
     public static class DemoSceneBuilder
     {
         public const string ScenePath = "Assets/Game/Demo/Scenes/Demo.unity";
-        public const string BackgroundPath = "Assets/Game/Demo/Art/demo-battlefield-bg-v1.png";
 
         [MenuItem("Biome Rivals/Build and Open Demo Scene")]
         public static void BuildAndOpen()
@@ -27,16 +26,15 @@ namespace BiomeRivals.Demo.Editor
         private static void BuildScene()
         {
             Directory.CreateDirectory("Assets/Game/Demo/Scenes");
-            ConfigureBackgroundImporter();
-
-            var background = AssetDatabase.LoadAssetAtPath<Sprite>(BackgroundPath);
-            if (background == null) throw new FileNotFoundException("Demo background sprite could not be imported.", BackgroundPath);
 
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             scene.name = "Demo";
             var root = new GameObject("[Demo] Biome Rivals Local Match");
-            var controller = root.AddComponent<DemoSceneController>();
-            controller.Configure(background);
+            var battlefield = root.AddComponent<DemoBattlefield3D>();
+            var blockShader = Shader.Find("Standard") ?? Shader.Find("Universal Render Pipeline/Lit");
+            if (blockShader == null) throw new MissingReferenceException("A tracked block shader is required by the 2.5D demo.");
+            battlefield.Configure(blockShader);
+            root.AddComponent<DemoSceneController>();
 
             if (!EditorSceneManager.SaveScene(scene, ScenePath))
                 throw new IOException("Failed to save demo scene: " + ScenePath);
@@ -46,23 +44,5 @@ namespace BiomeRivals.Demo.Editor
             AssetDatabase.Refresh();
         }
 
-        private static void ConfigureBackgroundImporter()
-        {
-            AssetDatabase.ImportAsset(BackgroundPath, ImportAssetOptions.ForceSynchronousImport);
-            var importer = AssetImporter.GetAtPath(BackgroundPath) as TextureImporter;
-            if (importer == null) throw new FileNotFoundException("Demo background texture importer was not found.", BackgroundPath);
-            var changed = importer.textureType != TextureImporterType.Sprite || importer.mipmapEnabled ||
-                          importer.filterMode != FilterMode.Bilinear || importer.wrapMode != TextureWrapMode.Clamp ||
-                          importer.maxTextureSize != 2048;
-            if (!changed) return;
-            importer.textureType = TextureImporterType.Sprite;
-            importer.spriteImportMode = SpriteImportMode.Single;
-            importer.mipmapEnabled = false;
-            importer.filterMode = FilterMode.Bilinear;
-            importer.wrapMode = TextureWrapMode.Clamp;
-            importer.maxTextureSize = 2048;
-            importer.textureCompression = TextureImporterCompression.CompressedHQ;
-            importer.SaveAndReimport();
-        }
     }
 }

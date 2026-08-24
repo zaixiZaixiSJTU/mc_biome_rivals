@@ -26,8 +26,6 @@ namespace BiomeRivals.Demo
         private static readonly Color OakEdge = Hex("#9A6A3A");
         private static readonly Color Danger = Hex("#E05A47");
 
-        [SerializeField] private Sprite battlefieldBackground;
-
         private readonly DemoLocalMatch _match = new DemoLocalMatch();
         private readonly List<SlotView> _playerUnitSlots = new List<SlotView>();
         private readonly List<SlotView> _playerBuildingSlots = new List<SlotView>();
@@ -36,6 +34,7 @@ namespace BiomeRivals.Demo
         private readonly string[] _opponentBuildings = { string.Empty, "nt_007", string.Empty };
 
         private CardContentRegistry _registry;
+        private DemoBattlefield3D _battlefield;
         private RectTransform _canvasRoot;
         private RectTransform _handRoot;
         private RectTransform _inspectorRoot;
@@ -63,12 +62,12 @@ namespace BiomeRivals.Demo
             new FactionSpec("end", "末地", "ed")
         };
 
-        public void Configure(Sprite background) => battlefieldBackground = background;
-
         private void Start()
         {
             Application.runInBackground = true;
             if (HasCommandLineFlag("-disableLocalCardArt")) DemoCardArtProvider.LocalArtEnabled = false;
+            if (HasCommandLineFlag("-disableLocalWorldAssets") || HasCommandLineFlag("-disableLocalCardArt"))
+                DemoWorldAssetProvider.LocalAssetsEnabled = false;
             BuildNow();
             var capturePath = GetCommandLineValue("-captureDemo");
             if (!string.IsNullOrWhiteSpace(capturePath)) StartCoroutine(CaptureDemo(capturePath));
@@ -87,6 +86,10 @@ namespace BiomeRivals.Demo
         private void BuildInterface()
         {
             EnsureEventSystem();
+            _battlefield = GetComponent<DemoBattlefield3D>();
+            if (_battlefield == null) _battlefield = gameObject.AddComponent<DemoBattlefield3D>();
+            _battlefield.BuildNow();
+
             var canvasObject = new GameObject("DemoCanvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
             canvasObject.transform.SetParent(transform, false);
             var canvas = canvasObject.GetComponent<Canvas>();
@@ -99,10 +102,6 @@ namespace BiomeRivals.Demo
             scaler.matchWidthOrHeight = 0.5f;
             _canvasRoot = canvasObject.GetComponent<RectTransform>();
 
-            var background = CreateStretchPanel(_canvasRoot, "BattlefieldBackground", Color.white);
-            background.sprite = battlefieldBackground;
-            background.type = Image.Type.Simple;
-            background.raycastTarget = false;
             CreateTintBand("BackdropWash", Vector2.zero, new Vector2(ReferenceWidth, ReferenceHeight), new Color(0.02f, 0.025f, 0.02f, 0.16f));
             CreateTintBand("OpponentTint", new Vector2(0, 270), new Vector2(ReferenceWidth, 540), new Color(0.16f, 0.035f, 0.025f, 0.10f));
             CreateTintBand("PlayerTint", new Vector2(0, -270), new Vector2(ReferenceWidth, 540), new Color(0.035f, 0.10f, 0.045f, 0.08f));
@@ -164,20 +163,15 @@ namespace BiomeRivals.Demo
 
         private void BuildSlots()
         {
-            var topBuildingX = new[] { -345f, 0f, 345f };
-            var topUnitX = new[] { -405f, -135f, 135f, 405f };
-            var playerUnitX = new[] { -390f, -120f, 150f, 420f };
-            var playerBuildingX = new[] { -360f, 10f, 380f };
+            for (var i = 0; i < 3; i++)
+                CreateOpponentSlot(DemoSlotKind.Building, i, _battlefield.GetSlotReferencePosition(false, DemoSlotKind.Building, i), new Vector2(190, 92), _opponentBuildings[i]);
+            for (var i = 0; i < 4; i++)
+                CreateOpponentSlot(DemoSlotKind.Unit, i, _battlefield.GetSlotReferencePosition(false, DemoSlotKind.Unit, i), new Vector2(150, 118), _opponentUnits[i]);
 
-            for (var i = 0; i < topBuildingX.Length; i++)
-                CreateOpponentSlot(DemoSlotKind.Building, i, new Vector2(topBuildingX[i], 310), new Vector2(190, 112), _opponentBuildings[i]);
-            for (var i = 0; i < topUnitX.Length; i++)
-                CreateOpponentSlot(DemoSlotKind.Unit, i, new Vector2(topUnitX[i], 165), new Vector2(155, 145), _opponentUnits[i]);
-
-            for (var i = 0; i < playerUnitX.Length; i++)
-                _playerUnitSlots.Add(CreatePlayerSlot(DemoSlotKind.Unit, i, new Vector2(playerUnitX[i], -150), new Vector2(165, 150)));
-            for (var i = 0; i < playerBuildingX.Length; i++)
-                _playerBuildingSlots.Add(CreatePlayerSlot(DemoSlotKind.Building, i, new Vector2(playerBuildingX[i], -270), new Vector2(205, 100)));
+            for (var i = 0; i < 4; i++)
+                _playerUnitSlots.Add(CreatePlayerSlot(DemoSlotKind.Unit, i, _battlefield.GetSlotReferencePosition(true, DemoSlotKind.Unit, i), new Vector2(158, 118)));
+            for (var i = 0; i < 3; i++)
+                _playerBuildingSlots.Add(CreatePlayerSlot(DemoSlotKind.Building, i, _battlefield.GetSlotReferencePosition(true, DemoSlotKind.Building, i), new Vector2(195, 84)));
 
             CreateText(_canvasRoot, "OpponentLaneLabel", new Vector2(-687, 68), new Vector2(175, 34), "敌方单位排", 13, new Color(Pale.r, Pale.g, Pale.b, 0.72f), TextAnchor.MiddleLeft, FontStyle.Bold);
             CreateText(_canvasRoot, "PlayerLaneLabel", new Vector2(-687, -66), new Vector2(175, 34), "己方单位排", 13, new Color(Pale.r, Pale.g, Pale.b, 0.72f), TextAnchor.MiddleLeft, FontStyle.Bold);
@@ -201,13 +195,13 @@ namespace BiomeRivals.Demo
 
         private void CreateOpponentSlot(DemoSlotKind kind, int index, Vector2 position, Vector2 size, string cardId)
         {
-            var root = CreateFramedPanel(_canvasRoot, $"Opponent{kind}Slot{index}", position, size, new Color(0.15f, 0.085f, 0.065f, 0.19f), Color.Lerp(Ember, StoneEdge, 0.64f));
+            var root = CreateFramedPanel(_canvasRoot, $"Opponent{kind}Slot{index}", position, size, new Color(0.15f, 0.085f, 0.065f, 0.055f), Color.Lerp(Ember, StoneEdge, 0.64f));
             if (string.IsNullOrEmpty(cardId))
             {
                 CreateText(root, "Empty", Vector2.zero, size - new Vector2(20, 20), kind == DemoSlotKind.Unit ? "敌方单位格" : "敌方建筑格", 13, new Color(Pale.r, Pale.g, Pale.b, 0.32f), TextAnchor.MiddleCenter, FontStyle.Bold);
                 return;
             }
-            CreateBoardPiece(root, cardId, size - new Vector2(10, 10), true);
+            CreateWorldPieceLabel(root, cardId, size - new Vector2(10, 10), true);
         }
 
         private void BuildHandArea()
@@ -265,6 +259,7 @@ namespace BiomeRivals.Demo
             RefreshFactionButtons();
             RefreshHand();
             RefreshPlayerSlots();
+            _battlefield.SyncPieces(_match.UnitSlots, _match.BuildingSlots, _opponentUnits, _opponentBuildings, _registry);
             RefreshInspector();
             _energyText.text = $"◆ {_match.Energy}/{_match.MaxEnergy}";
             _roundText.text = $"第 {_match.Round} 回合";
@@ -330,15 +325,15 @@ namespace BiomeRivals.Demo
             view.EmptyLabel.gameObject.SetActive(empty);
             var valid = empty && IsSelectedValidFor(view.Kind);
             view.Image.color = valid
-                ? new Color(Cyan.r, Cyan.g, Cyan.b, 0.46f)
-                : new Color(PanelRaised.r, PanelRaised.g, PanelRaised.b, empty ? 0.34f : 0.92f);
+                ? new Color(Cyan.r, Cyan.g, Cyan.b, 0.20f)
+                : new Color(PanelRaised.r, PanelRaised.g, PanelRaised.b, empty ? 0.055f : 0.08f);
 
             if (!empty)
             {
                 if (view.Kind == DemoSlotKind.Building && view.Index > 0 && _match.BuildingSlots[view.Index - 1] == cardId)
                     CreateText(view.Content, "Occupied", Vector2.zero, view.Content.sizeDelta, "结构占用", 14, Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
                 else
-                    CreateBoardPiece(view.Content, cardId, view.Content.sizeDelta, false);
+                    CreateWorldPieceLabel(view.Content, cardId, view.Content.sizeDelta, false);
             }
         }
 
@@ -448,39 +443,38 @@ namespace BiomeRivals.Demo
             yield return null;
             yield return null;
             var canvas = GetComponentInChildren<Canvas>();
-            var cameraObject = new GameObject("DemoCaptureCamera");
-            var camera = cameraObject.AddComponent<Camera>();
-            camera.clearFlags = CameraClearFlags.SolidColor;
-            camera.backgroundColor = Ink;
-            camera.orthographic = true;
-            camera.orthographicSize = 5f;
-            camera.nearClipPlane = 0.1f;
-            camera.farClipPlane = 20f;
-            camera.transform.position = new Vector3(0, 0, -10f);
+            var camera = _battlefield.BoardCamera;
+            if (camera == null) throw new InvalidOperationException("2.5D battlefield camera is not available.");
+            var directory = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
+
+            var originalMode = canvas.renderMode;
+            var originalCamera = canvas.worldCamera;
+            var originalTarget = camera.targetTexture;
+            var renderTexture = new RenderTexture(1920, 1080, 24, RenderTextureFormat.ARGB32);
+            renderTexture.Create();
             canvas.renderMode = RenderMode.ScreenSpaceCamera;
             canvas.worldCamera = camera;
             canvas.planeDistance = 1f;
-
-            var renderTexture = new RenderTexture(1920, 1080, 24, RenderTextureFormat.ARGB32);
             camera.targetTexture = renderTexture;
             Canvas.ForceUpdateCanvases();
             camera.Render();
-            var previous = RenderTexture.active;
+
+            var previousActive = RenderTexture.active;
             RenderTexture.active = renderTexture;
             var texture = new Texture2D(1920, 1080, TextureFormat.RGB24, false);
             texture.ReadPixels(new Rect(0, 0, 1920, 1080), 0, 0, false);
             texture.Apply(false, false);
-            var directory = Path.GetDirectoryName(path);
-            if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
             File.WriteAllBytes(path, texture.EncodeToPNG());
-            RenderTexture.active = previous;
-            camera.targetTexture = null;
+
+            RenderTexture.active = previousActive;
+            camera.targetTexture = originalTarget;
+            canvas.renderMode = originalMode;
+            canvas.worldCamera = originalCamera;
             renderTexture.Release();
             Destroy(renderTexture);
-            Destroy(cameraObject);
             Destroy(texture);
             Debug.Log("Demo screenshot saved: " + path);
-            yield return null;
             Application.Quit(0);
         }
 
@@ -557,26 +551,21 @@ namespace BiomeRivals.Demo
             return root;
         }
 
-        private void CreateBoardPiece(Transform parent, string cardId, Vector2 size, bool enemy)
+        private void CreateWorldPieceLabel(Transform parent, string cardId, Vector2 size, bool enemy)
         {
             if (!_registry.TryGetDefinition(cardId, out var definition) || !_registry.TryGetText(cardId, out var text)) return;
             _registry.TryGetTheme(definition.themeId, out var theme);
-            var root = CreatePanel(parent, "Piece_" + cardId, Vector2.zero, size, new Color(theme.FrameDark.r, theme.FrameDark.g, theme.FrameDark.b, 0.94f));
-            root.raycastTarget = false;
             var accent = enemy ? Ember : theme.Accent;
-            CreatePanel(root.rectTransform, "Accent", new Vector2(0, size.y * 0.5f - 4), new Vector2(size.x, 6), accent).raycastTarget = false;
-            var sprite = DemoCardArtProvider.Load(cardId);
-            if (sprite != null)
-            {
-                var art = CreatePanel(root.rectTransform, "Art", new Vector2(-size.x * 0.28f, 4), new Vector2(size.y * 0.52f, size.y * 0.52f), Color.white);
-                art.sprite = sprite;
-                art.preserveAspect = true;
-                art.raycastTarget = false;
-            }
-            else CreateText(root.rectTransform, "Glyph", new Vector2(-size.x * 0.28f, 4), new Vector2(54, 54), "◆", 27, accent, TextAnchor.MiddleCenter, FontStyle.Bold);
-            CreateText(root.rectTransform, "Name", new Vector2(size.x * 0.14f, 18), new Vector2(size.x * 0.58f, 40), text.name, 14, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
-            var stats = definition.hasAttack && definition.hasHealth ? $"⚔ {definition.attack}   ❤ {definition.health}" : definition.hasHealth ? $"❤ {definition.health}" : definition.hasAttack && definition.hasDurability ? $"⚔ {definition.attack}   ◇ {definition.durability}" : text.typeLabel;
-            CreateText(root.rectTransform, "Stats", new Vector2(size.x * 0.14f, -23), new Vector2(size.x * 0.58f, 28), stats, 13, accent, TextAnchor.MiddleCenter, FontStyle.Bold);
+            var stats = definition.hasAttack && definition.hasHealth
+                ? $"{text.name}   {definition.attack}/{definition.health}"
+                : definition.hasHealth
+                    ? $"{text.name}   ❤ {definition.health}"
+                    : text.name;
+            var labelY = -size.y * 0.34f;
+            var plate = CreatePanel(parent, "WorldLabel", new Vector2(0, labelY), new Vector2(size.x - 8, 30), new Color(Ink.r, Ink.g, Ink.b, 0.84f));
+            plate.raycastTarget = false;
+            CreatePanel(parent, "WorldLabelAccent", new Vector2(0, labelY + 14), new Vector2(size.x - 8, 2), new Color(accent.r, accent.g, accent.b, 0.82f)).raycastTarget = false;
+            CreateText(parent, "WorldLabelText", new Vector2(0, labelY), new Vector2(size.x - 14, 26), stats, 12, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
         }
 
         private void CreateStat(Transform parent, Vector2 position, string value, Color color, float size)
@@ -611,20 +600,6 @@ namespace BiomeRivals.Demo
         {
             var root = CreateRect(parent, name, position, size);
             var image = root.gameObject.AddComponent<Image>();
-            image.color = color;
-            return image;
-        }
-
-        private Image CreateStretchPanel(Transform parent, string name, Color color)
-        {
-            var go = new GameObject(name, typeof(RectTransform), typeof(Image));
-            go.transform.SetParent(parent, false);
-            var rect = go.GetComponent<RectTransform>();
-            rect.anchorMin = Vector2.zero;
-            rect.anchorMax = Vector2.one;
-            rect.offsetMin = Vector2.zero;
-            rect.offsetMax = Vector2.zero;
-            var image = go.GetComponent<Image>();
             image.color = color;
             return image;
         }

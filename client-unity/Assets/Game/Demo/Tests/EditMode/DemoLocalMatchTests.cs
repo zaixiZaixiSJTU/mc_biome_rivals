@@ -57,18 +57,26 @@ namespace BiomeRivals.Demo.Tests
         public void GeneratedSceneAndRuntimeHierarchyExist()
         {
             Assert.That(AssetDatabase.LoadAssetAtPath<SceneAsset>(DemoSceneBuilder.ScenePath), Is.Not.Null);
-            var background = AssetDatabase.LoadAssetAtPath<Sprite>(DemoSceneBuilder.BackgroundPath);
-            Assert.That(background, Is.Not.Null);
 
             var root = new GameObject("DemoTestRoot");
             try
             {
                 var controller = root.AddComponent<DemoSceneController>();
-                controller.Configure(background);
                 controller.BuildNow();
+                var battlefield = root.GetComponent<DemoBattlefield3D>();
+                Assert.That(battlefield, Is.Not.Null);
+                Assert.That(battlefield.BoardCamera, Is.Not.Null);
+                Assert.That(battlefield.BoardCamera.orthographic, Is.True);
+                Assert.That(root.transform.Find("BattlefieldGeometry"), Is.Not.Null);
+                Assert.That(root.transform.Find("BattlefieldPieces"), Is.Not.Null);
                 Assert.That(root.transform.Find("DemoCanvas"), Is.Not.Null);
                 Assert.That(GameObject.Find("EndTurn"), Is.Not.Null);
                 Assert.That(GameObject.Find("Faction_plains_forest"), Is.Not.Null);
+
+                var playerUnit = battlefield.GetSlotReferencePosition(true, DemoSlotKind.Unit, 0);
+                var opponentUnit = battlefield.GetSlotReferencePosition(false, DemoSlotKind.Unit, 0);
+                Assert.That(playerUnit.y, Is.LessThan(opponentUnit.y));
+                Assert.That(playerUnit, Is.Not.EqualTo(opponentUnit));
             }
             finally
             {

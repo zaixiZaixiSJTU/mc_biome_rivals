@@ -46,13 +46,14 @@ docker compose up --build
 
 ## 最基础可玩 Demo
 
-Unity 中打开 `client-unity/Assets/Game/Demo/Scenes/Demo.unity` 后点击 Play。当前 Demo 支持：
+Unity 中打开 `client-unity/Assets/Game/Demo/Scenes/Demo.unity` 后点击 Play。当前 Demo 使用固定斜俯视正交摄像机，将真实 3D 方块棋盘与屏幕空间卡牌 UI 组合为 2.5D 战场，并支持：
 
 - 七个群系主题即时切换，每个群系装载 5 张已注册卡牌；
 - 选择手牌并部署到 4 个单位格或 3 个建筑格；
 - 多格结构检查连续建筑空间；
 - 法术、材料和装备的费用支付与效果占位释放；
 - 红石能量、结束回合、模拟对手回合和下一回合补充；
+- 3D 单位/建筑后备模型、轻微待机动画，以及按 `cardId` 热替换正式 Prefab；
 - 本机提取过 Minecraft 图标时自动显示像素物品，否则使用无版权占位符。
 
 重新生成场景或额外构建 Windows 演示包：
@@ -60,9 +61,10 @@ Unity 中打开 `client-unity/Assets/Game/Demo/Scenes/Demo.unity` 后点击 Play
 ```powershell
 .\scripts\build-demo.ps1
 .\scripts\build-demo.ps1 -WithWindowsPlayer
+.\scripts\build-demo.ps1 -WithWindowsPlayer -WithMinecraftAssets
 ```
 
-Windows 构建输出位于忽略目录 `client-unity/Builds/DemoPreview/`，不会进入 Git。
+`-WithMinecraftAssets` 会从本机已拥有的 Minecraft Java JAR 白名单提取 17 张方块贴图和卡牌图标。提取物与 Windows 构建均位于 Git 忽略目录，不会进入仓库。
 
 ![Demo 实际运行预览](docs/design/assets/demo-runtime-preview-v1.png)
 

@@ -23,6 +23,8 @@ client-unity/MemoryCaptures/
 client-unity/Recordings/
 client-unity/Assets/Generated/MinecraftCardIcons/*
 !client-unity/Assets/Generated/MinecraftCardIcons/.gitkeep
+client-unity/Assets/Generated/MinecraftWorldTextures/
+client-unity/Assets/Generated/MinecraftWorldTextures.meta
 *.csproj
 *.sln
 *.user

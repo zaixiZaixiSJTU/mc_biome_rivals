@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [string]$UnityPath,
-    [switch]$WithWindowsPlayer
+    [switch]$WithWindowsPlayer,
+    [switch]$WithMinecraftAssets
 )
 
 $ErrorActionPreference = 'Stop'
@@ -18,6 +19,10 @@ if (-not $UnityPath) {
 if (-not $UnityPath -or -not (Test-Path -LiteralPath $UnityPath)) { throw "Unity $requiredVersion was not found." }
 
 & (Join-Path $PSScriptRoot 'sync-card-content.ps1')
+if ($WithMinecraftAssets) {
+    & (Join-Path $PSScriptRoot 'extract-minecraft-card-icons.ps1')
+    & (Join-Path $PSScriptRoot 'extract-minecraft-world-textures.ps1')
+}
 [System.IO.Directory]::CreateDirectory((Join-Path $projectPath 'Logs')) | Out-Null
 
 function Invoke-DemoUnity([string]$Method, [string]$LogName, [int]$TimeoutSeconds) {
