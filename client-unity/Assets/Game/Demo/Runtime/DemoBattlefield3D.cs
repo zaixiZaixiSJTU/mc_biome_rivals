@@ -18,6 +18,7 @@ namespace BiomeRivals.Demo
         private static readonly float[] OpponentBuildingX = { -4.5f, 0f, 4.5f };
 
         private readonly Dictionary<string, Material> _materials = new Dictionary<string, Material>(StringComparer.Ordinal);
+        private readonly Dictionary<string, SlotMarker> _slotMarkers = new Dictionary<string, SlotMarker>(StringComparer.Ordinal);
         private readonly List<Floater> _floaters = new List<Floater>();
         [SerializeField] private Shader blockShader;
         [SerializeField] private Shader backdropShader;
@@ -70,6 +71,20 @@ namespace BiomeRivals.Demo
             return new Vector2((viewport.x - 0.5f) * ReferenceWidth, (viewport.y - 0.5f) * ReferenceHeight);
         }
 
+        public void SetSlotState(bool player, DemoSlotKind kind, int index, bool validTarget, bool occupied)
+        {
+            BuildNow();
+            if (!_slotMarkers.TryGetValue(SlotKey(player, kind, index), out var marker)) return;
+            marker.ValidTarget = validTarget;
+            marker.Occupied = occupied;
+        }
+
+        public void SetSlotHovered(bool player, DemoSlotKind kind, int index, bool hovered)
+        {
+            BuildNow();
+            if (_slotMarkers.TryGetValue(SlotKey(player, kind, index), out var marker)) marker.Hovered = hovered;
+        }
+
         public void SyncPieces(
             IReadOnlyList<string> playerUnits,
             IReadOnlyList<string> playerBuildings,
@@ -100,6 +115,31 @@ namespace BiomeRivals.Demo
                 floater.Transform.localPosition = position;
                 floater.Transform.localRotation = Quaternion.Euler(0, Mathf.Sin(time * 0.7f + floater.Phase) * 5f, 0);
             }
+
+            foreach (var marker in _slotMarkers.Values) UpdateSlotMarker(marker, time);
+        }
+
+        private static void UpdateSlotMarker(SlotMarker marker, float time)
+        {
+            if (marker.Root == null || marker.Material == null) return;
+            var pulse = 0.5f + Mathf.Sin(time * 4.6f + marker.Phase) * 0.5f;
+            var actionableHover = marker.Hovered && marker.ValidTarget && !marker.Occupied;
+            var color = actionableHover
+                ? Hex("#F1C96A")
+                : marker.ValidTarget && !marker.Occupied
+                    ? Color.Lerp(Hex("#3D9E8F"), Hex("#79E0CB"), pulse)
+                    : marker.Occupied
+                        ? Hex("#3A3028")
+                        : marker.Hovered ? Hex("#6B685D") : Hex("#3B3C37");
+            var emission = actionableHover
+                ? color * 0.75f
+                : marker.ValidTarget && !marker.Occupied
+                    ? color * (0.38f + pulse * 0.48f)
+                    : Color.black;
+            SetMaterialColor(marker.Material, color, emission);
+            var position = marker.BasePosition;
+            position.y += actionableHover ? 0.085f : marker.ValidTarget && !marker.Occupied ? pulse * 0.045f : marker.Hovered ? 0.018f : 0f;
+            marker.Root.localPosition = position;
         }
 
         private void CreateRoots()
@@ -278,7 +318,35 @@ namespace BiomeRivals.Demo
             var material = player ? _materials["player_slot"] : _materials["enemy_slot"];
             if (illustratedBackdrop == null)
                 CreateBlock(_terrainRoot, $"{(player ? "Player" : "Opponent")}_{kind}_{index}", position, size, material);
-            CreateBlock(_terrainRoot, "SlotMark", position + new Vector3(0, 0.065f, 0), new Vector3(size.x * 0.72f, 0.035f, size.z * 0.08f), _materials["slot_edge"]);
+
+            var markerRoot = NewChildRoot(_terrainRoot, $"SlotMarker_{(player ? "Player" : "Opponent")}_{kind}_{index}", position);
+            var markerMaterial = DemoWorldAssetProvider.CreateBlockMaterial(
+                $"DemoSlotMarker_{(player ? "Player" : "Opponent")}_{kind}_{index}",
+                Hex("#5B5A50"),
+                string.Empty,
+                Color.black,
+                blockShader);
+            _materials[$"slot_marker_{player}_{kind}_{index}"] = markerMaterial;
+            var rail = 0.055f;
+            var height = 0.035f;
+            CreateBlock(markerRoot, "North", new Vector3(0, 0.065f, size.z * 0.5f), new Vector3(size.x, height, rail), markerMaterial);
+            CreateBlock(markerRoot, "South", new Vector3(0, 0.065f, -size.z * 0.5f), new Vector3(size.x, height, rail), markerMaterial);
+            CreateBlock(markerRoot, "West", new Vector3(-size.x * 0.5f, 0.065f, 0), new Vector3(rail, height, size.z), markerMaterial);
+            CreateBlock(markerRoot, "East", new Vector3(size.x * 0.5f, 0.065f, 0), new Vector3(rail, height, size.z), markerMaterial);
+            _slotMarkers[SlotKey(player, kind, index)] = new SlotMarker(markerRoot, markerMaterial, position, index * 0.77f + (player ? 0f : 2.4f));
+        }
+
+        private static string SlotKey(bool player, DemoSlotKind kind, int index) => $"{player}:{kind}:{index}";
+
+        private static void SetMaterialColor(Material material, Color color, Color emission)
+        {
+            if (material.HasProperty("_Color")) material.SetColor("_Color", color);
+            if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", color);
+            if (material.HasProperty("_EmissionColor"))
+            {
+                material.EnableKeyword("_EMISSION");
+                material.SetColor("_EmissionColor", emission);
+            }
         }
 
         private void BuildBiomeDecor()
@@ -341,17 +409,17 @@ namespace BiomeRivals.Demo
 
         private void BuildBlockCreature(Transform root, Material material, Color accent, string cardId, bool player, int index)
         {
+            if (DemoMinecraftModelFactory.TryGetTextureKey(cardId, out var textureKey))
+            {
+                var entityMaterial = GetEntityMaterial(cardId, textureKey, material.color);
+                if (DemoMinecraftModelFactory.TryBuild(root, cardId, player, entityMaterial))
+                {
+                    _floaters.Add(new Floater(root, root.localPosition.y + (cardId == "nt_003" ? 0.12f : 0f), index * 0.9f + (player ? 0f : 2.7f)));
+                    return;
+                }
+            }
+
             var accentMaterial = GetAccentMaterial("accent_" + cardId, accent);
-            if (cardId == "nt_001")
-            {
-                BuildMagmaCube(root, index);
-                return;
-            }
-            if (cardId == "nt_003")
-            {
-                BuildBlaze(root, accentMaterial, index);
-                return;
-            }
             CreateBlock(root, "Body", new Vector3(0, 0.72f, 0), new Vector3(0.92f, 0.78f, 0.62f), material);
             CreateBlock(root, "Head", new Vector3(0, 1.35f, player ? -0.08f : 0.08f), new Vector3(0.68f, 0.62f, 0.66f), material);
             CreateBlock(root, "EyeBand", new Vector3(0, 1.39f, player ? -0.43f : 0.43f), new Vector3(0.46f, 0.12f, 0.055f), accentMaterial);
@@ -360,26 +428,13 @@ namespace BiomeRivals.Demo
             _floaters.Add(new Floater(root, root.localPosition.y, index * 0.9f + (player ? 0 : 2.7f)));
         }
 
-        private void BuildMagmaCube(Transform root, int index)
+        private Material GetEntityMaterial(string cardId, string textureKey, Color fallback)
         {
-            CreateBlock(root, "MagmaBody", new Vector3(0, 0.66f, 0), new Vector3(1.16f, 0.92f, 1.05f), _materials["magma"]);
-            CreateBlock(root, "MagmaCap", new Vector3(0, 1.13f, 0), new Vector3(1.22f, 0.17f, 1.10f), _materials["blackstone"]);
-            CreateBlock(root, "MagmaEyes", new Vector3(0, 0.78f, -0.54f), new Vector3(0.72f, 0.14f, 0.06f), _materials["ember"]);
-            _floaters.Add(new Floater(root, root.localPosition.y, index * 0.9f + 2.7f));
-        }
-
-        private void BuildBlaze(Transform root, Material accentMaterial, int index)
-        {
-            CreateBlock(root, "BlazeCore", new Vector3(0, 1.05f, 0), new Vector3(0.56f, 0.72f, 0.56f), _materials["ember"]);
-            for (var rod = 0; rod < 8; rod++)
-            {
-                var angle = rod * Mathf.PI * 0.25f;
-                var radius = rod % 2 == 0 ? 0.72f : 0.54f;
-                var y = 0.62f + (rod % 3) * 0.38f;
-                CreateBlock(root, "BlazeRod_" + rod, new Vector3(Mathf.Cos(angle) * radius, y, Mathf.Sin(angle) * radius), new Vector3(0.16f, 0.72f, 0.16f), accentMaterial);
-            }
-            CreateBlock(root, "BlazeEyes", new Vector3(0, 1.11f, -0.30f), new Vector3(0.36f, 0.10f, 0.05f), _materials["blackstone"]);
-            _floaters.Add(new Floater(root, root.localPosition.y + 0.16f, index * 0.9f + 2.7f));
+            var key = "entity_" + cardId;
+            if (_materials.TryGetValue(key, out var material)) return material;
+            material = DemoWorldAssetProvider.CreateEntityMaterial("DemoEntity_" + cardId, fallback, textureKey, blockShader);
+            _materials[key] = material;
+            return material;
         }
 
         private void BuildBlockStructure(Transform root, Material material, Color accent, int occupiedSlots)
@@ -477,6 +532,25 @@ namespace BiomeRivals.Demo
             {
                 Transform = transform;
                 BaseY = baseY;
+                Phase = phase;
+            }
+        }
+
+        private sealed class SlotMarker
+        {
+            public readonly Transform Root;
+            public readonly Material Material;
+            public readonly Vector3 BasePosition;
+            public readonly float Phase;
+            public bool ValidTarget;
+            public bool Occupied;
+            public bool Hovered;
+
+            public SlotMarker(Transform root, Material material, Vector3 basePosition, float phase)
+            {
+                Root = root;
+                Material = material;
+                BasePosition = basePosition;
                 Phase = phase;
             }
         }

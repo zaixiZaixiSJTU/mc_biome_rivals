@@ -22,7 +22,7 @@
 
 - 通用 HUD 只使用低饱和深板岩、旧木和羊皮纸色；青色仅表示能量、分界线和合法操作。
 - 群系主色只进入卡牌框、激活按钮和少量状态点，不给整块外围面板染色。
-- 空战场格采用半透明地面压印效果，已有单位才使用高不透明信息块。
+- 空战场格只显示贴地的细石质轮廓，不绘制半透明面板；合法部署格以青色呼吸光提示，悬停时轮廓变金并轻微抬升，已有单位的格子由 3D 模型占据。
 - 背景统一覆盖轻微暗色罩层，保证文字可读，同时保留上下群系材质差异。
 
 ## 2.5D 场景分层
@@ -31,10 +31,13 @@
 |---|---|---|
 | `DemoBattlefield3D` | 摄像机、灯光、精绘环境层、3D 世界槽位和单位 | 精绘背景负责整体材质质量，真实几何负责交互、遮挡和动画 |
 | `DemoWorldAssetProvider` | 加载本机方块贴图与按 `cardId` 注册的 Prefab | 正式素材不应侵入回合和卡牌规则代码 |
+| `DemoMinecraftModelFactory` | 将已注册单位构造成 Minecraft 式分件方块模型并套用对应生物皮肤 | 只负责后备表现；正式 Prefab 仍拥有最高优先级 |
 | `DemoSceneController` | 手牌、检查器、点击热区和世界坐标到 UI 坐标投影 | 保持屏幕空间布局和输入职责 |
 | `DemoLocalMatch` | 费用、槽位、连续建筑与回合状态 | 不访问场景对象或渲染组件 |
 
-本机原型贴图通过 `scripts/extract-minecraft-world-textures.ps1` 从已拥有的 Java 客户端 JAR 按 17 项白名单提取到 Git 忽略目录。运行时先查找 `Resources/DemoWorld/Prefabs/{cardId}`；不存在时才生成程序化方块生物/建筑。因此以后注册正式 Prefab 不需要改部署逻辑。
+本机原型贴图通过 `scripts/extract-minecraft-world-textures.ps1` 从已拥有的 Java 客户端 JAR 按白名单提取 17 张方块贴图和 6 张生物皮肤到 Git 忽略目录。运行时先查找 `Resources/DemoWorld/Prefabs/{cardId}`；不存在时由 `DemoMinecraftModelFactory` 为 `pf_001` 蜜蜂、`pf_002` 绵羊、`pf_003` 狼、`pf_004` 村民、`nt_001` 岩浆怪和 `nt_003` 烈焰人构造 Minecraft 式分件模型，其余单位才使用通用后备模型。因此以后注册正式 Prefab 不需要改部署逻辑。
+
+槽位的屏幕空间矩形只负责射线命中，本身完全透明。`DemoSceneController` 将合法性和指针悬停状态传给 `DemoBattlefield3D`，由世界空间轮廓负责颜色、发光和高度动画；规则状态仍只存在于 `DemoLocalMatch`，不会被动画反向修改。
 
 默认场景采用“精绘背景 + 真实 3D 槽位/单位”的 2.5D 合成方式，不再用低精度程序化地形覆盖原有美术。程序化方块地形仅作为背景资源缺失时的可运行后备。进入性能阶段后，槽位之外的静态装饰应合并为少量 Mesh，单位和建筑继续保持独立对象。
 

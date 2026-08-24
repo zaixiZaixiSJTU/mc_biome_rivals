@@ -41,6 +41,12 @@ $textures = [ordered]@{
     deepslate_bricks = 'assets/minecraft/textures/block/deepslate_bricks.png'
     prismarine_bricks = 'assets/minecraft/textures/block/prismarine_bricks.png'
     purpur_block = 'assets/minecraft/textures/block/purpur_block.png'
+    entity_magma_cube = 'assets/minecraft/textures/entity/slime/magmacube.png'
+    entity_blaze = 'assets/minecraft/textures/entity/blaze.png'
+    entity_bee = 'assets/minecraft/textures/entity/bee/bee.png'
+    entity_sheep = 'assets/minecraft/textures/entity/sheep/sheep.png'
+    entity_wolf = 'assets/minecraft/textures/entity/wolf/wolf.png'
+    entity_villager = 'assets/minecraft/textures/entity/villager/villager.png'
 }
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -85,7 +91,7 @@ try {
         ($document | ConvertTo-Json -Depth 8) + [Environment]::NewLine,
         [System.Text.UTF8Encoding]::new($false))
 
-    Write-Output "Extracted $($provenance.Count) local 2.5D block textures -> $outputRoot"
+    Write-Output "Extracted $($provenance.Count) local 2.5D block/entity textures -> $outputRoot"
 }
 finally {
     $archive.Dispose()

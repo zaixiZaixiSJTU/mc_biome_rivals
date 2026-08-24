@@ -66,8 +66,7 @@ namespace BiomeRivals.Demo
         {
             Application.runInBackground = true;
             if (HasCommandLineFlag("-disableLocalCardArt")) DemoCardArtProvider.LocalArtEnabled = false;
-            if (HasCommandLineFlag("-disableLocalWorldAssets") || HasCommandLineFlag("-disableLocalCardArt"))
-                DemoWorldAssetProvider.LocalAssetsEnabled = false;
+            if (HasCommandLineFlag("-disableLocalWorldAssets")) DemoWorldAssetProvider.LocalAssetsEnabled = false;
             BuildNow();
             var capturePath = GetCommandLineValue("-captureDemo");
             if (!string.IsNullOrWhiteSpace(capturePath)) StartCoroutine(CaptureDemo(capturePath));
@@ -179,26 +178,33 @@ namespace BiomeRivals.Demo
 
         private SlotView CreatePlayerSlot(DemoSlotKind kind, int index, Vector2 position, Vector2 size)
         {
-            var slotEdge = Color.Lerp(Cyan, StoneEdge, 0.62f);
-            var slotFill = new Color(PanelRaised.r, PanelRaised.g, PanelRaised.b, 0.34f);
-            var root = CreateFramedPanel(_canvasRoot, $"Player{kind}Slot{index}", position, size, slotFill, slotEdge);
+            var root = CreateRect(_canvasRoot, $"Player{kind}Slot{index}", position, size);
+            var image = root.gameObject.AddComponent<Image>();
+            image.color = Color.clear;
             var button = root.gameObject.AddComponent<Button>();
-            button.targetGraphic = root.GetComponent<Image>();
-            ConfigureButtonColors(button, slotFill, Cyan);
+            button.targetGraphic = image;
+            ConfigureInvisibleButton(button);
             var capturedKind = kind;
             var capturedIndex = index;
             button.onClick.AddListener(() => OnSlotClicked(capturedKind, capturedIndex));
+            root.gameObject.AddComponent<DemoSlotPointerRelay>().Configure(
+                hovered => _battlefield.SetSlotHovered(true, capturedKind, capturedIndex, hovered));
             var content = CreateRect(root, "Content", Vector2.zero, size - new Vector2(12, 12));
-            var label = CreateText(content, "EmptyLabel", Vector2.zero, size - new Vector2(20, 20), kind == DemoSlotKind.Unit ? $"单位格 {index + 1}" : $"建筑格 {index + 1}", 14, new Color(Pale.r, Pale.g, Pale.b, 0.46f), TextAnchor.MiddleCenter, FontStyle.Bold);
-            return new SlotView(kind, index, root.GetComponent<Image>(), button, content, label);
+            var label = CreateText(content, "EmptyLabel", Vector2.zero, size - new Vector2(20, 20), kind == DemoSlotKind.Unit ? $"单位格 {index + 1}" : $"建筑格 {index + 1}", 13, new Color(Pale.r, Pale.g, Pale.b, 0.30f), TextAnchor.MiddleCenter, FontStyle.Bold);
+            return new SlotView(kind, index, image, button, content, label);
         }
 
         private void CreateOpponentSlot(DemoSlotKind kind, int index, Vector2 position, Vector2 size, string cardId)
         {
-            var root = CreateFramedPanel(_canvasRoot, $"Opponent{kind}Slot{index}", position, size, new Color(0.15f, 0.085f, 0.065f, 0.055f), Color.Lerp(Ember, StoneEdge, 0.64f));
+            var root = CreateRect(_canvasRoot, $"Opponent{kind}Slot{index}", position, size);
+            var hitArea = root.gameObject.AddComponent<Image>();
+            hitArea.color = Color.clear;
+            hitArea.raycastTarget = false;
+            var occupied = !string.IsNullOrEmpty(cardId);
+            _battlefield.SetSlotState(false, kind, index, false, occupied);
             if (string.IsNullOrEmpty(cardId))
             {
-                CreateText(root, "Empty", Vector2.zero, size - new Vector2(20, 20), kind == DemoSlotKind.Unit ? "敌方单位格" : "敌方建筑格", 13, new Color(Pale.r, Pale.g, Pale.b, 0.32f), TextAnchor.MiddleCenter, FontStyle.Bold);
+                CreateText(root, "Empty", Vector2.zero, size - new Vector2(20, 20), kind == DemoSlotKind.Unit ? "敌方单位格" : "敌方建筑格", 12, new Color(Pale.r, Pale.g, Pale.b, 0.24f), TextAnchor.MiddleCenter, FontStyle.Bold);
                 return;
             }
             CreateWorldPieceLabel(root, cardId, size - new Vector2(10, 10), true);
@@ -324,9 +330,11 @@ namespace BiomeRivals.Demo
             var empty = string.IsNullOrEmpty(cardId);
             view.EmptyLabel.gameObject.SetActive(empty);
             var valid = empty && IsSelectedValidFor(view.Kind);
-            view.Image.color = valid
-                ? new Color(Cyan.r, Cyan.g, Cyan.b, 0.20f)
-                : new Color(PanelRaised.r, PanelRaised.g, PanelRaised.b, empty ? 0.055f : 0.08f);
+            view.Image.color = Color.clear;
+            view.EmptyLabel.color = valid
+                ? new Color(Cyan.r, Cyan.g, Cyan.b, 0.86f)
+                : new Color(Pale.r, Pale.g, Pale.b, 0.30f);
+            _battlefield.SetSlotState(true, view.Kind, view.Index, valid, !empty);
 
             if (!empty)
             {
@@ -624,6 +632,19 @@ namespace BiomeRivals.Demo
             colors.disabledColor = new Color(normal.r, normal.g, normal.b, 0.42f);
             colors.colorMultiplier = 1f;
             colors.fadeDuration = 0.08f;
+            button.colors = colors;
+        }
+
+        private static void ConfigureInvisibleButton(Button button)
+        {
+            var colors = button.colors;
+            colors.normalColor = Color.clear;
+            colors.highlightedColor = Color.clear;
+            colors.pressedColor = Color.clear;
+            colors.selectedColor = Color.clear;
+            colors.disabledColor = Color.clear;
+            colors.colorMultiplier = 1f;
+            colors.fadeDuration = 0f;
             button.colors = colors;
         }
 

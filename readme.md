@@ -64,7 +64,7 @@ Unity 中打开 `client-unity/Assets/Game/Demo/Scenes/Demo.unity` 后点击 Play
 .\scripts\build-demo.ps1 -WithWindowsPlayer -WithMinecraftAssets
 ```
 
-`-WithMinecraftAssets` 会从本机已拥有的 Minecraft Java JAR 白名单提取 17 张方块贴图和卡牌图标。提取物与 Windows 构建均位于 Git 忽略目录，不会进入仓库。
+`-WithMinecraftAssets` 会从本机已拥有的 Minecraft Java JAR 白名单提取 17 张方块贴图、6 张生物皮肤和卡牌图标。提取物与 Windows 构建均位于 Git 忽略目录，不会进入仓库。
 
 ![Demo 实际运行预览](docs/design/assets/demo-runtime-preview-v1.png)
 

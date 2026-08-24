@@ -69,6 +69,7 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(battlefield.BoardCamera.orthographic, Is.True);
                 Assert.That(root.transform.Find("BattlefieldGeometry"), Is.Not.Null);
                 Assert.That(root.transform.Find("BattlefieldPieces"), Is.Not.Null);
+                Assert.That(root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Unit_0"), Is.Not.Null);
                 Assert.That(root.transform.Find("DemoCanvas"), Is.Not.Null);
                 Assert.That(GameObject.Find("EndTurn"), Is.Not.Null);
                 Assert.That(GameObject.Find("Faction_plains_forest"), Is.Not.Null);
@@ -77,6 +78,12 @@ namespace BiomeRivals.Demo.Tests
                 var opponentUnit = battlefield.GetSlotReferencePosition(false, DemoSlotKind.Unit, 0);
                 Assert.That(playerUnit.y, Is.LessThan(opponentUnit.y));
                 Assert.That(playerUnit, Is.Not.EqualTo(opponentUnit));
+                Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("pf_001", out var beeTexture), Is.True);
+                Assert.That(beeTexture, Is.EqualTo("entity_bee"));
+                Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("nt_003", out var blazeTexture), Is.True);
+                Assert.That(blazeTexture, Is.EqualTo("entity_blaze"));
+                battlefield.SetSlotState(true, DemoSlotKind.Unit, 0, true, false);
+                battlefield.SetSlotHovered(true, DemoSlotKind.Unit, 0, true);
             }
             finally
             {

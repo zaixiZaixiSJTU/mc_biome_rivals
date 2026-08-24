@@ -49,6 +49,21 @@ namespace BiomeRivals.Demo
             return material;
         }
 
+        public static Material CreateEntityMaterial(string name, Color fallback, string textureKey, Shader preferredShader = null)
+        {
+            var material = CreateBlockMaterial(name, fallback, textureKey, Color.black, preferredShader);
+            material.enableInstancing = false;
+            if (LoadBlockTexture(textureKey) != null)
+            {
+                SetColor(material, "_BaseColor", Color.white);
+                SetColor(material, "_Color", Color.white);
+            }
+            if (material.HasProperty("_Cutoff")) material.SetFloat("_Cutoff", 0.1f);
+            material.EnableKeyword("_ALPHATEST_ON");
+            material.renderQueue = 2450;
+            return material;
+        }
+
         private static void SetColor(Material material, string property, Color value)
         {
             if (material.HasProperty(property)) material.SetColor(property, value);
