@@ -219,11 +219,11 @@ namespace BiomeRivals.Demo
             _camera = cameraObject.GetComponent<Camera>();
             _camera.clearFlags = CameraClearFlags.SolidColor;
             _camera.backgroundColor = Hex("#090B0A");
-            _camera.orthographic = true;
-            _camera.orthographicSize = 7.55f;
+            _camera.orthographic = false;
+            _camera.fieldOfView = 42.5f;
             _camera.aspect = 16f / 9f;
             _camera.nearClipPlane = 0.1f;
-            _camera.farClipPlane = 60f;
+            _camera.farClipPlane = 80f;
             _camera.allowHDR = true;
             _camera.transform.position = new Vector3(0, 12.8f, -14.2f);
             _camera.transform.LookAt(new Vector3(0, -0.1f, 0.25f));
@@ -254,9 +254,11 @@ namespace BiomeRivals.Demo
             var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
             quad.name = "IllustratedBattlefieldBackdrop";
             quad.transform.SetParent(_camera.transform, false);
-            quad.transform.localPosition = new Vector3(0, 0, 45f);
+            const float backdropDistance = 45f;
+            quad.transform.localPosition = new Vector3(0, 0, backdropDistance);
             quad.transform.localRotation = Quaternion.identity;
-            quad.transform.localScale = new Vector3(_camera.orthographicSize * 2f * _camera.aspect, _camera.orthographicSize * 2f, 1f);
+            var backdropHeight = 2f * backdropDistance * Mathf.Tan(_camera.fieldOfView * 0.5f * Mathf.Deg2Rad);
+            quad.transform.localScale = new Vector3(backdropHeight * _camera.aspect, backdropHeight, 1f);
             var renderer = quad.GetComponent<MeshRenderer>();
             renderer.sharedMaterial = material;
             renderer.shadowCastingMode = ShadowCastingMode.Off;
@@ -341,6 +343,7 @@ namespace BiomeRivals.Demo
             var surfaceMaterial = DemoWorldAssetProvider.CreateGroundSurfaceMaterial(
                 $"DemoGroundSurface_{(player ? "Player" : "Opponent")}_{kind}_{index}",
                 groundTexture,
+                illustratedBackdrop != null,
                 groundSurfaceShader);
             var riserMaterial = DemoWorldAssetProvider.CreateBlockMaterial(
                 $"DemoGroundRiser_{(player ? "Player" : "Opponent")}_{kind}_{index}",
@@ -350,7 +353,7 @@ namespace BiomeRivals.Demo
                 blockShader);
             _materials[$"ground_surface_{player}_{kind}_{index}"] = surfaceMaterial;
             _materials[$"ground_riser_{player}_{kind}_{index}"] = riserMaterial;
-            var surfaceRenderer = CreateGroundSurface(markerRoot, kind, size, surfaceMaterial, illustratedBackdrop != null);
+            var surfaceRenderer = CreateGroundSurface(markerRoot, kind, size, surfaceMaterial);
             var riserRenderer = CreateGroundRiser(markerRoot, kind, size, riserMaterial);
             riserRenderer.enabled = false;
             _slotMarkers[SlotKey(player, kind, index)] = new SlotMarker(
@@ -363,7 +366,7 @@ namespace BiomeRivals.Demo
                 index * 0.77f + (player ? 0f : 2.4f));
         }
 
-        private MeshRenderer CreateGroundSurface(Transform parent, DemoSlotKind kind, Vector3 size, Material material, bool projectedBackdrop)
+        private static MeshRenderer CreateGroundSurface(Transform parent, DemoSlotKind kind, Vector3 size, Material material)
         {
             var columns = kind == DemoSlotKind.Unit ? 5 : 6;
             const int rows = 3;
@@ -388,7 +391,7 @@ namespace BiomeRivals.Demo
                     var right = centerX + halfWidth;
                     var near = centerZ - halfDepth;
                     var far = centerZ + halfDepth;
-                    AddGroundTopQuad(parent, vertices, normals, triangles, projectedUv, cellUv, left, right, near, far, projectedBackdrop);
+                    AddGroundTopQuad(vertices, normals, triangles, projectedUv, cellUv, left, right, near, far);
                 }
             }
 
@@ -410,8 +413,7 @@ namespace BiomeRivals.Demo
             return renderer;
         }
 
-        private void AddGroundTopQuad(
-            Transform parent,
+        private static void AddGroundTopQuad(
             ICollection<Vector3> vertices,
             ICollection<Vector3> normals,
             ICollection<int> triangles,
@@ -420,8 +422,7 @@ namespace BiomeRivals.Demo
             float left,
             float right,
             float near,
-            float far,
-            bool projectedBackdrop)
+            float far)
         {
             var localVertices = new[]
             {
@@ -436,12 +437,7 @@ namespace BiomeRivals.Demo
             {
                 vertices.Add(localVertices[vertex]);
                 normals.Add(Vector3.up);
-                if (projectedBackdrop)
-                {
-                    var viewport = _camera.WorldToViewportPoint(parent.TransformPoint(localVertices[vertex]));
-                    projectedUv.Add(new Vector2(viewport.x, viewport.y));
-                }
-                else projectedUv.Add(fallbackUv[vertex]);
+                projectedUv.Add(fallbackUv[vertex]);
                 cellUv.Add(fallbackUv[vertex]);
             }
             triangles.Add(start);

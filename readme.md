@@ -46,7 +46,7 @@ docker compose up --build
 
 ## 最基础可玩 Demo
 
-Unity 中打开 `client-unity/Assets/Game/Demo/Scenes/Demo.unity` 后点击 Play。当前 Demo 使用固定斜俯视正交摄像机，将真实 3D 方块棋盘与屏幕空间卡牌 UI 组合为 2.5D 战场，并支持：
+Unity 中打开 `client-unity/Assets/Game/Demo/Scenes/Demo.unity` 后点击 Play。当前 Demo 使用与精绘背景消失方向匹配的固定斜俯视透视摄像机，将真实 3D 方块棋盘与屏幕空间卡牌 UI 组合为 2.5D 战场，并支持：
 
 - 七个群系主题即时切换，每个群系装载 5 张已注册卡牌；
 - 选择手牌并部署到 4 个单位格或 3 个建筑格；

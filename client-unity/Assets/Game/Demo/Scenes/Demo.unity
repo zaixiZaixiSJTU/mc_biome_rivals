@@ -119,7 +119,7 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
---- !u!1 &1879169493
+--- !u!1 &1850077231
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -127,9 +127,9 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 1879169496}
-  - component: {fileID: 1879169495}
-  - component: {fileID: 1879169494}
+  - component: {fileID: 1850077234}
+  - component: {fileID: 1850077233}
+  - component: {fileID: 1850077232}
   m_Layer: 0
   m_Name: '[Demo] Biome Rivals Local Match'
   m_TagString: Untagged
@@ -137,25 +137,25 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1879169494
+--- !u!114 &1850077232
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1879169493}
+  m_GameObject: {fileID: 1850077231}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 84ed3e3ce94ba2b4fb74639d16b7f971, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
---- !u!114 &1879169495
+--- !u!114 &1850077233
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1879169493}
+  m_GameObject: {fileID: 1850077231}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 642712145a3bf9f47994b8b8a21884a4, type: 3}
@@ -165,13 +165,13 @@ MonoBehaviour:
   backdropShader: {fileID: 10752, guid: 0000000000000000f000000000000000, type: 0}
   groundSurfaceShader: {fileID: 4800000, guid: 4caa64c1fe417b54fbbc756b21bbdd68, type: 3}
   illustratedBackdrop: {fileID: 2800000, guid: e793d11426f45254ba9de848fff085ca, type: 3}
---- !u!4 &1879169496
+--- !u!4 &1850077234
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1879169493}
+  m_GameObject: {fileID: 1850077231}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -184,4 +184,4 @@ Transform:
 SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
-  - {fileID: 1879169496}
+  - {fileID: 1850077234}

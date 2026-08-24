@@ -7,6 +7,7 @@ Shader "BiomeRivals/Demo/GroundSurface"
         _HighlightColor ("Highlight Color", Color) = (0, 0, 0, 1)
         _HighlightStrength ("Highlight Strength", Range(0, 1)) = 0
         _EdgeWidth ("Pixel Edge Width", Range(0.01, 0.25)) = 0.09
+        _UseScreenProjection ("Use Screen Projection", Range(0, 1)) = 1
     }
 
     SubShader
@@ -36,6 +37,7 @@ Shader "BiomeRivals/Demo/GroundSurface"
                 float4 vertex : SV_POSITION;
                 float2 uv : TEXCOORD0;
                 float2 cellUv : TEXCOORD1;
+                float4 screenPos : TEXCOORD2;
             };
 
             sampler2D _MainTex;
@@ -44,6 +46,7 @@ Shader "BiomeRivals/Demo/GroundSurface"
             fixed4 _HighlightColor;
             float _HighlightStrength;
             float _EdgeWidth;
+            float _UseScreenProjection;
 
             v2f vert(appdata input)
             {
@@ -51,12 +54,15 @@ Shader "BiomeRivals/Demo/GroundSurface"
                 output.vertex = UnityObjectToClipPos(input.vertex);
                 output.uv = TRANSFORM_TEX(input.uv, _MainTex);
                 output.cellUv = input.cellUv;
+                output.screenPos = ComputeScreenPos(output.vertex);
                 return output;
             }
 
             fixed4 frag(v2f input) : SV_Target
             {
-                fixed4 ground = tex2D(_MainTex, input.uv) * _Color;
+                float2 screenUv = input.screenPos.xy / input.screenPos.w;
+                float2 groundUv = lerp(input.uv, screenUv, saturate(_UseScreenProjection));
+                fixed4 ground = tex2D(_MainTex, groundUv) * _Color;
                 float edgeDistance = min(min(input.cellUv.x, 1.0 - input.cellUv.x), min(input.cellUv.y, 1.0 - input.cellUv.y));
                 float edge = 1.0 - smoothstep(_EdgeWidth, _EdgeWidth * 2.0, edgeDistance);
                 float strength = saturate(_HighlightStrength);

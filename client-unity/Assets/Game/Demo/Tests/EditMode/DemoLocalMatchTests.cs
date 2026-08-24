@@ -66,7 +66,8 @@ namespace BiomeRivals.Demo.Tests
                 var battlefield = root.GetComponent<DemoBattlefield3D>();
                 Assert.That(battlefield, Is.Not.Null);
                 Assert.That(battlefield.BoardCamera, Is.Not.Null);
-                Assert.That(battlefield.BoardCamera.orthographic, Is.True);
+                Assert.That(battlefield.BoardCamera.orthographic, Is.False);
+                Assert.That(battlefield.BoardCamera.fieldOfView, Is.EqualTo(42.5f).Within(0.01f));
                 Assert.That(root.transform.Find("BattlefieldGeometry"), Is.Not.Null);
                 Assert.That(root.transform.Find("BattlefieldPieces"), Is.Not.Null);
                 var unitMarker = root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Unit_0/InteractiveGround");
@@ -79,6 +80,7 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(unitMarker.GetComponent<MeshRenderer>().enabled, Is.True);
                 Assert.That(buildingMarker.GetComponent<MeshRenderer>().enabled, Is.True);
                 Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.shader.name, Is.EqualTo("BiomeRivals/Demo/GroundSurface"));
+                Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_UseScreenProjection"), Is.Zero);
                 Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.GreaterThan(0f));
                 Assert.That(buildingMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.Zero);
                 Assert.That(root.transform.Find("DemoCanvas"), Is.Not.Null);

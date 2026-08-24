@@ -64,7 +64,7 @@ namespace BiomeRivals.Demo
             return material;
         }
 
-        public static Material CreateGroundSurfaceMaterial(string name, Texture texture, Shader preferredShader = null)
+        public static Material CreateGroundSurfaceMaterial(string name, Texture texture, bool useScreenProjection, Shader preferredShader = null)
         {
             var shader = preferredShader ?? Shader.Find("BiomeRivals/Demo/GroundSurface") ?? Shader.Find("Unlit/Texture");
             if (shader == null) throw new MissingReferenceException("No tracked interactive ground shader is available.");
@@ -73,6 +73,7 @@ namespace BiomeRivals.Demo
             SetColor(material, "_Color", Color.white);
             SetColor(material, "_HighlightColor", Color.black);
             if (material.HasProperty("_HighlightStrength")) material.SetFloat("_HighlightStrength", 0f);
+            if (material.HasProperty("_UseScreenProjection")) material.SetFloat("_UseScreenProjection", useScreenProjection ? 1f : 0f);
             return material;
         }
 
