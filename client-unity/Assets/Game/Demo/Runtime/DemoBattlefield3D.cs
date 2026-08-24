@@ -20,6 +20,8 @@ namespace BiomeRivals.Demo
         private readonly Dictionary<string, Material> _materials = new Dictionary<string, Material>(StringComparer.Ordinal);
         private readonly List<Floater> _floaters = new List<Floater>();
         [SerializeField] private Shader blockShader;
+        [SerializeField] private Shader backdropShader;
+        [SerializeField] private Texture2D illustratedBackdrop;
         private Transform _terrainRoot;
         private Transform _piecesRoot;
         private Camera _camera;
@@ -28,7 +30,12 @@ namespace BiomeRivals.Demo
 
         public Camera BoardCamera => _camera;
 
-        public void Configure(Shader shader) => blockShader = shader;
+        public void Configure(Shader worldShader, Shader unlitBackdropShader, Texture2D backdrop)
+        {
+            blockShader = worldShader;
+            backdropShader = unlitBackdropShader;
+            illustratedBackdrop = backdrop;
+        }
 
         public void BuildNow()
         {
@@ -37,9 +44,10 @@ namespace BiomeRivals.Demo
             CreateRoots();
             CreateMaterials();
             ConfigureWorld();
-            BuildTerrain();
+            BuildIllustratedBackdrop();
+            if (illustratedBackdrop == null) BuildTerrain();
             BuildSlotPads();
-            BuildBiomeDecor();
+            if (illustratedBackdrop == null) BuildBiomeDecor();
         }
 
         public Vector3 GetSlotWorldPosition(bool player, DemoSlotKind kind, int index)
@@ -174,6 +182,34 @@ namespace BiomeRivals.Demo
             CreatePointLight("MeadowFill", new Vector3(-3.5f, 4.8f, -4.5f), Hex("#8FC7B7"), 8f, 1.25f);
         }
 
+        private void BuildIllustratedBackdrop()
+        {
+            if (illustratedBackdrop == null) return;
+            if (backdropShader == null) throw new MissingReferenceException("The illustrated battlefield backdrop shader is not configured.");
+            RenderSettings.fog = false;
+
+            var material = new Material(backdropShader) { name = "DemoIllustratedBattlefield" };
+            material.mainTexture = illustratedBackdrop;
+            _materials["illustrated_backdrop"] = material;
+
+            var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            quad.name = "IllustratedBattlefieldBackdrop";
+            quad.transform.SetParent(_camera.transform, false);
+            quad.transform.localPosition = new Vector3(0, 0, 45f);
+            quad.transform.localRotation = Quaternion.identity;
+            quad.transform.localScale = new Vector3(_camera.orthographicSize * 2f * _camera.aspect, _camera.orthographicSize * 2f, 1f);
+            var renderer = quad.GetComponent<MeshRenderer>();
+            renderer.sharedMaterial = material;
+            renderer.shadowCastingMode = ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
+            var collider = quad.GetComponent<Collider>();
+            if (collider != null)
+            {
+                if (Application.isPlaying) Destroy(collider);
+                else DestroyImmediate(collider);
+            }
+        }
+
         private void CreatePointLight(string name, Vector3 position, Color color, float range, float intensity)
         {
             var lightObject = new GameObject(name, typeof(Light));
@@ -240,7 +276,8 @@ namespace BiomeRivals.Demo
         {
             var position = GetSlotWorldPosition(player, kind, index);
             var material = player ? _materials["player_slot"] : _materials["enemy_slot"];
-            CreateBlock(_terrainRoot, $"{(player ? "Player" : "Opponent")}_{kind}_{index}", position, size, material);
+            if (illustratedBackdrop == null)
+                CreateBlock(_terrainRoot, $"{(player ? "Player" : "Opponent")}_{kind}_{index}", position, size, material);
             CreateBlock(_terrainRoot, "SlotMark", position + new Vector3(0, 0.065f, 0), new Vector3(size.x * 0.72f, 0.035f, size.z * 0.08f), _materials["slot_edge"]);
         }
 

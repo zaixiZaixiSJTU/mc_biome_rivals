@@ -29,14 +29,14 @@
 
 | 层级 | 职责 | 替换边界 |
 |---|---|---|
-| `DemoBattlefield3D` | 摄像机、灯光、上下群系地形、中央河道和世界槽位 | 后续可把逐块原型替换为合并网格或预制棋盘 |
+| `DemoBattlefield3D` | 摄像机、灯光、精绘环境层、3D 世界槽位和单位 | 精绘背景负责整体材质质量，真实几何负责交互、遮挡和动画 |
 | `DemoWorldAssetProvider` | 加载本机方块贴图与按 `cardId` 注册的 Prefab | 正式素材不应侵入回合和卡牌规则代码 |
 | `DemoSceneController` | 手牌、检查器、点击热区和世界坐标到 UI 坐标投影 | 保持屏幕空间布局和输入职责 |
 | `DemoLocalMatch` | 费用、槽位、连续建筑与回合状态 | 不访问场景对象或渲染组件 |
 
 本机原型贴图通过 `scripts/extract-minecraft-world-textures.ps1` 从已拥有的 Java 客户端 JAR 按 17 项白名单提取到 Git 忽略目录。运行时先查找 `Resources/DemoWorld/Prefabs/{cardId}`；不存在时才生成程序化方块生物/建筑。因此以后注册正式 Prefab 不需要改部署逻辑。
 
-当前地形为了快速验证仍采用逐块 GameObject。进入性能阶段后，应把静态地面合并为少量 Mesh，保留材质实例化，并让槽位、单位和建筑继续保持独立对象。
+默认场景采用“精绘背景 + 真实 3D 槽位/单位”的 2.5D 合成方式，不再用低精度程序化地形覆盖原有美术。程序化方块地形仅作为背景资源缺失时的可运行后备。进入性能阶段后，槽位之外的静态装饰应合并为少量 Mesh，单位和建筑继续保持独立对象。
 
 ## 素材与版权边界
 
@@ -53,6 +53,6 @@
 
 > Use case: stylized-concept. Asset type: 16:9 Unity digital card-game battlefield background. Create a polished empty block-built arena for a collectible card game. The upper half is a restrained Nether-like volcanic biome with dark basalt bricks, deep crimson accents, tiny controlled ember cracks and warm orange edge light. The lower half is a meadow-and-forest biome with dark oak planks, mossy stone, grass and subtle leaf details. Separate the halves with a narrow neutral deepslate lane and a faint turquoise river/rune accent. The arena must support overlay UI for four unit slots and three building slots on each side, but do not draw literal card slots; use subtle floor rhythm and material changes only. Upper and lower terrain geometry may differ organically while retaining balanced competitive readability. Style/medium: shippable modern digital card game environment, elegant blocky voxel-inspired materials, crisp game UI backdrop, restrained premium polish, not a screenshot and not concept sketch. Composition/framing: wide 16:9, straight-on shallow top-down view, perfectly centered central lane, large calm empty play areas, darkened outer edges reserved for HUD and buttons. Lighting/mood: controlled soft cinematic lighting, upper warm ember glow, lower cool natural moonlight, strong readable separation, no visual noise behind cards. Color palette: charcoal, deep crimson, ember orange, forest green, oak brown, muted turquoise. Constraints: absolutely no text, letters, numbers, logos, characters, creatures, cards, UI buttons, item icons, trademarks or watermark; no recognizable copied game interface; keep the central play surfaces uncluttered and high contrast for overlay elements. Avoid: busy scenery, tall objects blocking play space, excessive lava glow, photorealism, fisheye perspective, ornate fantasy filigree.
 
-历史概念背景：`client-unity/Assets/Game/Demo/Art/demo-battlefield-bg-v1.png`。2.5D 版本已解除运行时引用，仅保留为设计对照。
+精绘环境层：`client-unity/Assets/Game/Demo/Art/demo-battlefield-bg-v1.png`。2.5D 版本保留它作为默认环境质感来源，并在其上叠加真实 3D 槽位、生物与建筑。
 
 实际运行预览：[`assets/demo-runtime-preview-v1.png`](assets/demo-runtime-preview-v1.png)

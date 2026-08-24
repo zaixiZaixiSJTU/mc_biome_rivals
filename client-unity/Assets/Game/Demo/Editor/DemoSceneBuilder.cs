@@ -9,6 +9,7 @@ namespace BiomeRivals.Demo.Editor
     public static class DemoSceneBuilder
     {
         public const string ScenePath = "Assets/Game/Demo/Scenes/Demo.unity";
+        public const string BackgroundPath = "Assets/Game/Demo/Art/demo-battlefield-bg-v1.png";
 
         [MenuItem("Biome Rivals/Build and Open Demo Scene")]
         public static void BuildAndOpen()
@@ -33,7 +34,11 @@ namespace BiomeRivals.Demo.Editor
             var battlefield = root.AddComponent<DemoBattlefield3D>();
             var blockShader = Shader.Find("Standard") ?? Shader.Find("Universal Render Pipeline/Lit");
             if (blockShader == null) throw new MissingReferenceException("A tracked block shader is required by the 2.5D demo.");
-            battlefield.Configure(blockShader);
+            var backdropShader = Shader.Find("Unlit/Texture");
+            if (backdropShader == null) throw new MissingReferenceException("The unlit backdrop shader is required by the 2.5D demo.");
+            var backdrop = AssetDatabase.LoadAssetAtPath<Texture2D>(BackgroundPath);
+            if (backdrop == null) throw new FileNotFoundException("The illustrated battlefield backdrop is missing.", BackgroundPath);
+            battlefield.Configure(blockShader, backdropShader, backdrop);
             root.AddComponent<DemoSceneController>();
 
             if (!EditorSceneManager.SaveScene(scene, ScenePath))
