@@ -69,7 +69,14 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(battlefield.BoardCamera.orthographic, Is.True);
                 Assert.That(root.transform.Find("BattlefieldGeometry"), Is.Not.Null);
                 Assert.That(root.transform.Find("BattlefieldPieces"), Is.Not.Null);
-                Assert.That(root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Unit_0"), Is.Not.Null);
+                var unitMarker = root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Unit_0/SurfaceGrid");
+                var buildingMarker = root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Building_0/SurfaceGrid");
+                Assert.That(unitMarker, Is.Not.Null);
+                Assert.That(buildingMarker, Is.Not.Null);
+                Assert.That(unitMarker.GetComponent<MeshFilter>().sharedMesh.vertexCount, Is.EqualTo(240));
+                Assert.That(unitMarker.GetComponent<MeshRenderer>().enabled, Is.True);
+                Assert.That(buildingMarker.GetComponent<MeshRenderer>().enabled, Is.False);
+                Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.renderQueue, Is.EqualTo(3000));
                 Assert.That(root.transform.Find("DemoCanvas"), Is.Not.Null);
                 Assert.That(GameObject.Find("EndTurn"), Is.Not.Null);
                 Assert.That(GameObject.Find("Faction_plains_forest"), Is.Not.Null);
@@ -84,6 +91,9 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(blazeTexture, Is.EqualTo("entity_blaze"));
                 battlefield.SetSlotState(true, DemoSlotKind.Unit, 0, true, false);
                 battlefield.SetSlotHovered(true, DemoSlotKind.Unit, 0, true);
+                Assert.That(unitMarker.parent.localPosition.y, Is.GreaterThan(0.29f));
+                battlefield.SetSlotState(true, DemoSlotKind.Unit, 0, false, true);
+                Assert.That(unitMarker.GetComponent<MeshRenderer>().enabled, Is.False);
             }
             finally
             {

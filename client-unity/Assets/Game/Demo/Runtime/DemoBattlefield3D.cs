@@ -77,12 +77,15 @@ namespace BiomeRivals.Demo
             if (!_slotMarkers.TryGetValue(SlotKey(player, kind, index), out var marker)) return;
             marker.ValidTarget = validTarget;
             marker.Occupied = occupied;
+            UpdateSlotMarker(marker, Time.unscaledTime, 1f);
         }
 
         public void SetSlotHovered(bool player, DemoSlotKind kind, int index, bool hovered)
         {
             BuildNow();
-            if (_slotMarkers.TryGetValue(SlotKey(player, kind, index), out var marker)) marker.Hovered = hovered;
+            if (!_slotMarkers.TryGetValue(SlotKey(player, kind, index), out var marker)) return;
+            marker.Hovered = hovered;
+            UpdateSlotMarker(marker, Time.unscaledTime, 1f);
         }
 
         public void SyncPieces(
@@ -116,30 +119,33 @@ namespace BiomeRivals.Demo
                 floater.Transform.localRotation = Quaternion.Euler(0, Mathf.Sin(time * 0.7f + floater.Phase) * 5f, 0);
             }
 
-            foreach (var marker in _slotMarkers.Values) UpdateSlotMarker(marker, time);
+            foreach (var marker in _slotMarkers.Values) UpdateSlotMarker(marker, time, Time.unscaledDeltaTime);
         }
 
-        private static void UpdateSlotMarker(SlotMarker marker, float time)
+        private static void UpdateSlotMarker(SlotMarker marker, float time, float deltaTime)
         {
-            if (marker.Root == null || marker.Material == null) return;
+            if (marker.Root == null || marker.SurfaceRenderer == null || marker.Material == null) return;
             var pulse = 0.5f + Mathf.Sin(time * 4.6f + marker.Phase) * 0.5f;
             var actionableHover = marker.Hovered && marker.ValidTarget && !marker.Occupied;
+            var visible = !marker.Occupied && (marker.ValidTarget || marker.Hovered);
+            marker.SurfaceRenderer.enabled = visible;
             var color = actionableHover
-                ? Hex("#F1C96A")
+                ? WithAlpha(Hex("#F1C96A"), 0.34f)
                 : marker.ValidTarget && !marker.Occupied
-                    ? Color.Lerp(Hex("#3D9E8F"), Hex("#79E0CB"), pulse)
-                    : marker.Occupied
-                        ? Hex("#3A3028")
-                        : marker.Hovered ? Hex("#6B685D") : Hex("#3B3C37");
+                    ? WithAlpha(Color.Lerp(Hex("#3D9E8F"), Hex("#79E0CB"), pulse), 0.10f + pulse * 0.06f)
+                    : WithAlpha(Hex("#777263"), 0.10f);
             var emission = actionableHover
-                ? color * 0.75f
+                ? Hex("#C28C32") * 0.30f
                 : marker.ValidTarget && !marker.Occupied
-                    ? color * (0.38f + pulse * 0.48f)
+                    ? Hex("#4FC9B2") * (0.08f + pulse * 0.10f)
                     : Color.black;
             SetMaterialColor(marker.Material, color, emission);
-            var position = marker.BasePosition;
-            position.y += actionableHover ? 0.085f : marker.ValidTarget && !marker.Occupied ? pulse * 0.045f : marker.Hovered ? 0.018f : 0f;
-            marker.Root.localPosition = position;
+            var targetPosition = marker.BasePosition;
+            targetPosition.y += actionableHover ? 0.10f : marker.ValidTarget && !marker.Occupied ? 0.018f + pulse * 0.025f : marker.Hovered ? 0.035f : 0f;
+            var targetScale = actionableHover ? new Vector3(1.025f, 1f, 1.025f) : Vector3.one;
+            var blend = 1f - Mathf.Exp(-18f * Mathf.Max(deltaTime, 0.001f));
+            marker.Root.localPosition = Vector3.Lerp(marker.Root.localPosition, targetPosition, blend);
+            marker.Root.localScale = Vector3.Lerp(marker.Root.localScale, targetScale, blend);
         }
 
         private void CreateRoots()
@@ -168,9 +174,6 @@ namespace BiomeRivals.Demo
             AddMaterial("basalt", "#333238", "basalt_top");
             AddMaterial("water", "#2B8D8D", "water_still", "#123B3B");
             AddMaterial("magma", "#C66828", "magma", "#7A2608");
-            AddMaterial("player_slot", "#243A34", string.Empty);
-            AddMaterial("enemy_slot", "#432B2A", string.Empty);
-            AddMaterial("slot_edge", "#8E8268", string.Empty);
             AddMaterial("leaf", "#426034", "oak_leaves");
             AddMaterial("ember", "#E18B42", string.Empty, "#8A2C0A");
         }
@@ -315,25 +318,87 @@ namespace BiomeRivals.Demo
         private void CreateSlotPad(bool player, DemoSlotKind kind, int index, Vector3 size)
         {
             var position = GetSlotWorldPosition(player, kind, index);
-            var material = player ? _materials["player_slot"] : _materials["enemy_slot"];
-            if (illustratedBackdrop == null)
-                CreateBlock(_terrainRoot, $"{(player ? "Player" : "Opponent")}_{kind}_{index}", position, size, material);
-
             var markerRoot = NewChildRoot(_terrainRoot, $"SlotMarker_{(player ? "Player" : "Opponent")}_{kind}_{index}", position);
-            var markerMaterial = DemoWorldAssetProvider.CreateBlockMaterial(
+            var markerMaterial = DemoWorldAssetProvider.CreateSurfaceHighlightMaterial(
                 $"DemoSlotMarker_{(player ? "Player" : "Opponent")}_{kind}_{index}",
-                Hex("#5B5A50"),
-                string.Empty,
-                Color.black,
                 blockShader);
             _materials[$"slot_marker_{player}_{kind}_{index}"] = markerMaterial;
-            var rail = 0.055f;
-            var height = 0.035f;
-            CreateBlock(markerRoot, "North", new Vector3(0, 0.065f, size.z * 0.5f), new Vector3(size.x, height, rail), markerMaterial);
-            CreateBlock(markerRoot, "South", new Vector3(0, 0.065f, -size.z * 0.5f), new Vector3(size.x, height, rail), markerMaterial);
-            CreateBlock(markerRoot, "West", new Vector3(-size.x * 0.5f, 0.065f, 0), new Vector3(rail, height, size.z), markerMaterial);
-            CreateBlock(markerRoot, "East", new Vector3(size.x * 0.5f, 0.065f, 0), new Vector3(rail, height, size.z), markerMaterial);
-            _slotMarkers[SlotKey(player, kind, index)] = new SlotMarker(markerRoot, markerMaterial, position, index * 0.77f + (player ? 0f : 2.4f));
+            var surfaceRenderer = CreateGridSurface(markerRoot, kind, size, markerMaterial);
+            surfaceRenderer.enabled = false;
+            _slotMarkers[SlotKey(player, kind, index)] = new SlotMarker(markerRoot, surfaceRenderer, markerMaterial, position, index * 0.77f + (player ? 0f : 2.4f));
+        }
+
+        private static MeshRenderer CreateGridSurface(Transform parent, DemoSlotKind kind, Vector3 size, Material material)
+        {
+            var columns = kind == DemoSlotKind.Unit ? 5 : 6;
+            const int rows = 3;
+            const float fill = 0.78f;
+            var cellWidth = size.x / columns;
+            var cellDepth = size.z / rows;
+            var halfWidth = cellWidth * fill * 0.5f;
+            var halfDepth = cellDepth * fill * 0.5f;
+            var seam = Mathf.Min(cellWidth, cellDepth) * 0.075f;
+            var vertices = new List<Vector3>(columns * rows * 16);
+            var triangles = new List<int>(columns * rows * 24);
+            var normals = new List<Vector3>(columns * rows * 16);
+
+            for (var row = 0; row < rows; row++)
+            {
+                for (var column = 0; column < columns; column++)
+                {
+                    var centerX = -size.x * 0.5f + cellWidth * (column + 0.5f);
+                    var centerZ = -size.z * 0.5f + cellDepth * (row + 0.5f);
+                    var left = centerX - halfWidth;
+                    var right = centerX + halfWidth;
+                    var near = centerZ - halfDepth;
+                    var far = centerZ + halfDepth;
+                    AddSurfaceQuad(vertices, normals, triangles, left, right, near, near + seam);
+                    AddSurfaceQuad(vertices, normals, triangles, left, right, far - seam, far);
+                    AddSurfaceQuad(vertices, normals, triangles, left, left + seam, near + seam, far - seam);
+                    AddSurfaceQuad(vertices, normals, triangles, right - seam, right, near + seam, far - seam);
+                }
+            }
+
+            var mesh = new Mesh { name = $"Demo_{kind}_SurfaceGrid" };
+            mesh.SetVertices(vertices);
+            mesh.SetNormals(normals);
+            mesh.SetTriangles(triangles, 0);
+            mesh.RecalculateBounds();
+            var surface = new GameObject("SurfaceGrid", typeof(MeshFilter), typeof(MeshRenderer), typeof(DemoGeneratedMeshOwner));
+            surface.transform.SetParent(parent, false);
+            surface.GetComponent<MeshFilter>().sharedMesh = mesh;
+            var renderer = surface.GetComponent<MeshRenderer>();
+            renderer.sharedMaterial = material;
+            renderer.shadowCastingMode = ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
+            surface.GetComponent<DemoGeneratedMeshOwner>().Configure(mesh);
+            return renderer;
+        }
+
+        private static void AddSurfaceQuad(
+            ICollection<Vector3> vertices,
+            ICollection<Vector3> normals,
+            ICollection<int> triangles,
+            float left,
+            float right,
+            float near,
+            float far)
+        {
+            var start = vertices.Count;
+            vertices.Add(new Vector3(left, 0.072f, near));
+            vertices.Add(new Vector3(left, 0.072f, far));
+            vertices.Add(new Vector3(right, 0.072f, far));
+            vertices.Add(new Vector3(right, 0.072f, near));
+            normals.Add(Vector3.up);
+            normals.Add(Vector3.up);
+            normals.Add(Vector3.up);
+            normals.Add(Vector3.up);
+            triangles.Add(start);
+            triangles.Add(start + 1);
+            triangles.Add(start + 2);
+            triangles.Add(start);
+            triangles.Add(start + 2);
+            triangles.Add(start + 3);
         }
 
         private static string SlotKey(bool player, DemoSlotKind kind, int index) => $"{player}:{kind}:{index}";
@@ -522,6 +587,12 @@ namespace BiomeRivals.Demo
             return color;
         }
 
+        private static Color WithAlpha(Color color, float alpha)
+        {
+            color.a = alpha;
+            return color;
+        }
+
         private readonly struct Floater
         {
             public readonly Transform Transform;
@@ -539,6 +610,7 @@ namespace BiomeRivals.Demo
         private sealed class SlotMarker
         {
             public readonly Transform Root;
+            public readonly MeshRenderer SurfaceRenderer;
             public readonly Material Material;
             public readonly Vector3 BasePosition;
             public readonly float Phase;
@@ -546,9 +618,10 @@ namespace BiomeRivals.Demo
             public bool Occupied;
             public bool Hovered;
 
-            public SlotMarker(Transform root, Material material, Vector3 basePosition, float phase)
+            public SlotMarker(Transform root, MeshRenderer surfaceRenderer, Material material, Vector3 basePosition, float phase)
             {
                 Root = root;
+                SurfaceRenderer = surfaceRenderer;
                 Material = material;
                 BasePosition = basePosition;
                 Phase = phase;

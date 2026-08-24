@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace BiomeRivals.Demo
 {
@@ -61,6 +62,22 @@ namespace BiomeRivals.Demo
             if (material.HasProperty("_Cutoff")) material.SetFloat("_Cutoff", 0.1f);
             material.EnableKeyword("_ALPHATEST_ON");
             material.renderQueue = 2450;
+            return material;
+        }
+
+        public static Material CreateSurfaceHighlightMaterial(string name, Shader preferredShader = null)
+        {
+            var material = CreateBlockMaterial(name, new Color(0f, 0f, 0f, 0f), string.Empty, Color.black, preferredShader);
+            if (material.HasProperty("_Mode")) material.SetFloat("_Mode", 3f);
+            if (material.HasProperty("_SrcBlend")) material.SetInt("_SrcBlend", (int)BlendMode.SrcAlpha);
+            if (material.HasProperty("_DstBlend")) material.SetInt("_DstBlend", (int)BlendMode.OneMinusSrcAlpha);
+            if (material.HasProperty("_ZWrite")) material.SetInt("_ZWrite", 0);
+            material.DisableKeyword("_ALPHATEST_ON");
+            material.EnableKeyword("_ALPHABLEND_ON");
+            material.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+            if (material.HasProperty("_Metallic")) material.SetFloat("_Metallic", 0f);
+            if (material.HasProperty("_Glossiness")) material.SetFloat("_Glossiness", 0.08f);
+            material.renderQueue = (int)RenderQueue.Transparent;
             return material;
         }
 
