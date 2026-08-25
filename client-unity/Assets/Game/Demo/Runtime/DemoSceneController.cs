@@ -50,6 +50,7 @@ namespace BiomeRivals.Demo
         private string _activeFaction = "plains_forest";
         private bool _built;
         private Font _font;
+        private DemoHudMaterialFactory _hudMaterialFactory;
 
         private static readonly FactionSpec[] Factions =
         {
@@ -71,6 +72,13 @@ namespace BiomeRivals.Demo
             if (HasCommandLineFlag("-previewGroundHover")) _battlefield.SetSlotHovered(true, DemoSlotKind.Unit, 0, true);
             var capturePath = GetCommandLineValue("-captureDemo");
             if (!string.IsNullOrWhiteSpace(capturePath)) StartCoroutine(CaptureDemo(capturePath));
+        }
+
+        private void OnDestroy()
+        {
+            if (_hudMaterialFactory == null) return;
+            _hudMaterialFactory.Dispose();
+            _hudMaterialFactory = null;
         }
 
         public void BuildNow()
@@ -282,14 +290,6 @@ namespace BiomeRivals.Demo
                 view.Image.color = active
                     ? Color.Lerp(view.Theme.FrameBase, PanelRaised, 0.22f)
                     : new Color(Ink.r, Ink.g, Ink.b, 0.82f);
-                var outline = view.Button.GetComponent<Outline>();
-                if (active && outline == null) outline = view.Button.gameObject.AddComponent<Outline>();
-                if (outline != null)
-                {
-                    outline.effectColor = view.Theme.Accent;
-                    outline.effectDistance = active ? new Vector2(1.5f, -1.5f) : Vector2.zero;
-                    outline.enabled = active;
-                }
             }
         }
 
@@ -309,11 +309,6 @@ namespace BiomeRivals.Demo
                 card.gameObject.AddComponent<DemoHoverScale>().Configure(1.08f, 16f);
                 if (selected)
                 {
-                    var outline = card.gameObject.AddComponent<Outline>();
-                    _registry.TryGetDefinition(cardId, out var definition);
-                    _registry.TryGetTheme(definition.themeId, out var theme);
-                    outline.effectColor = theme.Accent;
-                    outline.effectDistance = new Vector2(2, -2);
                     card.SetAsLastSibling();
                 }
             }
@@ -593,14 +588,9 @@ namespace BiomeRivals.Demo
             var shadow = root.gameObject.AddComponent<Shadow>();
             shadow.effectColor = new Color(0, 0, 0, 0.46f);
             shadow.effectDistance = new Vector2(5, -5);
-            var outline = root.gameObject.AddComponent<Outline>();
-            outline.effectColor = new Color(edge.r, edge.g, edge.b, 0.58f);
-            outline.effectDistance = new Vector2(1.25f, -1.25f);
-
-            var topBevel = CreatePanel(root, "TopBevel", new Vector2(0, size.y * 0.5f - 1.5f), new Vector2(Mathf.Max(0, size.x - 4), 3), new Color(edge.r, edge.g, edge.b, 0.38f));
-            topBevel.raycastTarget = false;
-            var bottomBevel = CreatePanel(root, "BottomBevel", new Vector2(0, -size.y * 0.5f + 1.5f), new Vector2(Mathf.Max(0, size.x - 4), 3), new Color(0, 0, 0, 0.32f));
-            bottomBevel.raycastTarget = false;
+            if (_hudMaterialFactory == null)
+                _hudMaterialFactory = new DemoHudMaterialFactory(StoneEdge, OakEdge, Ember, Cyan, Pale);
+            _hudMaterialFactory.Decorate(root, size, fill, edge);
             return root;
         }
 

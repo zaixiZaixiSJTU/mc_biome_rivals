@@ -86,6 +86,17 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(root.transform.Find("DemoCanvas"), Is.Not.Null);
                 Assert.That(GameObject.Find("EndTurn"), Is.Not.Null);
                 Assert.That(GameObject.Find("Faction_plains_forest"), Is.Not.Null);
+                var opponentHud = root.transform.Find("DemoCanvas/OpponentHUD");
+                Assert.That(opponentHud, Is.Not.Null);
+                Assert.That(opponentHud.GetComponent<UnityEngine.UI.Outline>(), Is.Null);
+                Assert.That(opponentHud.Find("MaterialFill")?.GetComponent<UnityEngine.UI.RawImage>(), Is.Not.Null);
+                Assert.That(opponentHud.Find("FrameTop")?.GetComponent<UnityEngine.UI.RawImage>(), Is.Not.Null);
+                Assert.That(opponentHud.Find("FrameCornerNW")?.GetComponent<UnityEngine.UI.RawImage>(), Is.Not.Null);
+                Assert.That(opponentHud.Find("RivetNW")?.GetComponent<UnityEngine.UI.Image>(), Is.Not.Null);
+                Assert.That(opponentHud.Find("FrameTop").GetComponent<UnityEngine.UI.RawImage>().texture.name, Does.Contain("nether_bricks"));
+                Assert.That(root.transform.Find("DemoCanvas/PlayerHUD/FrameTop").GetComponent<UnityEngine.UI.RawImage>().texture.name, Does.Contain("oak_planks"));
+                Assert.That(root.transform.Find("DemoCanvas/InspectorPanel/FrameTop").GetComponent<UnityEngine.UI.RawImage>().texture.name, Does.Contain("stone_bricks"));
+                Assert.That(root.transform.Find("DemoCanvas/EndTurn/FrameTop").GetComponent<UnityEngine.UI.RawImage>().texture.name, Does.Contain("prismarine_bricks"));
 
                 var playerUnit = battlefield.GetSlotReferencePosition(true, DemoSlotKind.Unit, 0);
                 var opponentUnit = battlefield.GetSlotReferencePosition(false, DemoSlotKind.Unit, 0);
