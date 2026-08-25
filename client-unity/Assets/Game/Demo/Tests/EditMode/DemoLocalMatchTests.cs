@@ -1,6 +1,7 @@
 using BiomeRivals.Content;
 using BiomeRivals.Demo.Editor;
 using NUnit.Framework;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
@@ -66,6 +67,12 @@ namespace BiomeRivals.Demo.Tests
             var root = new GameObject("DemoTestRoot");
             try
             {
+                var configuredBattlefield = root.AddComponent<DemoBattlefield3D>();
+                configuredBattlefield.Configure(
+                    Shader.Find("Standard") ?? Shader.Find("Universal Render Pipeline/Lit"),
+                    Shader.Find("Unlit/Texture"),
+                    Shader.Find("BiomeRivals/Demo/GroundSurface"),
+                    AssetDatabase.LoadAssetAtPath<Texture2D>(DemoSceneBuilder.BackgroundPath));
                 var controller = root.AddComponent<DemoSceneController>();
                 controller.BuildNow();
                 var battlefield = root.GetComponent<DemoBattlefield3D>();
@@ -81,13 +88,33 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(unitMarker, Is.Not.Null);
                 Assert.That(buildingMarker, Is.Not.Null);
                 Assert.That(unitRiser, Is.Not.Null);
+                Assert.That(unitMarker.IsChildOf(root.transform.Find("DemoCanvas")), Is.False);
+                Assert.That(root.GetComponent<DemoBattlefieldPointerController>(), Is.Not.Null);
+                Assert.That(unitMarker.GetComponent<MeshCollider>(), Is.Not.Null);
+                var unitTarget = unitMarker.GetComponent<DemoBattlefieldSlotTarget>();
+                Assert.That(unitTarget, Is.Not.Null);
+                Assert.That(unitTarget.Player, Is.True);
+                Assert.That(unitTarget.Kind, Is.EqualTo(DemoSlotKind.Unit));
+                Assert.That(unitTarget.Index, Is.Zero);
                 Assert.That(unitMarker.GetComponent<MeshFilter>().sharedMesh.vertexCount, Is.EqualTo(60));
                 Assert.That(unitMarker.GetComponent<MeshRenderer>().enabled, Is.True);
                 Assert.That(buildingMarker.GetComponent<MeshRenderer>().enabled, Is.True);
                 Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.shader.name, Is.EqualTo("BiomeRivals/Demo/GroundSurface"));
-                Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_UseScreenProjection"), Is.Zero);
+                Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_UseScreenProjection"), Is.EqualTo(1f));
                 Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.GreaterThan(0f));
                 Assert.That(buildingMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.Zero);
+                Physics.SyncTransforms();
+                var unitScreenPosition = battlefield.BoardCamera.WorldToScreenPoint(unitMarker.TransformPoint(unitMarker.GetComponent<MeshFilter>().sharedMesh.bounds.center));
+                Assert.That(battlefield.TryRaycastSlot(unitScreenPosition, out var raycastTarget), Is.True);
+                Assert.That(raycastTarget, Is.SameAs(unitTarget));
+                var unitMeshVertices = unitMarker.GetComponent<MeshFilter>().sharedMesh.vertices;
+                var nearZ = unitMeshVertices.Min(vertex => vertex.z);
+                var farZ = unitMeshVertices.Max(vertex => vertex.z);
+                var nearVertices = unitMeshVertices.Where(vertex => Mathf.Abs(vertex.z - nearZ) < 0.001f).ToArray();
+                var farVertices = unitMeshVertices.Where(vertex => Mathf.Abs(vertex.z - farZ) < 0.001f).ToArray();
+                var nearWidth = ProjectedWidth(battlefield.BoardCamera, unitMarker, nearVertices);
+                var farWidth = ProjectedWidth(battlefield.BoardCamera, unitMarker, farVertices);
+                Assert.That(nearWidth, Is.GreaterThan(farWidth));
                 Assert.That(root.transform.Find("DemoCanvas"), Is.Not.Null);
                 var canvas = root.transform.Find("DemoCanvas").GetComponent<UnityEngine.Canvas>();
                 var scaler = root.transform.Find("DemoCanvas").GetComponent<UnityEngine.UI.CanvasScaler>();
@@ -95,6 +122,10 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(scaler.referencePixelsPerUnit, Is.EqualTo(DemoUiMetrics.PixelsPerUnit));
                 Assert.That(GameObject.Find("EndTurnButton"), Is.Not.Null);
                 Assert.That(GameObject.Find("Faction_plains_forest"), Is.Not.Null);
+                var playerSlotHitArea = root.transform.Find("DemoCanvas/PlayerUnitSlot0");
+                Assert.That(playerSlotHitArea.GetComponent<UnityEngine.UI.Graphic>(), Is.Null);
+                Assert.That(playerSlotHitArea.GetComponent<UnityEngine.UI.Button>(), Is.Null);
+                Assert.That(root.transform.Find("DemoCanvas/OpponentUnitSlot0").GetComponent<UnityEngine.UI.Graphic>(), Is.Null);
                 var opponentHud = root.transform.Find("DemoCanvas/OpponentHUD");
                 Assert.That(opponentHud, Is.Not.Null);
                 Assert.That(opponentHud.GetComponent<BasePanel>(), Is.Not.Null);
@@ -215,6 +246,13 @@ namespace BiomeRivals.Demo.Tests
             {
                 Object.DestroyImmediate(root);
             }
+        }
+
+        private static float ProjectedWidth(Camera camera, Transform surface, Vector3[] vertices)
+        {
+            var min = vertices.Min(vertex => camera.WorldToViewportPoint(surface.TransformPoint(vertex)).x);
+            var max = vertices.Max(vertex => camera.WorldToViewportPoint(surface.TransformPoint(vertex)).x);
+            return max - min;
         }
     }
 }

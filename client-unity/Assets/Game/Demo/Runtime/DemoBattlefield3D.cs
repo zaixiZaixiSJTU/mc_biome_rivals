@@ -20,6 +20,7 @@ namespace BiomeRivals.Demo
         private readonly Dictionary<string, Material> _materials = new Dictionary<string, Material>(StringComparer.Ordinal);
         private readonly Dictionary<string, SlotMarker> _slotMarkers = new Dictionary<string, SlotMarker>(StringComparer.Ordinal);
         private readonly List<Floater> _floaters = new List<Floater>();
+        private readonly RaycastHit[] _slotRaycastHits = new RaycastHit[64];
         [SerializeField] private Shader blockShader;
         [SerializeField] private Shader backdropShader;
         [SerializeField] private Shader groundSurfaceShader;
@@ -71,6 +72,25 @@ namespace BiomeRivals.Demo
             BuildNow();
             var viewport = _camera.WorldToViewportPoint(GetSlotWorldPosition(player, kind, index));
             return new Vector2((viewport.x - 0.5f) * ReferenceWidth, (viewport.y - 0.5f) * ReferenceHeight);
+        }
+
+        public bool TryRaycastSlot(Vector2 screenPosition, out DemoBattlefieldSlotTarget target)
+        {
+            BuildNow();
+            target = null;
+            if (_camera == null) return false;
+            var ray = _camera.ScreenPointToRay(screenPosition);
+            var hitCount = Physics.RaycastNonAlloc(ray, _slotRaycastHits, 200f, ~0, QueryTriggerInteraction.Ignore);
+            var nearestDistance = float.PositiveInfinity;
+            for (var index = 0; index < hitCount; index++)
+            {
+                var hit = _slotRaycastHits[index];
+                var candidate = hit.collider.GetComponent<DemoBattlefieldSlotTarget>();
+                if (candidate == null || hit.distance >= nearestDistance) continue;
+                target = candidate;
+                nearestDistance = hit.distance;
+            }
+            return target != null;
         }
 
         public void SetSlotState(bool player, DemoSlotKind kind, int index, bool validTarget, bool occupied)
@@ -353,7 +373,7 @@ namespace BiomeRivals.Demo
                 blockShader);
             _materials[$"ground_surface_{player}_{kind}_{index}"] = surfaceMaterial;
             _materials[$"ground_riser_{player}_{kind}_{index}"] = riserMaterial;
-            var surfaceRenderer = CreateGroundSurface(markerRoot, kind, size, surfaceMaterial);
+            var surfaceRenderer = CreateGroundSurface(markerRoot, player, kind, index, size, surfaceMaterial);
             var riserRenderer = CreateGroundRiser(markerRoot, kind, size, riserMaterial);
             riserRenderer.enabled = false;
             _slotMarkers[SlotKey(player, kind, index)] = new SlotMarker(
@@ -366,7 +386,7 @@ namespace BiomeRivals.Demo
                 index * 0.77f + (player ? 0f : 2.4f));
         }
 
-        private static MeshRenderer CreateGroundSurface(Transform parent, DemoSlotKind kind, Vector3 size, Material material)
+        private static MeshRenderer CreateGroundSurface(Transform parent, bool player, DemoSlotKind kind, int index, Vector3 size, Material material)
         {
             var columns = kind == DemoSlotKind.Unit ? 5 : 6;
             const int rows = 3;
@@ -402,9 +422,17 @@ namespace BiomeRivals.Demo
             mesh.SetUVs(1, cellUv);
             mesh.SetTriangles(triangles, 0);
             mesh.RecalculateBounds();
-            var surface = new GameObject("InteractiveGround", typeof(MeshFilter), typeof(MeshRenderer), typeof(DemoGeneratedMeshOwner));
+            var surface = new GameObject(
+                "InteractiveGround",
+                typeof(MeshFilter),
+                typeof(MeshRenderer),
+                typeof(MeshCollider),
+                typeof(DemoBattlefieldSlotTarget),
+                typeof(DemoGeneratedMeshOwner));
             surface.transform.SetParent(parent, false);
             surface.GetComponent<MeshFilter>().sharedMesh = mesh;
+            surface.GetComponent<MeshCollider>().sharedMesh = mesh;
+            surface.GetComponent<DemoBattlefieldSlotTarget>().Configure(player, kind, index);
             var renderer = surface.GetComponent<MeshRenderer>();
             renderer.sharedMaterial = material;
             renderer.shadowCastingMode = ShadowCastingMode.Off;

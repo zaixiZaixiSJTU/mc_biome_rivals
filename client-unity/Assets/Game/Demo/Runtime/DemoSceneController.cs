@@ -95,6 +95,9 @@ namespace BiomeRivals.Demo
             _battlefield = GetComponent<DemoBattlefield3D>();
             if (_battlefield == null) _battlefield = gameObject.AddComponent<DemoBattlefield3D>();
             _battlefield.BuildNow();
+            var battlefieldPointer = GetComponent<DemoBattlefieldPointerController>();
+            if (battlefieldPointer == null) battlefieldPointer = gameObject.AddComponent<DemoBattlefieldPointerController>();
+            battlefieldPointer.Configure(_battlefield, OnSlotClicked);
 
             var canvasObject = new GameObject("DemoCanvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
             canvasObject.transform.SetParent(transform, false);
@@ -189,28 +192,14 @@ namespace BiomeRivals.Demo
         private SlotView CreatePlayerSlot(DemoSlotKind kind, int index, Vector2 position, Vector2 size)
         {
             var root = CreateRect(_canvasRoot, $"Player{kind}Slot{index}", position, size);
-            var image = root.gameObject.AddComponent<Image>();
-            image.color = Color.clear;
-            var button = root.gameObject.AddComponent<Button>();
-            button.targetGraphic = image;
-            ConfigureInvisibleButton(button);
-            var capturedKind = kind;
-            var capturedIndex = index;
-            button.onClick.AddListener(() => OnSlotClicked(capturedKind, capturedIndex));
-            root.gameObject.AddComponent<DemoSlotPointerRelay>().Configure(
-                hovered => _battlefield.SetSlotHovered(true, capturedKind, capturedIndex, hovered),
-                pressed => _battlefield.SetSlotPressed(true, capturedKind, capturedIndex, pressed));
             var content = CreateRect(root, "Content", Vector2.zero, size - new Vector2(12, 12));
             var label = CreateText(content, "EmptyLabel", Vector2.zero, size - new Vector2(20, 20), kind == DemoSlotKind.Unit ? $"单位格 {index + 1}" : $"建筑格 {index + 1}", 13, Color.clear, TextAnchor.MiddleCenter, FontStyle.Bold);
-            return new SlotView(kind, index, image, button, content, label);
+            return new SlotView(kind, index, content, label);
         }
 
         private void CreateOpponentSlot(DemoSlotKind kind, int index, Vector2 position, Vector2 size, string cardId)
         {
             var root = CreateRect(_canvasRoot, $"Opponent{kind}Slot{index}", position, size);
-            var hitArea = root.gameObject.AddComponent<Image>();
-            hitArea.color = Color.clear;
-            hitArea.raycastTarget = false;
             var occupied = !string.IsNullOrEmpty(cardId);
             _battlefield.SetSlotState(false, kind, index, false, occupied);
             if (string.IsNullOrEmpty(cardId))
@@ -329,7 +318,6 @@ namespace BiomeRivals.Demo
             var empty = string.IsNullOrEmpty(cardId);
             view.EmptyLabel.gameObject.SetActive(empty);
             var valid = empty && IsSelectedValidFor(view.Kind);
-            view.Image.color = Color.clear;
             view.EmptyLabel.color = Color.clear;
             _battlefield.SetSlotState(true, view.Kind, view.Index, valid, !empty);
 
@@ -592,19 +580,6 @@ namespace BiomeRivals.Demo
             button.colors = colors;
         }
 
-        private static void ConfigureInvisibleButton(Button button)
-        {
-            var colors = button.colors;
-            colors.normalColor = Color.clear;
-            colors.highlightedColor = Color.clear;
-            colors.pressedColor = Color.clear;
-            colors.selectedColor = Color.clear;
-            colors.disabledColor = Color.clear;
-            colors.colorMultiplier = 1f;
-            colors.fadeDuration = 0f;
-            button.colors = colors;
-        }
-
         private Text CreateText(Transform parent, string name, Vector2 position, Vector2 size, string value, int fontSize, Color color, TextAnchor alignment, FontStyle style)
         {
             var root = CreateRect(parent, name, position, size);
@@ -693,17 +668,13 @@ namespace BiomeRivals.Demo
         {
             public readonly DemoSlotKind Kind;
             public readonly int Index;
-            public readonly Image Image;
-            public readonly Button Button;
             public readonly RectTransform Content;
             public readonly Text EmptyLabel;
 
-            public SlotView(DemoSlotKind kind, int index, Image image, Button button, RectTransform content, Text emptyLabel)
+            public SlotView(DemoSlotKind kind, int index, RectTransform content, Text emptyLabel)
             {
                 Kind = kind;
                 Index = index;
-                Image = image;
-                Button = button;
                 Content = content;
                 EmptyLabel = emptyLabel;
             }
