@@ -7,11 +7,24 @@ namespace BiomeRivals.Demo.Editor
     public sealed class DemoWorldTexturePostprocessor : AssetPostprocessor
     {
         private const string TextureRoot = "Assets/Generated/MinecraftWorldTextures/Resources/DemoWorld/";
+        private const string CardFrameRoot = "Assets/Game/Demo/Art/Resources/DemoCardFrames/";
 
         private void OnPreprocessTexture()
         {
-            if (!assetPath.StartsWith(TextureRoot, StringComparison.Ordinal)) return;
             var importer = (TextureImporter)assetImporter;
+            if (assetPath.StartsWith(CardFrameRoot, StringComparison.Ordinal))
+            {
+                importer.textureType = TextureImporterType.Default;
+                importer.filterMode = FilterMode.Bilinear;
+                importer.mipmapEnabled = false;
+                importer.sRGBTexture = true;
+                importer.textureCompression = TextureImporterCompression.Uncompressed;
+                importer.wrapMode = TextureWrapMode.Clamp;
+                importer.npotScale = TextureImporterNPOTScale.None;
+                importer.maxTextureSize = 2048;
+                return;
+            }
+            if (!assetPath.StartsWith(TextureRoot, StringComparison.Ordinal)) return;
             importer.textureType = TextureImporterType.Default;
             importer.filterMode = FilterMode.Point;
             importer.mipmapEnabled = true;

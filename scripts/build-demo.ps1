@@ -19,6 +19,7 @@ if (-not $UnityPath) {
 if (-not $UnityPath -or -not (Test-Path -LiteralPath $UnityPath)) { throw "Unity $requiredVersion was not found." }
 
 & (Join-Path $PSScriptRoot 'sync-card-content.ps1')
+& (Join-Path $PSScriptRoot 'sync-card-frame-study.ps1')
 if ($WithMinecraftAssets) {
     & (Join-Path $PSScriptRoot 'extract-minecraft-card-icons.ps1')
     & (Join-Path $PSScriptRoot 'extract-minecraft-world-textures.ps1')

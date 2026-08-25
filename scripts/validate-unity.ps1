@@ -28,6 +28,8 @@ if (-not $actualVersion.StartsWith($requiredVersion, [System.StringComparison]::
 
 & (Join-Path $PSScriptRoot 'sync-card-content.ps1')
 if (-not $?) { throw 'Card content sync failed.' }
+& (Join-Path $PSScriptRoot 'sync-card-frame-study.ps1')
+if (-not $?) { throw 'Card-frame study sync failed.' }
 
 function Invoke-Unity(
     [string[]]$Arguments,

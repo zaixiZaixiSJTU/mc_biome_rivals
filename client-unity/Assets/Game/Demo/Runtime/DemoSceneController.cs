@@ -497,34 +497,62 @@ namespace BiomeRivals.Demo
             var shell = Color.Lerp(theme.FrameDark, Ink, 0.28f);
             var frame = Color.Lerp(theme.FrameBase, PanelRaised, 0.18f);
             var cardEdge = Color.Lerp(theme.Accent, OakEdge, 0.34f);
-            var root = CreateFramedPanel(parent, "Card_" + cardId, Vector2.zero, size, shell, cardEdge);
-            var image = root.GetComponent<Image>();
+            var frameSprite = DemoCardFrameProvider.Load(definition.themeId);
+            var usesStudyFrame = frameSprite != null;
+            RectTransform root;
+            Image image;
+            if (usesStudyFrame)
+            {
+                root = CreateRect(parent, "Card_" + cardId, Vector2.zero, size);
+                image = root.gameObject.AddComponent<Image>();
+                image.sprite = frameSprite;
+                image.type = Image.Type.Simple;
+                image.preserveAspect = false;
+                image.color = Color.white;
+            }
+            else
+            {
+                root = CreateFramedPanel(parent, "Card_" + cardId, Vector2.zero, size, shell, cardEdge);
+                image = root.GetComponent<Image>();
+            }
             if (onClick != null)
             {
                 var button = root.gameObject.AddComponent<Button>();
                 button.targetGraphic = image;
-                ConfigureButtonColors(button, shell, theme.Accent);
+                ConfigureButtonColors(button, usesStudyFrame ? Color.white : shell, theme.Accent);
                 button.onClick.AddListener(() => onClick());
             }
 
-            var inner = CreatePanel(root, "Frame", Vector2.zero, size - new Vector2(10, 10), frame);
-            inner.raycastTarget = false;
+            if (!usesStudyFrame)
+            {
+                var inner = CreatePanel(root, "Frame", Vector2.zero, size - new Vector2(10, 10), frame);
+                inner.raycastTarget = false;
+            }
             var h = size.y;
             var w = size.x;
             var titleHeight = compact ? 31f : 39f;
             var titleY = h * 0.5f - titleHeight * 0.72f;
-            CreatePanel(root, "TitleBand", new Vector2(0, titleY), new Vector2(w - 14, titleHeight), shell).raycastTarget = false;
-            CreateText(root, "Name", new Vector2(7, titleY), new Vector2(w - 50, titleHeight - 4), text.name, compact ? 15 : 20, theme.TitleText, TextAnchor.MiddleCenter, FontStyle.Bold);
+            if (!usesStudyFrame) CreatePanel(root, "TitleBand", new Vector2(0, titleY), new Vector2(w - 14, titleHeight), shell).raycastTarget = false;
 
             var costSize = compact ? 34f : 43f;
-            CreatePanel(root, "CostSocket", new Vector2(-w * 0.5f + costSize * 0.62f, h * 0.5f - costSize * 0.62f), new Vector2(costSize, costSize), theme.Accent).raycastTarget = false;
-            CreateText(root, "Cost", new Vector2(-w * 0.5f + costSize * 0.62f, h * 0.5f - costSize * 0.62f), new Vector2(costSize, costSize), definition.cost.ToString(), compact ? 18 : 23, Ink, TextAnchor.MiddleCenter, FontStyle.Bold);
+            var socketVisualSize = usesStudyFrame ? costSize * 1.55f : costSize;
+            var costPosition = new Vector2(-w * 0.5f + socketVisualSize * 0.52f, h * 0.5f - socketVisualSize * 0.52f);
+            if (usesStudyFrame)
+            {
+                var costFrame = CreatePanel(root, "CostSocketFrame", costPosition, new Vector2(socketVisualSize, socketVisualSize), Color.white);
+                costFrame.sprite = DemoCardFrameProvider.LoadCostSocket(definition.themeId);
+                costFrame.preserveAspect = true;
+                costFrame.raycastTarget = false;
+            }
+            else CreatePanel(root, "CostSocket", costPosition, new Vector2(costSize, costSize), theme.Accent).raycastTarget = false;
+            CreateText(root, "Name", new Vector2(usesStudyFrame ? 12f : 7f, titleY), new Vector2(w - (usesStudyFrame ? 64f : 50f), titleHeight - 4), text.name, compact ? 15 : 20, theme.TitleText, TextAnchor.MiddleCenter, FontStyle.Bold);
+            CreateText(root, "Cost", costPosition, new Vector2(costSize, costSize), definition.cost.ToString(), compact ? 18 : 23, usesStudyFrame ? Pale : Ink, TextAnchor.MiddleCenter, FontStyle.Bold);
 
             var artHeight = compact ? h * 0.36f : h * 0.39f;
             var artY = compact ? h * 0.105f : h * 0.11f;
             var artWell = Color.Lerp(theme.FrameDark, Ink, 0.40f);
             artWell.a = 0.94f;
-            CreatePanel(root, "ArtWell", new Vector2(0, artY), new Vector2(w - 18, artHeight), artWell).raycastTarget = false;
+            if (!usesStudyFrame) CreatePanel(root, "ArtWell", new Vector2(0, artY), new Vector2(w - 18, artHeight), artWell).raycastTarget = false;
             var sprite = DemoCardArtProvider.Load(cardId);
             if (sprite != null)
             {
@@ -540,17 +568,17 @@ namespace BiomeRivals.Demo
 
             var rulesHeight = compact ? h * 0.31f : h * 0.29f;
             var rulesY = -h * 0.235f;
-            CreatePanel(root, "RulesSurface", new Vector2(0, rulesY), new Vector2(w - 18, rulesHeight), theme.RulesSurface).raycastTarget = false;
-            var rules = CreateText(root, "Rules", new Vector2(0, rulesY + 2), new Vector2(w - 30, rulesHeight - 8), text.rulesText, compact ? 11 : 14, theme.BodyText, TextAnchor.MiddleCenter, FontStyle.Normal);
+            if (!usesStudyFrame) CreatePanel(root, "RulesSurface", new Vector2(0, rulesY), new Vector2(w - 18, rulesHeight), theme.RulesSurface).raycastTarget = false;
+            var rules = CreateText(root, "Rules", new Vector2(0, rulesY + 2), new Vector2(w - (usesStudyFrame ? 38 : 30), rulesHeight - (usesStudyFrame ? 15 : 8)), text.rulesText, compact ? 11 : 14, theme.BodyText, TextAnchor.MiddleCenter, FontStyle.Normal);
             rules.resizeTextForBestFit = compact;
             rules.resizeTextMinSize = 9;
             rules.resizeTextMaxSize = compact ? 11 : 14;
 
             var typeY = -h * 0.5f + (compact ? 20f : 24f);
             CreateText(root, "Type", new Vector2(0, typeY), new Vector2(w - 54, compact ? 20 : 24), text.typeLabel, compact ? 10 : 12, theme.TitleText, TextAnchor.MiddleCenter, FontStyle.Bold);
-            if (definition.hasAttack) CreateStat(root, new Vector2(-w * 0.5f + 22, -h * 0.5f + 21), definition.attack.ToString(), Hex("#E6A641"), compact ? 28 : 36);
-            if (definition.hasHealth) CreateStat(root, new Vector2(w * 0.5f - 22, -h * 0.5f + 21), definition.health.ToString(), Hex("#C94D42"), compact ? 28 : 36);
-            if (definition.hasDurability) CreateStat(root, new Vector2(w * 0.5f - 22, -h * 0.5f + 21), definition.durability.ToString(), Hex("#74A9B8"), compact ? 28 : 36);
+            if (definition.hasAttack) CreateStat(root, new Vector2(-w * 0.5f + 22, -h * 0.5f + 21), definition.attack.ToString(), Hex("#E6A641"), compact ? 28 : 36, !usesStudyFrame);
+            if (definition.hasHealth) CreateStat(root, new Vector2(w * 0.5f - 22, -h * 0.5f + 21), definition.health.ToString(), Hex("#C94D42"), compact ? 28 : 36, !usesStudyFrame);
+            if (definition.hasDurability) CreateStat(root, new Vector2(w * 0.5f - 22, -h * 0.5f + 21), definition.durability.ToString(), Hex("#74A9B8"), compact ? 28 : 36, !usesStudyFrame);
             return root;
         }
 
@@ -571,9 +599,9 @@ namespace BiomeRivals.Demo
             CreateText(parent, "WorldLabelText", new Vector2(0, labelY), new Vector2(size.x - 14, 26), stats, 12, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
         }
 
-        private void CreateStat(Transform parent, Vector2 position, string value, Color color, float size)
+        private void CreateStat(Transform parent, Vector2 position, string value, Color color, float size, bool drawSocket)
         {
-            CreatePanel(parent, "StatSocket", position, new Vector2(size, size), color).raycastTarget = false;
+            if (drawSocket) CreatePanel(parent, "StatSocket", position, new Vector2(size, size), color).raycastTarget = false;
             CreateText(parent, "Stat", position, new Vector2(size, size), value, Mathf.RoundToInt(size * 0.54f), Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
         }
 
@@ -687,7 +715,7 @@ namespace BiomeRivals.Demo
 
         private static void ClearChildren(Transform parent)
         {
-            for (var i = parent.childCount - 1; i >= 0; i--) Destroy(parent.GetChild(i).gameObject);
+            for (var i = parent.childCount - 1; i >= 0; i--) DestroyUiObject(parent.GetChild(i).gameObject);
         }
 
         private static void ClearChildrenExcept(Transform parent, GameObject preserved)
@@ -695,8 +723,14 @@ namespace BiomeRivals.Demo
             for (var i = parent.childCount - 1; i >= 0; i--)
             {
                 var child = parent.GetChild(i).gameObject;
-                if (child != preserved) Destroy(child);
+                if (child != preserved) DestroyUiObject(child);
             }
+        }
+
+        private static void DestroyUiObject(GameObject target)
+        {
+            if (Application.isPlaying) Destroy(target);
+            else DestroyImmediate(target);
         }
 
         private static Color Hex(string value)

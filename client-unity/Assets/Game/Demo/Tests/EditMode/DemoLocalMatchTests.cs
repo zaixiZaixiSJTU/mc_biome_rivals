@@ -97,6 +97,33 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(root.transform.Find("DemoCanvas/PlayerHUD/FrameTop").GetComponent<UnityEngine.UI.RawImage>().texture.name, Does.Contain("oak_planks"));
                 Assert.That(root.transform.Find("DemoCanvas/InspectorPanel/FrameTop").GetComponent<UnityEngine.UI.RawImage>().texture.name, Does.Contain("stone_bricks"));
                 Assert.That(root.transform.Find("DemoCanvas/EndTurn/FrameTop").GetComponent<UnityEngine.UI.RawImage>().texture.name, Does.Contain("prismarine_bricks"));
+                var themedCard = GameObject.Find("Card_pf_001");
+                Assert.That(themedCard, Is.Not.Null);
+                Assert.That(themedCard.GetComponent<UnityEngine.UI.Image>().sprite.name, Is.EqualTo("CardFrame_plains_forest"));
+                Assert.That(themedCard.transform.Find("MaterialFill"), Is.Null);
+                Assert.That(themedCard.transform.Find("TitleBand"), Is.Null);
+                Assert.That(themedCard.transform.Find("CostSocket"), Is.Null);
+                Assert.That(themedCard.transform.Find("CostSocketFrame").GetComponent<UnityEngine.UI.Image>().sprite.name, Is.EqualTo("CardCostSocket_plains_forest"));
+                var frameMappings = new[,]
+                {
+                    { "plains_forest", "pf" },
+                    { "desert_badlands", "db" },
+                    { "snow_ice", "si" },
+                    { "cave_dark_forest", "cd" },
+                    { "ocean_river", "or" },
+                    { "nether", "nt" },
+                    { "end", "ed" }
+                };
+                for (var mapping = 0; mapping < frameMappings.GetLength(0); mapping++)
+                {
+                    var themeId = frameMappings[mapping, 0];
+                    var prefix = frameMappings[mapping, 1];
+                    GameObject.Find("Faction_" + themeId).GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
+                    var card = GameObject.Find("Card_" + prefix + "_001");
+                    Assert.That(card, Is.Not.Null, themeId);
+                    Assert.That(card.GetComponent<UnityEngine.UI.Image>().sprite.name, Is.EqualTo("CardFrame_" + themeId));
+                    Assert.That(card.transform.Find("CostSocketFrame").GetComponent<UnityEngine.UI.Image>().sprite.name, Is.EqualTo("CardCostSocket_" + themeId));
+                }
 
                 var playerUnit = battlefield.GetSlotReferencePosition(true, DemoSlotKind.Unit, 0);
                 var opponentUnit = battlefield.GetSlotReferencePosition(false, DemoSlotKind.Unit, 0);
