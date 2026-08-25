@@ -26,6 +26,7 @@ namespace BiomeRivals.Demo.Editor
 
         private static void BuildScene()
         {
+            DemoUiPrefabBuilder.Rebuild();
             Directory.CreateDirectory("Assets/Game/Demo/Scenes");
 
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);

@@ -57,6 +57,9 @@ namespace BiomeRivals.Demo.Tests
         public void GeneratedSceneAndRuntimeHierarchyExist()
         {
             Assert.That(AssetDatabase.LoadAssetAtPath<SceneAsset>(DemoSceneBuilder.ScenePath), Is.Not.Null);
+            Assert.That(AssetDatabase.LoadAssetAtPath<GameObject>(DemoUiPrefabBuilder.PrefabFolder + "/BasePanel.prefab").GetComponent<BasePanel>(), Is.Not.Null);
+            Assert.That(AssetDatabase.LoadAssetAtPath<GameObject>(DemoUiPrefabBuilder.PrefabFolder + "/SecondaryButton.prefab").GetComponent<SecondaryButton>(), Is.Not.Null);
+            Assert.That(AssetDatabase.LoadAssetAtPath<GameObject>(DemoUiPrefabBuilder.PrefabFolder + "/PrimaryActionButton.prefab").GetComponent<PrimaryActionButton>(), Is.Not.Null);
 
             var root = new GameObject("DemoTestRoot");
             try
@@ -88,10 +91,11 @@ namespace BiomeRivals.Demo.Tests
                 var scaler = root.transform.Find("DemoCanvas").GetComponent<UnityEngine.UI.CanvasScaler>();
                 Assert.That(canvas.pixelPerfect, Is.True);
                 Assert.That(scaler.referencePixelsPerUnit, Is.EqualTo(DemoUiMetrics.PixelsPerUnit));
-                Assert.That(GameObject.Find("EndTurn"), Is.Not.Null);
+                Assert.That(GameObject.Find("EndTurnButton"), Is.Not.Null);
                 Assert.That(GameObject.Find("Faction_plains_forest"), Is.Not.Null);
                 var opponentHud = root.transform.Find("DemoCanvas/OpponentHUD");
                 Assert.That(opponentHud, Is.Not.Null);
+                Assert.That(opponentHud.GetComponent<BasePanel>(), Is.Not.Null);
                 Assert.That(opponentHud.GetComponent<UnityEngine.UI.Outline>(), Is.Null);
                 var materialFill = opponentHud.Find("MaterialFill")?.GetComponent<UnityEngine.UI.Image>();
                 var frameSlice = opponentHud.Find("FrameSlice")?.GetComponent<UnityEngine.UI.Image>();
@@ -106,10 +110,25 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(opponentHud.Find("FrameTop"), Is.Null);
                 Assert.That(opponentHud.Find("FrameCornerNW"), Is.Null);
                 Assert.That(opponentHud.Find("RivetNW")?.GetComponent<UnityEngine.UI.Image>(), Is.Not.Null);
-                Assert.That(frameSlice.sprite.texture.name, Does.Contain("nether_bricks"));
-                Assert.That(root.transform.Find("DemoCanvas/PlayerHUD/FrameSlice").GetComponent<UnityEngine.UI.Image>().sprite.texture.name, Does.Contain("oak_planks"));
+                Assert.That(frameSlice.sprite.texture.name, Does.Contain("stone_bricks"));
+                Assert.That(root.transform.Find("DemoCanvas/PlayerHUD/FrameSlice").GetComponent<UnityEngine.UI.Image>().sprite.texture.name, Does.Contain("stone_bricks"));
                 Assert.That(root.transform.Find("DemoCanvas/CardDetailsPanel/FrameSlice").GetComponent<UnityEngine.UI.Image>().sprite.texture.name, Does.Contain("stone_bricks"));
-                Assert.That(root.transform.Find("DemoCanvas/EndTurn/FrameSlice").GetComponent<UnityEngine.UI.Image>().sprite.texture.name, Does.Contain("prismarine_bricks"));
+                Assert.That(root.transform.Find("DemoCanvas/HandPlate/FrameSlice").GetComponent<UnityEngine.UI.Image>().sprite.texture.name, Does.Contain("stone_bricks"));
+                Assert.That(root.transform.Find("DemoCanvas/EndTurnButton/FrameSlice").GetComponent<UnityEngine.UI.Image>().sprite.texture.name, Does.Contain("prismarine_bricks"));
+                var endTurn = root.transform.Find("DemoCanvas/EndTurnButton");
+                Assert.That(endTurn.GetComponent<PrimaryActionButton>(), Is.Not.Null);
+                Assert.That(endTurn.GetComponent<SecondaryButton>(), Is.Null);
+                Assert.That(root.GetComponentsInChildren<PrimaryActionButton>(true), Has.Length.EqualTo(1));
+                var factionButtons = root.GetComponentsInChildren<SecondaryButton>(true);
+                Assert.That(factionButtons, Has.Length.EqualTo(7));
+                var neutralButtonColor = DemoUiStyleCatalog.GetRootFill(DemoUiStyleClass.SecondaryButton);
+                foreach (var style in factionButtons)
+                {
+                    Assert.That(style.GetComponent<UnityEngine.UI.Image>().color, Is.EqualTo(neutralButtonColor));
+                    Assert.That(style.transform.Find("FrameSlice").GetComponent<UnityEngine.UI.Image>().sprite.texture.name, Does.Contain("stone_bricks"));
+                }
+                Assert.That(root.transform.Find("DemoCanvas/FactionRail/Faction_plains_forest/SelectionAccent").gameObject.activeSelf, Is.True);
+                Assert.That(root.transform.Find("DemoCanvas/FactionRail/Faction_desert_badlands/SelectionAccent").gameObject.activeSelf, Is.False);
                 Assert.That(root.transform.Find("DemoCanvas/CardDetailsPanel/InspectorContent").GetComponent<RectTransform>().sizeDelta, Is.EqualTo(new Vector2(286f, 701f)));
                 var themedCard = GameObject.Find("Card_pf_001");
                 Assert.That(themedCard, Is.Not.Null);

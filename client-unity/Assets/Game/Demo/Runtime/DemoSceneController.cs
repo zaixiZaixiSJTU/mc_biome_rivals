@@ -22,8 +22,6 @@ namespace BiomeRivals.Demo
         private static readonly Color Muted = Hex("#B2AA96");
         private static readonly Color Cyan = Hex("#5AAE9F");
         private static readonly Color Ember = Hex("#D98545");
-        private static readonly Color StoneEdge = Hex("#777263");
-        private static readonly Color OakEdge = Hex("#9A6A3A");
         private static readonly Color Danger = Hex("#E05A47");
 
         private readonly DemoLocalMatch _match = new DemoLocalMatch();
@@ -129,10 +127,10 @@ namespace BiomeRivals.Demo
 
         private void BuildTopChrome()
         {
-            var titlePlate = CreateFramedPanel(_canvasRoot, "TitlePlate", new Vector2(0, 502), new Vector2(510, 58), new Color(Panel.r, Panel.g, Panel.b, 0.90f), StoneEdge);
+            var titlePlate = CreateBasePanel(_canvasRoot, "TitlePlate", new Vector2(0, 502), new Vector2(510, 58));
             CreateText(titlePlate, "Title", Vector2.zero, new Vector2(480, 44), "群系竞逐  ·  本地战场演示", 24, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
 
-            var opponentHud = CreateFramedPanel(_canvasRoot, "OpponentHUD", new Vector2(-760, 455), new Vector2(315, 104), Panel, Ember);
+            var opponentHud = CreateBasePanel(_canvasRoot, "OpponentHUD", new Vector2(-760, 455), new Vector2(315, 104));
             CreatePanel(opponentHud, "Avatar", new Vector2(-112, 0), new Vector2(70, 70), Hex("#5B2020"));
             CreateText(opponentHud, "AvatarGlyph", new Vector2(-112, 1), new Vector2(60, 60), "▣", 36, Ember, TextAnchor.MiddleCenter, FontStyle.Bold);
             CreateText(opponentHud, "Name", new Vector2(34, 22), new Vector2(190, 32), "下界远征队", 20, Pale, TextAnchor.MiddleLeft, FontStyle.Bold);
@@ -142,12 +140,12 @@ namespace BiomeRivals.Demo
             for (var i = 0; i < 5; i++)
             {
                 var x = (i - 2) * 72f;
-                var back = CreateFramedPanel(cardBackRoot, "CardBack", new Vector2(x, Mathf.Abs(i - 2) * -4f), new Vector2(78, 112), Hex("#2B1917"), Ember);
+                var back = CreateBasePanel(cardBackRoot, "CardBack", new Vector2(x, Mathf.Abs(i - 2) * -4f), new Vector2(78, 112));
                 back.localRotation = Quaternion.Euler(0, 0, (i - 2) * -2.5f);
                 CreateText(back, "Rune", Vector2.zero, new Vector2(58, 80), "◇", 32, Ember, TextAnchor.MiddleCenter, FontStyle.Bold);
             }
 
-            _playerHud = CreateFramedPanel(_canvasRoot, "PlayerHUD", new Vector2(-782, -454), new Vector2(270, 105), new Color(Panel.r, Panel.g, Panel.b, 0.93f), OakEdge);
+            _playerHud = CreateBasePanel(_canvasRoot, "PlayerHUD", new Vector2(-782, -454), new Vector2(270, 105));
             CreatePanel(_playerHud, "Avatar", new Vector2(-92, 0), new Vector2(70, 70), Hex("#274C2D"));
             CreateText(_playerHud, "AvatarGlyph", new Vector2(-92, 1), new Vector2(60, 60), "▦", 34, Hex("#D3C35B"), TextAnchor.MiddleCenter, FontStyle.Bold);
             CreateText(_playerHud, "Name", new Vector2(35, 22), new Vector2(150, 30), "林地守护者", 18, Pale, TextAnchor.MiddleLeft, FontStyle.Bold);
@@ -156,17 +154,19 @@ namespace BiomeRivals.Demo
 
         private void BuildFactionRail()
         {
-            var rail = CreateFramedPanel(_canvasRoot, "FactionRail", new Vector2(-879, 45), new Vector2(150, 590), new Color(Panel.r, Panel.g, Panel.b, 0.86f), StoneEdge);
+            var rail = CreateBasePanel(_canvasRoot, "FactionRail", new Vector2(-879, 45), new Vector2(150, 590));
             CreateText(rail, "Header", new Vector2(0, 252), new Vector2(120, 48), "群 系", 18, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
 
             for (var i = 0; i < Factions.Length; i++)
             {
                 var spec = Factions[i];
                 _registry.TryGetTheme(spec.Id, out var theme);
-                var button = CreateButton(rail, "Faction_" + spec.Id, new Vector2(0, 188 - i * 67), new Vector2(116, 51), new Color(Ink.r, Ink.g, Ink.b, 0.82f), Color.Lerp(theme.Accent, StoneEdge, 0.55f), spec.Label, 16);
+                var button = CreateSecondaryButton(rail, "Faction_" + spec.Id, new Vector2(0, 188 - i * 67), new Vector2(116, 51), spec.Label, 16);
+                var selectionAccent = CreatePanel(button.transform, "SelectionAccent", new Vector2(-54, 0), new Vector2(3, 39), theme.Accent);
+                selectionAccent.raycastTarget = false;
                 var captured = spec.Id;
                 button.onClick.AddListener(() => SelectFaction(captured));
-                _factionButtons.Add(new FactionButtonView(spec.Id, button, button.targetGraphic as Image, theme));
+                _factionButtons.Add(new FactionButtonView(spec.Id, button, button.targetGraphic as Image, selectionAccent));
             }
         }
 
@@ -222,38 +222,38 @@ namespace BiomeRivals.Demo
 
         private void BuildHandArea()
         {
-            var handPlate = CreateFramedPanel(_canvasRoot, "HandPlate", new Vector2(35, -418), new Vector2(1360, 232), new Color(Ink.r, Ink.g, Ink.b, 0.72f), OakEdge);
+            var handPlate = CreateBasePanel(_canvasRoot, "HandPlate", new Vector2(35, -418), new Vector2(1360, 232));
             _handRoot = CreateRect(handPlate, "HandCards", new Vector2(-20, 14), new Vector2(1250, 225));
             CreateText(_canvasRoot, "HandLabel", new Vector2(-584, -508), new Vector2(130, 25), "手牌  5/7", 13, Muted, TextAnchor.MiddleLeft, FontStyle.Bold);
         }
 
         private void BuildInspector()
         {
-            var panel = CreateFramedPanel(_canvasRoot, "CardDetailsPanel", new Vector2(785, 60), new Vector2(300, 715), new Color(Panel.r, Panel.g, Panel.b, 0.92f), StoneEdge);
+            var panel = CreateBasePanel(_canvasRoot, "CardDetailsPanel", new Vector2(785, 60), new Vector2(300, 715));
             var inset = DemoUiMetrics.PanelContentInset * 2f;
             _inspectorRoot = CreateRect(panel, "InspectorContent", Vector2.zero, new Vector2(300f - inset, 715f - inset));
         }
 
         private void BuildTurnControls()
         {
-            var energyPlate = CreateFramedPanel(_canvasRoot, "EnergyPlate", new Vector2(-570, -454), new Vector2(150, 72), new Color(Panel.r, Panel.g, Panel.b, 0.92f), OakEdge);
+            var energyPlate = CreateBasePanel(_canvasRoot, "EnergyPlate", new Vector2(-570, -454), new Vector2(150, 72));
             _energyText = CreateText(energyPlate, "Energy", Vector2.zero, new Vector2(130, 54), "◆ 6/6", 22, Cyan, TextAnchor.MiddleCenter, FontStyle.Bold);
 
-            var roundPlate = CreateFramedPanel(_canvasRoot, "RoundPlate", new Vector2(710, 472), new Vector2(155, 54), Panel, Ember);
+            var roundPlate = CreateBasePanel(_canvasRoot, "RoundPlate", new Vector2(710, 472), new Vector2(155, 54));
             _roundText = CreateText(roundPlate, "Round", Vector2.zero, new Vector2(135, 38), "第 1 回合", 17, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
 
-            _endTurnButton = CreateButton(_canvasRoot, "EndTurn", new Vector2(786, -355), new Vector2(230, 86), Hex("#245D50"), Cyan, "结束回合", 23);
+            _endTurnButton = CreatePrimaryActionButton(_canvasRoot, "EndTurnButton", new Vector2(786, -355), new Vector2(230, 86), "结束回合", 23);
             _endTurnLabel = _endTurnButton.GetComponentInChildren<Text>();
             _endTurnButton.onClick.AddListener(OnEndTurn);
             _endTurnButton.gameObject.AddComponent<DemoHoverScale>().Configure(1.04f, 16f);
 
-            var statusPlate = CreateFramedPanel(_canvasRoot, "StatusPlate", new Vector2(780, -462), new Vector2(315, 94), new Color(Ink.r, Ink.g, Ink.b, 0.86f), StoneEdge);
+            var statusPlate = CreateBasePanel(_canvasRoot, "StatusPlate", new Vector2(780, -462), new Vector2(315, 94));
             _statusText = CreateText(statusPlate, "Status", Vector2.zero, new Vector2(285, 70), string.Empty, 14, Pale, TextAnchor.MiddleCenter, FontStyle.Normal);
         }
 
         private void BuildBanner()
         {
-            var banner = CreateFramedPanel(_canvasRoot, "TurnBanner", new Vector2(0, 8), new Vector2(570, 112), new Color(Ink.r, Ink.g, Ink.b, 0.96f), Cyan);
+            var banner = CreateBasePanel(_canvasRoot, "TurnBanner", new Vector2(0, 8), new Vector2(570, 112));
             _turnBanner = banner.gameObject.AddComponent<CanvasGroup>();
             _turnBanner.alpha = 0f;
             _turnBanner.blocksRaycasts = false;
@@ -289,9 +289,8 @@ namespace BiomeRivals.Demo
             foreach (var view in _factionButtons)
             {
                 var active = view.Id == _activeFaction;
-                view.Image.color = active
-                    ? Color.Lerp(view.Theme.FrameBase, PanelRaised, 0.22f)
-                    : new Color(Ink.r, Ink.g, Ink.b, 0.82f);
+                view.Image.color = DemoUiStyleCatalog.GetRootFill(DemoUiStyleClass.SecondaryButton);
+                view.SelectionAccent.gameObject.SetActive(active);
             }
         }
 
@@ -361,7 +360,7 @@ namespace BiomeRivals.Demo
             }
             else
             {
-                var cast = CreateButton(_inspectorRoot, "Cast", new Vector2(0, -118), new Vector2(235, 60), Hex("#6A4C22"), Ember, "释放（效果占位）", 17);
+                var cast = CreateSecondaryButton(_inspectorRoot, "Cast", new Vector2(0, -118), new Vector2(235, 60), "释放（效果占位）", 17);
                 cast.onClick.AddListener(CastSelectedCard);
                 cast.gameObject.AddComponent<DemoHoverScale>().Configure(1.04f, 16f);
             }
@@ -498,7 +497,6 @@ namespace BiomeRivals.Demo
 
             var shell = Color.Lerp(theme.FrameDark, Ink, 0.28f);
             var frame = Color.Lerp(theme.FrameBase, PanelRaised, 0.18f);
-            var cardEdge = Color.Lerp(theme.Accent, OakEdge, 0.34f);
             var frameSprite = DemoCardFrameProvider.Load(definition.themeId);
             var usesStudyFrame = frameSprite != null;
             RectTransform root;
@@ -514,7 +512,7 @@ namespace BiomeRivals.Demo
             }
             else
             {
-                root = CreateFramedPanel(parent, "Card_" + cardId, Vector2.zero, size, shell, cardEdge);
+                root = CreateBasePanel(parent, "Card_" + cardId, Vector2.zero, size);
                 image = root.GetComponent<Image>();
             }
             if (onClick != null)
@@ -611,18 +609,48 @@ namespace BiomeRivals.Demo
         private void CreateTintBand(string name, Vector2 position, Vector2 size, Color color) =>
             CreatePanel(_canvasRoot, name, position, size, color).raycastTarget = false;
 
-        private RectTransform CreateFramedPanel(Transform parent, string name, Vector2 position, Vector2 size, Color fill, Color edge)
+        private RectTransform CreateBasePanel(Transform parent, string name, Vector2 position, Vector2 size) =>
+            CreateStyledPanel(parent, name, position, size, DemoUiStyleClass.BasePanel);
+
+        private RectTransform CreateStyledPanel(Transform parent, string name, Vector2 position, Vector2 size, DemoUiStyleClass styleClass)
         {
-            var root = CreateRect(parent, name, position, size);
-            var image = root.gameObject.AddComponent<Image>();
-            image.color = fill;
-            var shadow = root.gameObject.AddComponent<Shadow>();
+            var prefab = DemoUiPrefabProvider.Load(styleClass);
+            var root = prefab != null
+                ? Instantiate(prefab, parent, false).GetComponent<RectTransform>()
+                : CreateRect(parent, name, position, size);
+            root.name = name;
+            root.anchorMin = new Vector2(0.5f, 0.5f);
+            root.anchorMax = new Vector2(0.5f, 0.5f);
+            root.pivot = new Vector2(0.5f, 0.5f);
+            root.sizeDelta = size;
+            root.anchoredPosition = position;
+            var image = root.GetComponent<Image>() ?? root.gameObject.AddComponent<Image>();
+            image.color = DemoUiStyleCatalog.GetRootFill(styleClass);
+            AttachStyleComponent(root.gameObject, styleClass);
+            var shadow = root.GetComponent<Shadow>() ?? root.gameObject.AddComponent<Shadow>();
             shadow.effectColor = new Color(0, 0, 0, 0.46f);
             shadow.effectDistance = new Vector2(5, -5);
             if (_hudMaterialFactory == null)
-                _hudMaterialFactory = new DemoHudMaterialFactory(StoneEdge, OakEdge, Ember, Cyan, Pale);
-            _hudMaterialFactory.Decorate(root, size, fill, edge);
+                _hudMaterialFactory = new DemoHudMaterialFactory(Pale);
+            _hudMaterialFactory.Decorate(root, size, styleClass);
             return root;
+        }
+
+        private static void AttachStyleComponent(GameObject gameObject, DemoUiStyleClass styleClass)
+        {
+            if (gameObject.GetComponent<DemoUiStyleComponent>() != null) return;
+            switch (styleClass)
+            {
+                case DemoUiStyleClass.SecondaryButton:
+                    gameObject.AddComponent<SecondaryButton>();
+                    break;
+                case DemoUiStyleClass.PrimaryActionButton:
+                    gameObject.AddComponent<PrimaryActionButton>();
+                    break;
+                default:
+                    gameObject.AddComponent<BasePanel>();
+                    break;
+            }
         }
 
         private Image CreatePanel(Transform parent, string name, Vector2 position, Vector2 size, Color color)
@@ -633,12 +661,18 @@ namespace BiomeRivals.Demo
             return image;
         }
 
-        private Button CreateButton(Transform parent, string name, Vector2 position, Vector2 size, Color fill, Color accent, string label, int fontSize)
+        private Button CreateSecondaryButton(Transform parent, string name, Vector2 position, Vector2 size, string label, int fontSize) =>
+            CreateStyledButton(parent, name, position, size, label, fontSize, DemoUiStyleClass.SecondaryButton);
+
+        private Button CreatePrimaryActionButton(Transform parent, string name, Vector2 position, Vector2 size, string label, int fontSize) =>
+            CreateStyledButton(parent, name, position, size, label, fontSize, DemoUiStyleClass.PrimaryActionButton);
+
+        private Button CreateStyledButton(Transform parent, string name, Vector2 position, Vector2 size, string label, int fontSize, DemoUiStyleClass styleClass)
         {
-            var root = CreateFramedPanel(parent, name, position, size, fill, accent);
-            var button = root.gameObject.AddComponent<Button>();
+            var root = CreateStyledPanel(parent, name, position, size, styleClass);
+            var button = root.GetComponent<Button>() ?? root.gameObject.AddComponent<Button>();
             button.targetGraphic = root.GetComponent<Image>();
-            ConfigureButtonColors(button, fill, accent);
+            ConfigureButtonColors(button, DemoUiStyleCatalog.GetRootFill(styleClass), DemoUiStyleCatalog.GetFrameTint(styleClass));
             CreateText(root, "Label", Vector2.zero, size - new Vector2(12, 8), label, fontSize, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
             return button;
         }
@@ -778,14 +812,14 @@ namespace BiomeRivals.Demo
             public readonly string Id;
             public readonly Button Button;
             public readonly Image Image;
-            public readonly CardThemePalette Theme;
+            public readonly Image SelectionAccent;
 
-            public FactionButtonView(string id, Button button, Image image, CardThemePalette theme)
+            public FactionButtonView(string id, Button button, Image image, Image selectionAccent)
             {
                 Id = id;
                 Button = button;
                 Image = image;
-                Theme = theme;
+                SelectionAccent = selectionAccent;
             }
         }
 

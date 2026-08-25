@@ -8,6 +8,18 @@
 
 通用 HUD 的像素规范集中在 `DemoUiMetrics`：Canvas 开启 `Pixel Perfect`，CanvasScaler 与运行时创建的 UI Sprite 统一使用 `16 PPU`。容器边框不再由四条边和四个角分别拉伸，而是由带 `5 px` Border 的 `Image.Type.Sliced` 九宫格渲染；内部材质使用同 PPU 的 `Image.Type.Tiled` 平铺。`CardDetailsPanel` 的内容安全边距为每边 `7 px`，避免边框吞占详情卡牌的有效面积。以上参数有 EditMode 层级与数值断言，修改时必须同步更新视觉验收图和测试。
 
+UGUI 样式由 `DemoUiStyleCatalog` 集中提供材质、底色、描边和交互色，不允许业务代码直接拼装临时配色。运行时对象挂载对应的样式组件，后续转为 Prefab 时保留同一语义：
+
+| 样式组件 | 使用范围 | 材质规则 |
+|---|---|---|
+| `BasePanel` | 左右侧栏、顶部信息、底部手牌底板、状态容器 | 暗色石砖边框 + 深色黑石内板 |
+| `SecondaryButton` | 群系列表项、普通释放/确认操作 | 与 BasePanel 同源的中性石砖，仅用亮度反馈悬停和按下 |
+| `PrimaryActionButton` | 唯一高优先级操作 `EndTurnButton` | 海晶高亮边框 + 深青内板；同屏不得出现第二个主按钮 |
+
+群系按钮的主题色只显示为左侧 `3 px` 选中标记，不再改变整块按钮材质。这样主题信息仍可辨识，同时不会重新引入木质、下界砖、海晶砖混搭的外围 HUD。
+
+三份 Prefab 位于 `Assets/Game/Demo/UI/Resources/DemoUI/Prefabs`，由 `DemoUiPrefabBuilder` 生成并纳入场景构建流程；运行时通过 `DemoUiPrefabProvider` 加载，资源临时缺失时才使用等价的组件化回退构建。
+
 ## 画面结构
 
 | 区域 | 功能 | 视觉规则 |

@@ -7,47 +7,37 @@ namespace BiomeRivals.Demo
 {
     internal sealed class DemoHudMaterialFactory : IDisposable
     {
-        private readonly Color _stoneEdge;
-        private readonly Color _oakEdge;
-        private readonly Color _emberEdge;
-        private readonly Color _prismarineEdge;
         private readonly Color _rivetHighlight;
         private readonly Dictionary<string, Texture2D> _textures = new Dictionary<string, Texture2D>(StringComparer.Ordinal);
         private readonly Dictionary<string, Sprite> _sprites = new Dictionary<string, Sprite>(StringComparer.Ordinal);
         private readonly HashSet<Texture2D> _generatedTextures = new HashSet<Texture2D>();
 
-        public DemoHudMaterialFactory(Color stoneEdge, Color oakEdge, Color emberEdge, Color prismarineEdge, Color rivetHighlight)
+        public DemoHudMaterialFactory(Color rivetHighlight)
         {
-            _stoneEdge = stoneEdge;
-            _oakEdge = oakEdge;
-            _emberEdge = emberEdge;
-            _prismarineEdge = prismarineEdge;
             _rivetHighlight = rivetHighlight;
         }
 
-        public void Decorate(RectTransform root, Vector2 size, Color fill, Color edge)
+        public void Decorate(RectTransform root, Vector2 size, DemoUiStyleClass styleClass)
         {
             const float bevelOffset = 2f;
-            var frameTexture = ResolveFrameTexture(edge);
+            var frameTexture = GetTexture(DemoUiStyleCatalog.GetFrameTextureKey(styleClass));
             var bodyTexture = GetTexture("polished_blackstone_bricks");
             var contentInset = DemoUiMetrics.FrameBorderPixels;
             var bodySize = new Vector2(Mathf.Max(0, size.x - contentInset * 2f), Mathf.Max(0, size.y - contentInset * 2f));
-            var frameTint = Color.Lerp(Color.white, edge, 0.24f);
-            frameTint.a = 0.96f;
-            var bodyTint = Color.Lerp(Color.white, fill, 0.42f);
-            bodyTint.a = 0.34f;
+            var frameTint = DemoUiStyleCatalog.GetFrameTint(styleClass);
+            var bodyTint = DemoUiStyleCatalog.GetBodyTint(styleClass);
 
             CreateSlicedPanel(root, "FrameSlice", Vector2.zero, size, GetSprite(frameTexture, true), frameTint);
             CreateTiledPanel(root, "MaterialFill", Vector2.zero, bodySize, GetSprite(bodyTexture, false), bodyTint);
 
             var bevelWidth = Mathf.Max(0, size.x - contentInset * 2f);
-            CreateSolidPanel(root, "InnerBevelTop", new Vector2(0, size.y * 0.5f - contentInset - bevelOffset), new Vector2(bevelWidth, 1f), new Color(edge.r, edge.g, edge.b, 0.30f));
+            CreateSolidPanel(root, "InnerBevelTop", new Vector2(0, size.y * 0.5f - contentInset - bevelOffset), new Vector2(bevelWidth, 1f), new Color(frameTint.r, frameTint.g, frameTint.b, 0.30f));
             CreateSolidPanel(root, "InnerBevelBottom", new Vector2(0, -size.y * 0.5f + contentInset + bevelOffset), new Vector2(bevelWidth, 2f), new Color(0, 0, 0, 0.38f));
 
-            CreateRivet(root, "NW", new Vector2(-size.x * 0.5f + 3f, size.y * 0.5f - 3f), edge);
-            CreateRivet(root, "NE", new Vector2(size.x * 0.5f - 3f, size.y * 0.5f - 3f), edge);
-            CreateRivet(root, "SW", new Vector2(-size.x * 0.5f + 3f, -size.y * 0.5f + 3f), edge);
-            CreateRivet(root, "SE", new Vector2(size.x * 0.5f - 3f, -size.y * 0.5f + 3f), edge);
+            CreateRivet(root, "NW", new Vector2(-size.x * 0.5f + 3f, size.y * 0.5f - 3f), frameTint);
+            CreateRivet(root, "NE", new Vector2(size.x * 0.5f - 3f, size.y * 0.5f - 3f), frameTint);
+            CreateRivet(root, "SW", new Vector2(-size.x * 0.5f + 3f, -size.y * 0.5f + 3f), frameTint);
+            CreateRivet(root, "SE", new Vector2(size.x * 0.5f - 3f, -size.y * 0.5f + 3f), frameTint);
         }
 
         public void Dispose()
@@ -72,24 +62,6 @@ namespace BiomeRivals.Demo
         private void CreateRivet(Transform parent, string suffix, Vector2 position, Color edge)
         {
             CreateSolidPanel(parent, "Rivet" + suffix, position, new Vector2(3f, 3f), Color.Lerp(edge, _rivetHighlight, 0.52f));
-        }
-
-        private Texture2D ResolveFrameTexture(Color edge)
-        {
-            var key = "stone_bricks";
-            var nearest = ColorDistance(edge, _stoneEdge);
-            SelectNearest(edge, _oakEdge, "oak_planks", ref nearest, ref key);
-            SelectNearest(edge, _emberEdge, "nether_bricks", ref nearest, ref key);
-            SelectNearest(edge, _prismarineEdge, "prismarine_bricks", ref nearest, ref key);
-            return GetTexture(key);
-        }
-
-        private static void SelectNearest(Color value, Color candidate, string candidateKey, ref float nearest, ref string key)
-        {
-            var distance = ColorDistance(value, candidate);
-            if (distance >= nearest) return;
-            nearest = distance;
-            key = candidateKey;
         }
 
         private Texture2D GetTexture(string key)
@@ -222,12 +194,5 @@ namespace BiomeRivals.Demo
             return ColorUtility.TryParseHtmlString(value, out color) ? color : Color.magenta;
         }
 
-        private static float ColorDistance(Color left, Color right)
-        {
-            var red = left.r - right.r;
-            var green = left.g - right.g;
-            var blue = left.b - right.b;
-            return red * red + green * green + blue * blue;
-        }
     }
 }
