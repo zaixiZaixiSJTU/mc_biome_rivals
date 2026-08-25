@@ -13,6 +13,7 @@ namespace BiomeRivals.Demo
         private readonly Color _prismarineEdge;
         private readonly Color _rivetHighlight;
         private readonly Dictionary<string, Texture2D> _textures = new Dictionary<string, Texture2D>(StringComparer.Ordinal);
+        private readonly Dictionary<string, Sprite> _sprites = new Dictionary<string, Sprite>(StringComparer.Ordinal);
         private readonly HashSet<Texture2D> _generatedTextures = new HashSet<Texture2D>();
 
         public DemoHudMaterialFactory(Color stoneEdge, Color oakEdge, Color emberEdge, Color prismarineEdge, Color rivetHighlight)
@@ -26,34 +27,38 @@ namespace BiomeRivals.Demo
 
         public void Decorate(RectTransform root, Vector2 size, Color fill, Color edge)
         {
-            const float railThickness = 10f;
-            const float cornerSize = 15f;
-            const float inset = 4f;
+            const float bevelOffset = 2f;
             var frameTexture = ResolveFrameTexture(edge);
             var bodyTexture = GetTexture("polished_blackstone_bricks");
-            var bodySize = new Vector2(Mathf.Max(0, size.x - railThickness * 2f), Mathf.Max(0, size.y - railThickness * 2f));
+            var contentInset = DemoUiMetrics.FrameBorderPixels;
+            var bodySize = new Vector2(Mathf.Max(0, size.x - contentInset * 2f), Mathf.Max(0, size.y - contentInset * 2f));
             var frameTint = Color.Lerp(Color.white, edge, 0.24f);
             frameTint.a = 0.96f;
             var bodyTint = Color.Lerp(Color.white, fill, 0.42f);
             bodyTint.a = 0.34f;
 
-            CreateRawTexturePanel(root, "MaterialFill", Vector2.zero, bodySize, bodyTexture, bodyTint, 48f);
-            CreateRawTexturePanel(root, "FrameTop", new Vector2(0, size.y * 0.5f - railThickness * 0.5f), new Vector2(Mathf.Max(0, size.x - cornerSize * 1.35f), railThickness), frameTexture, frameTint, 34f);
-            CreateRawTexturePanel(root, "FrameBottom", new Vector2(0, -size.y * 0.5f + railThickness * 0.5f), new Vector2(Mathf.Max(0, size.x - cornerSize * 1.35f), railThickness), frameTexture, Color.Lerp(frameTint, Color.black, 0.22f), 34f);
-            CreateRawTexturePanel(root, "FrameLeft", new Vector2(-size.x * 0.5f + railThickness * 0.5f, 0), new Vector2(railThickness, Mathf.Max(0, size.y - cornerSize * 1.35f)), frameTexture, frameTint, 34f);
-            CreateRawTexturePanel(root, "FrameRight", new Vector2(size.x * 0.5f - railThickness * 0.5f, 0), new Vector2(railThickness, Mathf.Max(0, size.y - cornerSize * 1.35f)), frameTexture, Color.Lerp(frameTint, Color.black, 0.12f), 34f);
+            CreateSlicedPanel(root, "FrameSlice", Vector2.zero, size, GetSprite(frameTexture, true), frameTint);
+            CreateTiledPanel(root, "MaterialFill", Vector2.zero, bodySize, GetSprite(bodyTexture, false), bodyTint);
 
-            CreateCorner(root, "NW", new Vector2(-size.x * 0.5f + cornerSize * 0.5f, size.y * 0.5f - cornerSize * 0.5f), cornerSize, frameTexture, frameTint, edge);
-            CreateCorner(root, "NE", new Vector2(size.x * 0.5f - cornerSize * 0.5f, size.y * 0.5f - cornerSize * 0.5f), cornerSize, frameTexture, frameTint, edge);
-            CreateCorner(root, "SW", new Vector2(-size.x * 0.5f + cornerSize * 0.5f, -size.y * 0.5f + cornerSize * 0.5f), cornerSize, frameTexture, Color.Lerp(frameTint, Color.black, 0.18f), edge);
-            CreateCorner(root, "SE", new Vector2(size.x * 0.5f - cornerSize * 0.5f, -size.y * 0.5f + cornerSize * 0.5f), cornerSize, frameTexture, Color.Lerp(frameTint, Color.black, 0.22f), edge);
+            var bevelWidth = Mathf.Max(0, size.x - contentInset * 2f);
+            CreateSolidPanel(root, "InnerBevelTop", new Vector2(0, size.y * 0.5f - contentInset - bevelOffset), new Vector2(bevelWidth, 1f), new Color(edge.r, edge.g, edge.b, 0.30f));
+            CreateSolidPanel(root, "InnerBevelBottom", new Vector2(0, -size.y * 0.5f + contentInset + bevelOffset), new Vector2(bevelWidth, 2f), new Color(0, 0, 0, 0.38f));
 
-            CreateSolidPanel(root, "InnerBevelTop", new Vector2(0, size.y * 0.5f - railThickness - inset * 0.5f), new Vector2(Mathf.Max(0, size.x - railThickness * 2f), 2f), new Color(edge.r, edge.g, edge.b, 0.30f));
-            CreateSolidPanel(root, "InnerBevelBottom", new Vector2(0, -size.y * 0.5f + railThickness + inset * 0.5f), new Vector2(Mathf.Max(0, size.x - railThickness * 2f), 3f), new Color(0, 0, 0, 0.38f));
+            CreateRivet(root, "NW", new Vector2(-size.x * 0.5f + 3f, size.y * 0.5f - 3f), edge);
+            CreateRivet(root, "NE", new Vector2(size.x * 0.5f - 3f, size.y * 0.5f - 3f), edge);
+            CreateRivet(root, "SW", new Vector2(-size.x * 0.5f + 3f, -size.y * 0.5f + 3f), edge);
+            CreateRivet(root, "SE", new Vector2(size.x * 0.5f - 3f, -size.y * 0.5f + 3f), edge);
         }
 
         public void Dispose()
         {
+            foreach (var sprite in _sprites.Values)
+            {
+                if (sprite == null) continue;
+                if (Application.isPlaying) UnityEngine.Object.Destroy(sprite);
+                else UnityEngine.Object.DestroyImmediate(sprite);
+            }
+            _sprites.Clear();
             foreach (var texture in _generatedTextures)
             {
                 if (texture == null) continue;
@@ -64,11 +69,9 @@ namespace BiomeRivals.Demo
             _textures.Clear();
         }
 
-        private void CreateCorner(Transform parent, string suffix, Vector2 position, float size, Texture texture, Color tint, Color edge)
+        private void CreateRivet(Transform parent, string suffix, Vector2 position, Color edge)
         {
-            CreateRawTexturePanel(parent, "FrameCorner" + suffix, position, new Vector2(size, size), texture, tint, 30f);
-            var rivetPosition = position + new Vector2(suffix.Contains("W") ? -1f : 1f, suffix.Contains("N") ? 1f : -1f);
-            CreateSolidPanel(parent, "Rivet" + suffix, rivetPosition, new Vector2(4f, 4f), Color.Lerp(edge, _rivetHighlight, 0.52f));
+            CreateSolidPanel(parent, "Rivet" + suffix, position, new Vector2(3f, 3f), Color.Lerp(edge, _rivetHighlight, 0.52f));
         }
 
         private Texture2D ResolveFrameTexture(Color edge)
@@ -105,13 +108,50 @@ namespace BiomeRivals.Demo
             return texture;
         }
 
-        private static RawImage CreateRawTexturePanel(Transform parent, string name, Vector2 position, Vector2 size, Texture texture, Color tint, float tileSize)
+        private Sprite GetSprite(Texture2D texture, bool sliced)
+        {
+            var key = texture.name + (sliced ? ":sliced" : ":tile");
+            Sprite cached;
+            if (_sprites.TryGetValue(key, out cached) && cached != null) return cached;
+            var border = sliced
+                ? Vector4.one * DemoUiMetrics.FrameBorderPixels
+                : Vector4.zero;
+            var sprite = Sprite.Create(
+                texture,
+                new Rect(0f, 0f, texture.width, texture.height),
+                new Vector2(0.5f, 0.5f),
+                DemoUiMetrics.PixelsPerUnit,
+                0,
+                SpriteMeshType.FullRect,
+                border);
+            sprite.name = "RuntimeHudSprite_" + key;
+            _sprites[key] = sprite;
+            return sprite;
+        }
+
+        private static Image CreateSlicedPanel(Transform parent, string name, Vector2 position, Vector2 size, Sprite sprite, Color tint)
+        {
+            var image = CreateSpritePanel(parent, name, position, size, sprite, tint);
+            image.type = Image.Type.Sliced;
+            image.fillCenter = true;
+            image.pixelsPerUnitMultiplier = 1f;
+            return image;
+        }
+
+        private static Image CreateTiledPanel(Transform parent, string name, Vector2 position, Vector2 size, Sprite sprite, Color tint)
+        {
+            var image = CreateSpritePanel(parent, name, position, size, sprite, tint);
+            image.type = Image.Type.Tiled;
+            image.pixelsPerUnitMultiplier = 1f;
+            return image;
+        }
+
+        private static Image CreateSpritePanel(Transform parent, string name, Vector2 position, Vector2 size, Sprite sprite, Color tint)
         {
             var root = CreateRect(parent, name, position, size);
-            var image = root.gameObject.AddComponent<RawImage>();
-            image.texture = texture;
+            var image = root.gameObject.AddComponent<Image>();
+            image.sprite = sprite;
             image.color = tint;
-            image.uvRect = new Rect(0f, 0f, Mathf.Max(0.1f, size.x / tileSize), Mathf.Max(0.1f, size.y / tileSize));
             image.raycastTarget = false;
             return image;
         }

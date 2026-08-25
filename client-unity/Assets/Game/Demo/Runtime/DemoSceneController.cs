@@ -102,12 +102,13 @@ namespace BiomeRivals.Demo
             canvasObject.transform.SetParent(transform, false);
             var canvas = canvasObject.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.pixelPerfect = false;
+            canvas.pixelPerfect = true;
             var scaler = canvasObject.GetComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(ReferenceWidth, ReferenceHeight);
             scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
             scaler.matchWidthOrHeight = 0.5f;
+            scaler.referencePixelsPerUnit = DemoUiMetrics.PixelsPerUnit;
             _canvasRoot = canvasObject.GetComponent<RectTransform>();
 
             CreateTintBand("BackdropWash", Vector2.zero, new Vector2(ReferenceWidth, ReferenceHeight), new Color(0.02f, 0.025f, 0.02f, 0.16f));
@@ -228,8 +229,9 @@ namespace BiomeRivals.Demo
 
         private void BuildInspector()
         {
-            var panel = CreateFramedPanel(_canvasRoot, "InspectorPanel", new Vector2(785, 60), new Vector2(300, 715), new Color(Panel.r, Panel.g, Panel.b, 0.92f), StoneEdge);
-            _inspectorRoot = CreateRect(panel, "InspectorContent", Vector2.zero, new Vector2(280, 695));
+            var panel = CreateFramedPanel(_canvasRoot, "CardDetailsPanel", new Vector2(785, 60), new Vector2(300, 715), new Color(Panel.r, Panel.g, Panel.b, 0.92f), StoneEdge);
+            var inset = DemoUiMetrics.PanelContentInset * 2f;
+            _inspectorRoot = CreateRect(panel, "InspectorContent", Vector2.zero, new Vector2(300f - inset, 715f - inset));
         }
 
         private void BuildTurnControls()

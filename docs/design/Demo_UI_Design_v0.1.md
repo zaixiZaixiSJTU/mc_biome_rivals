@@ -6,6 +6,8 @@
 
 运行时基准分辨率为 `1920×1080`，Canvas 使用 `Scale With Screen Size`。所有交互由运行时 UI 组件生成，场景只保留启动对象和背景资源，便于后续注册新卡、替换动画系统和进行自动化测试。
 
+通用 HUD 的像素规范集中在 `DemoUiMetrics`：Canvas 开启 `Pixel Perfect`，CanvasScaler 与运行时创建的 UI Sprite 统一使用 `16 PPU`。容器边框不再由四条边和四个角分别拉伸，而是由带 `5 px` Border 的 `Image.Type.Sliced` 九宫格渲染；内部材质使用同 PPU 的 `Image.Type.Tiled` 平铺。`CardDetailsPanel` 的内容安全边距为每边 `7 px`，避免边框吞占详情卡牌的有效面积。以上参数有 EditMode 层级与数值断言，修改时必须同步更新视觉验收图和测试。
+
 ## 画面结构
 
 | 区域 | 功能 | 视觉规则 |

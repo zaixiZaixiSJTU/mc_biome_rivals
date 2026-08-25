@@ -65,7 +65,7 @@ namespace BiomeRivals.Demo
             if (texture == null || texture.width < 1638 || texture.height < 946) return null;
             texture.filterMode = FilterMode.Bilinear;
             texture.wrapMode = TextureWrapMode.Clamp;
-            var sprite = Sprite.Create(texture, rects[themeIndex], new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
+            var sprite = Sprite.Create(texture, rects[themeIndex], new Vector2(0.5f, 0.5f), DemoUiMetrics.PixelsPerUnit, 0, SpriteMeshType.FullRect);
             sprite.name = spritePrefix + themeId;
             Cache[cacheKey] = sprite;
             return sprite;
