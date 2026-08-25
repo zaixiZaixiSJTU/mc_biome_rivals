@@ -8,5 +8,7 @@ namespace BiomeRivals.Demo
 
         public static GameObject Load(DemoUiStyleClass styleClass) =>
             Resources.Load<GameObject>(ResourceFolder + styleClass);
+
+        public static GameObject LoadCardUI() => Resources.Load<GameObject>(ResourceFolder + "CardUI");
     }
 }

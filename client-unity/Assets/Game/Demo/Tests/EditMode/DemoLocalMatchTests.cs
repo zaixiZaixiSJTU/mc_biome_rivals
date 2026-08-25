@@ -60,7 +60,9 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(AssetDatabase.LoadAssetAtPath<GameObject>(DemoUiPrefabBuilder.PrefabFolder + "/BasePanel.prefab").GetComponent<BasePanel>(), Is.Not.Null);
             Assert.That(AssetDatabase.LoadAssetAtPath<GameObject>(DemoUiPrefabBuilder.PrefabFolder + "/SecondaryButton.prefab").GetComponent<SecondaryButton>(), Is.Not.Null);
             Assert.That(AssetDatabase.LoadAssetAtPath<GameObject>(DemoUiPrefabBuilder.PrefabFolder + "/PrimaryActionButton.prefab").GetComponent<PrimaryActionButton>(), Is.Not.Null);
+            Assert.That(AssetDatabase.LoadAssetAtPath<GameObject>(DemoUiPrefabBuilder.PrefabFolder + "/CardUI.prefab").GetComponent<CardUI>(), Is.Not.Null);
 
+            var registry = CardContentLoader.Load();
             var root = new GameObject("DemoTestRoot");
             try
             {
@@ -132,11 +134,25 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(root.transform.Find("DemoCanvas/CardDetailsPanel/InspectorContent").GetComponent<RectTransform>().sizeDelta, Is.EqualTo(new Vector2(286f, 701f)));
                 var themedCard = GameObject.Find("Card_pf_001");
                 Assert.That(themedCard, Is.Not.Null);
+                var handCard = root.transform.Find("DemoCanvas/HandPlate/HandCards/Card_pf_001").GetComponent<CardUI>();
+                var detailCard = root.transform.Find("DemoCanvas/CardDetailsPanel/InspectorContent/Card_pf_001").GetComponent<CardUI>();
+                var detailsView = root.transform.Find("DemoCanvas/CardDetailsPanel/InspectorContent").GetComponent<CardDetailsView>();
+                Assert.That(handCard, Is.Not.Null);
+                Assert.That(detailCard, Is.Not.Null);
+                Assert.That(handCard.CardId, Is.EqualTo(detailCard.CardId));
+                Assert.That(handCard.IsCompact, Is.True);
+                Assert.That(detailCard.IsCompact, Is.False);
+                Assert.That(detailsView.CurrentCard, Is.SameAs(detailCard));
                 Assert.That(themedCard.GetComponent<UnityEngine.UI.Image>().sprite.name, Is.EqualTo("CardFrame_plains_forest"));
                 Assert.That(themedCard.transform.Find("MaterialFill"), Is.Null);
                 Assert.That(themedCard.transform.Find("TitleBand"), Is.Null);
                 Assert.That(themedCard.transform.Find("CostSocket"), Is.Null);
                 Assert.That(themedCard.transform.Find("CostSocketFrame").GetComponent<UnityEngine.UI.Image>().sprite.name, Is.EqualTo("CardCostSocket_plains_forest"));
+                Assert.That(themedCard.transform.Find("AttackSocketFrame").GetComponent<UnityEngine.UI.Image>().sprite.name, Is.EqualTo("CardAttackSocket_plains_forest"));
+                Assert.That(themedCard.transform.Find("HealthSocketFrame").GetComponent<UnityEngine.UI.Image>().sprite.name, Is.EqualTo("CardHealthSocket_plains_forest"));
+                var artSurface = themedCard.transform.Find("ArtSurface").GetComponent<UnityEngine.UI.Image>();
+                Assert.That(artSurface.type, Is.EqualTo(UnityEngine.UI.Image.Type.Tiled));
+                Assert.That(artSurface.sprite.name, Is.EqualTo("CardArtSurface_polished_blackstone_bricks"));
                 var themedRules = themedCard.transform.Find("Rules").GetComponent<UnityEngine.UI.Text>();
                 Assert.That(themedRules.alignment, Is.EqualTo(UnityEngine.TextAnchor.MiddleCenter));
                 Assert.That(themedRules.alignByGeometry, Is.True);
@@ -157,10 +173,22 @@ namespace BiomeRivals.Demo.Tests
                     var themeId = frameMappings[mapping, 0];
                     var prefix = frameMappings[mapping, 1];
                     GameObject.Find("Faction_" + themeId).GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
-                    var card = GameObject.Find("Card_" + prefix + "_001");
+                    var mappedCardId = prefix + "_001";
+                    var card = GameObject.Find("Card_" + mappedCardId);
                     Assert.That(card, Is.Not.Null, themeId);
                     Assert.That(card.GetComponent<UnityEngine.UI.Image>().sprite.name, Is.EqualTo("CardFrame_" + themeId));
                     Assert.That(card.transform.Find("CostSocketFrame").GetComponent<UnityEngine.UI.Image>().sprite.name, Is.EqualTo("CardCostSocket_" + themeId));
+                    Assert.That(registry.TryGetDefinition(mappedCardId, out var mappedDefinition), Is.True);
+                    if (mappedDefinition.hasAttack)
+                        Assert.That(card.transform.Find("AttackSocketFrame").GetComponent<UnityEngine.UI.Image>().sprite.name, Is.EqualTo("CardAttackSocket_" + themeId));
+                    else
+                        Assert.That(card.transform.Find("AttackSocketFrame"), Is.Null);
+                    if (mappedDefinition.hasHealth)
+                        Assert.That(card.transform.Find("HealthSocketFrame").GetComponent<UnityEngine.UI.Image>().sprite.name, Is.EqualTo("CardHealthSocket_" + themeId));
+                    else
+                        Assert.That(card.transform.Find("HealthSocketFrame"), Is.Null);
+                    if (mappedDefinition.hasDurability)
+                        Assert.That(card.transform.Find("DurabilitySocketFrame").GetComponent<UnityEngine.UI.Image>().sprite.name, Is.EqualTo("CardHealthSocket_" + themeId));
                 }
 
                 var playerUnit = battlefield.GetSlotReferencePosition(true, DemoSlotKind.Unit, 0);

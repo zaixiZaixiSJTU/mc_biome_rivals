@@ -41,6 +41,9 @@ namespace BiomeRivals.Demo
             new Rect(1416, 638, 79, 83)
         };
 
+        private static readonly Rect[] AttackSocketRects = CreateBottomSocketRects(false);
+        private static readonly Rect[] HealthSocketRects = CreateBottomSocketRects(true);
+
         private static readonly Dictionary<string, Sprite> Cache = new Dictionary<string, Sprite>(StringComparer.Ordinal);
 
         public static Sprite Load(string themeId)
@@ -51,6 +54,25 @@ namespace BiomeRivals.Demo
         public static Sprite LoadCostSocket(string themeId)
         {
             return LoadSlice(themeId, CostSocketRects, "CardCostSocket_", "_cost");
+        }
+
+        public static Sprite LoadAttackSocket(string themeId) =>
+            LoadSlice(themeId, AttackSocketRects, "CardAttackSocket_", "_attack");
+
+        public static Sprite LoadHealthSocket(string themeId) =>
+            LoadSlice(themeId, HealthSocketRects, "CardHealthSocket_", "_health");
+
+        private static Rect[] CreateBottomSocketRects(bool right)
+        {
+            var rects = new Rect[FrameRects.Length];
+            for (var index = 0; index < rects.Length; index++)
+            {
+                var frame = FrameRects[index];
+                var reference = CostSocketRects[index];
+                var x = right ? frame.xMax - reference.width : frame.x;
+                rects[index] = new Rect(x, frame.y, reference.width, reference.height);
+            }
+            return rects;
         }
 
         private static Sprite LoadSlice(string themeId, IReadOnlyList<Rect> rects, string spritePrefix, string cacheSuffix)

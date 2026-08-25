@@ -17,7 +17,6 @@ namespace BiomeRivals.Demo
 
         private static readonly Color Ink = Hex("#0E100E");
         private static readonly Color Panel = Hex("#20231F");
-        private static readonly Color PanelRaised = Hex("#34382F");
         private static readonly Color Pale = Hex("#F1E6CB");
         private static readonly Color Muted = Hex("#B2AA96");
         private static readonly Color Cyan = Hex("#5AAE9F");
@@ -36,6 +35,7 @@ namespace BiomeRivals.Demo
         private RectTransform _canvasRoot;
         private RectTransform _handRoot;
         private RectTransform _inspectorRoot;
+        private CardDetailsView _cardDetailsView;
         private RectTransform _playerHud;
         private Text _energyText;
         private Text _roundText;
@@ -232,6 +232,8 @@ namespace BiomeRivals.Demo
             var panel = CreateBasePanel(_canvasRoot, "CardDetailsPanel", new Vector2(785, 60), new Vector2(300, 715));
             var inset = DemoUiMetrics.PanelContentInset * 2f;
             _inspectorRoot = CreateRect(panel, "InspectorContent", Vector2.zero, new Vector2(300f - inset, 715f - inset));
+            _cardDetailsView = _inspectorRoot.gameObject.AddComponent<CardDetailsView>();
+            _cardDetailsView.Configure(_registry, UiFont);
         }
 
         private void BuildTurnControls()
@@ -304,13 +306,13 @@ namespace BiomeRivals.Demo
                 var selected = cardId == _selectedCardId;
                 var x = (i - (count - 1) * 0.5f) * 176f;
                 var y = selected ? 20f : -Mathf.Abs(i - (count - 1) * 0.5f) * 4f;
-                var card = CreateCardFace(_handRoot, cardId, new Vector2(158, 216), true, () => SelectCard(cardId));
-                card.anchoredPosition = new Vector2(x, y);
-                card.localRotation = Quaternion.Euler(0, 0, (i - (count - 1) * 0.5f) * -1.8f);
+                var card = DemoCardUiFactory.Create(_handRoot, _registry, cardId, new Vector2(158, 216), true, UiFont, () => SelectCard(cardId));
+                card.RectTransform.anchoredPosition = new Vector2(x, y);
+                card.RectTransform.localRotation = Quaternion.Euler(0, 0, (i - (count - 1) * 0.5f) * -1.8f);
                 card.gameObject.AddComponent<DemoHoverScale>().Configure(1.08f, 16f);
                 if (selected)
                 {
-                    card.SetAsLastSibling();
+                    card.RectTransform.SetAsLastSibling();
                 }
             }
         }
@@ -346,12 +348,12 @@ namespace BiomeRivals.Demo
             CreateText(_inspectorRoot, "Header", new Vector2(0, 315), new Vector2(250, 38), "卡牌详情", 20, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
             if (string.IsNullOrEmpty(_selectedCardId) || !_registry.TryGetDefinition(_selectedCardId, out var definition))
             {
+                _cardDetailsView.Clear();
                 CreateText(_inspectorRoot, "Empty", new Vector2(0, 40), new Vector2(230, 180), "手牌已打空。\n切换左侧群系可重新装填演示手牌。", 16, Muted, TextAnchor.MiddleCenter, FontStyle.Normal);
                 return;
             }
 
-            var face = CreateCardFace(_inspectorRoot, _selectedCardId, new Vector2(238, 350), false, null);
-            face.anchoredPosition = new Vector2(0, 100);
+            _cardDetailsView.ShowCard(_selectedCardId, new Vector2(238, 350), new Vector2(0, 100));
             var deployType = definition.cardType == "UNIT" || definition.cardType == "BUILDING" || definition.cardType == "STRUCTURE";
             if (deployType)
             {
@@ -489,100 +491,6 @@ namespace BiomeRivals.Demo
             _statusText.color = error ? Danger : Pale;
         }
 
-        private RectTransform CreateCardFace(Transform parent, string cardId, Vector2 size, bool compact, Action onClick)
-        {
-            if (!_registry.TryGetDefinition(cardId, out var definition) || !_registry.TryGetText(cardId, out var text))
-                throw new InvalidOperationException("Card content is not registered: " + cardId);
-            _registry.TryGetTheme(definition.themeId, out var theme);
-
-            var shell = Color.Lerp(theme.FrameDark, Ink, 0.28f);
-            var frame = Color.Lerp(theme.FrameBase, PanelRaised, 0.18f);
-            var frameSprite = DemoCardFrameProvider.Load(definition.themeId);
-            var usesStudyFrame = frameSprite != null;
-            RectTransform root;
-            Image image;
-            if (usesStudyFrame)
-            {
-                root = CreateRect(parent, "Card_" + cardId, Vector2.zero, size);
-                image = root.gameObject.AddComponent<Image>();
-                image.sprite = frameSprite;
-                image.type = Image.Type.Simple;
-                image.preserveAspect = false;
-                image.color = Color.white;
-            }
-            else
-            {
-                root = CreateBasePanel(parent, "Card_" + cardId, Vector2.zero, size);
-                image = root.GetComponent<Image>();
-            }
-            if (onClick != null)
-            {
-                var button = root.gameObject.AddComponent<Button>();
-                button.targetGraphic = image;
-                ConfigureButtonColors(button, usesStudyFrame ? Color.white : shell, theme.Accent);
-                button.onClick.AddListener(() => onClick());
-            }
-
-            if (!usesStudyFrame)
-            {
-                var inner = CreatePanel(root, "Frame", Vector2.zero, size - new Vector2(10, 10), frame);
-                inner.raycastTarget = false;
-            }
-            var h = size.y;
-            var w = size.x;
-            var titleHeight = compact ? 31f : 39f;
-            var titleY = h * 0.5f - titleHeight * 0.72f;
-            if (!usesStudyFrame) CreatePanel(root, "TitleBand", new Vector2(0, titleY), new Vector2(w - 14, titleHeight), shell).raycastTarget = false;
-
-            var costSize = compact ? 34f : 43f;
-            var socketVisualSize = usesStudyFrame ? costSize * 1.55f : costSize;
-            var costPosition = new Vector2(-w * 0.5f + socketVisualSize * 0.52f, h * 0.5f - socketVisualSize * 0.52f);
-            if (usesStudyFrame)
-            {
-                var costFrame = CreatePanel(root, "CostSocketFrame", costPosition, new Vector2(socketVisualSize, socketVisualSize), Color.white);
-                costFrame.sprite = DemoCardFrameProvider.LoadCostSocket(definition.themeId);
-                costFrame.preserveAspect = true;
-                costFrame.raycastTarget = false;
-            }
-            else CreatePanel(root, "CostSocket", costPosition, new Vector2(costSize, costSize), theme.Accent).raycastTarget = false;
-            CreateText(root, "Name", new Vector2(usesStudyFrame ? 12f : 7f, titleY), new Vector2(w - (usesStudyFrame ? 64f : 50f), titleHeight - 4), text.name, compact ? 15 : 20, theme.TitleText, TextAnchor.MiddleCenter, FontStyle.Bold);
-            CreateText(root, "Cost", costPosition, new Vector2(costSize, costSize), definition.cost.ToString(), compact ? 18 : 23, usesStudyFrame ? Pale : Ink, TextAnchor.MiddleCenter, FontStyle.Bold);
-
-            var artHeight = compact ? h * 0.36f : h * 0.39f;
-            var artY = compact ? h * 0.105f : h * 0.11f;
-            var artWell = Color.Lerp(theme.FrameDark, Ink, 0.40f);
-            artWell.a = 0.94f;
-            if (!usesStudyFrame) CreatePanel(root, "ArtWell", new Vector2(0, artY), new Vector2(w - 18, artHeight), artWell).raycastTarget = false;
-            var sprite = DemoCardArtProvider.Load(cardId);
-            if (sprite != null)
-            {
-                var art = CreatePanel(root, "Art", new Vector2(0, artY), new Vector2(Mathf.Min(w * 0.54f, artHeight * 0.78f), artHeight * 0.78f), Color.white);
-                art.sprite = sprite;
-                art.preserveAspect = true;
-                art.raycastTarget = false;
-            }
-            else
-            {
-                CreateText(root, "ArtFallback", new Vector2(0, artY), new Vector2(w - 28, artHeight - 10), "◆", compact ? 34 : 52, theme.Accent, TextAnchor.MiddleCenter, FontStyle.Bold);
-            }
-
-            var rulesHeight = compact ? h * 0.31f : h * 0.29f;
-            var rulesY = usesStudyFrame ? -h * 0.21f : -h * 0.235f;
-            if (!usesStudyFrame) CreatePanel(root, "RulesSurface", new Vector2(0, rulesY), new Vector2(w - 18, rulesHeight), theme.RulesSurface).raycastTarget = false;
-            var rules = CreateText(root, "Rules", new Vector2(0, rulesY), new Vector2(w - (usesStudyFrame ? 38 : 30), rulesHeight - (usesStudyFrame ? 15 : 8)), text.rulesText, compact ? 11 : 14, theme.BodyText, TextAnchor.MiddleCenter, FontStyle.Normal);
-            rules.alignByGeometry = usesStudyFrame;
-            rules.resizeTextForBestFit = compact;
-            rules.resizeTextMinSize = 9;
-            rules.resizeTextMaxSize = compact ? 11 : 14;
-
-            var typeY = -h * 0.5f + (compact ? 20f : 24f);
-            CreateText(root, "Type", new Vector2(0, typeY), new Vector2(w - 54, compact ? 20 : 24), text.typeLabel, compact ? 10 : 12, theme.TitleText, TextAnchor.MiddleCenter, FontStyle.Bold);
-            if (definition.hasAttack) CreateStat(root, new Vector2(-w * 0.5f + 22, -h * 0.5f + 21), definition.attack.ToString(), Hex("#E6A641"), compact ? 28 : 36, !usesStudyFrame);
-            if (definition.hasHealth) CreateStat(root, new Vector2(w * 0.5f - 22, -h * 0.5f + 21), definition.health.ToString(), Hex("#C94D42"), compact ? 28 : 36, !usesStudyFrame);
-            if (definition.hasDurability) CreateStat(root, new Vector2(w * 0.5f - 22, -h * 0.5f + 21), definition.durability.ToString(), Hex("#74A9B8"), compact ? 28 : 36, !usesStudyFrame);
-            return root;
-        }
-
         private void CreateWorldPieceLabel(Transform parent, string cardId, Vector2 size, bool enemy)
         {
             if (!_registry.TryGetDefinition(cardId, out var definition) || !_registry.TryGetText(cardId, out var text)) return;
@@ -598,12 +506,6 @@ namespace BiomeRivals.Demo
             plate.raycastTarget = false;
             CreatePanel(parent, "WorldLabelAccent", new Vector2(0, labelY + 14), new Vector2(size.x - 8, 2), new Color(accent.r, accent.g, accent.b, 0.82f)).raycastTarget = false;
             CreateText(parent, "WorldLabelText", new Vector2(0, labelY), new Vector2(size.x - 14, 26), stats, 12, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
-        }
-
-        private void CreateStat(Transform parent, Vector2 position, string value, Color color, float size, bool drawSocket)
-        {
-            if (drawSocket) CreatePanel(parent, "StatSocket", position, new Vector2(size, size), color).raycastTarget = false;
-            CreateText(parent, "Stat", position, new Vector2(size, size), value, Mathf.RoundToInt(size * 0.54f), Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
         }
 
         private void CreateTintBand(string name, Vector2 position, Vector2 size, Color color) =>

@@ -75,7 +75,15 @@
 - 新卡注册必须同时通过：ID 唯一、名称键唯一、主题存在、图片资源状态明确。
 - 原版纹理只能作为图标层，必须保留像素边缘，不应用有损 JPEG 压缩。
 
-## 8. imagegen 样张提示词
+## 8. Unity Prefab 与渲染入口
+
+- 唯一卡牌预制体为 `Assets/Game/Demo/UI/Resources/DemoUI/Prefabs/CardUI.prefab`，只保存稳定骨架组件，不保存具体卡牌数据或群系颜色。
+- `DemoCardUiFactory` 是手牌、详情面板和后续战场卡牌展示的统一实例化入口；`CardUI.Bind` 根据 `cardId` 注入卡框、名称、费用、立绘、规则、类型与属性。
+- `CardDetailsView` 不维护另一套详情卡布局，而是直接通过同一 Factory 实例化非紧凑尺寸的 `CardUI.prefab`。任何卡面修正必须同时影响手牌与详情视图。
+- 立绘窗口使用点采样、可平铺的深色黑石像素底材 `ArtSurface`，不允许透明窗口直接露出纯黑 UI 底色。该纹理只作为卡内立绘承托面，不替代群系外框，也不复用 HUD 容器层级。
+- 费用、攻击、生命/耐久插槽统一由 `DemoCardFrameProvider` 从当前群系卡框图集中裁切，禁止用无纹理纯色 `Image` 临时补位。
+
+## 9. imagegen 样张提示词
 
 使用模式：内置 imagegen；分类：`ui-mockup`。
 
