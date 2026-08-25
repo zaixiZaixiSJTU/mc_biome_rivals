@@ -104,6 +104,11 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(themedCard.transform.Find("TitleBand"), Is.Null);
                 Assert.That(themedCard.transform.Find("CostSocket"), Is.Null);
                 Assert.That(themedCard.transform.Find("CostSocketFrame").GetComponent<UnityEngine.UI.Image>().sprite.name, Is.EqualTo("CardCostSocket_plains_forest"));
+                var themedRules = themedCard.transform.Find("Rules").GetComponent<UnityEngine.UI.Text>();
+                Assert.That(themedRules.alignment, Is.EqualTo(UnityEngine.TextAnchor.MiddleCenter));
+                Assert.That(themedRules.alignByGeometry, Is.True);
+                Assert.That(themedRules.rectTransform.anchoredPosition.x, Is.Zero.Within(0.001f));
+                Assert.That(themedRules.rectTransform.anchoredPosition.y, Is.EqualTo(-themedCard.GetComponent<RectTransform>().sizeDelta.y * 0.21f).Within(0.01f));
                 var frameMappings = new[,]
                 {
                     { "plains_forest", "pf" },

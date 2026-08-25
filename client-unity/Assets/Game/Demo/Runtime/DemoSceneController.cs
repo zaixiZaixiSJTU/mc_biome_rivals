@@ -567,9 +567,10 @@ namespace BiomeRivals.Demo
             }
 
             var rulesHeight = compact ? h * 0.31f : h * 0.29f;
-            var rulesY = -h * 0.235f;
+            var rulesY = usesStudyFrame ? -h * 0.21f : -h * 0.235f;
             if (!usesStudyFrame) CreatePanel(root, "RulesSurface", new Vector2(0, rulesY), new Vector2(w - 18, rulesHeight), theme.RulesSurface).raycastTarget = false;
-            var rules = CreateText(root, "Rules", new Vector2(0, rulesY + 2), new Vector2(w - (usesStudyFrame ? 38 : 30), rulesHeight - (usesStudyFrame ? 15 : 8)), text.rulesText, compact ? 11 : 14, theme.BodyText, TextAnchor.MiddleCenter, FontStyle.Normal);
+            var rules = CreateText(root, "Rules", new Vector2(0, rulesY), new Vector2(w - (usesStudyFrame ? 38 : 30), rulesHeight - (usesStudyFrame ? 15 : 8)), text.rulesText, compact ? 11 : 14, theme.BodyText, TextAnchor.MiddleCenter, FontStyle.Normal);
+            rules.alignByGeometry = usesStudyFrame;
             rules.resizeTextForBestFit = compact;
             rules.resizeTextMinSize = 9;
             rules.resizeTextMaxSize = compact ? 11 : 14;
