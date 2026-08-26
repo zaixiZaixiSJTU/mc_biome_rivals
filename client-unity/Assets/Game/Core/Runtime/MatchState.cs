@@ -130,6 +130,15 @@ namespace BiomeRivals.Core
                     Current.nextInstanceId = payload.nextInstanceId;
                     for (var index = payload.slotIndex; index < payload.slotIndex + occupiedSlots; index++) slots[index] = payload.instanceId;
                     break;
+                case MatchEventTypes.CardPlayed:
+                    var playingPlayer = FindPlayer(payload.playerId);
+                    playingPlayer.hand = RemoveFirst(playingPlayer.hand, payload.cardId);
+                    if (playingPlayer.hand.Length != payload.handCount) throw new InvalidOperationException("Play event hand count does not match projected hand.");
+                    playingPlayer.redstone = payload.redstone;
+                    var playedDiscard = new List<string>(playingPlayer.discardPile ?? Array.Empty<string>()) { payload.cardId };
+                    if (playedDiscard.Count != payload.discardCount) throw new InvalidOperationException("Play event discard count does not match projected discard pile.");
+                    playingPlayer.discardPile = playedDiscard.ToArray();
+                    break;
                 case MatchEventTypes.CardDrawn:
                     var drawingPlayer = FindPlayer(payload.playerId);
                     var drawnHand = new List<string>(drawingPlayer.hand ?? Array.Empty<string>()) { payload.cardId };
@@ -152,6 +161,17 @@ namespace BiomeRivals.Core
                     fatiguedPlayer.fatigueCount = payload.fatigueCount;
                     fatiguedPlayer.life = payload.life;
                     fatiguedPlayer.armor = payload.armor;
+                    break;
+                case MatchEventTypes.HeroDamaged:
+                    var damagedPlayer = FindPlayer(payload.playerId);
+                    damagedPlayer.life = payload.life;
+                    damagedPlayer.armor = payload.armor;
+                    break;
+                case MatchEventTypes.HeroHealed:
+                    FindPlayer(payload.playerId).life = payload.life;
+                    break;
+                case MatchEventTypes.ArmorGained:
+                    FindPlayer(payload.playerId).armor = payload.armor;
                     break;
                 case MatchEventTypes.PhaseChanged:
                     Current.phase = payload.phase;

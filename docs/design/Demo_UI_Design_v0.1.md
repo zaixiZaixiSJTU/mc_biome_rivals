@@ -51,7 +51,7 @@ UGUI 样式由 `DemoUiStyleCatalog` 集中提供材质、底色、描边和交�
 | `DemoMinecraftModelFactory` | 将已注册单位构造成 Minecraft 式分件方块模型并套用对应生物皮肤 | 只负责后备表现；正式 Prefab 仍拥有最高优先级 |
 | `DemoBattlefieldPointerController` | 从主相机发射 3D 射线，维护双方槽位的悬停、按下和点击状态 | 只命中带 `DemoBattlefieldSlotTarget` 的地表，不依赖 Canvas 格子位置 |
 | `DemoSceneController` | 手牌、检查器、规则操作回调和世界坐标到文字 UI 的投影 | 保持屏幕空间布局；不创建部署格 Graphic/Button |
-| `DemoLocalMatch` | 费用、手牌/牌库/弃牌、抽牌/爆牌/疲劳、槽位、阶段、战场实例、攻击/反击、死亡与英雄生命 | 不访问场景对象或渲染组件；命令 DTO 与联网网关保持一致 |
+| `DemoLocalMatch` | 费用、手牌/牌库/弃牌、抽牌/爆牌/疲劳、`effectId` 效果、槽位、阶段、战场实例、攻击/反击、死亡与英雄生命/护甲 | 不访问场景对象或渲染组件；命令 DTO 与联网网关保持一致 |
 
 手牌底板左下角持续显示“手牌 / 牌库 / 弃牌”三个区域计数，信息使用与 HUD 相同的低对比度浅色文字，不额外叠加 Web 风格浮层。新回合抽到的卡直接进入扇形手牌；满 7 张时卡牌公开进入弃牌堆，空牌库时状态板显示本次疲劳伤害。离线展示牌组为 5 张展示手牌加 25 张临时群系循环牌库，用于 UI 和回合测试；正式权威规则按 GDD 使用 30 张牌组与 3/4 张起手。
 
@@ -83,3 +83,5 @@ UGUI 样式由 `DemoUiStyleCatalog` 集中提供材质、底色、描边和交�
 实际运行预览：[`assets/demo-runtime-preview-v1.png`](assets/demo-runtime-preview-v1.png)
 
 战斗阶段预览：[`assets/demo-combat-phase-preview-v1.png`](assets/demo-combat-phase-preview-v1.png)。进入战斗后手牌只降低内容亮度，石砖底板保持不变；检查器切换为战斗指令，主按钮切换为“结束回合”。
+
+权威效果表现预览：[`assets/demo-card-effect-preview-v1.png`](assets/demo-card-effect-preview-v1.png)。已实现的法术/材料使用明确的“释放卡牌”动作，结算后同步刷新生命、护甲、手牌与区域计数，并在英雄实体 HUD 上播放与效果类型对应的短促颜色脉冲；待实现效果的按钮显示“效果尚未接入”并禁用。

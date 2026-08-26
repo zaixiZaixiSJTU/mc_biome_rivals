@@ -8,6 +8,7 @@ $themesPath = Join-Path $repoRoot 'shared-schema\card-data\card-theme-registry.v
 $artPath = Join-Path $repoRoot 'shared-schema\card-art\card-art-registry.v1.json'
 $definitionsPath = Join-Path $repoRoot 'shared-schema\card-data\card-definition-registry.v1.json'
 $textsPath = Join-Path $repoRoot 'shared-schema\card-data\localization\card-text-registry.zh-CN.v1.json'
+$implementedEffectsPath = Join-Path $repoRoot 'shared-schema\card-data\implemented-effect-registry.v1.json'
 $markdownPath = Join-Path $repoRoot 'docs\design\Minecraft_Biome_Rivals_Prototype_Cards_v0.1.md'
 
 function Read-Json([string]$Path) {
@@ -47,6 +48,13 @@ $themes = Read-Json $themesPath
 $art = Read-Json $artPath
 $definitions = Read-Json $definitionsPath
 $texts = Read-Json $textsPath
+$implementedEffects = Read-Json $implementedEffectsPath
+if ($implementedEffects.schemaVersion -ne 1 -or $implementedEffects.contentVersion -lt 1) { throw 'Implemented effect registry version is invalid.' }
+$implementedEffectIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+foreach ($effectId in $implementedEffects.implementedEffectIds) {
+    if ([string]$effectId -notmatch '^effect\.[a-z0-9_]+\.[0-9]{2}$') { throw "Invalid implemented effect id: $effectId" }
+    if (-not $implementedEffectIds.Add([string]$effectId)) { throw "Duplicate implemented effect id: $effectId" }
+}
 
 if ($names.entries.Count -ne 74) { throw "Expected 74 names, found $($names.entries.Count)." }
 if ($art.entries.Count -ne 74) { throw "Expected 74 art entries, found $($art.entries.Count)." }
@@ -88,9 +96,15 @@ foreach ($entry in $definitions.entries) {
     if ($entry.artKey -ne "card_art.$id") { throw "Definition art key mismatch: $id" }
     if ($entry.nameKey -ne "card.$id.name") { throw "Definition name key mismatch: $id" }
     if ($entry.rulesTextKey -ne "card.$id.rules") { throw "Definition rules key mismatch: $id" }
+    if ($null -eq $entry.effectIds) { throw "Definition effectIds must be an array, not null: $id" }
     if ($entry.effectImplementationStatus -eq 'PENDING') {
         if ($entry.effectIds.Count -ne 1 -or $entry.effectIds[0] -ne "effect.$id.01") {
             throw "Pending card must reserve exactly effect.$id.01"
+        }
+    }
+    elseif ($entry.effectImplementationStatus -eq 'IMPLEMENTED') {
+        if ($entry.effectIds.Count -ne 1 -or -not $implementedEffectIds.Contains([string]$entry.effectIds[0])) {
+            throw "Implemented card must reference an implemented effect id: $id"
         }
     }
     elseif ($entry.effectImplementationStatus -eq 'NONE') {
@@ -111,6 +125,10 @@ foreach ($entry in $definitions.entries) {
 if ($definitionIds.Count -ne $nameIds.Count) { throw 'Card definition and name registry counts differ.' }
 foreach ($id in $nameIds) {
     if (-not $definitionIds.Contains($id)) { throw "Card definition registry is missing: $id" }
+}
+foreach ($effectId in $implementedEffectIds) {
+    $implementedCard = $definitions.entries | Where-Object { $_.effectIds -contains $effectId -and $_.effectImplementationStatus -eq 'IMPLEMENTED' } | Select-Object -First 1
+    if ($null -eq $implementedCard) { throw "Implemented effect registry entry is not backed by an implemented card: $effectId" }
 }
 
 $textIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
@@ -178,4 +196,5 @@ foreach ($pair in $unityCopies) {
 & (Join-Path $PSScriptRoot 'sync-server-card-catalog.ps1') -Check
 
 $pendingCount = @($definitions.entries | Where-Object effectImplementationStatus -eq 'PENDING').Count
-Write-Output "Card content validation passed: 74 definitions/texts/art mappings, 7 accessible themes, $pendingCount reserved effects."
+$implementedCount = @($definitions.entries | Where-Object effectImplementationStatus -eq 'IMPLEMENTED').Count
+Write-Output "Card content validation passed: 74 definitions/texts/art mappings, 7 accessible themes, $implementedCount implemented and $pendingCount reserved effects."

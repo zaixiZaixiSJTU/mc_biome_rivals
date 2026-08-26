@@ -18,7 +18,8 @@ $lines.Add('  const CARD_DEFINITIONS: { [cardId: string]: CardRuleDefinition } =
 for ($index = 0; $index -lt $registry.entries.Count; $index++) {
     $card = $registry.entries[$index]
     $comma = if ($index -lt $registry.entries.Count - 1) { ',' } else { '' }
-    $lines.Add("    '$($card.id)': { id: '$($card.id)', cardType: '$($card.cardType)', cost: $($card.cost), buildingSlots: $($card.buildingSlots), attack: $($card.attack), health: $($card.health) }$comma")
+    $effectIds = if ($card.effectIds.Count -gt 0) { "['" + (($card.effectIds | ForEach-Object { [string]$_ }) -join "', '") + "']" } else { '[]' }
+    $lines.Add("    '$($card.id)': { id: '$($card.id)', cardType: '$($card.cardType)', cost: $($card.cost), buildingSlots: $($card.buildingSlots), attack: $($card.attack), health: $($card.health), effectImplementationStatus: '$($card.effectImplementationStatus)', effectIds: $effectIds }$comma")
 }
 $lines.Add('  };')
 $lines.Add('')

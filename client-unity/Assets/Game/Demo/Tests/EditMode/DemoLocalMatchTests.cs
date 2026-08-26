@@ -15,7 +15,7 @@ namespace BiomeRivals.Demo.Tests
         {
             var registry = CardContentLoader.Load();
             var match = new DemoLocalMatch();
-            match.ResetHand(new[] { "pf_001", "pf_005", "pf_006" });
+            match.ResetHand(new[] { "pf_001", "pf_005", "tk_016" });
 
             Assert.That(registry.TryGetDefinition("pf_001", out var bee), Is.True);
             Assert.That(match.TryDeploy(bee, DemoSlotKind.Unit, 0, out _), Is.True);
@@ -27,11 +27,12 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(match.BuildingSlots[0], Is.EqualTo("pf_005"));
             Assert.That(match.Energy, Is.EqualTo(3));
 
-            Assert.That(registry.TryGetDefinition("pf_006", out var season), Is.True);
-            Assert.That(match.TryCast(season, out var castMessage), Is.True);
-            Assert.That(castMessage, Does.Contain("后续版本"));
-            Assert.That(match.Energy, Is.Zero);
-            Assert.That(match.DiscardPile, Does.Contain("pf_006"));
+            Assert.That(registry.TryGetDefinition("tk_016", out var shell), Is.True);
+            Assert.That(match.TryCast(shell, out var castMessage), Is.True);
+            Assert.That(castMessage, Does.Contain("2 点护甲"));
+            Assert.That(match.Energy, Is.EqualTo(2));
+            Assert.That(match.PlayerArmor, Is.EqualTo(2));
+            Assert.That(match.DiscardPile, Does.Contain("tk_016"));
 
             match.EndPlayerTurn();
             Assert.That(match.IsPlayerTurn, Is.False);
@@ -73,6 +74,35 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(secondFatigue.FatigueDamage, Is.EqualTo(2));
             Assert.That(fatiguing.PlayerLife, Is.EqualTo(27));
             Assert.That(fatiguing.FatigueCount, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void LocalImplementedEffectsResolveAndPendingEffectsRemainUnspent()
+        {
+            var registry = CardContentLoader.Load();
+
+            var sacrificeMatch = new DemoLocalMatch();
+            sacrificeMatch.ResetDeckAndHand(new[] { "nt_006" }, new[] { "nt_001" });
+            Assert.That(registry.TryGetDefinition("nt_006", out var sacrifice), Is.True);
+            Assert.That(sacrifice.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+            Assert.That(sacrificeMatch.TryCast(sacrifice, out var sacrificeMessage), Is.True);
+            Assert.That(sacrificeMatch.PlayerLife, Is.EqualTo(28));
+            Assert.That(sacrificeMatch.Hand, Is.EqualTo(new[] { "nt_001" }));
+            Assert.That(sacrificeMessage, Does.Contain("真实伤害"));
+
+            var fleshMatch = new DemoLocalMatch();
+            fleshMatch.ResetDeckAndHand(new[] { "tk_005" }, new string[0]);
+            Assert.That(registry.TryGetDefinition("tk_005", out var flesh), Is.True);
+            Assert.That(fleshMatch.TryCast(flesh, out _), Is.True);
+            Assert.That(fleshMatch.PlayerLife, Is.EqualTo(29));
+
+            var pendingMatch = new DemoLocalMatch();
+            pendingMatch.ResetDeckAndHand(new[] { "pf_006" }, new string[0]);
+            Assert.That(registry.TryGetDefinition("pf_006", out var pending), Is.True);
+            Assert.That(pendingMatch.TryCast(pending, out var pendingMessage), Is.False);
+            Assert.That(pendingMatch.Hand, Does.Contain("pf_006"));
+            Assert.That(pendingMatch.Energy, Is.EqualTo(6));
+            Assert.That(pendingMessage, Does.Contain("尚未接入"));
         }
 
         [Test]
@@ -279,6 +309,7 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(opponentHud.Find("RivetNW")?.GetComponent<UnityEngine.UI.Image>(), Is.Not.Null);
                 Assert.That(frameSlice.sprite.texture.name, Does.Contain("stone_bricks"));
                 Assert.That(root.transform.Find("DemoCanvas/PlayerHUD/FrameSlice").GetComponent<UnityEngine.UI.Image>().sprite.texture.name, Does.Contain("stone_bricks"));
+                Assert.That(root.transform.Find("DemoCanvas/PlayerHUD/EffectFlash").GetComponent<CanvasGroup>().alpha, Is.Zero);
                 Assert.That(root.transform.Find("DemoCanvas/CardDetailsPanel/FrameSlice").GetComponent<UnityEngine.UI.Image>().sprite.texture.name, Does.Contain("stone_bricks"));
                 Assert.That(root.transform.Find("DemoCanvas/HandPlate/FrameSlice").GetComponent<UnityEngine.UI.Image>().sprite.texture.name, Does.Contain("stone_bricks"));
                 Assert.That(root.transform.Find("DemoCanvas/HandLabel").GetComponent<UnityEngine.UI.Text>().text, Does.Contain("牌库 25"));
@@ -356,6 +387,14 @@ namespace BiomeRivals.Demo.Tests
                     if (mappedDefinition.hasDurability)
                         Assert.That(card.transform.Find("DurabilitySocketFrame").GetComponent<UnityEngine.UI.Image>().sprite.name, Is.EqualTo("CardHealthSocket_" + themeId));
                 }
+
+                GameObject.Find("Faction_nether").GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
+                Assert.That(root.transform.Find("DemoCanvas/PlayerHUD/Name").GetComponent<UnityEngine.UI.Text>().text, Is.EqualTo("熔岩统御者"));
+                root.transform.Find("DemoCanvas/HandPlate/HandCards/Card_nt_006").GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
+                var implementedCast = root.transform.Find("DemoCanvas/CardDetailsPanel/InspectorContent/Cast").GetComponent<UnityEngine.UI.Button>();
+                Assert.That(implementedCast.interactable, Is.True);
+                Assert.That(implementedCast.GetComponentInChildren<UnityEngine.UI.Text>().text, Is.EqualTo("释放卡牌"));
+                Assert.That(root.transform.Find("DemoCanvas/CardDetailsPanel/InspectorContent/Implementation").GetComponent<UnityEngine.UI.Text>().text, Does.Contain("已接入"));
 
                 var playerUnit = battlefield.GetSlotReferencePosition(true, DemoSlotKind.Unit, 0);
                 var opponentUnit = battlefield.GetSlotReferencePosition(false, DemoSlotKind.Unit, 0);

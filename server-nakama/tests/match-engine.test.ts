@@ -25,6 +25,12 @@ function enterCombatCommand(id: string, revision: number): BiomeRivalsRules.Matc
   return command(id, revision, 'ENTER_COMBAT');
 }
 
+function playCommand(id: string, revision: number, cardId: string): BiomeRivalsRules.MatchCommand {
+  const result = command(id, revision, 'PLAY_CARD');
+  result.payload = { cardId: cardId };
+  return result;
+}
+
 function attackCommand(
   id: string,
   revision: number,
@@ -130,6 +136,66 @@ TestHarness.test('deploys a structure only across consecutive free building slot
   TestHarness.equal(accepted.state.players[0]!.buildingSlots[2], 'object-1');
   TestHarness.equal(accepted.state.players[0]!.battlefield[0]!.occupiedSlots, 2);
   TestHarness.equal(accepted.batch.events[0]!.payload.occupiedSlots, 2);
+});
+
+TestHarness.test('plays implemented armor material through its stable effect id', function (): void {
+  const state = BiomeRivalsRules.createInitialState('match-1', ['alice', 'bob']);
+  state.players[0]!.hand = ['tk_016'];
+  state.players[0]!.redstone = 1;
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', playCommand('play-armor', 0, 'tk_016'));
+  TestHarness.ok(result.accepted);
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[0]!.armor, 2);
+  TestHarness.equal(result.state.players[0]!.redstone, 0);
+  TestHarness.equal(result.state.players[0]!.hand.length, 0);
+  TestHarness.equal(result.state.players[0]!.discardPile[0], 'tk_016');
+  TestHarness.equal(result.batch.events[0]!.type, 'CARD_PLAYED');
+  TestHarness.equal(result.batch.events[0]!.payload.effectId, 'effect.tk_016.01');
+  TestHarness.equal(result.batch.events[1]!.type, 'ARMOR_GAINED');
+  TestHarness.equal(state.players[0]!.armor, 0);
+});
+
+TestHarness.test('resolves healing before rotten flesh true damage', function (): void {
+  const state = BiomeRivalsRules.createInitialState('match-1', ['alice', 'bob']);
+  state.players[0]!.hand = ['tk_005'];
+  state.players[0]!.life = 25;
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', playCommand('play-flesh', 0, 'tk_005'));
+  TestHarness.ok(result.accepted);
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[0]!.life, 26);
+  TestHarness.equal(result.batch.events[1]!.type, 'HERO_HEALED');
+  TestHarness.equal(result.batch.events[1]!.payload.life, 27);
+  TestHarness.equal(result.batch.events[2]!.type, 'HERO_DAMAGED');
+  TestHarness.equal(result.batch.events[2]!.payload.damageType, 'TRUE');
+});
+
+TestHarness.test('resolves lava sacrifice self damage then a private draw', function (): void {
+  const state = BiomeRivalsRules.createInitialState('match-1', ['alice', 'bob']);
+  state.players[0]!.hand = ['nt_006'];
+  state.players[0]!.deck = ['nt_001'];
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', playCommand('play-sacrifice', 0, 'nt_006'));
+  TestHarness.ok(result.accepted);
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[0]!.life, 28);
+  TestHarness.equal(result.state.players[0]!.hand[0], 'nt_001');
+  TestHarness.equal(result.state.players[0]!.discardPile[0], 'nt_006');
+  TestHarness.equal(result.batch.events[1]!.type, 'HERO_DAMAGED');
+  TestHarness.equal(result.batch.events[2]!.type, 'CARD_DRAWN');
+  const opponentProjection = BiomeRivalsRules.createClientEventBatch(result.batch, 'bob');
+  TestHarness.equal(opponentProjection.events[2]!.payload.cardId, null);
+});
+
+TestHarness.test('rejects pending card effects without paying or discarding', function (): void {
+  const state = BiomeRivalsRules.createInitialState('match-1', ['alice', 'bob']);
+  state.players[0]!.hand = ['pf_006'];
+  state.players[0]!.redstone = 6;
+  state.players[0]!.redstoneCapacity = 6;
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', playCommand('play-pending', 0, 'pf_006'));
+  TestHarness.equal(result.accepted, false);
+  if (!result.accepted) TestHarness.equal(result.code, 'EFFECT_NOT_IMPLEMENTED');
+  TestHarness.equal(state.players[0]!.redstone, 6);
+  TestHarness.equal(state.players[0]!.hand[0], 'pf_006');
+  TestHarness.equal(state.players[0]!.discardPile.length, 0);
 });
 
 TestHarness.test('enters combat and blocks main phase deployments', function (): void {

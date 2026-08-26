@@ -360,6 +360,89 @@ namespace BiomeRivalsRules {
       });
     }
 
+    function finishForSelfDefeat(player: PlayerState, reason: string): boolean {
+      if (player.life > 0) return false;
+      const winner = next.players[0]!.playerId === player.playerId ? next.players[1]! : next.players[0]!;
+      next.status = 'FINISHED';
+      next.winnerPlayerId = winner.playerId;
+      emit('MATCH_ENDED', { winnerPlayerId: next.winnerPlayerId, reason: reason });
+      return true;
+    }
+
+    function playCard(): CommandRejected | null {
+      if (actorIndex !== state.activePlayerIndex) return reject(state, 'NOT_ACTIVE_PLAYER', 'only the active player may play a card');
+      if (state.phase !== 'MAIN') return reject(state, 'WRONG_PHASE', 'cards may only be played during the main phase');
+      const cardId = command.payload && command.payload.cardId;
+      if (typeof cardId !== 'string') return reject(state, 'INVALID_COMMAND', 'PLAY_CARD requires cardId');
+      const definition = getCardDefinition(cardId);
+      if (definition === null) return reject(state, 'UNKNOWN_CARD', 'card is not registered');
+      if (definition.cardType !== 'SPELL' && definition.cardType !== 'MATERIAL') {
+        return reject(state, 'INVALID_TARGET', 'PLAY_CARD currently accepts only spells and materials');
+      }
+      if (definition.effectImplementationStatus !== 'IMPLEMENTED' || definition.effectIds.length !== 1) {
+        return reject(state, 'EFFECT_NOT_IMPLEMENTED', 'card effect is registered but not implemented');
+      }
+      const effectId = definition.effectIds[0]!;
+      if (effectId !== 'effect.nt_006.01' && effectId !== 'effect.tk_005.01' && effectId !== 'effect.tk_016.01') {
+        return reject(state, 'EFFECT_NOT_IMPLEMENTED', 'effect handler is not registered');
+      }
+      const player = next.players[actorIndex]!;
+      const handIndex = player.hand.indexOf(cardId);
+      if (handIndex < 0) return reject(state, 'CARD_NOT_IN_HAND', 'card is not in the active players hand');
+      if (definition.cost > player.redstone) return reject(state, 'INSUFFICIENT_REDSTONE', 'not enough redstone');
+
+      player.hand.splice(handIndex, 1);
+      player.redstone -= definition.cost;
+      player.discardPile.push(cardId);
+      emit('CARD_PLAYED', {
+        playerId: player.playerId,
+        cardId: cardId,
+        cardType: definition.cardType,
+        effectId: effectId,
+        redstone: player.redstone,
+        handCount: player.hand.length,
+        discardCount: player.discardPile.length
+      });
+
+      switch (effectId) {
+        case 'effect.nt_006.01':
+          player.life = Math.max(0, player.life - 2);
+          emit('HERO_DAMAGED', {
+            playerId: player.playerId, sourceCardId: cardId, effectId: effectId,
+            damage: 2, damageType: 'TRUE', life: player.life, armor: player.armor
+          });
+          if (finishForSelfDefeat(player, 'SELF_DAMAGE')) return null;
+          drawCard(player);
+          finishForSelfDefeat(player, 'FATIGUE');
+          return null;
+        case 'effect.tk_005.01': {
+          const healedLife = Math.min(30, player.life + 2);
+          const healing = healedLife - player.life;
+          player.life = healedLife;
+          emit('HERO_HEALED', {
+            playerId: player.playerId, sourceCardId: cardId, effectId: effectId,
+            healing: healing, life: player.life
+          });
+          player.life = Math.max(0, player.life - 1);
+          emit('HERO_DAMAGED', {
+            playerId: player.playerId, sourceCardId: cardId, effectId: effectId,
+            damage: 1, damageType: 'TRUE', life: player.life, armor: player.armor
+          });
+          finishForSelfDefeat(player, 'SELF_DAMAGE');
+          return null;
+        }
+        case 'effect.tk_016.01':
+          player.armor += 2;
+          emit('ARMOR_GAINED', {
+            playerId: player.playerId, sourceCardId: cardId, effectId: effectId,
+            amount: 2, armor: player.armor
+          });
+          return null;
+        default:
+          throw new Error('validated effect handler was not dispatched');
+      }
+    }
+
     function attack(): CommandRejected | null {
       if (actorIndex !== state.activePlayerIndex) {
         return reject(state, 'NOT_ACTIVE_PLAYER', 'only the active player may attack');
@@ -439,6 +522,11 @@ namespace BiomeRivalsRules {
       case 'DEPLOY_CARD': {
         const deploymentRejection = deployCard();
         if (deploymentRejection !== null) return deploymentRejection;
+        break;
+      }
+      case 'PLAY_CARD': {
+        const playRejection = playCard();
+        if (playRejection !== null) return playRejection;
         break;
       }
       case 'ENTER_COMBAT': {

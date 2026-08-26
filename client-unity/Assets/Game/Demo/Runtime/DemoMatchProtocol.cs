@@ -55,7 +55,8 @@ namespace BiomeRivals.Demo
         InvalidTarget,
         SlotOccupied,
         WrongPhase,
-        AttackerNotReady
+        AttackerNotReady,
+        EffectNotImplemented
     }
 
     public sealed class DemoCommandResult

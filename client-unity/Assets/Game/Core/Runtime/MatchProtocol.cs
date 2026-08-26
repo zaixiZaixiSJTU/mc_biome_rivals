@@ -13,6 +13,7 @@ namespace BiomeRivals.Core
     public static class MatchCommandTypes
     {
         public const string DeployCard = "DEPLOY_CARD";
+        public const string PlayCard = "PLAY_CARD";
         public const string EnterCombat = "ENTER_COMBAT";
         public const string Attack = "ATTACK";
         public const string EndTurn = "END_TURN";
@@ -22,9 +23,13 @@ namespace BiomeRivals.Core
     public static class MatchEventTypes
     {
         public const string CardDeployed = "CARD_DEPLOYED";
+        public const string CardPlayed = "CARD_PLAYED";
         public const string CardDrawn = "CARD_DRAWN";
         public const string CardBurned = "CARD_BURNED";
         public const string FatigueDamage = "FATIGUE_DAMAGE";
+        public const string HeroDamaged = "HERO_DAMAGED";
+        public const string HeroHealed = "HERO_HEALED";
+        public const string ArmorGained = "ARMOR_GAINED";
         public const string PhaseChanged = "PHASE_CHANGED";
         public const string AttackResolved = "ATTACK_RESOLVED";
         public const string ObjectDied = "OBJECT_DIED";
@@ -83,6 +88,17 @@ namespace BiomeRivals.Core
                 expectedRevision = revision,
                 type = MatchCommandTypes.EndTurn,
                 payload = new MatchCommandPayloadDto()
+            };
+
+        public static MatchCommandDto PlayCard(string commandId, int revision, string cardId) =>
+            new MatchCommandDto
+            {
+                protocolVersion = GameVersions.Protocol,
+                rulesetVersion = GameVersions.Ruleset,
+                commandId = commandId,
+                expectedRevision = revision,
+                type = MatchCommandTypes.PlayCard,
+                payload = new MatchCommandPayloadDto { cardId = cardId }
             };
 
         public static MatchCommandDto EnterCombat(string commandId, int revision) =>
@@ -157,6 +173,11 @@ namespace BiomeRivals.Core
         public int damage;
         public int life;
         public int armor;
+        public string effectId = string.Empty;
+        public string sourceCardId = string.Empty;
+        public string damageType = string.Empty;
+        public int healing;
+        public int amount;
     }
 
     [Serializable]

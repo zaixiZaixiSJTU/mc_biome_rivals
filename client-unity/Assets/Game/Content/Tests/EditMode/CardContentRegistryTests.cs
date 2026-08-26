@@ -22,6 +22,9 @@ namespace BiomeRivals.Content.Tests
             Assert.That(temple.health, Is.EqualTo(8));
             Assert.That(temple.buildingSlots, Is.EqualTo(2));
             Assert.That(temple.effectImplementationStatus, Is.EqualTo("PENDING"));
+            Assert.That(registry.TryGetDefinition("nt_006", out var sacrifice), Is.True);
+            Assert.That(sacrifice.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+            Assert.That(sacrifice.effectIds, Is.EqualTo(new[] { "effect.nt_006.01" }));
             Assert.That(registry.TryGetText("db_007", out var templeText), Is.True);
             Assert.That(templeText.rulesText, Does.Contain("藏宝图"));
         }

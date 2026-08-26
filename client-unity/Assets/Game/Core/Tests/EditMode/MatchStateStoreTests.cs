@@ -274,6 +274,69 @@ namespace BiomeRivals.Core.Tests
         }
 
         [Test]
+        public void Apply_ReplaysPlayedCardSelfDamagePrivateDrawAndArmor()
+        {
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "match-1", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice", life = 30, redstone = 2, hand = new[] { "nt_006", "tk_016" }, deckCount = 1 },
+                    new PlayerStateDto { playerId = "bob", life = 30, hand = new string[0] }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 1, type = MatchEventTypes.CardPlayed, payload = new MatchEventPayloadDto { playerId = "alice", cardId = "nt_006", redstone = 1, handCount = 1, discardCount = 1 } },
+                    new MatchEventDto { eventId = 2, type = MatchEventTypes.HeroDamaged, payload = new MatchEventPayloadDto { playerId = "alice", damage = 2, damageType = "TRUE", life = 28, armor = 0 } },
+                    new MatchEventDto { eventId = 3, type = MatchEventTypes.CardDrawn, payload = new MatchEventPayloadDto { playerId = "alice", cardId = "nt_001", handCount = 2, deckCount = 0 } }
+                }
+            });
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 2,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 4, type = MatchEventTypes.CardPlayed, payload = new MatchEventPayloadDto { playerId = "alice", cardId = "tk_016", redstone = 0, handCount = 1, discardCount = 2 } },
+                    new MatchEventDto { eventId = 5, type = MatchEventTypes.ArmorGained, payload = new MatchEventPayloadDto { playerId = "alice", amount = 2, armor = 2 } }
+                }
+            });
+
+            Assert.That(store.Current.players[0].life, Is.EqualTo(28));
+            Assert.That(store.Current.players[0].armor, Is.EqualTo(2));
+            Assert.That(store.Current.players[0].hand, Is.EqualTo(new[] { "nt_001" }));
+            Assert.That(store.Current.players[0].discardPile, Is.EqualTo(new[] { "nt_006", "tk_016" }));
+        }
+
+        [Test]
+        public void Apply_ReplaysHealingBeforeDamageInEventOrder()
+        {
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "match-1", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                players = new[] { new PlayerStateDto { playerId = "alice", life = 25 }, new PlayerStateDto { playerId = "bob", life = 30 } }
+            });
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 1, type = MatchEventTypes.HeroHealed, payload = new MatchEventPayloadDto { playerId = "alice", healing = 2, life = 27 } },
+                    new MatchEventDto { eventId = 2, type = MatchEventTypes.HeroDamaged, payload = new MatchEventPayloadDto { playerId = "alice", damage = 1, damageType = "TRUE", life = 26, armor = 0 } }
+                }
+            });
+            Assert.That(store.Current.players[0].life, Is.EqualTo(26));
+        }
+
+        [Test]
         public void Apply_RejectsRevisionGapsBeforeMutation()
         {
             var store = new MatchStateStore();

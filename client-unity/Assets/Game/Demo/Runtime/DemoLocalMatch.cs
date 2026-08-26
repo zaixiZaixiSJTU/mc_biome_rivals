@@ -36,7 +36,9 @@ namespace BiomeRivals.Demo
         public bool IsPlayerTurn { get; private set; } = true;
         public DemoTurnPhase Phase { get; private set; } = DemoTurnPhase.Main;
         public int PlayerLife { get; private set; } = 30;
+        public int PlayerArmor { get; private set; }
         public int FatigueCount { get; private set; }
+        public DemoDrawResult LastDrawResult { get; private set; }
         public int OpponentLife { get; private set; } = 30;
         public bool IsFinished { get; private set; }
         public int Revision { get; private set; }
@@ -59,6 +61,7 @@ namespace BiomeRivals.Demo
             _deck.AddRange(deckCardIds);
             _discardPile.Clear();
             FatigueCount = 0;
+            LastDrawResult = null;
         }
 
         public bool TryDeploy(
@@ -130,14 +133,62 @@ namespace BiomeRivals.Demo
 
         public bool TryCast(CardDefinitionEntry definition, out string message)
         {
-            if (!CanPlay(definition, out message)) return false;
-            if (definition.cardType == "UNIT" || definition.cardType == "BUILDING" || definition.cardType == "STRUCTURE")
-                return Fail("部署牌需要先选择战场槽位。", out message);
+            var result = ApplyPlayCard(definition, CreatePlayCardCommand(definition == null ? string.Empty : definition.id));
+            message = result.Message;
+            return result.Accepted;
+        }
 
+        public MatchCommandDto CreatePlayCardCommand(string cardId) =>
+            MatchCommandFactory.PlayCard(NextCommandId(), Revision, cardId);
+
+        public DemoCommandResult ApplyPlayCard(CardDefinitionEntry definition, MatchCommandDto command)
+        {
+            if (!ValidateCommand(command, MatchCommandTypes.PlayCard, out var rejection)) return rejection;
+            if (!CanPlay(definition, out var message)) return RejectFromMessage(message, definition);
+            if (definition.cardType == "UNIT" || definition.cardType == "BUILDING" || definition.cardType == "STRUCTURE" || definition.cardType == "EQUIPMENT")
+                return Reject(DemoCommandRejectionCode.InvalidTarget, "该卡牌需要对应的部署或装备目标。");
+            if (definition.effectImplementationStatus != "IMPLEMENTED" || definition.effectIds == null || definition.effectIds.Length != 1)
+                return Reject(DemoCommandRejectionCode.EffectNotImplemented, "该卡牌效果已注册，但尚未接入规则执行器。");
+
+            var effectId = definition.effectIds[0];
+            if (effectId != "effect.nt_006.01" && effectId != "effect.tk_005.01" && effectId != "effect.tk_016.01")
+                return Reject(DemoCommandRejectionCode.EffectNotImplemented, "找不到该 effectId 的规则处理器。");
             Consume(definition);
             _discardPile.Add(definition.id);
-            message = $"已打出 {definition.designId}；规则效果将在后续版本接入。";
-            return true;
+            switch (effectId)
+            {
+                case "effect.nt_006.01":
+                    PlayerLife = Math.Max(0, PlayerLife - 2);
+                    if (PlayerLife == 0)
+                    {
+                        IsFinished = true;
+                        message = "熔岩献祭造成致命自伤，对局结束。";
+                    }
+                    else
+                    {
+                        var draw = DrawCard();
+                        message = draw.Outcome == DemoDrawOutcome.Drawn
+                            ? $"熔岩献祭：受到 2 点真实伤害，抽到 {draw.CardId}。"
+                            : draw.Outcome == DemoDrawOutcome.Burned
+                                ? $"熔岩献祭：受到 2 点真实伤害，{draw.CardId} 因满手爆牌。"
+                                : $"熔岩献祭：受到 2 点真实伤害，并受到 {draw.FatigueDamage} 点疲劳伤害。";
+                    }
+                    break;
+                case "effect.tk_005.01":
+                    PlayerLife = Math.Min(30, PlayerLife + 2);
+                    PlayerLife = Math.Max(0, PlayerLife - 1);
+                    message = "腐肉：先恢复 2 点生命，再受到 1 点真实伤害。";
+                    break;
+                case "effect.tk_016.01":
+                    PlayerArmor += 2;
+                    message = "潜影壳：获得 2 点护甲。";
+                    break;
+                default:
+                    throw new InvalidOperationException("Validated effect handler was not dispatched.");
+            }
+
+            AcceptCommand(command);
+            return DemoCommandResult.Accept(message, Revision);
         }
 
         public void ResetOpponent(IEnumerable<CardDefinitionEntry> definitions)
@@ -271,7 +322,7 @@ namespace BiomeRivals.Demo
                 FatigueCount++;
                 PlayerLife = Math.Max(0, PlayerLife - FatigueCount);
                 if (PlayerLife == 0) IsFinished = true;
-                return new DemoDrawResult(DemoDrawOutcome.Fatigue, string.Empty, FatigueCount);
+                return RememberDraw(new DemoDrawResult(DemoDrawOutcome.Fatigue, string.Empty, FatigueCount));
             }
 
             var cardIndex = _deck.Count - 1;
@@ -280,11 +331,17 @@ namespace BiomeRivals.Demo
             if (_hand.Count >= 7)
             {
                 _discardPile.Add(cardId);
-                return new DemoDrawResult(DemoDrawOutcome.Burned, cardId, 0);
+                return RememberDraw(new DemoDrawResult(DemoDrawOutcome.Burned, cardId, 0));
             }
 
             _hand.Add(cardId);
-            return new DemoDrawResult(DemoDrawOutcome.Drawn, cardId, 0);
+            return RememberDraw(new DemoDrawResult(DemoDrawOutcome.Drawn, cardId, 0));
+        }
+
+        private DemoDrawResult RememberDraw(DemoDrawResult result)
+        {
+            LastDrawResult = result;
+            return result;
         }
 
         private bool CanPlay(CardDefinitionEntry definition, out string message)

@@ -16,7 +16,7 @@ namespace BiomeRivals.Networking.Tests
                 MatchStateDto received = null;
                 gateway.SnapshotReceived += snapshot => received = snapshot;
                 transport.Emit(MatchOpcodes.Snapshot,
-                    "{\"matchId\":\"match-1\",\"viewerPlayerId\":\"alice\",\"protocolVersion\":3,\"rulesetVersion\":\"prototype-0.3\",\"revision\":0," +
+                    "{\"matchId\":\"match-1\",\"viewerPlayerId\":\"alice\",\"protocolVersion\":4,\"rulesetVersion\":\"prototype-0.4\",\"revision\":0," +
                     "\"lastEventId\":0,\"status\":\"ACTIVE\",\"turn\":1,\"phase\":\"MAIN\",\"activePlayerIndex\":0,\"nextInstanceId\":1," +
                     "\"players\":[{\"playerId\":\"alice\",\"life\":30,\"armor\":0,\"redstone\":6," +
                     "\"redstoneCapacity\":6,\"hand\":[\"pf_001\"],\"deckCount\":26,\"discardPile\":[],\"fatigueCount\":0,\"unitSlots\":[null,null,null,null]," +
@@ -46,7 +46,7 @@ namespace BiomeRivals.Networking.Tests
                 MatchEventBatchDto received = null;
                 gateway.EventBatchReceived += batch => received = batch;
                 transport.Emit(MatchOpcodes.EventBatch,
-                    "{\"protocolVersion\":3,\"rulesetVersion\":\"prototype-0.3\",\"revision\":1," +
+                    "{\"protocolVersion\":4,\"rulesetVersion\":\"prototype-0.4\",\"revision\":1," +
                     "\"acknowledgedCommandId\":\"turn-1\",\"events\":[{\"eventId\":1,\"type\":\"CARD_DRAWN\"," +
                     "\"payload\":{\"playerId\":\"bob\",\"cardId\":null,\"handCount\":5,\"deckCount\":25}}]}");
 
@@ -72,6 +72,21 @@ namespace BiomeRivals.Networking.Tests
                 Assert.That(transport.LastJson, Does.Contain("\"payload\":{"));
                 Assert.That(transport.LastJson, Does.Contain("\"slotKind\":\"UNIT\""));
                 Assert.That(transport.LastJson, Does.Not.Contain("attackerInstanceId"));
+            }
+        }
+
+        [Test]
+        public async Task PlayCardCommandWirePayloadContainsOnlyCardId()
+        {
+            var transport = new FakeTransport();
+            using (var gateway = new AuthoritativeMatchGateway(transport))
+            {
+                await gateway.SendCommandAsync(MatchCommandFactory.PlayCard("play-1", 2, "tk_016"));
+
+                Assert.That(transport.LastJson, Does.Contain("\"type\":\"PLAY_CARD\""));
+                Assert.That(transport.LastJson, Does.Contain("\"cardId\":\"tk_016\""));
+                Assert.That(transport.LastJson, Does.Not.Contain("slotKind"));
+                Assert.That(transport.LastJson, Does.Not.Contain("targetType"));
             }
         }
 

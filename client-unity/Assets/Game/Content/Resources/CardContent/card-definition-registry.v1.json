@@ -1316,7 +1316,7 @@
                         "tags":  [
                                      "fire"
                                  ],
-                        "effectImplementationStatus":  "PENDING",
+                        "effectImplementationStatus":  "IMPLEMENTED",
                         "effectIds":  [
                                           "effect.nt_006.01"
                                       ]
@@ -1691,7 +1691,9 @@
                                      "juvenile"
                                  ],
                         "effectImplementationStatus":  "NONE",
-                        "effectIds":  null
+                        "effectIds":  [
+
+                                      ]
                     },
                     {
                         "id":  "tk_004",
@@ -1717,7 +1719,9 @@
                                      "animal"
                                  ],
                         "effectImplementationStatus":  "NONE",
-                        "effectIds":  null
+                        "effectIds":  [
+
+                                      ]
                     },
                     {
                         "id":  "tk_005",
@@ -1743,7 +1747,7 @@
                                      "material",
                                      "food"
                                  ],
-                        "effectImplementationStatus":  "PENDING",
+                        "effectImplementationStatus":  "IMPLEMENTED",
                         "effectIds":  [
                                           "effect.tk_005.01"
                                       ]
@@ -1915,7 +1919,9 @@
                                      "illager"
                                  ],
                         "effectImplementationStatus":  "NONE",
-                        "effectIds":  null
+                        "effectIds":  [
+
+                                      ]
                     },
                     {
                         "id":  "tk_012",
@@ -1999,7 +2005,9 @@
                                      "magma"
                                  ],
                         "effectImplementationStatus":  "NONE",
-                        "effectIds":  null
+                        "effectIds":  [
+
+                                      ]
                     },
                     {
                         "id":  "tk_015",
@@ -2027,7 +2035,9 @@
                                      "wither"
                                  ],
                         "effectImplementationStatus":  "NONE",
-                        "effectIds":  null
+                        "effectIds":  [
+
+                                      ]
                     },
                     {
                         "id":  "tk_016",
@@ -2053,7 +2063,7 @@
                                      "material",
                                      "ender"
                                  ],
-                        "effectImplementationStatus":  "PENDING",
+                        "effectImplementationStatus":  "IMPLEMENTED",
                         "effectIds":  [
                                           "effect.tk_016.01"
                                       ]

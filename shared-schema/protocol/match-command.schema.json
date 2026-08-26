@@ -6,11 +6,11 @@
   "additionalProperties": false,
   "required": ["protocolVersion", "rulesetVersion", "commandId", "expectedRevision", "type", "payload"],
   "properties": {
-    "protocolVersion": { "const": 3 },
+    "protocolVersion": { "const": 4 },
     "rulesetVersion": { "type": "string", "minLength": 1 },
     "commandId": { "type": "string", "minLength": 1, "maxLength": 80 },
     "expectedRevision": { "type": "integer", "minimum": 0 },
-    "type": { "enum": ["DEPLOY_CARD", "ENTER_COMBAT", "ATTACK", "END_TURN", "CONCEDE"] },
+    "type": { "enum": ["DEPLOY_CARD", "PLAY_CARD", "ENTER_COMBAT", "ATTACK", "END_TURN", "CONCEDE"] },
     "payload": { "type": "object" }
   },
   "allOf": [
@@ -27,6 +27,18 @@
               "slotKind": { "enum": ["UNIT", "BUILDING"] },
               "slotIndex": { "type": "integer", "minimum": 0 }
             }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "PLAY_CARD" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object", "additionalProperties": false,
+            "required": ["cardId"],
+            "properties": { "cardId": { "type": "string", "pattern": "^[a-z0-9_]+$" } }
           }
         }
       }

@@ -11,6 +11,7 @@
 | `card-text-registry.zh-CN.v1.json` | 中文描述、类型、稀有度、标签和设计备注 |
 | `card-art-registry.v1.json` | 卡牌到 Minecraft 本地原型纹理的映射 |
 | `card-theme-registry.v1.json` | 七群系卡面主题令牌 |
+| `implemented-effect-registry.v1.json` | 已接入权威规则处理器的稳定 `effectId` 白名单 |
 
 数据流为：
 
@@ -20,12 +21,12 @@
 
 - 56 张可收集牌。
 - 18 张不可收集衍生物。
-- 69 张有规则文本的牌预留 `effect.<cardId>.01`，状态为 `PENDING`。
+- 69 张有规则文本的牌预留 `effect.<cardId>.01`；其中 3 张为 `IMPLEMENTED`，其余 66 张为 `PENDING`。
 - 5 张无规则文本衍生物状态为 `NONE`。
 
 ## 效果实现约束
 
-`PENDING` 表示卡牌身份、数值和展示文本已注册，但服务端权威规则尚未接入。实现效果时保留现有 `cardId` 和 `effectId`，将状态改为 `IMPLEMENTED`，同时补充服务端规则测试、协议事件与客户端表现映射。禁止客户端卡面组件直接改变对局状态。
+`PENDING` 表示卡牌身份、数值和展示文本已注册，但服务端权威规则尚未接入。实现效果时保留现有 `cardId` 和 `effectId`，将其加入 `implemented-effect-registry.v1.json`，同步脚本会生成 `IMPLEMENTED` 状态；同时必须补充服务端规则测试、协议事件与客户端表现映射。禁止客户端卡面组件直接改变对局状态。
 
 新增或修改卡牌后依次执行：
 

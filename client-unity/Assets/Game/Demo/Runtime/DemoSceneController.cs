@@ -42,6 +42,10 @@ namespace BiomeRivals.Demo
         private Text _handLabel;
         private Text _opponentHealthText;
         private Text _playerHealthText;
+        private Image _playerAvatarImage;
+        private Text _playerAvatarGlyph;
+        private Text _playerNameText;
+        private CanvasGroup _playerEffectFlash;
         private Text _roundText;
         private Text _statusText;
         private Text _endTurnLabel;
@@ -57,13 +61,13 @@ namespace BiomeRivals.Demo
 
         private static readonly FactionSpec[] Factions =
         {
-            new FactionSpec("plains_forest", "平原", "pf"),
-            new FactionSpec("desert_badlands", "沙漠", "db"),
-            new FactionSpec("snow_ice", "冰原", "si"),
-            new FactionSpec("cave_dark_forest", "深暗", "cd"),
-            new FactionSpec("ocean_river", "海洋", "or"),
-            new FactionSpec("nether", "下界", "nt"),
-            new FactionSpec("end", "末地", "ed")
+            new FactionSpec("plains_forest", "平原", "pf", "林地守护者"),
+            new FactionSpec("desert_badlands", "沙漠", "db", "荒漠考古队"),
+            new FactionSpec("snow_ice", "冰原", "si", "雪原巡守者"),
+            new FactionSpec("cave_dark_forest", "深暗", "cd", "幽匿勘探队"),
+            new FactionSpec("ocean_river", "海洋", "or", "潮汐守卫"),
+            new FactionSpec("nether", "下界", "nt", "熔岩统御者"),
+            new FactionSpec("end", "末地", "ed", "虚空行者")
         };
 
         private void Start()
@@ -72,6 +76,12 @@ namespace BiomeRivals.Demo
             if (HasCommandLineFlag("-disableLocalCardArt")) DemoCardArtProvider.LocalArtEnabled = false;
             if (HasCommandLineFlag("-disableLocalWorldAssets")) DemoWorldAssetProvider.LocalAssetsEnabled = false;
             BuildNow();
+            if (HasCommandLineFlag("-previewEffect"))
+            {
+                SelectFaction("nether");
+                SelectCard("nt_006");
+                CastSelectedCard();
+            }
             if (HasCommandLineFlag("-previewCombat")) OnEndTurn();
             if (HasCommandLineFlag("-previewGroundHover")) _battlefield.SetSlotHovered(true, DemoSlotKind.Unit, 0, true);
             var capturePath = GetCommandLineValue("-captureDemo");
@@ -173,10 +183,15 @@ namespace BiomeRivals.Demo
             }
 
             _playerHud = CreateBasePanel(_canvasRoot, "PlayerHUD", new Vector2(-782, -454), new Vector2(270, 105));
-            CreatePanel(_playerHud, "Avatar", new Vector2(-92, 0), new Vector2(70, 70), Hex("#274C2D"));
-            CreateText(_playerHud, "AvatarGlyph", new Vector2(-92, 1), new Vector2(60, 60), "▦", 34, Hex("#D3C35B"), TextAnchor.MiddleCenter, FontStyle.Bold);
-            CreateText(_playerHud, "Name", new Vector2(35, 22), new Vector2(150, 30), "林地守护者", 18, Pale, TextAnchor.MiddleLeft, FontStyle.Bold);
+            _playerAvatarImage = CreatePanel(_playerHud, "Avatar", new Vector2(-92, 0), new Vector2(70, 70), Hex("#274C2D"));
+            _playerAvatarGlyph = CreateText(_playerHud, "AvatarGlyph", new Vector2(-92, 1), new Vector2(60, 60), "▦", 34, Hex("#D3C35B"), TextAnchor.MiddleCenter, FontStyle.Bold);
+            _playerNameText = CreateText(_playerHud, "Name", new Vector2(35, 22), new Vector2(150, 30), "林地守护者", 18, Pale, TextAnchor.MiddleLeft, FontStyle.Bold);
             _playerHealthText = CreateText(_playerHud, "Health", new Vector2(35, -17), new Vector2(150, 30), "❤ 30", 18, Hex("#B8E5A9"), TextAnchor.MiddleLeft, FontStyle.Bold);
+            var effectFlash = CreatePanel(_playerHud, "EffectFlash", Vector2.zero, new Vector2(258, 93), Color.white);
+            effectFlash.raycastTarget = false;
+            _playerEffectFlash = effectFlash.gameObject.AddComponent<CanvasGroup>();
+            _playerEffectFlash.alpha = 0f;
+            _playerEffectFlash.blocksRaycasts = false;
         }
 
         private void BuildFactionRail()
@@ -276,7 +291,14 @@ namespace BiomeRivals.Demo
         {
             _activeFaction = factionId;
             var spec = Factions.First(item => item.Id == factionId);
-            var ids = Enumerable.Range(1, 5).Select(index => $"{spec.Prefix}_{index:000}").ToArray();
+            if (_registry.TryGetTheme(spec.Id, out var selectedTheme))
+            {
+                _playerAvatarImage.color = Color.Lerp(selectedTheme.FrameDark, selectedTheme.Accent, 0.24f);
+                _playerAvatarGlyph.color = selectedTheme.Accent;
+            }
+            _playerNameText.text = spec.PlayerTitle;
+            var handNumbers = spec.Prefix == "nt" ? new[] { 1, 2, 3, 4, 6 } : Enumerable.Range(1, 5).ToArray();
+            var ids = handNumbers.Select(index => $"{spec.Prefix}_{index:000}").ToArray();
             var deck = Enumerable.Range(0, 25).Select(index => $"{spec.Prefix}_{(index % 8) + 1:000}").ToArray();
             _match.ResetDeckAndHand(ids, deck);
             _selectedCardId = _match.Hand.FirstOrDefault();
@@ -294,7 +316,7 @@ namespace BiomeRivals.Demo
             _energyText.text = $"◆ {_match.Energy}/{_match.MaxEnergy}";
             _roundText.text = $"第 {_match.Round} 回合 · {(_match.Phase == DemoTurnPhase.Main ? "主行动" : "战斗")}";
             _opponentHealthText.text = $"❤ {_match.OpponentLife}";
-            _playerHealthText.text = $"❤ {_match.PlayerLife}";
+            _playerHealthText.text = _match.PlayerArmor > 0 ? $"❤ {_match.PlayerLife}  ◈ {_match.PlayerArmor}" : $"❤ {_match.PlayerLife}";
             _handLabel.text = $"手牌 {_match.Hand.Count}/7 · 牌库 {_match.Deck.Count} · 弃牌 {_match.DiscardPile.Count}";
             _handCanvasGroup.alpha = _match.Phase == DemoTurnPhase.Main ? 1f : 0.52f;
             _handCanvasGroup.interactable = _match.Phase == DemoTurnPhase.Main;
@@ -397,11 +419,14 @@ namespace BiomeRivals.Demo
             }
             else
             {
-                var cast = CreateSecondaryButton(_inspectorRoot, "Cast", new Vector2(0, -118), new Vector2(235, 60), "释放（效果占位）", 17);
+                var implemented = definition.effectImplementationStatus == "IMPLEMENTED";
+                var cast = CreateSecondaryButton(_inspectorRoot, "Cast", new Vector2(0, -118), new Vector2(235, 60), implemented ? "释放卡牌" : "效果尚未接入", 17);
+                cast.interactable = implemented;
                 cast.onClick.AddListener(CastSelectedCard);
                 cast.gameObject.AddComponent<DemoHoverScale>().Configure(1.04f, 16f);
             }
-            CreateText(_inspectorRoot, "Implementation", new Vector2(0, -190), new Vector2(250, 62), $"规则状态：{definition.effectImplementationStatus}\n稳定效果槽：{string.Join(", ", definition.effectIds ?? Array.Empty<string>())}", 12, Muted, TextAnchor.MiddleCenter, FontStyle.Normal);
+            var implementationLabel = definition.effectImplementationStatus == "IMPLEMENTED" ? "已接入" : definition.effectImplementationStatus == "NONE" ? "无额外效果" : "待接入";
+            CreateText(_inspectorRoot, "Implementation", new Vector2(0, -190), new Vector2(250, 62), $"规则状态：{implementationLabel}\n稳定效果槽：{string.Join(", ", definition.effectIds ?? Array.Empty<string>())}", 12, Muted, TextAnchor.MiddleCenter, FontStyle.Normal);
         }
 
         private bool IsSelectedValidFor(DemoSlotKind kind)
@@ -518,10 +543,41 @@ namespace BiomeRivals.Demo
         private void CastSelectedCard()
         {
             if (string.IsNullOrEmpty(_selectedCardId) || !_registry.TryGetDefinition(_selectedCardId, out var definition)) return;
+            var lifeBefore = _match.PlayerLife;
+            var armorBefore = _match.PlayerArmor;
             var success = _match.TryCast(definition, out var message);
+            if (success && _match.LastDrawResult != null && !string.IsNullOrEmpty(_match.LastDrawResult.CardId))
+                message = message.Replace(_match.LastDrawResult.CardId, GetCardName(_match.LastDrawResult.CardId));
             if (success) _selectedCardId = _match.Hand.FirstOrDefault();
             ShowStatus(message, !success);
             RefreshAll();
+            if (success)
+            {
+                var color = _match.PlayerArmor > armorBefore ? Cyan : _match.PlayerLife < lifeBefore ? Danger : Hex("#B8E5A9");
+                StartCoroutine(PulsePlayerHud(color));
+            }
+        }
+
+        private IEnumerator PulsePlayerHud(Color color)
+        {
+            if (_playerEffectFlash == null || _playerHud == null) yield break;
+            _playerEffectFlash.GetComponent<Image>().color = new Color(color.r, color.g, color.b, 0.55f);
+            for (var time = 0f; time < 0.14f; time += Time.unscaledDeltaTime)
+            {
+                var progress = Mathf.Clamp01(time / 0.14f);
+                _playerEffectFlash.alpha = progress;
+                _playerHud.localScale = Vector3.one * Mathf.Lerp(1f, 1.035f, progress);
+                yield return null;
+            }
+            for (var time = 0f; time < 0.28f; time += Time.unscaledDeltaTime)
+            {
+                var progress = Mathf.Clamp01(time / 0.28f);
+                _playerEffectFlash.alpha = 1f - progress;
+                _playerHud.localScale = Vector3.one * Mathf.Lerp(1.035f, 1f, progress);
+                yield return null;
+            }
+            _playerEffectFlash.alpha = 0f;
+            _playerHud.localScale = Vector3.one;
         }
 
         private void OnEndTurn()
@@ -581,6 +637,7 @@ namespace BiomeRivals.Demo
         {
             yield return null;
             yield return null;
+            if (HasCommandLineFlag("-previewEffect")) yield return new WaitForSecondsRealtime(0.1f);
             if (HasCommandLineFlag("-previewGroundHover")) yield return new WaitForSecondsRealtime(0.2f);
             var canvas = GetComponentInChildren<Canvas>();
             var camera = _battlefield.BoardCamera;
@@ -849,12 +906,14 @@ namespace BiomeRivals.Demo
             public readonly string Id;
             public readonly string Label;
             public readonly string Prefix;
+            public readonly string PlayerTitle;
 
-            public FactionSpec(string id, string label, string prefix)
+            public FactionSpec(string id, string label, string prefix, string playerTitle)
             {
                 Id = id;
                 Label = label;
                 Prefix = prefix;
+                PlayerTitle = playerTitle;
             }
         }
     }

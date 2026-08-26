@@ -1,10 +1,10 @@
 namespace BiomeRivalsRules {
-  export const PROTOCOL_VERSION = 3;
-  export const RULESET_VERSION = 'prototype-0.3';
+  export const PROTOCOL_VERSION = 4;
+  export const RULESET_VERSION = 'prototype-0.4';
 
   export type MatchStatus = 'WAITING' | 'ACTIVE' | 'FINISHED';
-  export type CommandType = 'DEPLOY_CARD' | 'ENTER_COMBAT' | 'ATTACK' | 'END_TURN' | 'CONCEDE';
-  export type EventType = 'CARD_DEPLOYED' | 'CARD_DRAWN' | 'CARD_BURNED' | 'FATIGUE_DAMAGE' | 'PHASE_CHANGED' | 'ATTACK_RESOLVED' | 'OBJECT_DIED' | 'TURN_ENDED' | 'TURN_STARTED' | 'PLAYER_CONCEDED' | 'MATCH_ENDED';
+  export type CommandType = 'DEPLOY_CARD' | 'PLAY_CARD' | 'ENTER_COMBAT' | 'ATTACK' | 'END_TURN' | 'CONCEDE';
+  export type EventType = 'CARD_DEPLOYED' | 'CARD_PLAYED' | 'CARD_DRAWN' | 'CARD_BURNED' | 'FATIGUE_DAMAGE' | 'HERO_DAMAGED' | 'HERO_HEALED' | 'ARMOR_GAINED' | 'PHASE_CHANGED' | 'ATTACK_RESOLVED' | 'OBJECT_DIED' | 'TURN_ENDED' | 'TURN_STARTED' | 'PLAYER_CONCEDED' | 'MATCH_ENDED';
   export type DeploySlotKind = 'UNIT' | 'BUILDING';
   export type TurnPhase = 'MAIN' | 'COMBAT';
   export type AttackTargetType = 'HERO' | 'UNIT' | 'BUILDING';
@@ -17,6 +17,8 @@ namespace BiomeRivalsRules {
     buildingSlots: number;
     attack: number;
     health: number;
+    effectImplementationStatus: 'NONE' | 'PENDING' | 'IMPLEMENTED';
+    effectIds: string[];
   }
 
   export interface BattlefieldObjectState {
@@ -136,7 +138,8 @@ namespace BiomeRivalsRules {
     | 'WRONG_PHASE'
     | 'INVALID_ATTACKER'
     | 'ATTACKER_NOT_READY'
-    | 'ATTACK_ALREADY_USED';
+    | 'ATTACK_ALREADY_USED'
+    | 'EFFECT_NOT_IMPLEMENTED';
 
   export interface CommandAccepted {
     accepted: true;

@@ -2,13 +2,21 @@
 param(
     [string]$SourceMarkdown = 'docs\design\Minecraft_Biome_Rivals_Prototype_Cards_v0.1.md',
     [string]$DefinitionOutput = 'shared-schema\card-data\card-definition-registry.v1.json',
-    [string]$TextOutput = 'shared-schema\card-data\localization\card-text-registry.zh-CN.v1.json'
+    [string]$TextOutput = 'shared-schema\card-data\localization\card-text-registry.zh-CN.v1.json',
+    [string]$ImplementedEffects = 'shared-schema\card-data\implemented-effect-registry.v1.json'
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $sourcePath = Join-Path $repoRoot $SourceMarkdown
 if (-not (Test-Path -LiteralPath $sourcePath)) { throw "Card design source not found: $sourcePath" }
+$implementedEffectsPath = Join-Path $repoRoot $ImplementedEffects
+if (-not (Test-Path -LiteralPath $implementedEffectsPath)) { throw "Implemented effect registry not found: $implementedEffectsPath" }
+$implementedEffectDocument = Get-Content -LiteralPath $implementedEffectsPath -Raw -Encoding UTF8 | ConvertFrom-Json
+$implementedEffectIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+foreach ($effectId in $implementedEffectDocument.implementedEffectIds) {
+    if (-not $implementedEffectIds.Add([string]$effectId)) { throw "Duplicate implemented effect id: $effectId" }
+}
 
 $factionByPrefix = [ordered]@{
     PF = 'plains_forest'; DB = 'desert_badlands'; SI = 'snow_ice'; CD = 'cave_dark_forest'
@@ -108,7 +116,9 @@ foreach ($line in Get-Content -LiteralPath $sourcePath -Encoding UTF8) {
 
     $normalizedRules = Normalize-RulesText $rulesText
     $hasEffect = $normalizedRules -and $normalizedRules -ne '无卡牌文本。'
-    [string[]]$effectIds = if ($hasEffect) { @("effect.$cardId.01") } else { @() }
+    $effectId = "effect.$cardId.01"
+    $effectIds = [System.Collections.Generic.List[string]]::new()
+    if ($hasEffect) { $effectIds.Add($effectId) }
     $definitions.Add([ordered]@{
         id=$cardId; designId=$designId; contentVersion=1; collectible=(-not $isToken)
         nameKey="card.$cardId.name"; rulesTextKey="card.$cardId.rules"
@@ -116,7 +126,7 @@ foreach ($line in Get-Content -LiteralPath $sourcePath -Encoding UTF8) {
         hasAttack=$hasAttack; attack=$attack; hasHealth=$hasHealth; health=$health
         hasDurability=$hasDurability; durability=$durability; buildingSlots=$buildingSlots
         artKey="card_art.$cardId"; tags=([string[]]$tags)
-        effectImplementationStatus=$(if ($hasEffect) { 'PENDING' } else { 'NONE' })
+        effectImplementationStatus=$(if (-not $hasEffect) { 'NONE' } elseif ($implementedEffectIds.Contains($effectId)) { 'IMPLEMENTED' } else { 'PENDING' })
         effectIds=$effectIds
     })
     $texts.Add([ordered]@{
@@ -124,6 +134,10 @@ foreach ($line in Get-Content -LiteralPath $sourcePath -Encoding UTF8) {
         rulesTextKey="card.$cardId.rules"; rulesText=$normalizedRules
         typeLabel=$typeLabel; rarityLabel=$rarityLabel; tagLabels=([string[]]$tagLabels); designNotes=$designNotes
     })
+}
+
+foreach ($effectId in $implementedEffectIds) {
+    if (-not ($definitions | Where-Object { $_.effectIds -contains $effectId })) { throw "Implemented effect id is not registered by a card: $effectId" }
 }
 
 if ($definitions.Count -ne 74) { throw "Expected 74 card definitions, found $($definitions.Count)." }
