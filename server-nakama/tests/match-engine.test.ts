@@ -26,7 +26,7 @@ TestHarness.test('creates a valid two-player initial state', function (): void {
   TestHarness.equal(state.revision, 0);
   TestHarness.equal(state.protocolVersion, BiomeRivalsRules.PROTOCOL_VERSION);
   TestHarness.equal(state.players[0]!.life, 30);
-  TestHarness.equal(state.players[0]!.redstone, 6);
+  TestHarness.equal(state.players[0]!.redstone, 1);
   TestHarness.equal(state.players[0]!.hand.length, 5);
   TestHarness.equal(state.players[0]!.unitSlots.length, 4);
   TestHarness.equal(state.players[0]!.buildingSlots.length, 3);
@@ -40,17 +40,19 @@ TestHarness.test('deploys a registered unit and emits replayable state data', fu
   if (!result.accepted) return;
   TestHarness.equal(result.state.players[0]!.unitSlots[2], 'pf_001');
   TestHarness.equal(result.state.players[0]!.hand.indexOf('pf_001'), -1);
-  TestHarness.equal(result.state.players[0]!.redstone, 5);
+  TestHarness.equal(result.state.players[0]!.redstone, 0);
   TestHarness.equal(result.batch.events.length, 1);
   TestHarness.equal(result.batch.events[0]!.type, 'CARD_DEPLOYED');
   TestHarness.equal(result.batch.events[0]!.payload.slotIndex, 2);
-  TestHarness.equal(result.batch.events[0]!.payload.redstone, 5);
+  TestHarness.equal(result.batch.events[0]!.payload.redstone, 0);
   TestHarness.equal(state.players[0]!.unitSlots[2], null, 'accepted commands must not mutate their input state');
 });
 
 TestHarness.test('deploys a structure only across consecutive free building slots', function (): void {
   const state = BiomeRivalsRules.createInitialState('match-1', ['alice', 'bob']);
   state.players[0]!.hand = ['db_007'];
+  state.players[0]!.redstone = 6;
+  state.players[0]!.redstoneCapacity = 6;
   const invalid = BiomeRivalsRules.applyCommand(state, 'alice', deployCommand('deploy-1', 0, 'db_007', 'BUILDING', 2));
   TestHarness.equal(invalid.accepted, false);
   if (!invalid.accepted) TestHarness.equal(invalid.code, 'INVALID_TARGET');
@@ -68,7 +70,7 @@ TestHarness.test('rejects invalid deploys without spending redstone or moving ca
   const wrongRow = BiomeRivalsRules.applyCommand(state, 'alice', deployCommand('deploy-1', 0, 'pf_001', 'BUILDING', 0));
   TestHarness.equal(wrongRow.accepted, false);
   if (!wrongRow.accepted) TestHarness.equal(wrongRow.code, 'INVALID_TARGET');
-  TestHarness.equal(state.players[0]!.redstone, 6);
+  TestHarness.equal(state.players[0]!.redstone, 1);
   TestHarness.ok(state.players[0]!.hand.indexOf('pf_001') >= 0);
 
   state.players[0]!.redstone = 0;
@@ -96,10 +98,10 @@ TestHarness.test('ends a turn and emits an ordered event batch', function (): vo
   TestHarness.equal(result.batch.events[0]!.type, 'TURN_ENDED');
   TestHarness.equal(result.batch.events[1]!.type, 'TURN_STARTED');
   TestHarness.equal(result.batch.events[1]!.eventId, result.batch.events[0]!.eventId + 1);
-  TestHarness.equal(result.state.players[1]!.redstoneCapacity, 6);
-  TestHarness.equal(result.state.players[1]!.redstone, 6);
+  TestHarness.equal(result.state.players[1]!.redstoneCapacity, 1);
+  TestHarness.equal(result.state.players[1]!.redstone, 1);
   TestHarness.equal(result.batch.events[1]!.payload.activePlayerIndex, 1);
-  TestHarness.equal(result.batch.events[1]!.payload.redstoneCapacity, 6);
+  TestHarness.equal(result.batch.events[1]!.payload.redstoneCapacity, 1);
 });
 
 TestHarness.test('rejects stale revisions', function (): void {

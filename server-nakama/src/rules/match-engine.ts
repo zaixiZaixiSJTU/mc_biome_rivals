@@ -9,8 +9,8 @@ namespace BiomeRivalsRules {
       playerId: playerId,
       life: 30,
       armor: 0,
-      redstone: 6,
-      redstoneCapacity: 6,
+      redstone: 1,
+      redstoneCapacity: 1,
       hand: starterHand(playerIndex),
       unitSlots: [null, null, null, null],
       buildingSlots: [null, null, null]
