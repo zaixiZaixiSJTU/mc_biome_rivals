@@ -256,7 +256,7 @@ namespace BiomeRivals.Demo.Tests
                 var configuredBattlefield = root.AddComponent<DemoBattlefield3D>();
                 configuredBattlefield.Configure(
                     Shader.Find("Standard") ?? Shader.Find("Universal Render Pipeline/Lit"),
-                    Shader.Find("Unlit/Texture"),
+                    Shader.Find("BiomeRivals/Demo/CompositeBackdrop"),
                     Shader.Find("BiomeRivals/Demo/GroundSurface"),
                     AssetDatabase.LoadAssetAtPath<Texture2D>(DemoSceneBuilder.BackgroundPath));
                 var controller = root.AddComponent<DemoSceneController>();
@@ -288,6 +288,8 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(buildingMarker.GetComponent<MeshRenderer>().enabled, Is.True);
                 Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.shader.name, Is.EqualTo("BiomeRivals/Demo/GroundSurface"));
                 Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_UseScreenProjection"), Is.EqualTo(1f));
+                Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.mainTexture.name, Is.EqualTo("field-plains_forest-v1"));
+                Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.mainTexture.name, Is.EqualTo("field-nether-far-v1"));
                 Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.GreaterThan(0f));
                 Assert.That(buildingMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.Zero);
                 Physics.SyncTransforms();
@@ -346,7 +348,9 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(endTurn.GetComponent<PrimaryActionButton>(), Is.Not.Null);
                 Assert.That(endTurn.GetComponent<SecondaryButton>(), Is.Null);
                 Assert.That(root.GetComponentsInChildren<PrimaryActionButton>(true), Has.Length.EqualTo(1));
-                var factionButtons = root.GetComponentsInChildren<SecondaryButton>(true);
+                var factionButtons = root.GetComponentsInChildren<SecondaryButton>(true)
+                    .Where(style => style.name.StartsWith("Faction_", System.StringComparison.Ordinal))
+                    .ToArray();
                 Assert.That(factionButtons, Has.Length.EqualTo(7));
                 var neutralButtonColor = DemoUiStyleCatalog.GetRootFill(DemoUiStyleClass.SecondaryButton);
                 foreach (var style in factionButtons)
@@ -398,6 +402,8 @@ namespace BiomeRivals.Demo.Tests
                     var themeId = frameMappings[mapping, 0];
                     var prefix = frameMappings[mapping, 1];
                     GameObject.Find("Faction_" + themeId).GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
+                    Assert.That(battlefield.PlayerFactionId, Is.EqualTo(themeId));
+                    Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.mainTexture.name, Is.EqualTo("field-" + themeId + "-v1"));
                     var mappedCardId = prefix + "_001";
                     var card = GameObject.Find("Card_" + mappedCardId);
                     Assert.That(card, Is.Not.Null, themeId);
@@ -415,6 +421,18 @@ namespace BiomeRivals.Demo.Tests
                     if (mappedDefinition.hasDurability)
                         Assert.That(card.transform.Find("DurabilitySocketFrame").GetComponent<UnityEngine.UI.Image>().sprite.name, Is.EqualTo("CardHealthSocket_" + themeId));
                 }
+
+                var backdropRenderer = root.transform.Find("BattlefieldCamera/IllustratedBattlefieldBackdrop").GetComponent<MeshRenderer>();
+                Assert.That(backdropRenderer.sharedMaterial.shader.name, Is.EqualTo("BiomeRivals/Demo/CompositeBackdrop"));
+                Assert.That(backdropRenderer.sharedMaterial.GetTexture("_PlayerTex").name, Is.EqualTo("field-end-v1"));
+                Assert.That(backdropRenderer.sharedMaterial.GetTexture("_OpponentTex").name, Is.EqualTo("field-nether-far-v1"));
+                var nextOpponent = root.transform.Find("DemoCanvas/OpponentFactionSelector/NextOpponentFaction").GetComponent<UnityEngine.UI.Button>();
+                nextOpponent.onClick.Invoke();
+                Assert.That(battlefield.OpponentFactionId, Is.EqualTo("end"));
+                Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.mainTexture.name, Is.EqualTo("field-end-far-v1"));
+                Assert.That(backdropRenderer.sharedMaterial.GetTexture("_OpponentTex").name, Is.EqualTo("field-end-far-v1"));
+                Assert.That(root.transform.Find("DemoCanvas/OpponentFactionSelector/FactionLabel").GetComponent<UnityEngine.UI.Text>().text, Is.EqualTo("敌方 · 末地"));
+                Assert.That(root.transform.Find("DemoCanvas/OpponentHUD/Name").GetComponent<UnityEngine.UI.Text>().text, Is.EqualTo("虚空行者"));
 
                 GameObject.Find("Faction_nether").GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
                 Assert.That(root.transform.Find("DemoCanvas/PlayerHUD/Name").GetComponent<UnityEngine.UI.Text>().text, Is.EqualTo("熔岩统御者"));

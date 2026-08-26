@@ -28,10 +28,17 @@ namespace BiomeRivals.Demo
         private Transform _terrainRoot;
         private Transform _piecesRoot;
         private Camera _camera;
+        private Light _opponentEnvironmentLight;
+        private Light _playerEnvironmentLight;
+        private Material _backdropMaterial;
         private bool _built;
         private string _pieceSignature = string.Empty;
+        private string _playerFactionId = "plains_forest";
+        private string _opponentFactionId = "nether";
 
         public Camera BoardCamera => _camera;
+        public string PlayerFactionId => _playerFactionId;
+        public string OpponentFactionId => _opponentFactionId;
 
         public void Configure(Shader worldShader, Shader unlitBackdropShader, Shader interactiveGroundShader, Texture2D backdrop)
         {
@@ -52,6 +59,35 @@ namespace BiomeRivals.Demo
             if (illustratedBackdrop == null) BuildTerrain();
             BuildSlotPads();
             if (illustratedBackdrop == null) BuildBiomeDecor();
+            if (illustratedBackdrop != null) SetBattlefieldThemes(_playerFactionId, _opponentFactionId);
+        }
+
+        public void SetBattlefieldThemes(string playerFactionId, string opponentFactionId)
+        {
+            BuildNow();
+            var playerTheme = DemoBattlefieldThemeCatalog.Get(playerFactionId);
+            var opponentTheme = DemoBattlefieldThemeCatalog.Get(opponentFactionId);
+            var playerTexture = DemoBattlefieldThemeCatalog.LoadNearTexture(playerFactionId);
+            var opponentTexture = DemoBattlefieldThemeCatalog.LoadFarTexture(opponentFactionId);
+
+            _playerFactionId = playerFactionId;
+            _opponentFactionId = opponentFactionId;
+            if (_backdropMaterial != null)
+            {
+                _backdropMaterial.SetTexture("_PlayerTex", playerTexture);
+                _backdropMaterial.SetTexture("_OpponentTex", opponentTexture);
+                _backdropMaterial.SetTexture("_NeutralTex", illustratedBackdrop);
+                _backdropMaterial.SetColor("_PlayerTint", Color.white);
+                _backdropMaterial.SetColor("_OpponentTint", Color.white);
+            }
+
+            foreach (var marker in _slotMarkers.Values)
+            {
+                marker.SurfaceMaterial.mainTexture = marker.Player ? playerTexture : opponentTexture;
+            }
+
+            if (_playerEnvironmentLight != null) _playerEnvironmentLight.color = playerTheme.EnvironmentLight;
+            if (_opponentEnvironmentLight != null) _opponentEnvironmentLight.color = opponentTheme.EnvironmentLight;
         }
 
         public Vector3 GetSlotWorldPosition(bool player, DemoSlotKind kind, int index)
@@ -255,8 +291,8 @@ namespace BiomeRivals.Demo
             sunLight.intensity = 1.15f;
             sunLight.shadows = LightShadows.Soft;
 
-            CreatePointLight("NetherGlow", new Vector3(0, 4.2f, 5.5f), Hex("#FF6A2B"), 7.5f, 2.4f);
-            CreatePointLight("MeadowFill", new Vector3(-3.5f, 4.8f, -4.5f), Hex("#8FC7B7"), 8f, 1.25f);
+            _opponentEnvironmentLight = CreatePointLight("OpponentEnvironmentLight", new Vector3(0, 4.2f, 5.5f), Hex("#FF6A2B"), 7.5f, 2.4f);
+            _playerEnvironmentLight = CreatePointLight("PlayerEnvironmentLight", new Vector3(-3.5f, 4.8f, -4.5f), Hex("#8FC7B7"), 8f, 1.25f);
         }
 
         private void BuildIllustratedBackdrop()
@@ -265,9 +301,9 @@ namespace BiomeRivals.Demo
             if (backdropShader == null) throw new MissingReferenceException("The illustrated battlefield backdrop shader is not configured.");
             RenderSettings.fog = false;
 
-            var material = new Material(backdropShader) { name = "DemoIllustratedBattlefield" };
-            material.mainTexture = illustratedBackdrop;
-            _materials["illustrated_backdrop"] = material;
+            _backdropMaterial = new Material(backdropShader) { name = "DemoIllustratedBattlefield" };
+            _backdropMaterial.SetTexture("_NeutralTex", illustratedBackdrop);
+            _materials["illustrated_backdrop"] = _backdropMaterial;
 
             var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
             quad.name = "IllustratedBattlefieldBackdrop";
@@ -278,7 +314,7 @@ namespace BiomeRivals.Demo
             var backdropHeight = 2f * backdropDistance * Mathf.Tan(_camera.fieldOfView * 0.5f * Mathf.Deg2Rad);
             quad.transform.localScale = new Vector3(backdropHeight * _camera.aspect, backdropHeight, 1f);
             var renderer = quad.GetComponent<MeshRenderer>();
-            renderer.sharedMaterial = material;
+            renderer.sharedMaterial = _backdropMaterial;
             renderer.shadowCastingMode = ShadowCastingMode.Off;
             renderer.receiveShadows = false;
             var collider = quad.GetComponent<Collider>();
@@ -289,7 +325,7 @@ namespace BiomeRivals.Demo
             }
         }
 
-        private void CreatePointLight(string name, Vector3 position, Color color, float range, float intensity)
+        private Light CreatePointLight(string name, Vector3 position, Color color, float range, float intensity)
         {
             var lightObject = new GameObject(name, typeof(Light));
             lightObject.transform.SetParent(transform, false);
@@ -300,6 +336,7 @@ namespace BiomeRivals.Demo
             light.range = range;
             light.intensity = intensity;
             light.shadows = LightShadows.None;
+            return light;
         }
 
         private void BuildTerrain()
@@ -375,6 +412,7 @@ namespace BiomeRivals.Demo
             var riserRenderer = CreateGroundRiser(markerRoot, kind, size, riserMaterial);
             riserRenderer.enabled = false;
             _slotMarkers[SlotKey(player, kind, index)] = new SlotMarker(
+                player,
                 markerRoot,
                 surfaceRenderer,
                 riserRenderer,
@@ -745,6 +783,7 @@ namespace BiomeRivals.Demo
 
         private sealed class SlotMarker
         {
+            public readonly bool Player;
             public readonly Transform Root;
             public readonly MeshRenderer SurfaceRenderer;
             public readonly MeshRenderer RiserRenderer;
@@ -758,6 +797,7 @@ namespace BiomeRivals.Demo
             public bool Pressed;
 
             public SlotMarker(
+                bool player,
                 Transform root,
                 MeshRenderer surfaceRenderer,
                 MeshRenderer riserRenderer,
@@ -766,6 +806,7 @@ namespace BiomeRivals.Demo
                 Vector3 basePosition,
                 float phase)
             {
+                Player = player;
                 Root = root;
                 SurfaceRenderer = surfaceRenderer;
                 RiserRenderer = riserRenderer;

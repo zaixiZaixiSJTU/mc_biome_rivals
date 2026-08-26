@@ -41,6 +41,10 @@ namespace BiomeRivals.Demo
         private Text _energyText;
         private Text _handLabel;
         private Text _opponentHealthText;
+        private Image _opponentAvatarImage;
+        private Text _opponentAvatarGlyph;
+        private Text _opponentNameText;
+        private Text _opponentFactionLabel;
         private Text _playerHealthText;
         private Image _playerAvatarImage;
         private Text _playerAvatarGlyph;
@@ -52,10 +56,13 @@ namespace BiomeRivals.Demo
         private Button _endTurnButton;
         private CanvasGroup _turnBanner;
         private Text _turnBannerText;
+        private Image _opponentTint;
+        private Image _playerTint;
         private string _selectedCardId;
         private string _selectedAttackerInstanceId;
         private string _pendingTargetCardId;
         private string _activeFaction = "plains_forest";
+        private string _opponentFaction = "nether";
         private bool _built;
         private Font _font;
         private DemoHudMaterialFactory _hudMaterialFactory;
@@ -77,6 +84,10 @@ namespace BiomeRivals.Demo
             if (HasCommandLineFlag("-disableLocalCardArt")) DemoCardArtProvider.LocalArtEnabled = false;
             if (HasCommandLineFlag("-disableLocalWorldAssets")) DemoWorldAssetProvider.LocalAssetsEnabled = false;
             BuildNow();
+            var previewPlayerFaction = GetCommandLineValue("-previewPlayerFaction");
+            if (Factions.Any(item => item.Id == previewPlayerFaction)) SelectFaction(previewPlayerFaction);
+            var previewOpponentFaction = GetCommandLineValue("-previewOpponentFaction");
+            if (Factions.Any(item => item.Id == previewOpponentFaction)) SelectOpponentFaction(previewOpponentFaction);
             if (HasCommandLineFlag("-previewEffect"))
             {
                 SelectFaction("nether");
@@ -113,10 +124,7 @@ namespace BiomeRivals.Demo
             if (_built) return;
             _built = true;
             _registry = CardContentLoader.Current;
-            var opponents = new List<CardDefinitionEntry>();
-            foreach (var cardId in new[] { "nt_001", "nt_003", "nt_007" })
-                if (_registry.TryGetDefinition(cardId, out var definition)) opponents.Add(definition);
-            _match.ResetOpponent(opponents);
+            _match.ResetOpponent(GetOpponentDefinitions(_opponentFaction));
             BuildInterface();
             SelectFaction(_activeFaction);
             ShowStatus("选择手牌，再点击发光的战场格；法术和材料从右侧释放。", false);
@@ -146,8 +154,8 @@ namespace BiomeRivals.Demo
             _canvasRoot = canvasObject.GetComponent<RectTransform>();
 
             CreateTintBand("BackdropWash", Vector2.zero, new Vector2(ReferenceWidth, ReferenceHeight), new Color(0.02f, 0.025f, 0.02f, 0.16f));
-            CreateTintBand("OpponentTint", new Vector2(0, 270), new Vector2(ReferenceWidth, 540), new Color(0.16f, 0.035f, 0.025f, 0.10f));
-            CreateTintBand("PlayerTint", new Vector2(0, -270), new Vector2(ReferenceWidth, 540), new Color(0.035f, 0.10f, 0.045f, 0.08f));
+            _opponentTint = CreateTintBand("OpponentTint", new Vector2(0, 270), new Vector2(ReferenceWidth, 540), new Color(0.16f, 0.035f, 0.025f, 0.10f));
+            _playerTint = CreateTintBand("PlayerTint", new Vector2(0, -270), new Vector2(ReferenceWidth, 540), new Color(0.035f, 0.10f, 0.045f, 0.08f));
             CreatePanel(_canvasRoot, "CenterRiverBed", new Vector2(0, 0), new Vector2(1540, 6), new Color(Ink.r, Ink.g, Ink.b, 0.58f)).raycastTarget = false;
             CreatePanel(_canvasRoot, "CenterRiverGlow", new Vector2(0, 0), new Vector2(1540, 2), new Color(Cyan.r, Cyan.g, Cyan.b, 0.56f)).raycastTarget = false;
 
@@ -167,9 +175,9 @@ namespace BiomeRivals.Demo
             CreateText(titlePlate, "Title", Vector2.zero, new Vector2(480, 44), "群系竞逐  ·  本地战场演示", 24, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
 
             var opponentHud = CreateBasePanel(_canvasRoot, "OpponentHUD", new Vector2(-760, 455), new Vector2(315, 104));
-            CreatePanel(opponentHud, "Avatar", new Vector2(-112, 0), new Vector2(70, 70), Hex("#5B2020"));
-            CreateText(opponentHud, "AvatarGlyph", new Vector2(-112, 1), new Vector2(60, 60), "▣", 36, Ember, TextAnchor.MiddleCenter, FontStyle.Bold);
-            CreateText(opponentHud, "Name", new Vector2(34, 22), new Vector2(190, 32), "下界远征队", 20, Pale, TextAnchor.MiddleLeft, FontStyle.Bold);
+            _opponentAvatarImage = CreatePanel(opponentHud, "Avatar", new Vector2(-112, 0), new Vector2(70, 70), Hex("#5B2020"));
+            _opponentAvatarGlyph = CreateText(opponentHud, "AvatarGlyph", new Vector2(-112, 1), new Vector2(60, 60), "▣", 36, Ember, TextAnchor.MiddleCenter, FontStyle.Bold);
+            _opponentNameText = CreateText(opponentHud, "Name", new Vector2(34, 22), new Vector2(190, 32), "熔岩统御者", 20, Pale, TextAnchor.MiddleLeft, FontStyle.Bold);
             _opponentHealthText = CreateText(opponentHud, "Health", new Vector2(34, -19), new Vector2(190, 30), "❤ 30", 17, Hex("#F4C18A"), TextAnchor.MiddleLeft, FontStyle.Bold);
             var opponentHeroTarget = opponentHud.gameObject.AddComponent<Button>();
             opponentHeroTarget.targetGraphic = opponentHud.GetComponent<Image>();
@@ -185,6 +193,13 @@ namespace BiomeRivals.Demo
                 fadeDuration = 0.08f
             };
             opponentHeroTarget.onClick.AddListener(AttackOpponentHero);
+
+            var opponentSelector = CreateBasePanel(_canvasRoot, "OpponentFactionSelector", new Vector2(-760, 380), new Vector2(315, 38));
+            var previousOpponent = CreateSecondaryButton(opponentSelector, "PreviousOpponentFaction", new Vector2(-128, 0), new Vector2(42, 30), "◀", 15);
+            _opponentFactionLabel = CreateText(opponentSelector, "FactionLabel", Vector2.zero, new Vector2(190, 28), "敌方 · 下界", 14, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
+            var nextOpponent = CreateSecondaryButton(opponentSelector, "NextOpponentFaction", new Vector2(128, 0), new Vector2(42, 30), "▶", 15);
+            previousOpponent.onClick.AddListener(() => CycleOpponentFaction(-1));
+            nextOpponent.onClick.AddListener(() => CycleOpponentFaction(1));
 
             var cardBackRoot = CreateRect(_canvasRoot, "OpponentHand", new Vector2(0, 410), new Vector2(480, 130));
             for (var i = 0; i < 5; i++)
@@ -310,14 +325,60 @@ namespace BiomeRivals.Demo
                 _playerAvatarImage.color = Color.Lerp(selectedTheme.FrameDark, selectedTheme.Accent, 0.24f);
                 _playerAvatarGlyph.color = selectedTheme.Accent;
             }
+            var battlefieldTheme = DemoBattlefieldThemeCatalog.Get(spec.Id);
+            _playerTint.color = new Color(battlefieldTheme.UiTint.r, battlefieldTheme.UiTint.g, battlefieldTheme.UiTint.b, 0.075f);
             _playerNameText.text = spec.PlayerTitle;
             var handNumbers = spec.Prefix == "nt" ? new[] { 1, 2, 3, 4, 6 } : Enumerable.Range(1, 5).ToArray();
             var ids = handNumbers.Select(index => $"{spec.Prefix}_{index:000}").ToArray();
             var deck = Enumerable.Range(0, 25).Select(index => $"{spec.Prefix}_{(index % 8) + 1:000}").ToArray();
             _match.ResetDeckAndHand(ids, deck);
             _selectedCardId = _match.Hand.FirstOrDefault();
+            _battlefield.SetBattlefieldThemes(_activeFaction, _opponentFaction);
             RefreshAll();
             ShowStatus($"已切换到{spec.Label}牌组；可打出已接入规则的卡牌。", false);
+        }
+
+        private void CycleOpponentFaction(int offset)
+        {
+            var current = Array.FindIndex(Factions, item => item.Id == _opponentFaction);
+            var next = (current + offset + Factions.Length) % Factions.Length;
+            SelectOpponentFaction(Factions[next].Id);
+        }
+
+        private void SelectOpponentFaction(string factionId)
+        {
+            var spec = Factions.First(item => item.Id == factionId);
+            _opponentFaction = factionId;
+            _pendingTargetCardId = null;
+            _selectedAttackerInstanceId = null;
+            _match.ResetOpponent(GetOpponentDefinitions(factionId));
+            if (_registry.TryGetTheme(spec.Id, out var selectedTheme))
+            {
+                _opponentAvatarImage.color = Color.Lerp(selectedTheme.FrameDark, selectedTheme.Accent, 0.24f);
+                _opponentAvatarGlyph.color = selectedTheme.Accent;
+            }
+            var battlefieldTheme = DemoBattlefieldThemeCatalog.Get(spec.Id);
+            _opponentTint.color = new Color(battlefieldTheme.UiTint.r, battlefieldTheme.UiTint.g, battlefieldTheme.UiTint.b, 0.085f);
+            _opponentNameText.text = spec.PlayerTitle;
+            _opponentFactionLabel.text = "敌方 · " + spec.Label;
+            _battlefield.SetBattlefieldThemes(_activeFaction, _opponentFaction);
+            RefreshAll();
+            ShowStatus($"敌方阵营已切换为{spec.Label}；远端半场与生物同步更新。", false);
+        }
+
+        private IEnumerable<CardDefinitionEntry> GetOpponentDefinitions(string factionId)
+        {
+            var spec = Factions.First(item => item.Id == factionId);
+            var units = new List<CardDefinitionEntry>();
+            CardDefinitionEntry building = null;
+            for (var index = 1; index <= 8; index++)
+            {
+                if (!_registry.TryGetDefinition($"{spec.Prefix}_{index:000}", out var definition)) continue;
+                if (definition.cardType == "UNIT" && units.Count < 2) units.Add(definition);
+                else if (building == null && (definition.cardType == "BUILDING" || definition.cardType == "STRUCTURE")) building = definition;
+            }
+            if (building != null) units.Add(building);
+            return units;
         }
 
         private void RefreshAll()
@@ -780,8 +841,12 @@ namespace BiomeRivals.Demo
             CreateText(parent, "WorldLabelText", new Vector2(0, labelY), new Vector2(size.x - 14, 26), stats, 12, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
         }
 
-        private void CreateTintBand(string name, Vector2 position, Vector2 size, Color color) =>
-            CreatePanel(_canvasRoot, name, position, size, color).raycastTarget = false;
+        private Image CreateTintBand(string name, Vector2 position, Vector2 size, Color color)
+        {
+            var image = CreatePanel(_canvasRoot, name, position, size, color);
+            image.raycastTarget = false;
+            return image;
+        }
 
         private RectTransform CreateBasePanel(Transform parent, string name, Vector2 position, Vector2 size) =>
             CreateStyledPanel(parent, name, position, size, DemoUiStyleClass.BasePanel);

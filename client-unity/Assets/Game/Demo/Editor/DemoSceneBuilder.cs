@@ -35,8 +35,8 @@ namespace BiomeRivals.Demo.Editor
             var battlefield = root.AddComponent<DemoBattlefield3D>();
             var blockShader = Shader.Find("Standard") ?? Shader.Find("Universal Render Pipeline/Lit");
             if (blockShader == null) throw new MissingReferenceException("A tracked block shader is required by the 2.5D demo.");
-            var backdropShader = Shader.Find("Unlit/Texture");
-            if (backdropShader == null) throw new MissingReferenceException("The unlit backdrop shader is required by the 2.5D demo.");
+            var backdropShader = Shader.Find("BiomeRivals/Demo/CompositeBackdrop");
+            if (backdropShader == null) throw new MissingReferenceException("The composite battlefield shader is required by the 2.5D demo.");
             var groundSurfaceShader = Shader.Find("BiomeRivals/Demo/GroundSurface");
             if (groundSurfaceShader == null) throw new MissingReferenceException("The interactive ground surface shader is required by the 2.5D demo.");
             var backdrop = AssetDatabase.LoadAssetAtPath<Texture2D>(BackgroundPath);
