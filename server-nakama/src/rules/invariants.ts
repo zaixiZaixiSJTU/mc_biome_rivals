@@ -58,6 +58,12 @@ namespace BiomeRivalsRules {
         }
         if (object.health <= 0 || object.health > object.maxHealth || object.maxHealth <= 0) violations.push('battlefield health is out of range');
         if (object.attack < 0 || object.summonedTurn < 1 || object.summonedTurn > state.turn) violations.push('battlefield combat values are invalid');
+        if (object.temporaryAttackModifier > 0 || object.temporaryAttackModifierExpiresOnTurn < 0) {
+          violations.push('temporary attack modifier state is invalid');
+        }
+        if ((object.temporaryAttackModifier === 0) !== (object.temporaryAttackModifierExpiresOnTurn === 0)) {
+          violations.push('temporary attack modifier and expiry must be cleared together');
+        }
         if (object.occupiedSlots < 1) violations.push('battlefield object must occupy at least one slot');
         const expectedRow = object.slotKind === 'UNIT' ? player.unitSlots : player.buildingSlots;
         if (object.slotIndex < 0 || object.slotIndex + object.occupiedSlots > expectedRow.length) {

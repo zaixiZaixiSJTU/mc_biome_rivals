@@ -17,6 +17,8 @@ namespace BiomeRivals.Core
         public int occupiedSlots;
         public int summonedTurn;
         public bool hasAttacked;
+        public int temporaryAttackModifier;
+        public int temporaryAttackModifierExpiresOnTurn;
     }
 
     [Serializable]
@@ -124,7 +126,9 @@ namespace BiomeRivals.Core
                         slotIndex = payload.slotIndex,
                         occupiedSlots = occupiedSlots,
                         summonedTurn = payload.summonedTurn,
-                        hasAttacked = false
+                        hasAttacked = false,
+                        temporaryAttackModifier = 0,
+                        temporaryAttackModifierExpiresOnTurn = 0
                     });
                     player.battlefield = battlefield.ToArray();
                     Current.nextInstanceId = payload.nextInstanceId;
@@ -172,6 +176,13 @@ namespace BiomeRivals.Core
                     break;
                 case MatchEventTypes.ArmorGained:
                     FindPlayer(payload.playerId).armor = payload.armor;
+                    break;
+                case MatchEventTypes.ObjectStatsChanged:
+                    var statsObject = FindObject(FindPlayer(payload.playerId), payload.instanceId);
+                    statsObject.attack = payload.attack;
+                    statsObject.health = payload.health;
+                    statsObject.temporaryAttackModifier = payload.temporaryAttackModifier;
+                    statsObject.temporaryAttackModifierExpiresOnTurn = payload.temporaryAttackModifierExpiresOnTurn;
                     break;
                 case MatchEventTypes.PhaseChanged:
                     Current.phase = payload.phase;

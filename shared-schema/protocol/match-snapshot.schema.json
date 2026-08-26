@@ -8,7 +8,7 @@
   "properties": {
     "matchId": { "type": "string", "minLength": 1 },
     "viewerPlayerId": { "type": "string", "minLength": 1 },
-    "protocolVersion": { "const": 4 },
+    "protocolVersion": { "const": 5 },
     "rulesetVersion": { "type": "string", "minLength": 1 },
     "revision": { "type": "integer", "minimum": 0 },
     "lastEventId": { "type": "integer", "minimum": 0 },
@@ -47,7 +47,7 @@
             "type": "array",
             "items": {
               "type": "object", "additionalProperties": false,
-              "required": ["instanceId", "cardId", "cardType", "attack", "health", "maxHealth", "slotKind", "slotIndex", "occupiedSlots", "summonedTurn", "hasAttacked"],
+              "required": ["instanceId", "cardId", "cardType", "attack", "health", "maxHealth", "slotKind", "slotIndex", "occupiedSlots", "summonedTurn", "hasAttacked", "temporaryAttackModifier", "temporaryAttackModifierExpiresOnTurn"],
               "properties": {
                 "instanceId": { "type": "string", "pattern": "^object-[0-9]+$" },
                 "cardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
@@ -59,7 +59,9 @@
                 "slotIndex": { "type": "integer", "minimum": 0 },
                 "occupiedSlots": { "type": "integer", "minimum": 1, "maximum": 3 },
                 "summonedTurn": { "type": "integer", "minimum": 1 },
-                "hasAttacked": { "type": "boolean" }
+                "hasAttacked": { "type": "boolean" },
+                "temporaryAttackModifier": { "type": "integer", "maximum": 0 },
+                "temporaryAttackModifierExpiresOnTurn": { "type": "integer", "minimum": 0 }
               }
             }
           }

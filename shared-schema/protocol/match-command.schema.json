@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["protocolVersion", "rulesetVersion", "commandId", "expectedRevision", "type", "payload"],
   "properties": {
-    "protocolVersion": { "const": 4 },
+    "protocolVersion": { "const": 5 },
     "rulesetVersion": { "type": "string", "minLength": 1 },
     "commandId": { "type": "string", "minLength": 1, "maxLength": 80 },
     "expectedRevision": { "type": "integer", "minimum": 0 },
@@ -38,7 +38,11 @@
           "payload": {
             "type": "object", "additionalProperties": false,
             "required": ["cardId"],
-            "properties": { "cardId": { "type": "string", "pattern": "^[a-z0-9_]+$" } }
+            "properties": {
+              "cardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+              "targetType": { "enum": ["HERO", "UNIT", "BUILDING"] },
+              "targetInstanceId": { "type": "string", "pattern": "^object-[0-9]+$" }
+            }
           }
         }
       }

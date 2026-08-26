@@ -57,7 +57,7 @@ UGUI 样式由 `DemoUiStyleCatalog` 集中提供材质、底色、描边和交�
 
 本机原型贴图通过 `scripts/extract-minecraft-world-textures.ps1` 从已拥有的 Java 客户端 JAR 按白名单提取 17 张方块贴图和 6 张生物皮肤到 Git 忽略目录。运行时先查找 `Resources/DemoWorld/Prefabs/{cardId}`；不存在时由 `DemoMinecraftModelFactory` 为 `pf_001` 蜜蜂、`pf_002` 绵羊、`pf_003` 狼、`pf_004` 村民、`nt_001` 岩浆怪和 `nt_003` 烈焰人构造 Minecraft 式分件模型，其余单位才使用通用后备模型。因此以后注册正式 Prefab 不需要改部署逻辑。
 
-部署与攻击槽位不再使用屏幕空间矩形、透明 `Graphic` 或 UGUI `Button` 命中。每个槽位由一个合并的地砖顶面 Mesh、同 Mesh 的 `MeshCollider`、`DemoBattlefieldSlotTarget` 语义组件，以及一个仅在抬升时显示的合并侧壁 Mesh 组成，不为单块地砖创建 Renderer 或 Collider。`DemoBattlefieldPointerController` 使用主相机 `ScreenPointToRay` 在 3D 世界中寻找最近的双方语义槽位；UI 面板遮挡指针时停止世界命中。战斗阶段先持续高亮合法己方攻击者，选择后保持攻击者地砖的按下亮度，并点亮敌方生物/建筑目标；敌方英雄使用其实体 HUD 面板作为明确的点击目标。
+部署、攻击与卡牌目标槽位不再使用屏幕空间矩形、透明 `Graphic` 或 UGUI `Button` 命中。每个槽位由一个合并的地砖顶面 Mesh、同 Mesh 的 `MeshCollider`、`DemoBattlefieldSlotTarget` 语义组件，以及一个仅在抬升时显示的合并侧壁 Mesh 组成，不为单块地砖创建 Renderer 或 Collider。`DemoBattlefieldPointerController` 使用主相机 `ScreenPointToRay` 在 3D 世界中寻找最近的双方语义槽位；UI 面板遮挡指针时停止世界命中。战斗阶段先持续高亮合法己方攻击者，选择后保持攻击者地砖的按下亮度，并点亮敌方生物/建筑目标；敌方英雄使用其实体 HUD 面板作为明确的点击目标。有目标卡牌进入独立选择态，已占用的合法地表直接发光而不抬升生物模型，右键或 Esc 可取消。
 
 地砖顶点经过真实 Model/View/Projection 变换，透视摄像机使远端地砖自然收窄；`DemoGroundSurface` Shader 的屏幕投影只用于采样精绘背景纹理，几何形变和深度遮挡仍完全由世界 Mesh 与相机矩阵决定。未激活地砖因此保留背景原位置的草、石路或木板纹理，高亮则直接修改地砖表面及方块边缘亮度。交互顺序为“合法目标脉冲—悬停变金并抬升—按下压低并收缩—松开后回弹或部署单位”，规则状态仍只存在于 `DemoLocalMatch`。
 
@@ -85,3 +85,5 @@ UGUI 样式由 `DemoUiStyleCatalog` 集中提供材质、底色、描边和交�
 战斗阶段预览：[`assets/demo-combat-phase-preview-v1.png`](assets/demo-combat-phase-preview-v1.png)。进入战斗后手牌只降低内容亮度，石砖底板保持不变；检查器切换为战斗指令，主按钮切换为“结束回合”。
 
 权威效果表现预览：[`assets/demo-card-effect-preview-v1.png`](assets/demo-card-effect-preview-v1.png)。已实现的法术/材料使用明确的“释放卡牌”动作，结算后同步刷新生命、护甲、手牌与区域计数，并在英雄实体 HUD 上播放与效果类型对应的短促颜色脉冲；待实现效果的按钮显示“效果尚未接入”并禁用。
+
+有目标卡牌预览：[`assets/demo-targeted-card-preview-v1.png`](assets/demo-targeted-card-preview-v1.png)。`雪球`先进入目标选择态，只点亮合法敌方单位所在的真实 3D 地表；命令携带稳定对象实例 ID，服务端在扣费和弃牌前完成存活、阵营与类型校验。

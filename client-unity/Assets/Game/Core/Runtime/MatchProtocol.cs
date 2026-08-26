@@ -30,6 +30,7 @@ namespace BiomeRivals.Core
         public const string HeroDamaged = "HERO_DAMAGED";
         public const string HeroHealed = "HERO_HEALED";
         public const string ArmorGained = "ARMOR_GAINED";
+        public const string ObjectStatsChanged = "OBJECT_STATS_CHANGED";
         public const string PhaseChanged = "PHASE_CHANGED";
         public const string AttackResolved = "ATTACK_RESOLVED";
         public const string ObjectDied = "OBJECT_DIED";
@@ -90,7 +91,7 @@ namespace BiomeRivals.Core
                 payload = new MatchCommandPayloadDto()
             };
 
-        public static MatchCommandDto PlayCard(string commandId, int revision, string cardId) =>
+        public static MatchCommandDto PlayCard(string commandId, int revision, string cardId, string targetType = "", string targetInstanceId = "") =>
             new MatchCommandDto
             {
                 protocolVersion = GameVersions.Protocol,
@@ -98,7 +99,12 @@ namespace BiomeRivals.Core
                 commandId = commandId,
                 expectedRevision = revision,
                 type = MatchCommandTypes.PlayCard,
-                payload = new MatchCommandPayloadDto { cardId = cardId }
+                payload = new MatchCommandPayloadDto
+                {
+                    cardId = cardId,
+                    targetType = targetType,
+                    targetInstanceId = targetInstanceId
+                }
             };
 
         public static MatchCommandDto EnterCombat(string commandId, int revision) =>
@@ -178,6 +184,8 @@ namespace BiomeRivals.Core
         public string damageType = string.Empty;
         public int healing;
         public int amount;
+        public int temporaryAttackModifier;
+        public int temporaryAttackModifierExpiresOnTurn;
     }
 
     [Serializable]

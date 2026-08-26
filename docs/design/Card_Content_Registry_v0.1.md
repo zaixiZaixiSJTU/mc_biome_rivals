@@ -21,7 +21,7 @@
 
 - 56 张可收集牌。
 - 18 张不可收集衍生物。
-- 69 张有规则文本的牌预留 `effect.<cardId>.01`；其中 3 张为 `IMPLEMENTED`，其余 66 张为 `PENDING`。
+- 69 张有规则文本的牌预留 `effect.<cardId>.01`；其中 4 张为 `IMPLEMENTED`，其余 65 张为 `PENDING`。
 - 5 张无规则文本衍生物状态为 `NONE`。
 
 ## 效果实现约束

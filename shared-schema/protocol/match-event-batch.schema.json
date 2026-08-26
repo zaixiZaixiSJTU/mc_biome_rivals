@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["protocolVersion", "rulesetVersion", "revision", "acknowledgedCommandId", "events"],
   "properties": {
-    "protocolVersion": { "const": 4 },
+    "protocolVersion": { "const": 5 },
     "rulesetVersion": { "type": "string" },
     "revision": { "type": "integer", "minimum": 0 },
     "acknowledgedCommandId": { "type": "string" },
@@ -18,7 +18,7 @@
         "required": ["eventId", "type", "payload"],
         "properties": {
           "eventId": { "type": "integer", "minimum": 1 },
-          "type": { "enum": ["CARD_DEPLOYED", "CARD_PLAYED", "CARD_DRAWN", "CARD_BURNED", "FATIGUE_DAMAGE", "HERO_DAMAGED", "HERO_HEALED", "ARMOR_GAINED", "PHASE_CHANGED", "ATTACK_RESOLVED", "OBJECT_DIED", "TURN_ENDED", "TURN_STARTED", "PLAYER_CONCEDED", "MATCH_ENDED"] },
+          "type": { "enum": ["CARD_DEPLOYED", "CARD_PLAYED", "CARD_DRAWN", "CARD_BURNED", "FATIGUE_DAMAGE", "HERO_DAMAGED", "HERO_HEALED", "ARMOR_GAINED", "OBJECT_STATS_CHANGED", "PHASE_CHANGED", "ATTACK_RESOLVED", "OBJECT_DIED", "TURN_ENDED", "TURN_STARTED", "PLAYER_CONCEDED", "MATCH_ENDED"] },
           "payload": { "type": "object" }
         },
         "allOf": [
@@ -120,6 +120,28 @@
                     "effectId": { "type": "string", "pattern": "^effect\\.[a-z0-9_]+\\.[0-9]{2}$" },
                     "amount": { "type": "integer", "minimum": 0 },
                     "armor": { "type": "integer", "minimum": 0 }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": { "properties": { "type": { "const": "OBJECT_STATS_CHANGED" } } },
+            "then": {
+              "properties": {
+                "payload": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["playerId", "instanceId", "sourceCardId", "effectId", "reason", "attack", "health", "temporaryAttackModifier", "temporaryAttackModifierExpiresOnTurn"],
+                  "properties": {
+                    "playerId": { "type": "string", "minLength": 1 },
+                    "instanceId": { "type": "string", "pattern": "^object-[0-9]+$" },
+                    "sourceCardId": { "type": ["string", "null"], "pattern": "^[a-z0-9_]+$" },
+                    "effectId": { "type": ["string", "null"], "pattern": "^effect\\.[a-z0-9_]+\\.[0-9]{2}$" },
+                    "reason": { "enum": ["TEMPORARY_ATTACK_MODIFIER", "TEMPORARY_EXPIRED"] },
+                    "attack": { "type": "integer", "minimum": 0 },
+                    "health": { "type": "integer", "minimum": 1 },
+                    "temporaryAttackModifier": { "type": "integer", "maximum": 0 },
+                    "temporaryAttackModifierExpiresOnTurn": { "type": "integer", "minimum": 0 }
                   }
                 }
               }

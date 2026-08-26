@@ -20,6 +20,7 @@ namespace BiomeRivals.Demo
         private readonly List<DemoBattlefieldObject> _opponentBattlefield = new List<DemoBattlefieldObject>();
         private readonly HashSet<string> _processedCommandIds = new HashSet<string>(StringComparer.Ordinal);
         private int _nextLocalCommandId = 1;
+        private int _nextBattlefieldInstanceId = 1;
 
         public IReadOnlyList<string> Hand => _hand;
         public IReadOnlyList<string> Deck => _deck;
@@ -116,7 +117,7 @@ namespace BiomeRivals.Demo
             Consume(definition);
             _playerBattlefield.Add(new DemoBattlefieldObject
             {
-                InstanceId = $"demo-player-{_nextLocalCommandId}",
+                InstanceId = $"object-{_nextBattlefieldInstanceId++}",
                 CardId = definition.id,
                 Player = true,
                 SlotKind = command.payload.slotKind == "UNIT" ? DemoSlotKind.Unit : DemoSlotKind.Building,
@@ -138,8 +139,8 @@ namespace BiomeRivals.Demo
             return result.Accepted;
         }
 
-        public MatchCommandDto CreatePlayCardCommand(string cardId) =>
-            MatchCommandFactory.PlayCard(NextCommandId(), Revision, cardId);
+        public MatchCommandDto CreatePlayCardCommand(string cardId, string targetType = "", string targetInstanceId = "") =>
+            MatchCommandFactory.PlayCard(NextCommandId(), Revision, cardId, targetType, targetInstanceId);
 
         public DemoCommandResult ApplyPlayCard(CardDefinitionEntry definition, MatchCommandDto command)
         {
@@ -151,8 +152,17 @@ namespace BiomeRivals.Demo
                 return Reject(DemoCommandRejectionCode.EffectNotImplemented, "该卡牌效果已注册，但尚未接入规则执行器。");
 
             var effectId = definition.effectIds[0];
-            if (effectId != "effect.nt_006.01" && effectId != "effect.tk_005.01" && effectId != "effect.tk_016.01")
+            if (effectId != "effect.nt_006.01" && effectId != "effect.si_001.01" && effectId != "effect.tk_005.01" && effectId != "effect.tk_016.01")
                 return Reject(DemoCommandRejectionCode.EffectNotImplemented, "找不到该 effectId 的规则处理器。");
+            DemoBattlefieldObject targetedObject = null;
+            if (effectId == "effect.si_001.01")
+            {
+                if (command.payload == null || command.payload.targetType != "UNIT")
+                    return Reject(DemoCommandRejectionCode.InvalidTarget, "雪球需要选择一个敌方生物。");
+                targetedObject = _opponentBattlefield.Find(value => value.InstanceId == command.payload.targetInstanceId);
+                if (targetedObject == null || targetedObject.SlotKind != DemoSlotKind.Unit)
+                    return Reject(DemoCommandRejectionCode.InvalidTarget, "雪球目标必须是仍在战场上的敌方生物。");
+            }
             Consume(definition);
             _discardPile.Add(definition.id);
             switch (effectId)
@@ -173,6 +183,16 @@ namespace BiomeRivals.Demo
                                 ? $"熔岩献祭：受到 2 点真实伤害，{draw.CardId} 因满手爆牌。"
                                 : $"熔岩献祭：受到 2 点真实伤害，并受到 {draw.FatigueDamage} 点疲劳伤害。";
                     }
+                    break;
+                case "effect.si_001.01":
+                    var attackBefore = targetedObject.Attack;
+                    targetedObject.Attack = Math.Max(0, targetedObject.Attack - 1);
+                    targetedObject.TemporaryAttackModifier += targetedObject.Attack - attackBefore;
+                    if (targetedObject.TemporaryAttackModifier != 0) targetedObject.TemporaryAttackModifierExpiresOnRound = Round;
+                    var reduced = attackBefore - targetedObject.Attack;
+                    message = reduced > 0
+                        ? $"雪球：{targetedObject.CardId} 的攻击力降低 {reduced}，持续到本回合结束。"
+                        : $"雪球命中 {targetedObject.CardId}，但其攻击力已经为 0。";
                     break;
                 case "effect.tk_005.01":
                     PlayerLife = Math.Min(30, PlayerLife + 2);
@@ -299,6 +319,8 @@ namespace BiomeRivals.Demo
         {
             if (!ValidateCommand(command, MatchCommandTypes.EndTurn, out var rejection)) return rejection;
             if (!IsPlayerTurn) return Reject(DemoCommandRejectionCode.NotActivePlayer, "当前不是你的回合。");
+            RestoreExpiredAttackModifiers(_playerBattlefield);
+            RestoreExpiredAttackModifiers(_opponentBattlefield);
             IsPlayerTurn = false;
             AcceptCommand(command);
             return DemoCommandResult.Accept("已结束回合。", Revision);
@@ -400,12 +422,23 @@ namespace BiomeRivals.Demo
             if (slotIndex + occupiedSlots > slots.Length) return;
             var instance = new DemoBattlefieldObject
             {
-                InstanceId = $"demo-opponent-{_opponentBattlefield.Count + 1}", CardId = definition.id, Player = false,
+                InstanceId = $"object-{_nextBattlefieldInstanceId++}", CardId = definition.id, Player = false,
                 SlotKind = kind, SlotIndex = slotIndex, OccupiedSlots = occupiedSlots,
                 Attack = definition.attack, Health = definition.health, MaxHealth = definition.health, SummonedRound = 0
             };
             _opponentBattlefield.Add(instance);
             for (var index = slotIndex; index < slotIndex + occupiedSlots; index++) slots[index] = definition.id;
+        }
+
+        private void RestoreExpiredAttackModifiers(List<DemoBattlefieldObject> battlefield)
+        {
+            foreach (var value in battlefield)
+            {
+                if (value.TemporaryAttackModifierExpiresOnRound != Round) continue;
+                value.Attack -= value.TemporaryAttackModifier;
+                value.TemporaryAttackModifier = 0;
+                value.TemporaryAttackModifierExpiresOnRound = 0;
+            }
         }
 
         private void RemoveObject(

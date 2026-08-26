@@ -101,7 +101,9 @@ namespace BiomeRivalsRules {
               instanceId: object.instanceId, cardId: object.cardId, cardType: object.cardType,
               attack: object.attack, health: object.health, maxHealth: object.maxHealth,
               slotKind: object.slotKind, slotIndex: object.slotIndex, occupiedSlots: object.occupiedSlots,
-              summonedTurn: object.summonedTurn, hasAttacked: object.hasAttacked
+              summonedTurn: object.summonedTurn, hasAttacked: object.hasAttacked,
+              temporaryAttackModifier: object.temporaryAttackModifier,
+              temporaryAttackModifierExpiresOnTurn: object.temporaryAttackModifierExpiresOnTurn
             };
           })
         };
@@ -162,7 +164,9 @@ namespace BiomeRivalsRules {
               slotIndex: object.slotIndex,
               occupiedSlots: object.occupiedSlots,
               summonedTurn: object.summonedTurn,
-              hasAttacked: object.hasAttacked
+              hasAttacked: object.hasAttacked,
+              temporaryAttackModifier: object.temporaryAttackModifier,
+              temporaryAttackModifierExpiresOnTurn: object.temporaryAttackModifierExpiresOnTurn
             };
           })
         };
@@ -254,7 +258,9 @@ namespace BiomeRivalsRules {
         slotIndex: slotIndex,
         occupiedSlots: occupiedSlots,
         summonedTurn: state.turn,
-        hasAttacked: false
+        hasAttacked: false,
+        temporaryAttackModifier: 0,
+        temporaryAttackModifierExpiresOnTurn: 0
       };
       player.battlefield.push(battlefieldObject);
       const occupiedRow = slotKind === 'UNIT' ? player.unitSlots : player.buildingSlots;
@@ -383,10 +389,21 @@ namespace BiomeRivalsRules {
         return reject(state, 'EFFECT_NOT_IMPLEMENTED', 'card effect is registered but not implemented');
       }
       const effectId = definition.effectIds[0]!;
-      if (effectId !== 'effect.nt_006.01' && effectId !== 'effect.tk_005.01' && effectId !== 'effect.tk_016.01') {
+      if (effectId !== 'effect.nt_006.01' && effectId !== 'effect.si_001.01' && effectId !== 'effect.tk_005.01' && effectId !== 'effect.tk_016.01') {
         return reject(state, 'EFFECT_NOT_IMPLEMENTED', 'effect handler is not registered');
       }
       const player = next.players[actorIndex]!;
+      const opponent = next.players[actorIndex === 0 ? 1 : 0]!;
+      let targetedObject: BattlefieldObjectState | null = null;
+      if (effectId === 'effect.si_001.01') {
+        if (command.payload.targetType !== 'UNIT' || typeof command.payload.targetInstanceId !== 'string') {
+          return reject(state, 'INVALID_TARGET', 'snowball requires an enemy unit target');
+        }
+        targetedObject = findObject(opponent, command.payload.targetInstanceId);
+        if (targetedObject === null || targetedObject.cardType !== 'UNIT') {
+          return reject(state, 'INVALID_TARGET', 'snowball target must be a living enemy unit');
+        }
+      }
       const handIndex = player.hand.indexOf(cardId);
       if (handIndex < 0) return reject(state, 'CARD_NOT_IN_HAND', 'card is not in the active players hand');
       if (definition.cost > player.redstone) return reject(state, 'INSUFFICIENT_REDSTONE', 'not enough redstone');
@@ -415,6 +432,25 @@ namespace BiomeRivalsRules {
           drawCard(player);
           finishForSelfDefeat(player, 'FATIGUE');
           return null;
+        case 'effect.si_001.01': {
+          if (targetedObject === null) throw new Error('validated snowball target was not resolved');
+          const attackBefore = targetedObject.attack;
+          targetedObject.attack = Math.max(0, targetedObject.attack - 1);
+          targetedObject.temporaryAttackModifier += targetedObject.attack - attackBefore;
+          if (targetedObject.temporaryAttackModifier !== 0) targetedObject.temporaryAttackModifierExpiresOnTurn = state.turn;
+          emit('OBJECT_STATS_CHANGED', {
+            playerId: opponent.playerId,
+            instanceId: targetedObject.instanceId,
+            sourceCardId: cardId,
+            effectId: effectId,
+            reason: 'TEMPORARY_ATTACK_MODIFIER',
+            attack: targetedObject.attack,
+            health: targetedObject.health,
+            temporaryAttackModifier: targetedObject.temporaryAttackModifier,
+            temporaryAttackModifierExpiresOnTurn: targetedObject.temporaryAttackModifierExpiresOnTurn
+          });
+          return null;
+        }
         case 'effect.tk_005.01': {
           const healedLife = Math.min(30, player.life + 2);
           const healing = healedLife - player.life;
@@ -541,6 +577,27 @@ namespace BiomeRivalsRules {
       }
       case 'END_TURN': {
         if (actorIndex !== state.activePlayerIndex) return reject(state, 'NOT_ACTIVE_PLAYER', 'only the active player may end the turn');
+        for (let playerIndex = 0; playerIndex < next.players.length; playerIndex += 1) {
+          const effectPlayer = next.players[playerIndex]!;
+          for (let objectIndex = 0; objectIndex < effectPlayer.battlefield.length; objectIndex += 1) {
+            const object = effectPlayer.battlefield[objectIndex]!;
+            if (object.temporaryAttackModifierExpiresOnTurn !== state.turn) continue;
+            object.attack -= object.temporaryAttackModifier;
+            object.temporaryAttackModifier = 0;
+            object.temporaryAttackModifierExpiresOnTurn = 0;
+            emit('OBJECT_STATS_CHANGED', {
+              playerId: effectPlayer.playerId,
+              instanceId: object.instanceId,
+              sourceCardId: null,
+              effectId: null,
+              reason: 'TEMPORARY_EXPIRED',
+              attack: object.attack,
+              health: object.health,
+              temporaryAttackModifier: 0,
+              temporaryAttackModifierExpiresOnTurn: 0
+            });
+          }
+        }
         emit('TURN_ENDED', { playerId: actorPlayerId, turn: state.turn });
         next.activePlayerIndex = (state.activePlayerIndex + 1) % state.players.length;
         if (next.activePlayerIndex === 0) next.turn += 1;

@@ -337,6 +337,66 @@ namespace BiomeRivals.Core.Tests
         }
 
         [Test]
+        public void Apply_ReplaysTemporaryAttackModifierAndExpiry()
+        {
+            var target = new BattlefieldObjectStateDto
+            {
+                instanceId = "object-7", cardId = "nt_003", cardType = "UNIT", attack = 3,
+                health = 3, maxHealth = 3, slotKind = "UNIT", slotIndex = 1, occupiedSlots = 1, summonedTurn = 1
+            };
+            var slots = new string[4];
+            slots[1] = target.instanceId;
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "match-1", protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice" },
+                    new PlayerStateDto { playerId = "bob", unitSlots = slots, battlefield = new[] { target } }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 1, type = MatchEventTypes.ObjectStatsChanged,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "bob", instanceId = "object-7", attack = 2, health = 3,
+                            temporaryAttackModifier = -1, temporaryAttackModifierExpiresOnTurn = 1
+                        }
+                    }
+                }
+            });
+            Assert.That(target.attack, Is.EqualTo(2));
+            Assert.That(target.temporaryAttackModifier, Is.EqualTo(-1));
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 2,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 2, type = MatchEventTypes.ObjectStatsChanged,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "bob", instanceId = "object-7", attack = 3, health = 3,
+                            temporaryAttackModifier = 0, temporaryAttackModifierExpiresOnTurn = 0
+                        }
+                    }
+                }
+            });
+            Assert.That(target.attack, Is.EqualTo(3));
+            Assert.That(target.temporaryAttackModifier, Is.Zero);
+        }
+
+        [Test]
         public void Apply_RejectsRevisionGapsBeforeMutation()
         {
             var store = new MatchStateStore();

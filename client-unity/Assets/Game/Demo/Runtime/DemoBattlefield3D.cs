@@ -156,29 +156,27 @@ namespace BiomeRivals.Demo
         {
             if (marker.Root == null || marker.SurfaceMaterial == null) return;
             var pulse = 0.5f + Mathf.Sin(time * 4.6f + marker.Phase) * 0.5f;
-            var actionableHover = marker.Hovered && marker.ValidTarget && !marker.Occupied;
-            var actionablePress = marker.Pressed && marker.ValidTarget && !marker.Occupied;
+            var actionableHover = marker.Hovered && marker.ValidTarget;
+            var actionablePress = marker.Pressed && marker.ValidTarget;
             var highlightColor = actionablePress || actionableHover
                 ? Hex("#F1C96A")
-                : marker.ValidTarget && !marker.Occupied
+                : marker.ValidTarget
                     ? Color.Lerp(Hex("#3D9E8F"), Hex("#79E0CB"), pulse)
                     : Hex("#777263");
-            var highlightStrength = marker.Occupied
-                ? 0f
-                : actionablePress
+            var highlightStrength = actionablePress
                     ? 0.92f
                     : actionableHover
                     ? 0.78f
                     : marker.ValidTarget
-                        ? 0.18f + pulse * 0.12f
-                        : marker.Hovered ? 0.12f : 0f;
+                        ? (marker.Occupied ? 0.48f + pulse * 0.18f : 0.18f + pulse * 0.12f)
+                        : marker.Hovered && !marker.Occupied ? 0.12f : 0f;
             SetGroundHighlight(marker.SurfaceMaterial, highlightColor, highlightStrength);
-            if (marker.RiserRenderer != null) marker.RiserRenderer.enabled = actionableHover && !actionablePress;
+            if (marker.RiserRenderer != null) marker.RiserRenderer.enabled = actionableHover && !actionablePress && !marker.Occupied;
             if (marker.RiserMaterial != null)
                 SetMaterialColor(marker.RiserMaterial, actionableHover ? Hex("#8F642B") : Hex("#332A20"), actionableHover ? Hex("#6B4318") : Color.black);
             var targetPosition = marker.BasePosition;
-            targetPosition.y += actionablePress ? 0.025f : actionableHover ? 0.085f : marker.ValidTarget && !marker.Occupied ? pulse * 0.012f : marker.Hovered && !marker.Occupied ? 0.018f : 0f;
-            var targetScale = actionablePress ? new Vector3(0.985f, 1f, 0.985f) : actionableHover ? new Vector3(1.018f, 1f, 1.018f) : Vector3.one;
+            targetPosition.y += actionablePress && !marker.Occupied ? 0.025f : actionableHover && !marker.Occupied ? 0.085f : marker.ValidTarget && !marker.Occupied ? pulse * 0.012f : marker.Hovered && !marker.Occupied ? 0.018f : 0f;
+            var targetScale = actionablePress && !marker.Occupied ? new Vector3(0.985f, 1f, 0.985f) : actionableHover && !marker.Occupied ? new Vector3(1.018f, 1f, 1.018f) : Vector3.one;
             var blend = deltaTime <= 0f ? 0f : 1f - Mathf.Exp(-16f * deltaTime);
             marker.Root.localPosition = Vector3.Lerp(marker.Root.localPosition, targetPosition, blend);
             marker.Root.localScale = Vector3.Lerp(marker.Root.localScale, targetScale, blend);

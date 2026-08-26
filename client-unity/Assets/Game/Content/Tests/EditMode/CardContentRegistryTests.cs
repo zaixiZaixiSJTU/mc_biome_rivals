@@ -25,6 +25,9 @@ namespace BiomeRivals.Content.Tests
             Assert.That(registry.TryGetDefinition("nt_006", out var sacrifice), Is.True);
             Assert.That(sacrifice.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
             Assert.That(sacrifice.effectIds, Is.EqualTo(new[] { "effect.nt_006.01" }));
+            Assert.That(registry.TryGetDefinition("si_001", out var snowball), Is.True);
+            Assert.That(snowball.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+            Assert.That(snowball.effectIds, Is.EqualTo(new[] { "effect.si_001.01" }));
             Assert.That(registry.TryGetText("db_007", out var templeText), Is.True);
             Assert.That(templeText.rulesText, Does.Contain("藏宝图"));
         }

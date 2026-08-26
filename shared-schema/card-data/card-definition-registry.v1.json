@@ -485,7 +485,7 @@
                                      "material",
                                      "frostbite"
                                  ],
-                        "effectImplementationStatus":  "PENDING",
+                        "effectImplementationStatus":  "IMPLEMENTED",
                         "effectIds":  [
                                           "effect.si_001.01"
                                       ]

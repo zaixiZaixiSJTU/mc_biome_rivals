@@ -18,7 +18,7 @@ namespace BiomeRivalsRules {
     'db_006': { id: 'db_006', cardType: 'SPELL', cost: 3, buildingSlots: 0, attack: 0, health: 0, effectImplementationStatus: 'PENDING', effectIds: ['effect.db_006.01'] },
     'db_007': { id: 'db_007', cardType: 'STRUCTURE', cost: 5, buildingSlots: 2, attack: 0, health: 8, effectImplementationStatus: 'PENDING', effectIds: ['effect.db_007.01'] },
     'db_008': { id: 'db_008', cardType: 'UNIT', cost: 5, buildingSlots: 0, attack: 4, health: 7, effectImplementationStatus: 'PENDING', effectIds: ['effect.db_008.01'] },
-    'si_001': { id: 'si_001', cardType: 'MATERIAL', cost: 0, buildingSlots: 0, attack: 0, health: 0, effectImplementationStatus: 'PENDING', effectIds: ['effect.si_001.01'] },
+    'si_001': { id: 'si_001', cardType: 'MATERIAL', cost: 0, buildingSlots: 0, attack: 0, health: 0, effectImplementationStatus: 'IMPLEMENTED', effectIds: ['effect.si_001.01'] },
     'si_002': { id: 'si_002', cardType: 'UNIT', cost: 2, buildingSlots: 0, attack: 1, health: 4, effectImplementationStatus: 'PENDING', effectIds: ['effect.si_002.01'] },
     'si_003': { id: 'si_003', cardType: 'UNIT', cost: 3, buildingSlots: 0, attack: 3, health: 3, effectImplementationStatus: 'PENDING', effectIds: ['effect.si_003.01'] },
     'si_004': { id: 'si_004', cardType: 'UNIT', cost: 2, buildingSlots: 0, attack: 3, health: 2, effectImplementationStatus: 'PENDING', effectIds: ['effect.si_004.01'] },

@@ -25,9 +25,11 @@ function enterCombatCommand(id: string, revision: number): BiomeRivalsRules.Matc
   return command(id, revision, 'ENTER_COMBAT');
 }
 
-function playCommand(id: string, revision: number, cardId: string): BiomeRivalsRules.MatchCommand {
+function playCommand(id: string, revision: number, cardId: string, targetType?: BiomeRivalsRules.AttackTargetType, targetInstanceId?: string): BiomeRivalsRules.MatchCommand {
   const result = command(id, revision, 'PLAY_CARD');
   result.payload = { cardId: cardId };
+  if (targetType !== undefined) result.payload.targetType = targetType;
+  if (targetInstanceId !== undefined) result.payload.targetInstanceId = targetInstanceId;
   return result;
 }
 
@@ -69,7 +71,9 @@ function placeUnit(
     slotIndex: slotIndex,
     occupiedSlots: 1,
     summonedTurn: summonedTurn,
-    hasAttacked: false
+    hasAttacked: false,
+    temporaryAttackModifier: 0,
+    temporaryAttackModifierExpiresOnTurn: 0
   });
 }
 
@@ -183,6 +187,41 @@ TestHarness.test('resolves lava sacrifice self damage then a private draw', func
   TestHarness.equal(result.batch.events[2]!.type, 'CARD_DRAWN');
   const opponentProjection = BiomeRivalsRules.createClientEventBatch(result.batch, 'bob');
   TestHarness.equal(opponentProjection.events[2]!.payload.cardId, null);
+});
+
+TestHarness.test('applies a targeted snowball debuff and restores it when the caster turn ends', function (): void {
+  const state = BiomeRivalsRules.createInitialState('match-1', ['alice', 'bob']);
+  state.players[0]!.hand = ['si_001'];
+  placeUnit(state, 1, 'nt_003', 1, 'object-1', 1);
+  const played = BiomeRivalsRules.applyCommand(state, 'alice', playCommand('play-snowball', 0, 'si_001', 'UNIT', 'object-1'));
+  TestHarness.ok(played.accepted);
+  if (!played.accepted) return;
+  const target = played.state.players[1]!.battlefield[0]!;
+  TestHarness.equal(target.attack, 2);
+  TestHarness.equal(target.temporaryAttackModifier, -1);
+  TestHarness.equal(target.temporaryAttackModifierExpiresOnTurn, 1);
+  TestHarness.equal(played.batch.events[1]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(played.batch.events[1]!.payload.instanceId, 'object-1');
+
+  const ended = BiomeRivalsRules.applyCommand(played.state, 'alice', command('end-after-snowball', 1, 'END_TURN'));
+  TestHarness.ok(ended.accepted);
+  if (!ended.accepted) return;
+  const restored = ended.state.players[1]!.battlefield[0]!;
+  TestHarness.equal(restored.attack, 3);
+  TestHarness.equal(restored.temporaryAttackModifier, 0);
+  TestHarness.equal(ended.batch.events[0]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(ended.batch.events[0]!.payload.reason, 'TEMPORARY_EXPIRED');
+  TestHarness.equal(ended.batch.events[1]!.type, 'TURN_ENDED');
+});
+
+TestHarness.test('rejects a snowball without a living enemy unit target before payment', function (): void {
+  const state = BiomeRivalsRules.createInitialState('match-1', ['alice', 'bob']);
+  state.players[0]!.hand = ['si_001'];
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', playCommand('play-snowball', 0, 'si_001'));
+  TestHarness.equal(result.accepted, false);
+  if (!result.accepted) TestHarness.equal(result.code, 'INVALID_TARGET');
+  TestHarness.equal(state.players[0]!.hand[0], 'si_001');
+  TestHarness.equal(state.players[0]!.discardPile.length, 0);
 });
 
 TestHarness.test('rejects pending card effects without paying or discarding', function (): void {

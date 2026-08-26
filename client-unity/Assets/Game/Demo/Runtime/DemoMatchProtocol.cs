@@ -40,6 +40,8 @@ namespace BiomeRivals.Demo
         public int MaxHealth { get; set; }
         public int SummonedRound { get; set; }
         public bool HasAttacked { get; set; }
+        public int TemporaryAttackModifier { get; set; }
+        public int TemporaryAttackModifierExpiresOnRound { get; set; }
     }
 
     public enum DemoCommandRejectionCode

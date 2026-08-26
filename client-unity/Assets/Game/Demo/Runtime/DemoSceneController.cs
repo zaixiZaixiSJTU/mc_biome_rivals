@@ -54,6 +54,7 @@ namespace BiomeRivals.Demo
         private Text _turnBannerText;
         private string _selectedCardId;
         private string _selectedAttackerInstanceId;
+        private string _pendingTargetCardId;
         private string _activeFaction = "plains_forest";
         private bool _built;
         private Font _font;
@@ -82,6 +83,12 @@ namespace BiomeRivals.Demo
                 SelectCard("nt_006");
                 CastSelectedCard();
             }
+            if (HasCommandLineFlag("-previewTargeting"))
+            {
+                SelectFaction("snow_ice");
+                SelectCard("si_001");
+                CastSelectedCard();
+            }
             if (HasCommandLineFlag("-previewCombat")) OnEndTurn();
             if (HasCommandLineFlag("-previewGroundHover")) _battlefield.SetSlotHovered(true, DemoSlotKind.Unit, 0, true);
             var capturePath = GetCommandLineValue("-captureDemo");
@@ -93,6 +100,12 @@ namespace BiomeRivals.Demo
             if (_hudMaterialFactory == null) return;
             _hudMaterialFactory.Dispose();
             _hudMaterialFactory = null;
+        }
+
+        private void Update()
+        {
+            if (string.IsNullOrEmpty(_pendingTargetCardId)) return;
+            if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1)) CancelTargetSelection();
         }
 
         public void BuildNow()
@@ -289,6 +302,7 @@ namespace BiomeRivals.Demo
 
         private void SelectFaction(string factionId)
         {
+            _pendingTargetCardId = null;
             _activeFaction = factionId;
             var spec = Factions.First(item => item.Id == factionId);
             if (_registry.TryGetTheme(spec.Id, out var selectedTheme))
@@ -303,7 +317,7 @@ namespace BiomeRivals.Demo
             _match.ResetDeckAndHand(ids, deck);
             _selectedCardId = _match.Hand.FirstOrDefault();
             RefreshAll();
-            ShowStatus($"已切换到{spec.Label}牌组；效果文本已注册，复杂规则暂为展示。", false);
+            ShowStatus($"已切换到{spec.Label}牌组；可打出已接入规则的卡牌。", false);
         }
 
         private void RefreshAll()
@@ -370,11 +384,14 @@ namespace BiomeRivals.Demo
             var empty = string.IsNullOrEmpty(cardId);
             view.EmptyLabel.gameObject.SetActive(empty);
             var battlefieldObject = _match.GetObject(player, view.Kind, view.Index);
-            var valid = player
-                ? _match.Phase == DemoTurnPhase.Main
-                    ? empty && IsSelectedValidFor(view.Kind)
-                    : !empty && view.Kind == DemoSlotKind.Unit && _match.CanAttackWith(battlefieldObject, out _)
-                : _match.Phase == DemoTurnPhase.Combat && !string.IsNullOrEmpty(_selectedAttackerInstanceId) && !empty;
+            var selectingCardTarget = !string.IsNullOrEmpty(_pendingTargetCardId);
+            var valid = selectingCardTarget
+                ? !player && view.Kind == DemoSlotKind.Unit && !empty
+                : player
+                    ? _match.Phase == DemoTurnPhase.Main
+                        ? empty && IsSelectedValidFor(view.Kind)
+                        : !empty && view.Kind == DemoSlotKind.Unit && _match.CanAttackWith(battlefieldObject, out _)
+                    : _match.Phase == DemoTurnPhase.Combat && !string.IsNullOrEmpty(_selectedAttackerInstanceId) && !empty;
             view.EmptyLabel.color = Color.clear;
             _battlefield.SetSlotState(player, view.Kind, view.Index, valid, !empty);
 
@@ -420,9 +437,13 @@ namespace BiomeRivals.Demo
             else
             {
                 var implemented = definition.effectImplementationStatus == "IMPLEMENTED";
-                var cast = CreateSecondaryButton(_inspectorRoot, "Cast", new Vector2(0, -118), new Vector2(235, 60), implemented ? "释放卡牌" : "效果尚未接入", 17);
-                cast.interactable = implemented;
-                cast.onClick.AddListener(CastSelectedCard);
+                var targeting = _pendingTargetCardId == definition.id;
+                var requiresTarget = RequiresEnemyUnitTarget(definition);
+                var hasLegalTarget = !requiresTarget || HasEnemyUnitTarget();
+                var actionLabel = !implemented ? "效果尚未接入" : targeting ? "取消目标选择" : !hasLegalTarget ? "没有合法目标" : requiresTarget ? "选择敌方目标" : "释放卡牌";
+                var cast = CreateSecondaryButton(_inspectorRoot, "Cast", new Vector2(0, -118), new Vector2(235, 60), actionLabel, 17);
+                cast.interactable = implemented && (targeting || hasLegalTarget);
+                cast.onClick.AddListener(targeting ? (UnityEngine.Events.UnityAction)CancelTargetSelection : CastSelectedCard);
                 cast.gameObject.AddComponent<DemoHoverScale>().Configure(1.04f, 16f);
             }
             var implementationLabel = definition.effectImplementationStatus == "IMPLEMENTED" ? "已接入" : definition.effectImplementationStatus == "NONE" ? "无额外效果" : "待接入";
@@ -439,6 +460,7 @@ namespace BiomeRivals.Demo
 
         private void SelectCard(string cardId)
         {
+            _pendingTargetCardId = null;
             _selectedCardId = cardId;
             RefreshAll();
             if (_registry.TryGetText(cardId, out var text)) ShowStatus($"已选择：{text.name}", false);
@@ -446,6 +468,11 @@ namespace BiomeRivals.Demo
 
         private void OnSlotClicked(bool player, DemoSlotKind kind, int index)
         {
+            if (!string.IsNullOrEmpty(_pendingTargetCardId))
+            {
+                ResolveTargetedCard(player, kind, index);
+                return;
+            }
             if (_match.Phase == DemoTurnPhase.Combat)
             {
                 HandleCombatSlotClick(player, kind, index);
@@ -543,6 +570,18 @@ namespace BiomeRivals.Demo
         private void CastSelectedCard()
         {
             if (string.IsNullOrEmpty(_selectedCardId) || !_registry.TryGetDefinition(_selectedCardId, out var definition)) return;
+            if (RequiresEnemyUnitTarget(definition))
+            {
+                if (!HasEnemyUnitTarget())
+                {
+                    ShowStatus("当前没有可选择的敌方生物。", true);
+                    return;
+                }
+                _pendingTargetCardId = definition.id;
+                ShowStatus("请选择一个发光的敌方生物；右键或 Esc 取消。", false);
+                RefreshAll();
+                return;
+            }
             var lifeBefore = _match.PlayerLife;
             var armorBefore = _match.PlayerArmor;
             var success = _match.TryCast(definition, out var message);
@@ -557,6 +596,45 @@ namespace BiomeRivals.Demo
                 StartCoroutine(PulsePlayerHud(color));
             }
         }
+
+        private void ResolveTargetedCard(bool player, DemoSlotKind kind, int index)
+        {
+            if (player || kind != DemoSlotKind.Unit)
+            {
+                ShowStatus("该卡牌只能选择发光的敌方生物。", true);
+                return;
+            }
+            var target = _match.GetObject(false, kind, index);
+            if (target == null || !_registry.TryGetDefinition(_pendingTargetCardId, out var definition))
+            {
+                ShowStatus("目标已经离场，请重新选择。", true);
+                return;
+            }
+            var command = _match.CreatePlayCardCommand(definition.id, "UNIT", target.InstanceId);
+            var result = _match.ApplyPlayCard(definition, command);
+            if (result.Accepted)
+            {
+                _pendingTargetCardId = null;
+                _selectedCardId = _match.Hand.FirstOrDefault();
+            }
+            var message = result.Message.Replace(target.CardId, GetCardName(target.CardId));
+            ShowStatus(result.Accepted ? $"{message} · 状态 r{result.Revision}" : message, !result.Accepted);
+            RefreshAll();
+        }
+
+        private void CancelTargetSelection()
+        {
+            if (string.IsNullOrEmpty(_pendingTargetCardId)) return;
+            _pendingTargetCardId = null;
+            ShowStatus("已取消目标选择。", false);
+            RefreshAll();
+        }
+
+        private static bool RequiresEnemyUnitTarget(CardDefinitionEntry definition) =>
+            definition != null && definition.effectIds != null && definition.effectIds.Contains("effect.si_001.01");
+
+        private bool HasEnemyUnitTarget() =>
+            _match.OpponentBattlefield.Any(value => value != null && value.SlotKind == DemoSlotKind.Unit && value.Health > 0);
 
         private IEnumerator PulsePlayerHud(Color color)
         {
@@ -583,6 +661,7 @@ namespace BiomeRivals.Demo
         private void OnEndTurn()
         {
             if (!_match.IsPlayerTurn) return;
+            _pendingTargetCardId = null;
             if (_match.Phase == DemoTurnPhase.Main)
             {
                 var result = _match.ApplyEnterCombat(_match.CreateEnterCombatCommand());

@@ -106,6 +106,34 @@ namespace BiomeRivals.Demo.Tests
         }
 
         [Test]
+        public void TargetedSnowballUsesStableInstanceAndExpiresAtEndOfTurn()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(new[] { "si_001" }, new string[0]);
+            Assert.That(registry.TryGetDefinition("si_001", out var snowball), Is.True);
+            Assert.That(registry.TryGetDefinition("nt_003", out var blaze), Is.True);
+            match.ResetOpponent(new[] { blaze });
+            var target = match.GetObject(false, DemoSlotKind.Unit, 0);
+            Assert.That(target.InstanceId, Does.Match("^object-[0-9]+$"));
+
+            var missingTarget = match.ApplyPlayCard(snowball, match.CreatePlayCardCommand("si_001"));
+            Assert.That(missingTarget.Accepted, Is.False);
+            Assert.That(missingTarget.Code, Is.EqualTo(DemoCommandRejectionCode.InvalidTarget));
+            Assert.That(match.Hand, Does.Contain("si_001"));
+
+            var played = match.ApplyPlayCard(snowball, match.CreatePlayCardCommand("si_001", "UNIT", target.InstanceId));
+            Assert.That(played.Accepted, Is.True);
+            Assert.That(target.Attack, Is.EqualTo(2));
+            Assert.That(target.TemporaryAttackModifier, Is.EqualTo(-1));
+            Assert.That(match.DiscardPile, Does.Contain("si_001"));
+
+            match.EndPlayerTurn();
+            Assert.That(target.Attack, Is.EqualTo(3));
+            Assert.That(target.TemporaryAttackModifier, Is.Zero);
+        }
+
+        [Test]
         public void StructureRequiresConsecutiveBuildingSlots()
         {
             var registry = CardContentLoader.Load();
@@ -396,6 +424,14 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(implementedCast.GetComponentInChildren<UnityEngine.UI.Text>().text, Is.EqualTo("释放卡牌"));
                 Assert.That(root.transform.Find("DemoCanvas/CardDetailsPanel/InspectorContent/Implementation").GetComponent<UnityEngine.UI.Text>().text, Does.Contain("已接入"));
 
+                GameObject.Find("Faction_snow_ice").GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
+                root.transform.Find("DemoCanvas/HandPlate/HandCards/Card_si_001").GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
+                var targetCast = root.transform.Find("DemoCanvas/CardDetailsPanel/InspectorContent/Cast").GetComponent<UnityEngine.UI.Button>();
+                Assert.That(targetCast.GetComponentInChildren<UnityEngine.UI.Text>().text, Is.EqualTo("选择敌方目标"));
+                targetCast.onClick.Invoke();
+                Assert.That(root.transform.Find("DemoCanvas/CardDetailsPanel/InspectorContent/Cast").GetComponentInChildren<UnityEngine.UI.Text>().text, Is.EqualTo("取消目标选择"));
+                Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.GreaterThan(0f));
+
                 var playerUnit = battlefield.GetSlotReferencePosition(true, DemoSlotKind.Unit, 0);
                 var opponentUnit = battlefield.GetSlotReferencePosition(false, DemoSlotKind.Unit, 0);
                 Assert.That(playerUnit.y, Is.LessThan(opponentUnit.y));
@@ -415,6 +451,9 @@ namespace BiomeRivals.Demo.Tests
                 battlefield.SetSlotState(true, DemoSlotKind.Unit, 0, false, true);
                 Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.Zero);
                 Assert.That(unitRiser.GetComponent<MeshRenderer>().enabled, Is.False);
+                battlefield.SetSlotState(false, DemoSlotKind.Unit, 0, true, true);
+                battlefield.SetSlotHovered(false, DemoSlotKind.Unit, 0, true);
+                Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.EqualTo(0.78f).Within(0.001f));
                 endTurn.GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
                 Assert.That(endTurn.GetComponentInChildren<UnityEngine.UI.Text>().text, Is.EqualTo("结束回合"));
                 Assert.That(root.transform.Find("DemoCanvas/RoundPlate/Round").GetComponent<UnityEngine.UI.Text>().text, Does.Contain("战斗"));

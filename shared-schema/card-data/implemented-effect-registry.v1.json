@@ -4,6 +4,7 @@
   "contentVersion": 1,
   "implementedEffectIds": [
     "effect.nt_006.01",
+    "effect.si_001.01",
     "effect.tk_005.01",
     "effect.tk_016.01"
   ]

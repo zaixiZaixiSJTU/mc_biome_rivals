@@ -40,7 +40,9 @@ namespace BiomeRivals.Networking
                 case MatchCommandTypes.DeployCard:
                     return JsonUtility.ToJson(new DeployCommandWire(command));
                 case MatchCommandTypes.PlayCard:
-                    return JsonUtility.ToJson(new PlayCardCommandWire(command));
+                    return string.IsNullOrEmpty(command.payload.targetType)
+                        ? JsonUtility.ToJson(new PlayCardCommandWire(command))
+                        : JsonUtility.ToJson(new TargetedPlayCardCommandWire(command));
                 case MatchCommandTypes.Attack:
                     return command.payload.targetType == "HERO"
                         ? JsonUtility.ToJson(new HeroAttackCommandWire(command))
@@ -114,6 +116,14 @@ namespace BiomeRivals.Networking
         }
 
         [Serializable]
+        private sealed class TargetedPlayWirePayload
+        {
+            public string cardId;
+            public string targetType;
+            public string targetInstanceId;
+        }
+
+        [Serializable]
         private sealed class AttackWirePayload
         {
             public string attackerInstanceId;
@@ -178,6 +188,22 @@ namespace BiomeRivals.Networking
             public PlayCardCommandWire(MatchCommandDto command) : base(command)
             {
                 payload = new PlayWirePayload { cardId = command.payload.cardId };
+            }
+        }
+
+        [Serializable]
+        private sealed class TargetedPlayCardCommandWire : CommandWireBase
+        {
+            public TargetedPlayWirePayload payload;
+
+            public TargetedPlayCardCommandWire(MatchCommandDto command) : base(command)
+            {
+                payload = new TargetedPlayWirePayload
+                {
+                    cardId = command.payload.cardId,
+                    targetType = command.payload.targetType,
+                    targetInstanceId = command.payload.targetInstanceId
+                };
             }
         }
 
