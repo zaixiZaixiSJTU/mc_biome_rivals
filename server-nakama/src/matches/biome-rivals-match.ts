@@ -60,15 +60,24 @@ function biomeRivalsMatchJoin(
   const connected = Object.keys(state.presences).map(function (sessionId): nkruntime.Presence {
     return state.presences[sessionId]!;
   });
+  let snapshotRecipients = presences;
   if (state.game === null && connected.length === 2) {
     state.game = BiomeRivalsRules.createInitialState(ctx.matchId || 'unknown', [connected[0]!.userId, connected[1]!.userId]);
-    dispatcher.broadcastMessage(
-      BIOME_RIVALS_SNAPSHOT_OPCODE,
-      encodeMatchMessage(state.game),
-      connected,
-      null,
-      true
-    );
+    snapshotRecipients = connected;
+  }
+  if (state.game !== null) {
+    for (let index = 0; index < snapshotRecipients.length; index += 1) {
+      const recipient = snapshotRecipients[index]!;
+      const isPlayer = state.game.players.some(function (player): boolean { return player.playerId === recipient.userId; });
+      if (!isPlayer) continue;
+      dispatcher.broadcastMessage(
+        BIOME_RIVALS_SNAPSHOT_OPCODE,
+        encodeMatchMessage(BiomeRivalsRules.createClientSnapshot(state.game, recipient.userId)),
+        [recipient],
+        null,
+        true
+      );
+    }
   }
   return { state: state };
 }

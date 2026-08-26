@@ -2,7 +2,7 @@
 
 ## 目标
 
-这版 Demo 用一个可运行的纵向切片验证“选牌—查看详情—支付费用—部署/释放—结束回合”的基本闭环。视觉复杂度参考成熟数字卡牌游戏的信息层级，但不复刻任何现成产品界面；场景使用与精绘背景消失方向匹配的固定斜俯视透视摄像机，将真实 3D 方块棋盘与屏幕空间卡牌 UI 组合为 2.5D 战场。
+这版 Demo 用一个可运行的纵向切片验证“选牌—查看详情—支付费用—部署/释放—进入战斗—选择攻击者与目标—伤害/死亡—结束回合”的基本闭环。视觉复杂度参考成熟数字卡牌游戏的信息层级，但不复刻任何现成产品界面；场景使用与精绘背景消失方向匹配的固定斜俯视透视摄像机，将真实 3D 方块棋盘与屏幕空间卡牌 UI 组合为 2.5D 战场。
 
 运行时基准分辨率为 `1920×1080`，Canvas 使用 `Scale With Screen Size`。所有交互由运行时 UI 组件生成，场景只保留启动对象和背景资源，便于后续注册新卡、替换动画系统和进行自动化测试。
 
@@ -49,13 +49,13 @@ UGUI 样式由 `DemoUiStyleCatalog` 集中提供材质、底色、描边和交�
 | `DemoBattlefield3D` | 摄像机、灯光、精绘环境层、3D 世界槽位和单位 | 精绘背景负责整体材质质量，真实几何负责交互、遮挡和动画 |
 | `DemoWorldAssetProvider` | 加载本机方块贴图与按 `cardId` 注册的 Prefab | 正式素材不应侵入回合和卡牌规则代码 |
 | `DemoMinecraftModelFactory` | 将已注册单位构造成 Minecraft 式分件方块模型并套用对应生物皮肤 | 只负责后备表现；正式 Prefab 仍拥有最高优先级 |
-| `DemoBattlefieldPointerController` | 从主相机发射 3D 射线，维护槽位悬停、按下和点击状态 | 只命中带 `DemoBattlefieldSlotTarget` 的地表，不依赖 Canvas 格子位置 |
+| `DemoBattlefieldPointerController` | 从主相机发射 3D 射线，维护双方槽位的悬停、按下和点击状态 | 只命中带 `DemoBattlefieldSlotTarget` 的地表，不依赖 Canvas 格子位置 |
 | `DemoSceneController` | 手牌、检查器、规则操作回调和世界坐标到文字 UI 的投影 | 保持屏幕空间布局；不创建部署格 Graphic/Button |
-| `DemoLocalMatch` | 费用、槽位、连续建筑与回合状态 | 不访问场景对象或渲染组件 |
+| `DemoLocalMatch` | 费用、槽位、连续建筑、阶段、战场实例、攻击/反击、死亡与英雄生命 | 不访问场景对象或渲染组件；命令 DTO 与联网网关保持一致 |
 
 本机原型贴图通过 `scripts/extract-minecraft-world-textures.ps1` 从已拥有的 Java 客户端 JAR 按白名单提取 17 张方块贴图和 6 张生物皮肤到 Git 忽略目录。运行时先查找 `Resources/DemoWorld/Prefabs/{cardId}`；不存在时由 `DemoMinecraftModelFactory` 为 `pf_001` 蜜蜂、`pf_002` 绵羊、`pf_003` 狼、`pf_004` 村民、`nt_001` 岩浆怪和 `nt_003` 烈焰人构造 Minecraft 式分件模型，其余单位才使用通用后备模型。因此以后注册正式 Prefab 不需要改部署逻辑。
 
-部署槽位不再使用屏幕空间矩形、透明 `Graphic` 或 UGUI `Button` 命中。每个槽位由一个合并的地砖顶面 Mesh、同 Mesh 的 `MeshCollider`、`DemoBattlefieldSlotTarget` 语义组件，以及一个仅在抬升时显示的合并侧壁 Mesh 组成，不为单块地砖创建 Renderer 或 Collider。`DemoBattlefieldPointerController` 使用主相机 `ScreenPointToRay` 在 3D 世界中寻找最近的语义槽位；UI 面板遮挡指针时停止世界命中。
+部署与攻击槽位不再使用屏幕空间矩形、透明 `Graphic` 或 UGUI `Button` 命中。每个槽位由一个合并的地砖顶面 Mesh、同 Mesh 的 `MeshCollider`、`DemoBattlefieldSlotTarget` 语义组件，以及一个仅在抬升时显示的合并侧壁 Mesh 组成，不为单块地砖创建 Renderer 或 Collider。`DemoBattlefieldPointerController` 使用主相机 `ScreenPointToRay` 在 3D 世界中寻找最近的双方语义槽位；UI 面板遮挡指针时停止世界命中。战斗阶段先持续高亮合法己方攻击者，选择后保持攻击者地砖的按下亮度，并点亮敌方生物/建筑目标；敌方英雄使用其实体 HUD 面板作为明确的点击目标。
 
 地砖顶点经过真实 Model/View/Projection 变换，透视摄像机使远端地砖自然收窄；`DemoGroundSurface` Shader 的屏幕投影只用于采样精绘背景纹理，几何形变和深度遮挡仍完全由世界 Mesh 与相机矩阵决定。未激活地砖因此保留背景原位置的草、石路或木板纹理，高亮则直接修改地砖表面及方块边缘亮度。交互顺序为“合法目标脉冲—悬停变金并抬升—按下压低并收缩—松开后回弹或部署单位”，规则状态仍只存在于 `DemoLocalMatch`。
 
@@ -79,3 +79,5 @@ UGUI 样式由 `DemoUiStyleCatalog` 集中提供材质、底色、描边和交�
 精绘环境层：`client-unity/Assets/Game/Demo/Art/demo-battlefield-bg-v1.png`。2.5D 版本保留它作为默认环境质感来源，并在其上叠加真实 3D 槽位、生物与建筑。
 
 实际运行预览：[`assets/demo-runtime-preview-v1.png`](assets/demo-runtime-preview-v1.png)
+
+战斗阶段预览：[`assets/demo-combat-phase-preview-v1.png`](assets/demo-combat-phase-preview-v1.png)。进入战斗后手牌只降低内容亮度，石砖底板保持不变；检查器切换为战斗指令，主按钮切换为“结束回合”。

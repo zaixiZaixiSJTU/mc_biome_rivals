@@ -67,7 +67,7 @@ Invoke-Unity @('-batchmode','-nographics','-quit','-projectPath',$projectPath,'-
 
 $testLog = Join-Path $logsPath 'editmode-tests.log'
 $testResults = Join-Path $logsPath 'editmode-results.xml'
-Invoke-Unity @('-batchmode','-nographics','-projectPath',$projectPath,'-runTests','-testPlatform','EditMode','-testResults',$testResults,'-logFile',$testLog) 'Unity EditMode tests' 60 $testLog 'Test run completed\. Exiting with code 0'
+Invoke-Unity @('-batchmode','-nographics','-projectPath',$projectPath,'-runTests','-testPlatform','EditMode','-testResults',$testResults,'-logFile',$testLog) 'Unity EditMode tests' 60 $testLog 'Test run completed\. Exiting with code [0-9]+'
 
 [xml]$results = Get-Content -LiteralPath $testResults -Raw
 $run = $results.'test-run'

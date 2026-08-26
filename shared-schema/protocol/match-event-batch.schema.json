@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["protocolVersion", "rulesetVersion", "revision", "acknowledgedCommandId", "events"],
   "properties": {
-    "protocolVersion": { "const": 1 },
+    "protocolVersion": { "const": 2 },
     "rulesetVersion": { "type": "string" },
     "revision": { "type": "integer", "minimum": 0 },
     "acknowledgedCommandId": { "type": "string" },
@@ -18,7 +18,7 @@
         "required": ["eventId", "type", "payload"],
         "properties": {
           "eventId": { "type": "integer", "minimum": 1 },
-          "type": { "enum": ["CARD_DEPLOYED", "TURN_ENDED", "TURN_STARTED", "PLAYER_CONCEDED", "MATCH_ENDED"] },
+          "type": { "enum": ["CARD_DEPLOYED", "PHASE_CHANGED", "ATTACK_RESOLVED", "OBJECT_DIED", "TURN_ENDED", "TURN_STARTED", "PLAYER_CONCEDED", "MATCH_ENDED"] },
           "payload": { "type": "object" }
         },
         "allOf": [
@@ -29,14 +29,79 @@
                 "payload": {
                   "type": "object",
                   "additionalProperties": false,
-                  "required": ["playerId", "cardId", "slotKind", "slotIndex", "occupiedSlots", "redstone"],
+                  "required": ["playerId", "instanceId", "cardId", "cardType", "slotKind", "slotIndex", "occupiedSlots", "redstone", "attack", "health", "maxHealth", "summonedTurn", "nextInstanceId"],
                   "properties": {
                     "playerId": { "type": "string", "minLength": 1 },
+                    "instanceId": { "type": "string", "pattern": "^object-[0-9]+$" },
                     "cardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+                    "cardType": { "enum": ["UNIT", "BUILDING", "STRUCTURE"] },
                     "slotKind": { "enum": ["UNIT", "BUILDING"] },
                     "slotIndex": { "type": "integer", "minimum": 0 },
                     "occupiedSlots": { "type": "integer", "minimum": 1, "maximum": 3 },
-                    "redstone": { "type": "integer", "minimum": 0, "maximum": 10 }
+                    "redstone": { "type": "integer", "minimum": 0, "maximum": 10 },
+                    "attack": { "type": "integer", "minimum": 0 },
+                    "health": { "type": "integer", "minimum": 1 },
+                    "maxHealth": { "type": "integer", "minimum": 1 },
+                    "summonedTurn": { "type": "integer", "minimum": 1 },
+                    "nextInstanceId": { "type": "integer", "minimum": 1 }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": { "properties": { "type": { "const": "PHASE_CHANGED" } } },
+            "then": {
+              "properties": {
+                "payload": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["playerId", "phase", "turn"],
+                  "properties": {
+                    "playerId": { "type": "string", "minLength": 1 },
+                    "phase": { "enum": ["MAIN", "COMBAT"] },
+                    "turn": { "type": "integer", "minimum": 1 }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": { "properties": { "type": { "const": "ATTACK_RESOLVED" } } },
+            "then": {
+              "properties": {
+                "payload": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["attackerPlayerId", "attackerInstanceId", "targetPlayerId", "targetType", "targetInstanceId", "damageToTarget", "damageToAttacker", "attackerHealth", "targetHealth", "targetArmor"],
+                  "properties": {
+                    "attackerPlayerId": { "type": "string", "minLength": 1 },
+                    "attackerInstanceId": { "type": "string", "pattern": "^object-[0-9]+$" },
+                    "targetPlayerId": { "type": "string", "minLength": 1 },
+                    "targetType": { "enum": ["HERO", "UNIT", "BUILDING"] },
+                    "targetInstanceId": { "type": ["string", "null"] },
+                    "damageToTarget": { "type": "integer", "minimum": 0 },
+                    "damageToAttacker": { "type": "integer", "minimum": 0 },
+                    "attackerHealth": { "type": "integer", "minimum": 0 },
+                    "targetHealth": { "type": "integer", "minimum": 0 },
+                    "targetArmor": { "type": "integer", "minimum": 0 }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": { "properties": { "type": { "const": "OBJECT_DIED" } } },
+            "then": {
+              "properties": {
+                "payload": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["playerId", "instanceId", "cardId", "slotKind", "slotIndex", "occupiedSlots"],
+                  "properties": {
+                    "playerId": { "type": "string", "minLength": 1 },
+                    "instanceId": { "type": "string", "pattern": "^object-[0-9]+$" },
+                    "cardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+                    "slotKind": { "enum": ["UNIT", "BUILDING"] },
+                    "slotIndex": { "type": "integer", "minimum": 0 },
+                    "occupiedSlots": { "type": "integer", "minimum": 1, "maximum": 3 }
                   }
                 }
               }

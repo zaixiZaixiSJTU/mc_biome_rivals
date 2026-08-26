@@ -13,6 +13,8 @@ namespace BiomeRivals.Core
     public static class MatchCommandTypes
     {
         public const string DeployCard = "DEPLOY_CARD";
+        public const string EnterCombat = "ENTER_COMBAT";
+        public const string Attack = "ATTACK";
         public const string EndTurn = "END_TURN";
         public const string Concede = "CONCEDE";
     }
@@ -20,6 +22,9 @@ namespace BiomeRivals.Core
     public static class MatchEventTypes
     {
         public const string CardDeployed = "CARD_DEPLOYED";
+        public const string PhaseChanged = "PHASE_CHANGED";
+        public const string AttackResolved = "ATTACK_RESOLVED";
+        public const string ObjectDied = "OBJECT_DIED";
         public const string TurnEnded = "TURN_ENDED";
         public const string TurnStarted = "TURN_STARTED";
         public const string PlayerConceded = "PLAYER_CONCEDED";
@@ -32,6 +37,9 @@ namespace BiomeRivals.Core
         public string cardId = string.Empty;
         public string slotKind = string.Empty;
         public int slotIndex;
+        public string attackerInstanceId = string.Empty;
+        public string targetType = string.Empty;
+        public string targetInstanceId = string.Empty;
     }
 
     [Serializable]
@@ -73,6 +81,38 @@ namespace BiomeRivals.Core
                 type = MatchCommandTypes.EndTurn,
                 payload = new MatchCommandPayloadDto()
             };
+
+        public static MatchCommandDto EnterCombat(string commandId, int revision) =>
+            new MatchCommandDto
+            {
+                protocolVersion = GameVersions.Protocol,
+                rulesetVersion = GameVersions.Ruleset,
+                commandId = commandId,
+                expectedRevision = revision,
+                type = MatchCommandTypes.EnterCombat,
+                payload = new MatchCommandPayloadDto()
+            };
+
+        public static MatchCommandDto Attack(
+            string commandId,
+            int revision,
+            string attackerInstanceId,
+            string targetType,
+            string targetInstanceId = "") =>
+            new MatchCommandDto
+            {
+                protocolVersion = GameVersions.Protocol,
+                rulesetVersion = GameVersions.Ruleset,
+                commandId = commandId,
+                expectedRevision = revision,
+                type = MatchCommandTypes.Attack,
+                payload = new MatchCommandPayloadDto
+                {
+                    attackerInstanceId = attackerInstanceId,
+                    targetType = targetType,
+                    targetInstanceId = targetInstanceId
+                }
+            };
     }
 
     [Serializable]
@@ -89,6 +129,24 @@ namespace BiomeRivals.Core
         public int redstone;
         public int redstoneCapacity;
         public int activePlayerIndex;
+        public string phase = string.Empty;
+        public string instanceId = string.Empty;
+        public string cardType = string.Empty;
+        public int attack;
+        public int health;
+        public int maxHealth;
+        public int summonedTurn;
+        public int nextInstanceId;
+        public string attackerPlayerId = string.Empty;
+        public string attackerInstanceId = string.Empty;
+        public string targetPlayerId = string.Empty;
+        public string targetType = string.Empty;
+        public string targetInstanceId = string.Empty;
+        public int damageToTarget;
+        public int damageToAttacker;
+        public int attackerHealth;
+        public int targetHealth;
+        public int targetArmor;
     }
 
     [Serializable]

@@ -26,18 +26,21 @@ namespace BiomeRivals.Demo
         private readonly DemoLocalMatch _match = new DemoLocalMatch();
         private readonly List<SlotView> _playerUnitSlots = new List<SlotView>();
         private readonly List<SlotView> _playerBuildingSlots = new List<SlotView>();
+        private readonly List<SlotView> _opponentUnitSlots = new List<SlotView>();
+        private readonly List<SlotView> _opponentBuildingSlots = new List<SlotView>();
         private readonly List<FactionButtonView> _factionButtons = new List<FactionButtonView>();
-        private readonly string[] _opponentUnits = { "nt_001", string.Empty, "nt_003", string.Empty };
-        private readonly string[] _opponentBuildings = { string.Empty, "nt_007", string.Empty };
 
         private CardContentRegistry _registry;
         private DemoBattlefield3D _battlefield;
         private RectTransform _canvasRoot;
         private RectTransform _handRoot;
+        private CanvasGroup _handCanvasGroup;
         private RectTransform _inspectorRoot;
         private CardDetailsView _cardDetailsView;
         private RectTransform _playerHud;
         private Text _energyText;
+        private Text _opponentHealthText;
+        private Text _playerHealthText;
         private Text _roundText;
         private Text _statusText;
         private Text _endTurnLabel;
@@ -45,6 +48,7 @@ namespace BiomeRivals.Demo
         private CanvasGroup _turnBanner;
         private Text _turnBannerText;
         private string _selectedCardId;
+        private string _selectedAttackerInstanceId;
         private string _activeFaction = "plains_forest";
         private bool _built;
         private Font _font;
@@ -67,6 +71,7 @@ namespace BiomeRivals.Demo
             if (HasCommandLineFlag("-disableLocalCardArt")) DemoCardArtProvider.LocalArtEnabled = false;
             if (HasCommandLineFlag("-disableLocalWorldAssets")) DemoWorldAssetProvider.LocalAssetsEnabled = false;
             BuildNow();
+            if (HasCommandLineFlag("-previewCombat")) OnEndTurn();
             if (HasCommandLineFlag("-previewGroundHover")) _battlefield.SetSlotHovered(true, DemoSlotKind.Unit, 0, true);
             var capturePath = GetCommandLineValue("-captureDemo");
             if (!string.IsNullOrWhiteSpace(capturePath)) StartCoroutine(CaptureDemo(capturePath));
@@ -84,6 +89,10 @@ namespace BiomeRivals.Demo
             if (_built) return;
             _built = true;
             _registry = CardContentLoader.Current;
+            var opponents = new List<CardDefinitionEntry>();
+            foreach (var cardId in new[] { "nt_001", "nt_003", "nt_007" })
+                if (_registry.TryGetDefinition(cardId, out var definition)) opponents.Add(definition);
+            _match.ResetOpponent(opponents);
             BuildInterface();
             SelectFaction(_activeFaction);
             ShowStatus("选择手牌，再点击发光的战场格；法术和材料从右侧释放。", false);
@@ -137,7 +146,21 @@ namespace BiomeRivals.Demo
             CreatePanel(opponentHud, "Avatar", new Vector2(-112, 0), new Vector2(70, 70), Hex("#5B2020"));
             CreateText(opponentHud, "AvatarGlyph", new Vector2(-112, 1), new Vector2(60, 60), "▣", 36, Ember, TextAnchor.MiddleCenter, FontStyle.Bold);
             CreateText(opponentHud, "Name", new Vector2(34, 22), new Vector2(190, 32), "下界远征队", 20, Pale, TextAnchor.MiddleLeft, FontStyle.Bold);
-            CreateText(opponentHud, "Health", new Vector2(34, -19), new Vector2(190, 30), "❤ 20     ◆ 4/6", 17, Hex("#F4C18A"), TextAnchor.MiddleLeft, FontStyle.Normal);
+            _opponentHealthText = CreateText(opponentHud, "Health", new Vector2(34, -19), new Vector2(190, 30), "❤ 30", 17, Hex("#F4C18A"), TextAnchor.MiddleLeft, FontStyle.Bold);
+            var opponentHeroTarget = opponentHud.gameObject.AddComponent<Button>();
+            opponentHeroTarget.targetGraphic = opponentHud.GetComponent<Image>();
+            opponentHeroTarget.transition = Selectable.Transition.ColorTint;
+            opponentHeroTarget.colors = new ColorBlock
+            {
+                normalColor = Color.white,
+                highlightedColor = new Color(1f, 0.82f, 0.65f, 1f),
+                pressedColor = new Color(0.82f, 0.55f, 0.42f, 1f),
+                selectedColor = Color.white,
+                disabledColor = new Color(0.55f, 0.55f, 0.55f, 1f),
+                colorMultiplier = 1f,
+                fadeDuration = 0.08f
+            };
+            opponentHeroTarget.onClick.AddListener(AttackOpponentHero);
 
             var cardBackRoot = CreateRect(_canvasRoot, "OpponentHand", new Vector2(0, 410), new Vector2(480, 130));
             for (var i = 0; i < 5; i++)
@@ -152,7 +175,7 @@ namespace BiomeRivals.Demo
             CreatePanel(_playerHud, "Avatar", new Vector2(-92, 0), new Vector2(70, 70), Hex("#274C2D"));
             CreateText(_playerHud, "AvatarGlyph", new Vector2(-92, 1), new Vector2(60, 60), "▦", 34, Hex("#D3C35B"), TextAnchor.MiddleCenter, FontStyle.Bold);
             CreateText(_playerHud, "Name", new Vector2(35, 22), new Vector2(150, 30), "林地守护者", 18, Pale, TextAnchor.MiddleLeft, FontStyle.Bold);
-            CreateText(_playerHud, "Health", new Vector2(35, -17), new Vector2(150, 30), "❤ 20", 18, Hex("#B8E5A9"), TextAnchor.MiddleLeft, FontStyle.Bold);
+            _playerHealthText = CreateText(_playerHud, "Health", new Vector2(35, -17), new Vector2(150, 30), "❤ 30", 18, Hex("#B8E5A9"), TextAnchor.MiddleLeft, FontStyle.Bold);
         }
 
         private void BuildFactionRail()
@@ -176,9 +199,9 @@ namespace BiomeRivals.Demo
         private void BuildSlots()
         {
             for (var i = 0; i < 3; i++)
-                CreateOpponentSlot(DemoSlotKind.Building, i, _battlefield.GetSlotReferencePosition(false, DemoSlotKind.Building, i), new Vector2(190, 92), _opponentBuildings[i]);
+                _opponentBuildingSlots.Add(CreateOpponentSlot(DemoSlotKind.Building, i, _battlefield.GetSlotReferencePosition(false, DemoSlotKind.Building, i), new Vector2(190, 92)));
             for (var i = 0; i < 4; i++)
-                CreateOpponentSlot(DemoSlotKind.Unit, i, _battlefield.GetSlotReferencePosition(false, DemoSlotKind.Unit, i), new Vector2(150, 118), _opponentUnits[i]);
+                _opponentUnitSlots.Add(CreateOpponentSlot(DemoSlotKind.Unit, i, _battlefield.GetSlotReferencePosition(false, DemoSlotKind.Unit, i), new Vector2(150, 118)));
 
             for (var i = 0; i < 4; i++)
                 _playerUnitSlots.Add(CreatePlayerSlot(DemoSlotKind.Unit, i, _battlefield.GetSlotReferencePosition(true, DemoSlotKind.Unit, i), new Vector2(158, 118)));
@@ -197,22 +220,19 @@ namespace BiomeRivals.Demo
             return new SlotView(kind, index, content, label);
         }
 
-        private void CreateOpponentSlot(DemoSlotKind kind, int index, Vector2 position, Vector2 size, string cardId)
+        private SlotView CreateOpponentSlot(DemoSlotKind kind, int index, Vector2 position, Vector2 size)
         {
             var root = CreateRect(_canvasRoot, $"Opponent{kind}Slot{index}", position, size);
-            var occupied = !string.IsNullOrEmpty(cardId);
-            _battlefield.SetSlotState(false, kind, index, false, occupied);
-            if (string.IsNullOrEmpty(cardId))
-            {
-                return;
-            }
-            CreateWorldPieceLabel(root, cardId, size - new Vector2(10, 10), true);
+            var content = CreateRect(root, "Content", Vector2.zero, size - new Vector2(10, 10));
+            var empty = CreateText(content, "EmptyLabel", Vector2.zero, size - new Vector2(16, 16), string.Empty, 12, Color.clear, TextAnchor.MiddleCenter, FontStyle.Bold);
+            return new SlotView(kind, index, content, empty);
         }
 
         private void BuildHandArea()
         {
             var handPlate = CreateBasePanel(_canvasRoot, "HandPlate", new Vector2(35, -418), new Vector2(1360, 232));
             _handRoot = CreateRect(handPlate, "HandCards", new Vector2(-20, 14), new Vector2(1250, 225));
+            _handCanvasGroup = _handRoot.gameObject.AddComponent<CanvasGroup>();
             CreateText(_canvasRoot, "HandLabel", new Vector2(-584, -508), new Vector2(130, 25), "手牌  5/7", 13, Muted, TextAnchor.MiddleLeft, FontStyle.Bold);
         }
 
@@ -230,8 +250,8 @@ namespace BiomeRivals.Demo
             var energyPlate = CreateBasePanel(_canvasRoot, "EnergyPlate", new Vector2(-570, -454), new Vector2(150, 72));
             _energyText = CreateText(energyPlate, "Energy", Vector2.zero, new Vector2(130, 54), "◆ 6/6", 22, Cyan, TextAnchor.MiddleCenter, FontStyle.Bold);
 
-            var roundPlate = CreateBasePanel(_canvasRoot, "RoundPlate", new Vector2(710, 472), new Vector2(155, 54));
-            _roundText = CreateText(roundPlate, "Round", Vector2.zero, new Vector2(135, 38), "第 1 回合", 17, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
+            var roundPlate = CreateBasePanel(_canvasRoot, "RoundPlate", new Vector2(675, 472), new Vector2(230, 54));
+            _roundText = CreateText(roundPlate, "Round", Vector2.zero, new Vector2(208, 38), "第 1 回合 · 主行动", 17, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
 
             _endTurnButton = CreatePrimaryActionButton(_canvasRoot, "EndTurnButton", new Vector2(786, -355), new Vector2(230, 86), "结束回合", 23);
             _endTurnLabel = _endTurnButton.GetComponentInChildren<Text>();
@@ -266,13 +286,18 @@ namespace BiomeRivals.Demo
         {
             RefreshFactionButtons();
             RefreshHand();
-            RefreshPlayerSlots();
-            _battlefield.SyncPieces(_match.UnitSlots, _match.BuildingSlots, _opponentUnits, _opponentBuildings, _registry);
+            RefreshBattlefieldSlots();
+            _battlefield.SyncPieces(_match.UnitSlots, _match.BuildingSlots, _match.OpponentUnitSlots, _match.OpponentBuildingSlots, _registry);
             RefreshInspector();
             _energyText.text = $"◆ {_match.Energy}/{_match.MaxEnergy}";
-            _roundText.text = $"第 {_match.Round} 回合";
-            _endTurnButton.interactable = _match.IsPlayerTurn;
-            _endTurnLabel.text = _match.IsPlayerTurn ? "结束回合" : "对手行动中";
+            _roundText.text = $"第 {_match.Round} 回合 · {(_match.Phase == DemoTurnPhase.Main ? "主行动" : "战斗")}";
+            _opponentHealthText.text = $"❤ {_match.OpponentLife}";
+            _playerHealthText.text = $"❤ {_match.PlayerLife}";
+            _handCanvasGroup.alpha = _match.Phase == DemoTurnPhase.Main ? 1f : 0.52f;
+            _handCanvasGroup.interactable = _match.Phase == DemoTurnPhase.Main;
+            _handCanvasGroup.blocksRaycasts = _match.Phase == DemoTurnPhase.Main;
+            _endTurnButton.interactable = _match.IsPlayerTurn && !_match.IsFinished;
+            _endTurnLabel.text = !_match.IsPlayerTurn ? "对手行动中" : _match.IsFinished ? "对局结束" : _match.Phase == DemoTurnPhase.Main ? "进入战斗" : "结束回合";
         }
 
         private void RefreshFactionButtons()
@@ -306,34 +331,53 @@ namespace BiomeRivals.Demo
             }
         }
 
-        private void RefreshPlayerSlots()
+        private void RefreshBattlefieldSlots()
         {
-            foreach (var view in _playerUnitSlots) RefreshSlot(view, _match.UnitSlots[view.Index]);
-            foreach (var view in _playerBuildingSlots) RefreshSlot(view, _match.BuildingSlots[view.Index]);
+            foreach (var view in _playerUnitSlots) RefreshSlot(true, view, _match.UnitSlots[view.Index]);
+            foreach (var view in _playerBuildingSlots) RefreshSlot(true, view, _match.BuildingSlots[view.Index]);
+            foreach (var view in _opponentUnitSlots) RefreshSlot(false, view, _match.OpponentUnitSlots[view.Index]);
+            foreach (var view in _opponentBuildingSlots) RefreshSlot(false, view, _match.OpponentBuildingSlots[view.Index]);
         }
 
-        private void RefreshSlot(SlotView view, string cardId)
+        private void RefreshSlot(bool player, SlotView view, string cardId)
         {
             ClearChildrenExcept(view.Content, view.EmptyLabel.gameObject);
             var empty = string.IsNullOrEmpty(cardId);
             view.EmptyLabel.gameObject.SetActive(empty);
-            var valid = empty && IsSelectedValidFor(view.Kind);
+            var battlefieldObject = _match.GetObject(player, view.Kind, view.Index);
+            var valid = player
+                ? _match.Phase == DemoTurnPhase.Main
+                    ? empty && IsSelectedValidFor(view.Kind)
+                    : !empty && view.Kind == DemoSlotKind.Unit && _match.CanAttackWith(battlefieldObject, out _)
+                : _match.Phase == DemoTurnPhase.Combat && !string.IsNullOrEmpty(_selectedAttackerInstanceId) && !empty;
             view.EmptyLabel.color = Color.clear;
-            _battlefield.SetSlotState(true, view.Kind, view.Index, valid, !empty);
+            _battlefield.SetSlotState(player, view.Kind, view.Index, valid, !empty);
 
             if (!empty)
             {
-                if (view.Kind == DemoSlotKind.Building && view.Index > 0 && _match.BuildingSlots[view.Index - 1] == cardId)
+                var slots = player
+                    ? view.Kind == DemoSlotKind.Unit ? _match.UnitSlots : _match.BuildingSlots
+                    : view.Kind == DemoSlotKind.Unit ? _match.OpponentUnitSlots : _match.OpponentBuildingSlots;
+                if (view.Kind == DemoSlotKind.Building && view.Index > 0 && slots[view.Index - 1] == cardId)
                     CreateText(view.Content, "Occupied", Vector2.zero, view.Content.sizeDelta, "结构占用", 14, Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
                 else
-                    CreateWorldPieceLabel(view.Content, cardId, view.Content.sizeDelta, false);
+                    CreateWorldPieceLabel(view.Content, cardId, view.Content.sizeDelta, !player, battlefieldObject);
             }
         }
 
         private void RefreshInspector()
         {
             ClearChildren(_inspectorRoot);
-            CreateText(_inspectorRoot, "Header", new Vector2(0, 315), new Vector2(250, 38), "卡牌详情", 20, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
+            CreateText(_inspectorRoot, "Header", new Vector2(0, 315), new Vector2(250, 38), _match.Phase == DemoTurnPhase.Main ? "卡牌详情" : "战斗指令", 20, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
+            if (_match.Phase == DemoTurnPhase.Combat)
+            {
+                _cardDetailsView.Clear();
+                var attacker = FindSelectedAttacker();
+                var title = attacker == null ? "选择一个发光的己方生物" : $"攻击者：{GetCardName(attacker.CardId)}\n{attacker.Attack}/{attacker.Health}";
+                CreateText(_inspectorRoot, "CombatTitle", new Vector2(0, 100), new Vector2(245, 130), title, 19, Cyan, TextAnchor.MiddleCenter, FontStyle.Bold);
+                CreateText(_inspectorRoot, "CombatHint", new Vector2(0, -25), new Vector2(245, 120), "再点击敌方生物、建筑，\n或左上角敌方英雄面板。\n单位会同步反击，建筑不会反击。", 15, Pale, TextAnchor.MiddleCenter, FontStyle.Normal);
+                return;
+            }
             if (string.IsNullOrEmpty(_selectedCardId) || !_registry.TryGetDefinition(_selectedCardId, out var definition))
             {
                 _cardDetailsView.Clear();
@@ -372,8 +416,18 @@ namespace BiomeRivals.Demo
             if (_registry.TryGetText(cardId, out var text)) ShowStatus($"已选择：{text.name}", false);
         }
 
-        private void OnSlotClicked(DemoSlotKind kind, int index)
+        private void OnSlotClicked(bool player, DemoSlotKind kind, int index)
         {
+            if (_match.Phase == DemoTurnPhase.Combat)
+            {
+                HandleCombatSlotClick(player, kind, index);
+                return;
+            }
+            if (!player)
+            {
+                ShowStatus("主行动阶段不能攻击；请点击右下角进入战斗。", true);
+                return;
+            }
             if (string.IsNullOrEmpty(_selectedCardId) || !_registry.TryGetDefinition(_selectedCardId, out var definition))
             {
                 ShowStatus("请先选择一张手牌。", true);
@@ -385,6 +439,78 @@ namespace BiomeRivals.Demo
             ShowStatus(result.Accepted ? $"{result.Message} · 状态 r{result.Revision}" : result.Message, !result.Accepted);
             RefreshAll();
         }
+
+        private void HandleCombatSlotClick(bool player, DemoSlotKind kind, int index)
+        {
+            if (player)
+            {
+                var attacker = _match.GetObject(true, kind, index);
+                if (!_match.CanAttackWith(attacker, out var message))
+                {
+                    ShowStatus(message, true);
+                    return;
+                }
+                ClearSelectedAttackerHighlight();
+                _selectedAttackerInstanceId = attacker.InstanceId;
+                _battlefield.SetSlotPressed(true, DemoSlotKind.Unit, attacker.SlotIndex, true);
+                ShowStatus($"已选择攻击者：{GetCardName(attacker.CardId)}（{attacker.Attack}/{attacker.Health}）", false);
+                RefreshAll();
+                return;
+            }
+
+            var selected = FindSelectedAttacker();
+            if (selected == null)
+            {
+                ShowStatus("请先选择一个发光的己方生物。", true);
+                return;
+            }
+            var target = _match.GetObject(false, kind, index);
+            if (target == null)
+            {
+                ShowStatus("该敌方格为空。", true);
+                return;
+            }
+            ResolveLocalAttack(selected, kind == DemoSlotKind.Unit ? "UNIT" : "BUILDING", target.InstanceId);
+        }
+
+        private void AttackOpponentHero()
+        {
+            if (_match.Phase != DemoTurnPhase.Combat) return;
+            var selected = FindSelectedAttacker();
+            if (selected == null)
+            {
+                ShowStatus("请先选择一个发光的己方生物。", true);
+                return;
+            }
+            ResolveLocalAttack(selected, "HERO", string.Empty);
+        }
+
+        private void ResolveLocalAttack(DemoBattlefieldObject attacker, string targetType, string targetInstanceId)
+        {
+            var command = _match.CreateAttackCommand(attacker.InstanceId, targetType, targetInstanceId);
+            var result = _match.ApplyAttack(command);
+            if (result.Accepted)
+            {
+                _battlefield.SetSlotPressed(true, DemoSlotKind.Unit, attacker.SlotIndex, false);
+                _selectedAttackerInstanceId = null;
+            }
+            ShowStatus(result.Accepted ? $"{result.Message} · 状态 r{result.Revision}" : result.Message, !result.Accepted);
+            RefreshAll();
+        }
+
+        private DemoBattlefieldObject FindSelectedAttacker() =>
+            string.IsNullOrEmpty(_selectedAttackerInstanceId)
+                ? null
+                : _match.PlayerBattlefield.FirstOrDefault(value => value.InstanceId == _selectedAttackerInstanceId);
+
+        private void ClearSelectedAttackerHighlight()
+        {
+            var selected = FindSelectedAttacker();
+            if (selected != null) _battlefield.SetSlotPressed(true, DemoSlotKind.Unit, selected.SlotIndex, false);
+        }
+
+        private string GetCardName(string cardId) =>
+            _registry.TryGetText(cardId, out var text) ? text.name : cardId;
 
         private void CastSelectedCard()
         {
@@ -398,7 +524,18 @@ namespace BiomeRivals.Demo
         private void OnEndTurn()
         {
             if (!_match.IsPlayerTurn) return;
+            if (_match.Phase == DemoTurnPhase.Main)
+            {
+                var result = _match.ApplyEnterCombat(_match.CreateEnterCombatCommand());
+                ClearSelectedAttackerHighlight();
+                _selectedAttackerInstanceId = null;
+                ShowStatus(result.Message, !result.Accepted);
+                RefreshAll();
+                return;
+            }
             _match.EndPlayerTurn();
+            ClearSelectedAttackerHighlight();
+            _selectedAttackerInstanceId = null;
             RefreshAll();
             StartCoroutine(SimulateOpponentTurn());
         }
@@ -480,15 +617,17 @@ namespace BiomeRivals.Demo
             _statusText.color = error ? Danger : Pale;
         }
 
-        private void CreateWorldPieceLabel(Transform parent, string cardId, Vector2 size, bool enemy)
+        private void CreateWorldPieceLabel(Transform parent, string cardId, Vector2 size, bool enemy, DemoBattlefieldObject battlefieldObject = null)
         {
             if (!_registry.TryGetDefinition(cardId, out var definition) || !_registry.TryGetText(cardId, out var text)) return;
             _registry.TryGetTheme(definition.themeId, out var theme);
             var accent = enemy ? Ember : theme.Accent;
+            var attack = battlefieldObject?.Attack ?? definition.attack;
+            var health = battlefieldObject?.Health ?? definition.health;
             var stats = definition.hasAttack && definition.hasHealth
-                ? $"{text.name}   {definition.attack}/{definition.health}"
+                ? $"{text.name}   {attack}/{health}"
                 : definition.hasHealth
-                    ? $"{text.name}   ❤ {definition.health}"
+                    ? $"{text.name}   ❤ {health}"
                     : text.name;
             var labelY = -size.y * 0.34f;
             var plate = CreatePanel(parent, "WorldLabel", new Vector2(0, labelY), new Vector2(size.x - 8, 30), new Color(Ink.r, Ink.g, Ink.b, 0.84f));

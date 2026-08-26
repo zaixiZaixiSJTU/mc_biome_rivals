@@ -4,6 +4,22 @@ using System.Collections.Generic;
 namespace BiomeRivals.Core
 {
     [Serializable]
+    public sealed class BattlefieldObjectStateDto
+    {
+        public string instanceId = string.Empty;
+        public string cardId = string.Empty;
+        public string cardType = string.Empty;
+        public int attack;
+        public int health;
+        public int maxHealth;
+        public string slotKind = string.Empty;
+        public int slotIndex;
+        public int occupiedSlots;
+        public int summonedTurn;
+        public bool hasAttacked;
+    }
+
+    [Serializable]
     public sealed class PlayerStateDto
     {
         public string playerId = string.Empty;
@@ -14,19 +30,23 @@ namespace BiomeRivals.Core
         public string[] hand = Array.Empty<string>();
         public string[] unitSlots = Array.Empty<string>();
         public string[] buildingSlots = Array.Empty<string>();
+        public BattlefieldObjectStateDto[] battlefield = Array.Empty<BattlefieldObjectStateDto>();
     }
 
     [Serializable]
     public sealed class MatchStateDto
     {
         public string matchId = string.Empty;
+        public string viewerPlayerId = string.Empty;
         public int protocolVersion;
         public string rulesetVersion = string.Empty;
         public int revision;
         public long lastEventId;
         public string status = string.Empty;
         public int turn;
+        public string phase = string.Empty;
         public int activePlayerIndex;
+        public int nextInstanceId;
         public PlayerStateDto[] players = Array.Empty<PlayerStateDto>();
         public string winnerPlayerId = string.Empty;
     }
@@ -59,7 +79,15 @@ namespace BiomeRivals.Core
             if (batch.revision != Current.revision + 1)
                 throw new InvalidOperationException($"Expected revision {Current.revision + 1}, received {batch.revision}.");
 
+            var nextEventId = Current.lastEventId + 1;
+            foreach (var matchEvent in batch.events ?? Array.Empty<MatchEventDto>())
+            {
+                if (matchEvent == null || matchEvent.eventId != nextEventId)
+                    throw new InvalidOperationException($"Expected event {nextEventId}, received {matchEvent?.eventId ?? 0}.");
+                nextEventId++;
+            }
             foreach (var matchEvent in batch.events ?? Array.Empty<MatchEventDto>()) Apply(matchEvent);
+            if (batch.events != null && batch.events.Length > 0) Current.lastEventId = batch.events[batch.events.Length - 1].eventId;
             Current.revision = batch.revision;
         }
 
@@ -80,7 +108,46 @@ namespace BiomeRivals.Core
                     var nextHand = RemoveFirst(player.hand, payload.cardId);
                     player.hand = nextHand;
                     player.redstone = payload.redstone;
-                    for (var index = payload.slotIndex; index < payload.slotIndex + occupiedSlots; index++) slots[index] = payload.cardId;
+                    var battlefield = new List<BattlefieldObjectStateDto>(player.battlefield ?? Array.Empty<BattlefieldObjectStateDto>());
+                    battlefield.Add(new BattlefieldObjectStateDto
+                    {
+                        instanceId = payload.instanceId,
+                        cardId = payload.cardId,
+                        cardType = payload.cardType,
+                        attack = payload.attack,
+                        health = payload.health,
+                        maxHealth = payload.maxHealth,
+                        slotKind = payload.slotKind,
+                        slotIndex = payload.slotIndex,
+                        occupiedSlots = occupiedSlots,
+                        summonedTurn = payload.summonedTurn,
+                        hasAttacked = false
+                    });
+                    player.battlefield = battlefield.ToArray();
+                    Current.nextInstanceId = payload.nextInstanceId;
+                    for (var index = payload.slotIndex; index < payload.slotIndex + occupiedSlots; index++) slots[index] = payload.instanceId;
+                    break;
+                case MatchEventTypes.PhaseChanged:
+                    Current.phase = payload.phase;
+                    break;
+                case MatchEventTypes.AttackResolved:
+                    var attackerPlayer = FindPlayer(payload.attackerPlayerId);
+                    var attacker = FindObject(attackerPlayer, payload.attackerInstanceId);
+                    attacker.health = payload.attackerHealth;
+                    attacker.hasAttacked = true;
+                    var targetPlayer = FindPlayer(payload.targetPlayerId);
+                    if (payload.targetType == "HERO")
+                    {
+                        targetPlayer.life = payload.targetHealth;
+                        targetPlayer.armor = payload.targetArmor;
+                    }
+                    else
+                    {
+                        FindObject(targetPlayer, payload.targetInstanceId).health = payload.targetHealth;
+                    }
+                    break;
+                case MatchEventTypes.ObjectDied:
+                    RemoveObject(FindPlayer(payload.playerId), payload.instanceId);
                     break;
                 case MatchEventTypes.TurnStarted:
                     var activePlayer = FindPlayer(payload.playerId);
@@ -88,9 +155,12 @@ namespace BiomeRivals.Core
                         !ReferenceEquals(activePlayer, Current.players[payload.activePlayerIndex]))
                         throw new InvalidOperationException("Turn event active player index does not match its player id.");
                     Current.turn = payload.turn;
+                    Current.phase = payload.phase;
                     Current.activePlayerIndex = payload.activePlayerIndex;
                     activePlayer.redstone = payload.redstone;
                     activePlayer.redstoneCapacity = payload.redstoneCapacity;
+                    foreach (var battlefieldObject in activePlayer.battlefield ?? Array.Empty<BattlefieldObjectStateDto>())
+                        if (battlefieldObject != null) battlefieldObject.hasAttacked = false;
                     break;
                 case MatchEventTypes.MatchEnded:
                     Current.status = "FINISHED";
@@ -106,10 +176,34 @@ namespace BiomeRivals.Core
             throw new InvalidOperationException($"Event references unknown player '{playerId}'.");
         }
 
+        private static BattlefieldObjectStateDto FindObject(PlayerStateDto player, string instanceId)
+        {
+            foreach (var battlefieldObject in player.battlefield ?? Array.Empty<BattlefieldObjectStateDto>())
+                if (battlefieldObject != null && string.Equals(battlefieldObject.instanceId, instanceId, StringComparison.Ordinal)) return battlefieldObject;
+            throw new InvalidOperationException($"Event references unknown battlefield object '{instanceId}'.");
+        }
+
+        private static void RemoveObject(PlayerStateDto player, string instanceId)
+        {
+            var battlefield = new List<BattlefieldObjectStateDto>(player.battlefield ?? Array.Empty<BattlefieldObjectStateDto>());
+            var removed = battlefield.RemoveAll(item => item != null && string.Equals(item.instanceId, instanceId, StringComparison.Ordinal));
+            if (removed != 1) throw new InvalidOperationException($"Death event references unknown battlefield object '{instanceId}'.");
+            player.battlefield = battlefield.ToArray();
+            ClearSlots(player.unitSlots, instanceId);
+            ClearSlots(player.buildingSlots, instanceId);
+        }
+
+        private static void ClearSlots(string[] slots, string instanceId)
+        {
+            for (var index = 0; index < (slots?.Length ?? 0); index++)
+                if (string.Equals(slots[index], instanceId, StringComparison.Ordinal)) slots[index] = null;
+        }
+
         private static string[] RemoveFirst(string[] values, string value)
         {
             var result = new List<string>(values ?? Array.Empty<string>());
             var index = result.IndexOf(value);
+            if (index < 0) index = result.FindIndex(string.IsNullOrEmpty);
             if (index < 0) throw new InvalidOperationException($"Card '{value}' is not present in the authoritative hand projection.");
             result.RemoveAt(index);
             return result.ToArray();

@@ -1,5 +1,26 @@
 namespace BiomeRivals.Demo
 {
+    public enum DemoTurnPhase
+    {
+        Main,
+        Combat
+    }
+
+    public sealed class DemoBattlefieldObject
+    {
+        public string InstanceId { get; set; }
+        public string CardId { get; set; }
+        public bool Player { get; set; }
+        public DemoSlotKind SlotKind { get; set; }
+        public int SlotIndex { get; set; }
+        public int OccupiedSlots { get; set; }
+        public int Attack { get; set; }
+        public int Health { get; set; }
+        public int MaxHealth { get; set; }
+        public int SummonedRound { get; set; }
+        public bool HasAttacked { get; set; }
+    }
+
     public enum DemoCommandRejectionCode
     {
         None,
@@ -11,7 +32,9 @@ namespace BiomeRivals.Demo
         CardNotInHand,
         InsufficientRedstone,
         InvalidTarget,
-        SlotOccupied
+        SlotOccupied,
+        WrongPhase,
+        AttackerNotReady
     }
 
     public sealed class DemoCommandResult

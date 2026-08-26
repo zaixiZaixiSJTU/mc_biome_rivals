@@ -6,11 +6,11 @@
   "additionalProperties": false,
   "required": ["protocolVersion", "rulesetVersion", "commandId", "expectedRevision", "type", "payload"],
   "properties": {
-    "protocolVersion": { "const": 1 },
+    "protocolVersion": { "const": 2 },
     "rulesetVersion": { "type": "string", "minLength": 1 },
     "commandId": { "type": "string", "minLength": 1, "maxLength": 80 },
     "expectedRevision": { "type": "integer", "minimum": 0 },
-    "type": { "enum": ["DEPLOY_CARD", "END_TURN", "CONCEDE"] },
+    "type": { "enum": ["DEPLOY_CARD", "ENTER_COMBAT", "ATTACK", "END_TURN", "CONCEDE"] },
     "payload": { "type": "object" }
   },
   "allOf": [
@@ -27,6 +27,29 @@
               "slotKind": { "enum": ["UNIT", "BUILDING"] },
               "slotIndex": { "type": "integer", "minimum": 0 }
             }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "ATTACK" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["attackerInstanceId", "targetType"],
+            "properties": {
+              "attackerInstanceId": { "type": "string", "pattern": "^object-[0-9]+$" },
+              "targetType": { "enum": ["HERO", "UNIT", "BUILDING"] },
+              "targetInstanceId": { "type": "string", "pattern": "^object-[0-9]+$" }
+            },
+            "allOf": [
+              {
+                "if": { "properties": { "targetType": { "enum": ["UNIT", "BUILDING"] } } },
+                "then": { "required": ["targetInstanceId"] }
+              }
+            ]
           }
         }
       }

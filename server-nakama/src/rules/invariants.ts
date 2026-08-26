@@ -12,6 +12,8 @@ namespace BiomeRivalsRules {
     }
     if (state.revision < 0 || state.lastEventId < 0) violations.push('counters cannot be negative');
     if (state.turn < 1) violations.push('turn must start at one');
+    if (state.phase !== 'MAIN' && state.phase !== 'COMBAT') violations.push('turn phase is invalid');
+    if (state.nextInstanceId < 1) violations.push('nextInstanceId must be positive');
     if (state.status === 'FINISHED' && state.winnerPlayerId === null) {
       violations.push('finished match requires a winner');
     }
@@ -28,6 +30,52 @@ namespace BiomeRivalsRules {
       if (player.buildingSlots.length !== 3) violations.push('each player requires three building slots');
       for (let handIndex = 0; handIndex < player.hand.length; handIndex += 1) {
         if (getCardDefinition(player.hand[handIndex]!) === null) violations.push('hand contains an unknown card');
+      }
+      const instances: { [instanceId: string]: BattlefieldObjectState } = {};
+      for (let objectIndex = 0; objectIndex < player.battlefield.length; objectIndex += 1) {
+        const object = player.battlefield[objectIndex]!;
+        if (!object.instanceId || instances[object.instanceId]) violations.push('battlefield instance ids must be unique per player');
+        instances[object.instanceId] = object;
+        const definition = getCardDefinition(object.cardId);
+        if (definition === null) violations.push('battlefield contains an unknown card');
+        else {
+          if (definition.cardType !== object.cardType) violations.push('battlefield card type differs from its definition');
+          if (object.cardType === 'UNIT' && (object.slotKind !== 'UNIT' || object.occupiedSlots !== 1)) {
+            violations.push('unit battlefield placement is invalid');
+          }
+          if ((object.cardType === 'BUILDING' || object.cardType === 'STRUCTURE') &&
+              (object.slotKind !== 'BUILDING' || object.occupiedSlots !== Math.max(1, definition.buildingSlots))) {
+            violations.push('building battlefield placement is invalid');
+          }
+        }
+        if (object.health <= 0 || object.health > object.maxHealth || object.maxHealth <= 0) violations.push('battlefield health is out of range');
+        if (object.attack < 0 || object.summonedTurn < 1 || object.summonedTurn > state.turn) violations.push('battlefield combat values are invalid');
+        if (object.occupiedSlots < 1) violations.push('battlefield object must occupy at least one slot');
+        const expectedRow = object.slotKind === 'UNIT' ? player.unitSlots : player.buildingSlots;
+        if (object.slotIndex < 0 || object.slotIndex + object.occupiedSlots > expectedRow.length) {
+          violations.push('battlefield object slot range is invalid');
+        } else {
+          for (let slotOffset = 0; slotOffset < object.occupiedSlots; slotOffset += 1) {
+            if (expectedRow[object.slotIndex + slotOffset] !== object.instanceId) violations.push('battlefield object does not own its declared slots');
+          }
+        }
+        let referenceCount = 0;
+        const objectRows = [player.unitSlots, player.buildingSlots];
+        for (let objectRowIndex = 0; objectRowIndex < objectRows.length; objectRowIndex += 1) {
+          const objectRow = objectRows[objectRowIndex]!;
+          for (let objectSlotIndex = 0; objectSlotIndex < objectRow.length; objectSlotIndex += 1) {
+            if (objectRow[objectSlotIndex] === object.instanceId) referenceCount += 1;
+          }
+        }
+        if (referenceCount !== object.occupiedSlots) violations.push('battlefield instance has an unexpected slot reference count');
+      }
+      const rows = [player.unitSlots, player.buildingSlots];
+      for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+        const row = rows[rowIndex]!;
+        for (let slotIndex = 0; slotIndex < row.length; slotIndex += 1) {
+          const instanceId = row[slotIndex];
+          if (instanceId !== null && instanceId !== undefined && !instances[instanceId]) violations.push('slot references a missing battlefield object');
+        }
       }
     }
     return violations;

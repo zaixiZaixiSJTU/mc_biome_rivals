@@ -55,7 +55,7 @@ namespace BiomeRivals.Demo.Tests
         }
 
         [Test]
-        public void DeployCommandUsesSharedWireShapeAndRevisionGuard()
+        public void DeployCommandUsesSharedFieldsAndRevisionGuard()
         {
             var registry = CardContentLoader.Load();
             var match = new DemoLocalMatch();
@@ -63,14 +63,12 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(registry.TryGetDefinition("pf_001", out var bee), Is.True);
 
             var command = match.CreateDeployCommand("pf_001", DemoSlotKind.Unit, 2);
-            var json = JsonUtility.ToJson(command);
-            Assert.That(json, Does.Contain("\"protocolVersion\":1"));
-            Assert.That(json, Does.Contain("\"rulesetVersion\":\"prototype-0.1\""));
-            Assert.That(json, Does.Contain("\"type\":\"DEPLOY_CARD\""));
-            Assert.That(json, Does.Contain("\"payload\":{"));
-            Assert.That(json, Does.Contain("\"cardId\":\"pf_001\""));
-            Assert.That(json, Does.Contain("\"slotKind\":\"UNIT\""));
-            Assert.That(json, Does.Contain("\"slotIndex\":2"));
+            Assert.That(command.protocolVersion, Is.EqualTo(2));
+            Assert.That(command.rulesetVersion, Is.EqualTo("prototype-0.2"));
+            Assert.That(command.type, Is.EqualTo("DEPLOY_CARD"));
+            Assert.That(command.payload.cardId, Is.EqualTo("pf_001"));
+            Assert.That(command.payload.slotKind, Is.EqualTo("UNIT"));
+            Assert.That(command.payload.slotIndex, Is.EqualTo(2));
 
             var accepted = match.ApplyDeploy(bee, command);
             Assert.That(accepted.Accepted, Is.True);
@@ -91,6 +89,61 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(rejected.Code, Is.EqualTo(DemoCommandRejectionCode.RevisionMismatch));
             Assert.That(match.UnitSlots[3], Is.Null);
             Assert.That(match.Hand, Does.Contain("pf_002"));
+        }
+
+        [Test]
+        public void LocalCombatResolvesRetaliationDeathAndHeroDamage()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { "pf_003" });
+            Assert.That(registry.TryGetDefinition("pf_003", out var attackerDefinition), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_001", out var targetDefinition), Is.True);
+            match.ResetOpponent(new[] { targetDefinition });
+
+            Assert.That(match.TryDeploy(attackerDefinition, DemoSlotKind.Unit, 0, out _), Is.True);
+            var attacker = match.GetObject(true, DemoSlotKind.Unit, 0);
+            Assert.That(match.ApplyEnterCombat(match.CreateEnterCombatCommand()).Accepted, Is.True);
+            Assert.That(match.CanAttackWith(attacker, out var summoningMessage), Is.False);
+            Assert.That(summoningMessage, Does.Contain("刚被召唤"));
+
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            Assert.That(match.ApplyEnterCombat(match.CreateEnterCombatCommand()).Accepted, Is.True);
+            Assert.That(match.CanAttackWith(attacker, out _), Is.True);
+
+            var target = match.GetObject(false, DemoSlotKind.Unit, 0);
+            var attack = match.ApplyAttack(match.CreateAttackCommand(attacker.InstanceId, "UNIT", target.InstanceId));
+            Assert.That(attack.Accepted, Is.True);
+            Assert.That(attacker.Health, Is.EqualTo(1));
+            Assert.That(attacker.HasAttacked, Is.True);
+            Assert.That(match.GetObject(false, DemoSlotKind.Unit, 0), Is.Null);
+            Assert.That(match.OpponentUnitSlots[0], Is.Empty);
+        }
+
+        [Test]
+        public void LocalCombatCanDefeatOpponentHero()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { "pf_003" });
+            Assert.That(registry.TryGetDefinition("pf_003", out var attackerDefinition), Is.True);
+            Assert.That(match.TryDeploy(attackerDefinition, DemoSlotKind.Unit, 0, out _), Is.True);
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            Assert.That(match.ApplyEnterCombat(match.CreateEnterCombatCommand()).Accepted, Is.True);
+            var attacker = match.GetObject(true, DemoSlotKind.Unit, 0);
+
+            DemoCommandResult result = null;
+            while (!match.IsFinished)
+            {
+                attacker.HasAttacked = false;
+                result = match.ApplyAttack(match.CreateAttackCommand(attacker.InstanceId, "HERO"));
+                Assert.That(result.Accepted, Is.True);
+            }
+
+            Assert.That(match.OpponentLife, Is.Zero);
+            Assert.That(result.Message, Does.Contain("胜利"));
         }
 
         [Test]
@@ -122,6 +175,7 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(root.transform.Find("BattlefieldGeometry"), Is.Not.Null);
                 Assert.That(root.transform.Find("BattlefieldPieces"), Is.Not.Null);
                 var unitMarker = root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Unit_0/InteractiveGround");
+                var opponentUnitMarker = root.transform.Find("BattlefieldGeometry/SlotMarker_Opponent_Unit_0/InteractiveGround");
                 var buildingMarker = root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Building_0/InteractiveGround");
                 var unitRiser = root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Unit_0/GroundRiser");
                 Assert.That(unitMarker, Is.Not.Null);
@@ -146,6 +200,9 @@ namespace BiomeRivals.Demo.Tests
                 var unitScreenPosition = battlefield.BoardCamera.WorldToScreenPoint(unitMarker.TransformPoint(unitMarker.GetComponent<MeshFilter>().sharedMesh.bounds.center));
                 Assert.That(battlefield.TryRaycastSlot(unitScreenPosition, out var raycastTarget), Is.True);
                 Assert.That(raycastTarget, Is.SameAs(unitTarget));
+                var opponentScreenPosition = battlefield.BoardCamera.WorldToScreenPoint(opponentUnitMarker.TransformPoint(opponentUnitMarker.GetComponent<MeshFilter>().sharedMesh.bounds.center));
+                Assert.That(battlefield.TryRaycastSlot(opponentScreenPosition, out var opponentRaycastTarget), Is.True);
+                Assert.That(opponentRaycastTarget.Player, Is.False);
                 var unitMeshVertices = unitMarker.GetComponent<MeshFilter>().sharedMesh.vertices;
                 var nearZ = unitMeshVertices.Min(vertex => vertex.z);
                 var farZ = unitMeshVertices.Max(vertex => vertex.z);
@@ -165,6 +222,8 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(playerSlotHitArea.GetComponent<UnityEngine.UI.Graphic>(), Is.Null);
                 Assert.That(playerSlotHitArea.GetComponent<UnityEngine.UI.Button>(), Is.Null);
                 Assert.That(root.transform.Find("DemoCanvas/OpponentUnitSlot0").GetComponent<UnityEngine.UI.Graphic>(), Is.Null);
+                Assert.That(root.transform.Find("DemoCanvas/OpponentHUD").GetComponent<UnityEngine.UI.Button>(), Is.Not.Null);
+                Assert.That(root.transform.Find("DemoCanvas/OpponentHUD/Health").GetComponent<UnityEngine.UI.Text>().text, Does.Contain("30"));
                 var opponentHud = root.transform.Find("DemoCanvas/OpponentHUD");
                 Assert.That(opponentHud, Is.Not.Null);
                 Assert.That(opponentHud.GetComponent<BasePanel>(), Is.Not.Null);
@@ -280,6 +339,14 @@ namespace BiomeRivals.Demo.Tests
                 battlefield.SetSlotState(true, DemoSlotKind.Unit, 0, false, true);
                 Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.Zero);
                 Assert.That(unitRiser.GetComponent<MeshRenderer>().enabled, Is.False);
+                endTurn.GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
+                Assert.That(endTurn.GetComponentInChildren<UnityEngine.UI.Text>().text, Is.EqualTo("结束回合"));
+                Assert.That(root.transform.Find("DemoCanvas/RoundPlate/Round").GetComponent<UnityEngine.UI.Text>().text, Does.Contain("战斗"));
+                Assert.That(root.transform.Find("DemoCanvas/CardDetailsPanel/InspectorContent/CombatHint"), Is.Not.Null);
+                Assert.That(root.transform.Find("DemoCanvas/CardDetailsPanel/InspectorContent/Header").GetComponent<UnityEngine.UI.Text>().text, Is.EqualTo("战斗指令"));
+                var combatHand = root.transform.Find("DemoCanvas/HandPlate/HandCards").GetComponent<CanvasGroup>();
+                Assert.That(combatHand.alpha, Is.EqualTo(0.52f).Within(0.001f));
+                Assert.That(combatHand.blocksRaycasts, Is.False);
             }
             finally
             {

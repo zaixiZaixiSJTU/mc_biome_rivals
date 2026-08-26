@@ -4,16 +4,19 @@
   "title": "MatchSnapshot",
   "type": "object",
   "additionalProperties": false,
-  "required": ["matchId", "protocolVersion", "rulesetVersion", "revision", "lastEventId", "status", "turn", "activePlayerIndex", "players", "winnerPlayerId", "processedCommandIds"],
+  "required": ["matchId", "viewerPlayerId", "protocolVersion", "rulesetVersion", "revision", "lastEventId", "status", "turn", "phase", "activePlayerIndex", "nextInstanceId", "players", "winnerPlayerId"],
   "properties": {
     "matchId": { "type": "string", "minLength": 1 },
-    "protocolVersion": { "const": 1 },
+    "viewerPlayerId": { "type": "string", "minLength": 1 },
+    "protocolVersion": { "const": 2 },
     "rulesetVersion": { "type": "string", "minLength": 1 },
     "revision": { "type": "integer", "minimum": 0 },
     "lastEventId": { "type": "integer", "minimum": 0 },
     "status": { "enum": ["WAITING", "ACTIVE", "FINISHED"] },
     "turn": { "type": "integer", "minimum": 1 },
+    "phase": { "enum": ["MAIN", "COMBAT"] },
     "activePlayerIndex": { "type": "integer", "minimum": 0, "maximum": 1 },
+    "nextInstanceId": { "type": "integer", "minimum": 1 },
     "players": {
       "type": "array",
       "minItems": 2,
@@ -21,14 +24,14 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["playerId", "life", "armor", "redstone", "redstoneCapacity", "hand", "unitSlots", "buildingSlots"],
+        "required": ["playerId", "life", "armor", "redstone", "redstoneCapacity", "hand", "unitSlots", "buildingSlots", "battlefield"],
         "properties": {
           "playerId": { "type": "string", "minLength": 1 },
           "life": { "type": "integer", "minimum": 0 },
           "armor": { "type": "integer", "minimum": 0 },
           "redstone": { "type": "integer", "minimum": 0, "maximum": 10 },
           "redstoneCapacity": { "type": "integer", "minimum": 0, "maximum": 10 },
-          "hand": { "type": "array", "items": { "type": "string", "pattern": "^[a-z0-9_]+$" } },
+          "hand": { "type": "array", "items": { "type": ["string", "null"], "pattern": "^[a-z0-9_]+$" } },
           "unitSlots": {
             "type": "array", "minItems": 4, "maxItems": 4,
             "items": { "type": ["string", "null"], "pattern": "^[a-z0-9_]+$" }
@@ -36,11 +39,30 @@
           "buildingSlots": {
             "type": "array", "minItems": 3, "maxItems": 3,
             "items": { "type": ["string", "null"], "pattern": "^[a-z0-9_]+$" }
+          },
+          "battlefield": {
+            "type": "array",
+            "items": {
+              "type": "object", "additionalProperties": false,
+              "required": ["instanceId", "cardId", "cardType", "attack", "health", "maxHealth", "slotKind", "slotIndex", "occupiedSlots", "summonedTurn", "hasAttacked"],
+              "properties": {
+                "instanceId": { "type": "string", "pattern": "^object-[0-9]+$" },
+                "cardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+                "cardType": { "enum": ["UNIT", "BUILDING", "STRUCTURE"] },
+                "attack": { "type": "integer", "minimum": 0 },
+                "health": { "type": "integer", "minimum": 1 },
+                "maxHealth": { "type": "integer", "minimum": 1 },
+                "slotKind": { "enum": ["UNIT", "BUILDING"] },
+                "slotIndex": { "type": "integer", "minimum": 0 },
+                "occupiedSlots": { "type": "integer", "minimum": 1, "maximum": 3 },
+                "summonedTurn": { "type": "integer", "minimum": 1 },
+                "hasAttacked": { "type": "boolean" }
+              }
+            }
           }
         }
       }
     },
-    "winnerPlayerId": { "type": ["string", "null"] },
-    "processedCommandIds": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 80 } }
+    "winnerPlayerId": { "type": ["string", "null"] }
   }
 }

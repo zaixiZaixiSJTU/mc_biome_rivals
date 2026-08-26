@@ -29,7 +29,27 @@ namespace BiomeRivals.Networking
             if (command == null) throw new ArgumentNullException(nameof(command));
             if (command.protocolVersion != GameVersions.Protocol)
                 throw new InvalidOperationException("Command protocol version does not match this client.");
-            return _transport.SendAsync(MatchOpcodes.Command, JsonUtility.ToJson(command));
+            return _transport.SendAsync(MatchOpcodes.Command, SerializeCommand(command));
+        }
+
+        public static string SerializeCommand(MatchCommandDto command)
+        {
+            if (command == null) throw new ArgumentNullException(nameof(command));
+            switch (command.type)
+            {
+                case MatchCommandTypes.DeployCard:
+                    return JsonUtility.ToJson(new DeployCommandWire(command));
+                case MatchCommandTypes.Attack:
+                    return command.payload.targetType == "HERO"
+                        ? JsonUtility.ToJson(new HeroAttackCommandWire(command))
+                        : JsonUtility.ToJson(new AttackCommandWire(command));
+                case MatchCommandTypes.EnterCombat:
+                case MatchCommandTypes.EndTurn:
+                case MatchCommandTypes.Concede:
+                    return JsonUtility.ToJson(new EmptyCommandWire(command));
+                default:
+                    throw new InvalidOperationException($"Unsupported command type '{command.type}'.");
+            }
         }
 
         public Task DisconnectAsync() => _transport.DisconnectAsync();
@@ -72,6 +92,105 @@ namespace BiomeRivals.Networking
             _transport.MessageReceived -= HandleMessage;
             _transport.Faulted -= HandleFault;
             _transport.Dispose();
+        }
+
+        [Serializable]
+        private sealed class EmptyWirePayload { }
+
+        [Serializable]
+        private sealed class DeployWirePayload
+        {
+            public string cardId;
+            public string slotKind;
+            public int slotIndex;
+        }
+
+        [Serializable]
+        private sealed class AttackWirePayload
+        {
+            public string attackerInstanceId;
+            public string targetType;
+            public string targetInstanceId;
+        }
+
+        [Serializable]
+        private sealed class HeroAttackWirePayload
+        {
+            public string attackerInstanceId;
+            public string targetType;
+        }
+
+        [Serializable]
+        private abstract class CommandWireBase
+        {
+            public int protocolVersion;
+            public string rulesetVersion;
+            public string commandId;
+            public int expectedRevision;
+            public string type;
+
+            protected CommandWireBase(MatchCommandDto command)
+            {
+                protocolVersion = command.protocolVersion;
+                rulesetVersion = command.rulesetVersion;
+                commandId = command.commandId;
+                expectedRevision = command.expectedRevision;
+                type = command.type;
+            }
+        }
+
+        [Serializable]
+        private sealed class EmptyCommandWire : CommandWireBase
+        {
+            public EmptyWirePayload payload = new EmptyWirePayload();
+            public EmptyCommandWire(MatchCommandDto command) : base(command) { }
+        }
+
+        [Serializable]
+        private sealed class DeployCommandWire : CommandWireBase
+        {
+            public DeployWirePayload payload;
+
+            public DeployCommandWire(MatchCommandDto command) : base(command)
+            {
+                payload = new DeployWirePayload
+                {
+                    cardId = command.payload.cardId,
+                    slotKind = command.payload.slotKind,
+                    slotIndex = command.payload.slotIndex
+                };
+            }
+        }
+
+        [Serializable]
+        private sealed class AttackCommandWire : CommandWireBase
+        {
+            public AttackWirePayload payload;
+
+            public AttackCommandWire(MatchCommandDto command) : base(command)
+            {
+                payload = new AttackWirePayload
+                {
+                    attackerInstanceId = command.payload.attackerInstanceId,
+                    targetType = command.payload.targetType,
+                    targetInstanceId = command.payload.targetInstanceId
+                };
+            }
+        }
+
+        [Serializable]
+        private sealed class HeroAttackCommandWire : CommandWireBase
+        {
+            public HeroAttackWirePayload payload;
+
+            public HeroAttackCommandWire(MatchCommandDto command) : base(command)
+            {
+                payload = new HeroAttackWirePayload
+                {
+                    attackerInstanceId = command.payload.attackerInstanceId,
+                    targetType = command.payload.targetType
+                };
+            }
         }
     }
 }

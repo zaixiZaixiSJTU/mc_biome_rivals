@@ -7,21 +7,21 @@ namespace BiomeRivals.Demo
     public sealed class DemoBattlefieldPointerController : MonoBehaviour
     {
         private DemoBattlefield3D _battlefield;
-        private Action<DemoSlotKind, int> _onPlayerSlotClicked;
+        private Action<bool, DemoSlotKind, int> _onSlotClicked;
         private DemoBattlefieldSlotTarget _hovered;
         private DemoBattlefieldSlotTarget _pressed;
 
-        public void Configure(DemoBattlefield3D battlefield, Action<DemoSlotKind, int> onPlayerSlotClicked)
+        public void Configure(DemoBattlefield3D battlefield, Action<bool, DemoSlotKind, int> onSlotClicked)
         {
             _battlefield = battlefield;
-            _onPlayerSlotClicked = onPlayerSlotClicked;
+            _onSlotClicked = onSlotClicked;
         }
 
         private void Update()
         {
             if (_battlefield == null) return;
             var blockedByUi = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
-            var target = !blockedByUi && _battlefield.TryRaycastSlot(Input.mousePosition, out var hit) && hit.Player
+            var target = !blockedByUi && _battlefield.TryRaycastSlot(Input.mousePosition, out var hit)
                 ? hit
                 : null;
             SetHovered(target);
@@ -30,7 +30,7 @@ namespace BiomeRivals.Demo
             if (!Input.GetMouseButtonUp(0)) return;
             var clicked = _pressed != null && _pressed == target ? _pressed : null;
             SetPressed(null);
-            if (clicked != null) _onPlayerSlotClicked?.Invoke(clicked.Kind, clicked.Index);
+            if (clicked != null) _onSlotClicked?.Invoke(clicked.Player, clicked.Kind, clicked.Index);
         }
 
         private void SetHovered(DemoBattlefieldSlotTarget target)
