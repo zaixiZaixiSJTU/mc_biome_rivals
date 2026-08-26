@@ -18,9 +18,31 @@
         "required": ["eventId", "type", "payload"],
         "properties": {
           "eventId": { "type": "integer", "minimum": 1 },
-          "type": { "enum": ["TURN_ENDED", "TURN_STARTED", "PLAYER_CONCEDED", "MATCH_ENDED"] },
+          "type": { "enum": ["CARD_DEPLOYED", "TURN_ENDED", "TURN_STARTED", "PLAYER_CONCEDED", "MATCH_ENDED"] },
           "payload": { "type": "object" }
-        }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "type": { "const": "CARD_DEPLOYED" } } },
+            "then": {
+              "properties": {
+                "payload": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["playerId", "cardId", "slotKind", "slotIndex", "occupiedSlots", "redstone"],
+                  "properties": {
+                    "playerId": { "type": "string", "minLength": 1 },
+                    "cardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+                    "slotKind": { "enum": ["UNIT", "BUILDING"] },
+                    "slotIndex": { "type": "integer", "minimum": 0 },
+                    "occupiedSlots": { "type": "integer", "minimum": 1, "maximum": 3 },
+                    "redstone": { "type": "integer", "minimum": 0, "maximum": 10 }
+                  }
+                }
+              }
+            }
+          }
+        ]
       }
     }
   }

@@ -1,11 +1,19 @@
 namespace BiomeRivalsRules {
-  function makePlayer(playerId: string): PlayerState {
+  function starterHand(playerIndex: number): string[] {
+    const prefix = playerIndex === 0 ? 'pf' : 'nt';
+    return [prefix + '_001', prefix + '_002', prefix + '_003', prefix + '_004', prefix + '_005'];
+  }
+
+  function makePlayer(playerId: string, playerIndex: number): PlayerState {
     return {
       playerId: playerId,
       life: 30,
       armor: 0,
-      redstone: 1,
-      redstoneCapacity: 1
+      redstone: 6,
+      redstoneCapacity: 6,
+      hand: starterHand(playerIndex),
+      unitSlots: [null, null, null, null],
+      buildingSlots: [null, null, null]
     };
   }
 
@@ -17,13 +25,14 @@ namespace BiomeRivalsRules {
 
     const state: MatchState = {
       matchId: matchId,
+      protocolVersion: PROTOCOL_VERSION,
       rulesetVersion: RULESET_VERSION,
       revision: 0,
       lastEventId: 0,
       status: 'ACTIVE',
       turn: 1,
       activePlayerIndex: 0,
-      players: [makePlayer(playerIds[0]), makePlayer(playerIds[1])],
+      players: [makePlayer(playerIds[0], 0), makePlayer(playerIds[1], 1)],
       winnerPlayerId: null,
       processedCommandIds: []
     };
@@ -35,6 +44,7 @@ namespace BiomeRivalsRules {
   function cloneState(state: MatchState): MatchState {
     return {
       matchId: state.matchId,
+      protocolVersion: state.protocolVersion,
       rulesetVersion: state.rulesetVersion,
       revision: state.revision,
       lastEventId: state.lastEventId,
@@ -47,7 +57,10 @@ namespace BiomeRivalsRules {
           life: player.life,
           armor: player.armor,
           redstone: player.redstone,
-          redstoneCapacity: player.redstoneCapacity
+          redstoneCapacity: player.redstoneCapacity,
+          hand: player.hand.slice(),
+          unitSlots: player.unitSlots.slice(),
+          buildingSlots: player.buildingSlots.slice()
         };
       }),
       winnerPlayerId: state.winnerPlayerId,
@@ -79,13 +92,85 @@ namespace BiomeRivalsRules {
       events.push({ eventId: next.lastEventId, type: type, payload: payload });
     }
 
+    function deployCard(): CommandRejected | null {
+      if (actorIndex !== state.activePlayerIndex) {
+        return reject(state, 'NOT_ACTIVE_PLAYER', 'only the active player may deploy a card');
+      }
+      if (!command.payload || typeof command.payload !== 'object') {
+        return reject(state, 'INVALID_COMMAND', 'DEPLOY_CARD requires an object payload');
+      }
+      const cardId = command.payload.cardId;
+      const slotKind = command.payload.slotKind;
+      const slotIndex = command.payload.slotIndex;
+      if (typeof cardId !== 'string' || (slotKind !== 'UNIT' && slotKind !== 'BUILDING') ||
+          typeof slotIndex !== 'number' || slotIndex % 1 !== 0) {
+        return reject(state, 'INVALID_COMMAND', 'DEPLOY_CARD requires cardId, slotKind and integer slotIndex');
+      }
+      const definition = getCardDefinition(cardId);
+      if (definition === null) return reject(state, 'UNKNOWN_CARD', 'card definition is not registered');
+      const player = next.players[actorIndex]!;
+      const handIndex = player.hand.indexOf(cardId);
+      if (handIndex < 0) return reject(state, 'CARD_NOT_IN_HAND', 'card is not in the actor hand');
+      if (definition.cost > player.redstone) return reject(state, 'INSUFFICIENT_REDSTONE', 'not enough redstone');
+
+      let occupiedSlots = 1;
+      if (definition.cardType === 'UNIT') {
+        if (slotKind !== 'UNIT' || slotIndex < 0 || slotIndex >= player.unitSlots.length) {
+          return reject(state, 'INVALID_TARGET', 'unit cards require a valid unit slot');
+        }
+        if (player.unitSlots[slotIndex] !== null) return reject(state, 'SLOT_OCCUPIED', 'unit slot is occupied');
+        player.unitSlots[slotIndex] = cardId;
+      } else if (definition.cardType === 'BUILDING' || definition.cardType === 'STRUCTURE') {
+        occupiedSlots = Math.max(1, definition.buildingSlots);
+        if (slotKind !== 'BUILDING' || slotIndex < 0 || slotIndex + occupiedSlots > player.buildingSlots.length) {
+          return reject(state, 'INVALID_TARGET', 'building cards require enough consecutive building slots');
+        }
+        for (let index = slotIndex; index < slotIndex + occupiedSlots; index += 1) {
+          if (player.buildingSlots[index] !== null) {
+            return reject(state, 'SLOT_OCCUPIED', 'required building slots are occupied');
+          }
+        }
+        for (let index = slotIndex; index < slotIndex + occupiedSlots; index += 1) {
+          player.buildingSlots[index] = cardId;
+        }
+      } else {
+        return reject(state, 'INVALID_TARGET', 'card type cannot be deployed to the battlefield');
+      }
+
+      player.hand.splice(handIndex, 1);
+      player.redstone -= definition.cost;
+      emit('CARD_DEPLOYED', {
+        playerId: actorPlayerId,
+        cardId: cardId,
+        slotKind: slotKind,
+        slotIndex: slotIndex,
+        occupiedSlots: occupiedSlots,
+        redstone: player.redstone
+      });
+      return null;
+    }
+
     switch (command.type) {
+      case 'DEPLOY_CARD': {
+        const deploymentRejection = deployCard();
+        if (deploymentRejection !== null) return deploymentRejection;
+        break;
+      }
       case 'END_TURN': {
         if (actorIndex !== state.activePlayerIndex) return reject(state, 'NOT_ACTIVE_PLAYER', 'only the active player may end the turn');
         emit('TURN_ENDED', { playerId: actorPlayerId, turn: state.turn });
         next.activePlayerIndex = (state.activePlayerIndex + 1) % state.players.length;
         if (next.activePlayerIndex === 0) next.turn += 1;
-        emit('TURN_STARTED', { playerId: next.players[next.activePlayerIndex]!.playerId, turn: next.turn });
+        const nextPlayer = next.players[next.activePlayerIndex]!;
+        if (next.activePlayerIndex === 0) nextPlayer.redstoneCapacity = Math.min(10, nextPlayer.redstoneCapacity + 1);
+        nextPlayer.redstone = nextPlayer.redstoneCapacity;
+        emit('TURN_STARTED', {
+          playerId: nextPlayer.playerId,
+          turn: next.turn,
+          activePlayerIndex: next.activePlayerIndex,
+          redstone: nextPlayer.redstone,
+          redstoneCapacity: nextPlayer.redstoneCapacity
+        });
         break;
       }
       case 'CONCEDE': {

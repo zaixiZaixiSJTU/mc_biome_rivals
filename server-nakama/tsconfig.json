@@ -14,6 +14,7 @@
   "files": [
     "../node_modules/nakama-runtime/index.d.ts",
     "src/rules/types.ts",
+    "src/generated/card-catalog.ts",
     "src/rules/invariants.ts",
     "src/rules/match-engine.ts",
     "src/matches/biome-rivals-match.ts",

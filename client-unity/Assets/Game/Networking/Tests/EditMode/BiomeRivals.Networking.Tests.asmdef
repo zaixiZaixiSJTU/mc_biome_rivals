@@ -1,0 +1,9 @@
+{
+  "name": "BiomeRivals.Networking.Tests",
+  "rootNamespace": "BiomeRivals.Networking.Tests",
+  "references": ["BiomeRivals.Core", "BiomeRivals.Networking"],
+  "optionalUnityReferences": ["TestAssemblies"],
+  "includePlatforms": ["Editor"],
+  "autoReferenced": false,
+  "defineConstraints": ["UNITY_INCLUDE_TESTS"]
+}

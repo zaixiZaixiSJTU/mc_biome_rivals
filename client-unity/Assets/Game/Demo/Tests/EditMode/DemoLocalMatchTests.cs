@@ -55,6 +55,45 @@ namespace BiomeRivals.Demo.Tests
         }
 
         [Test]
+        public void DeployCommandUsesSharedWireShapeAndRevisionGuard()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { "pf_001", "pf_002" });
+            Assert.That(registry.TryGetDefinition("pf_001", out var bee), Is.True);
+
+            var command = match.CreateDeployCommand("pf_001", DemoSlotKind.Unit, 2);
+            var json = JsonUtility.ToJson(command);
+            Assert.That(json, Does.Contain("\"protocolVersion\":1"));
+            Assert.That(json, Does.Contain("\"rulesetVersion\":\"prototype-0.1\""));
+            Assert.That(json, Does.Contain("\"type\":\"DEPLOY_CARD\""));
+            Assert.That(json, Does.Contain("\"payload\":{"));
+            Assert.That(json, Does.Contain("\"cardId\":\"pf_001\""));
+            Assert.That(json, Does.Contain("\"slotKind\":\"UNIT\""));
+            Assert.That(json, Does.Contain("\"slotIndex\":2"));
+
+            var accepted = match.ApplyDeploy(bee, command);
+            Assert.That(accepted.Accepted, Is.True);
+            Assert.That(accepted.Revision, Is.EqualTo(1));
+            Assert.That(match.Revision, Is.EqualTo(1));
+
+            command.expectedRevision = match.Revision;
+            var duplicate = match.ApplyDeploy(bee, command);
+            Assert.That(duplicate.Accepted, Is.False);
+            Assert.That(duplicate.Code, Is.EqualTo(DemoCommandRejectionCode.DuplicateCommand));
+            Assert.That(match.Energy, Is.EqualTo(5));
+
+            var stale = match.CreateDeployCommand("pf_002", DemoSlotKind.Unit, 3);
+            stale.expectedRevision = 0;
+            Assert.That(registry.TryGetDefinition("pf_002", out var cow), Is.True);
+            var rejected = match.ApplyDeploy(cow, stale);
+            Assert.That(rejected.Accepted, Is.False);
+            Assert.That(rejected.Code, Is.EqualTo(DemoCommandRejectionCode.RevisionMismatch));
+            Assert.That(match.UnitSlots[3], Is.Null);
+            Assert.That(match.Hand, Does.Contain("pf_002"));
+        }
+
+        [Test]
         public void GeneratedSceneAndRuntimeHierarchyExist()
         {
             Assert.That(AssetDatabase.LoadAssetAtPath<SceneAsset>(DemoSceneBuilder.ScenePath), Is.Not.Null);

@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://biome-rivals.local/schema/match-snapshot.schema.json",
+  "title": "MatchSnapshot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["matchId", "protocolVersion", "rulesetVersion", "revision", "lastEventId", "status", "turn", "activePlayerIndex", "players", "winnerPlayerId", "processedCommandIds"],
+  "properties": {
+    "matchId": { "type": "string", "minLength": 1 },
+    "protocolVersion": { "const": 1 },
+    "rulesetVersion": { "type": "string", "minLength": 1 },
+    "revision": { "type": "integer", "minimum": 0 },
+    "lastEventId": { "type": "integer", "minimum": 0 },
+    "status": { "enum": ["WAITING", "ACTIVE", "FINISHED"] },
+    "turn": { "type": "integer", "minimum": 1 },
+    "activePlayerIndex": { "type": "integer", "minimum": 0, "maximum": 1 },
+    "players": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["playerId", "life", "armor", "redstone", "redstoneCapacity", "hand", "unitSlots", "buildingSlots"],
+        "properties": {
+          "playerId": { "type": "string", "minLength": 1 },
+          "life": { "type": "integer", "minimum": 0 },
+          "armor": { "type": "integer", "minimum": 0 },
+          "redstone": { "type": "integer", "minimum": 0, "maximum": 10 },
+          "redstoneCapacity": { "type": "integer", "minimum": 0, "maximum": 10 },
+          "hand": { "type": "array", "items": { "type": "string", "pattern": "^[a-z0-9_]+$" } },
+          "unitSlots": {
+            "type": "array", "minItems": 4, "maxItems": 4,
+            "items": { "type": ["string", "null"], "pattern": "^[a-z0-9_]+$" }
+          },
+          "buildingSlots": {
+            "type": "array", "minItems": 3, "maxItems": 3,
+            "items": { "type": ["string", "null"], "pattern": "^[a-z0-9_]+$" }
+          }
+        }
+      }
+    },
+    "winnerPlayerId": { "type": ["string", "null"] },
+    "processedCommandIds": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 80 } }
+  }
+}

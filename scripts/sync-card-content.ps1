@@ -8,6 +8,7 @@ $unityOutput = Join-Path $repoRoot 'client-unity\Assets\Game\Content\Resources\C
 
 & (Join-Path $PSScriptRoot 'sync-card-name-registry.ps1')
 & (Join-Path $PSScriptRoot 'sync-card-definition-registry.ps1')
+& (Join-Path $PSScriptRoot 'sync-server-card-catalog.ps1')
 
 $copies = [ordered]@{
     'shared-schema\card-data\localization\card-name-registry.zh-CN.v1.json' = 'card-name-registry.zh-CN.v1.json'

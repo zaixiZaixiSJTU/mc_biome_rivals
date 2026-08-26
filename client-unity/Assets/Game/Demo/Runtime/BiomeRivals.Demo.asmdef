@@ -1,6 +1,6 @@
 {
   "name": "BiomeRivals.Demo",
   "rootNamespace": "BiomeRivals.Demo",
-  "references": ["BiomeRivals.Content", "BiomeRivals.Presentation"],
+  "references": ["BiomeRivals.Core", "BiomeRivals.Content", "BiomeRivals.Presentation"],
   "autoReferenced": true
 }

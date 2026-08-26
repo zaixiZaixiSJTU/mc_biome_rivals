@@ -7,6 +7,7 @@ namespace BiomeRivals.Networking
     public interface IMatchGateway : IDisposable
     {
         event Action<MatchEventBatchDto> EventBatchReceived;
+        event Action<MatchStateDto> SnapshotReceived;
         event Action<CommandRejectionDto> CommandRejected;
         event Action<Exception> Faulted;
 

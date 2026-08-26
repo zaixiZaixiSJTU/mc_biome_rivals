@@ -12,6 +12,7 @@
   },
   "files": [
     "src/rules/types.ts",
+    "src/generated/card-catalog.ts",
     "src/rules/invariants.ts",
     "src/rules/match-engine.ts",
     "tests/test-harness.ts",

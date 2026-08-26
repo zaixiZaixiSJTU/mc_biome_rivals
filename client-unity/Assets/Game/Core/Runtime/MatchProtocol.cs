@@ -2,14 +2,24 @@ using System;
 
 namespace BiomeRivals.Core
 {
+    public static class MatchOpcodes
+    {
+        public const int Command = 1;
+        public const int EventBatch = 2;
+        public const int Rejection = 3;
+        public const int Snapshot = 4;
+    }
+
     public static class MatchCommandTypes
     {
+        public const string DeployCard = "DEPLOY_CARD";
         public const string EndTurn = "END_TURN";
         public const string Concede = "CONCEDE";
     }
 
     public static class MatchEventTypes
     {
+        public const string CardDeployed = "CARD_DEPLOYED";
         public const string TurnEnded = "TURN_ENDED";
         public const string TurnStarted = "TURN_STARTED";
         public const string PlayerConceded = "PLAYER_CONCEDED";
@@ -17,8 +27,11 @@ namespace BiomeRivals.Core
     }
 
     [Serializable]
-    public sealed class EmptyPayload
+    public sealed class MatchCommandPayloadDto
     {
+        public string cardId = string.Empty;
+        public string slotKind = string.Empty;
+        public int slotIndex;
     }
 
     [Serializable]
@@ -29,7 +42,37 @@ namespace BiomeRivals.Core
         public string commandId = string.Empty;
         public int expectedRevision;
         public string type = string.Empty;
-        public EmptyPayload payload = new EmptyPayload();
+        public MatchCommandPayloadDto payload = new MatchCommandPayloadDto();
+    }
+
+    public static class MatchCommandFactory
+    {
+        public static MatchCommandDto DeployCard(string commandId, int revision, string cardId, string slotKind, int slotIndex) =>
+            new MatchCommandDto
+            {
+                protocolVersion = GameVersions.Protocol,
+                rulesetVersion = GameVersions.Ruleset,
+                commandId = commandId,
+                expectedRevision = revision,
+                type = MatchCommandTypes.DeployCard,
+                payload = new MatchCommandPayloadDto
+                {
+                    cardId = cardId,
+                    slotKind = slotKind,
+                    slotIndex = slotIndex
+                }
+            };
+
+        public static MatchCommandDto EndTurn(string commandId, int revision) =>
+            new MatchCommandDto
+            {
+                protocolVersion = GameVersions.Protocol,
+                rulesetVersion = GameVersions.Ruleset,
+                commandId = commandId,
+                expectedRevision = revision,
+                type = MatchCommandTypes.EndTurn,
+                payload = new MatchCommandPayloadDto()
+            };
     }
 
     [Serializable]
@@ -39,6 +82,13 @@ namespace BiomeRivals.Core
         public int turn;
         public string winnerPlayerId = string.Empty;
         public string reason = string.Empty;
+        public string cardId = string.Empty;
+        public string slotKind = string.Empty;
+        public int slotIndex;
+        public int occupiedSlots;
+        public int redstone;
+        public int redstoneCapacity;
+        public int activePlayerIndex;
     }
 
     [Serializable]

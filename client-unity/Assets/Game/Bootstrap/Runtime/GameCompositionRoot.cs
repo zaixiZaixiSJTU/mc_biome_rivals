@@ -9,8 +9,11 @@ namespace BiomeRivals.Bootstrap
     {
         private IMatchGateway _matchGateway;
         private PresentationQueue _presentationQueue;
+        private readonly MatchStateStore _matchStateStore = new MatchStateStore();
 
         public static GameCompositionRoot Instance { get; private set; }
+        public MatchStateStore MatchStateStore => _matchStateStore;
+        public IMatchGateway MatchGateway => _matchGateway;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void EnsureCreated()
@@ -49,6 +52,8 @@ namespace BiomeRivals.Bootstrap
         private void BindGateway(IMatchGateway gateway)
         {
             _matchGateway = gateway;
+            _matchGateway.SnapshotReceived += _matchStateStore.Replace;
+            _matchGateway.EventBatchReceived += _matchStateStore.Apply;
             _matchGateway.EventBatchReceived += _presentationQueue.Enqueue;
             _matchGateway.CommandRejected += HandleCommandRejected;
             _matchGateway.Faulted += HandleGatewayFault;
@@ -57,6 +62,8 @@ namespace BiomeRivals.Bootstrap
         private void UnbindGateway()
         {
             if (_matchGateway == null) return;
+            _matchGateway.SnapshotReceived -= _matchStateStore.Replace;
+            _matchGateway.EventBatchReceived -= _matchStateStore.Apply;
             _matchGateway.EventBatchReceived -= _presentationQueue.Enqueue;
             _matchGateway.CommandRejected -= HandleCommandRejected;
             _matchGateway.Faulted -= HandleGatewayFault;

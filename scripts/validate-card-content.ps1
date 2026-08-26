@@ -175,5 +175,7 @@ foreach ($pair in $unityCopies) {
     if ($sourceHash -ne $targetHash) { throw "Unity content copy is stale: $($pair[1])" }
 }
 
+& (Join-Path $PSScriptRoot 'sync-server-card-catalog.ps1') -Check
+
 $pendingCount = @($definitions.entries | Where-Object effectImplementationStatus -eq 'PENDING').Count
 Write-Output "Card content validation passed: 74 definitions/texts/art mappings, 7 accessible themes, $pendingCount reserved effects."

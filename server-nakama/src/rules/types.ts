@@ -3,8 +3,17 @@ namespace BiomeRivalsRules {
   export const RULESET_VERSION = 'prototype-0.1';
 
   export type MatchStatus = 'WAITING' | 'ACTIVE' | 'FINISHED';
-  export type CommandType = 'END_TURN' | 'CONCEDE';
-  export type EventType = 'TURN_ENDED' | 'TURN_STARTED' | 'PLAYER_CONCEDED' | 'MATCH_ENDED';
+  export type CommandType = 'DEPLOY_CARD' | 'END_TURN' | 'CONCEDE';
+  export type EventType = 'CARD_DEPLOYED' | 'TURN_ENDED' | 'TURN_STARTED' | 'PLAYER_CONCEDED' | 'MATCH_ENDED';
+  export type DeploySlotKind = 'UNIT' | 'BUILDING';
+  export type CardType = 'UNIT' | 'SPELL' | 'BUILDING' | 'STRUCTURE' | 'EQUIPMENT' | 'MATERIAL';
+
+  export interface CardRuleDefinition {
+    id: string;
+    cardType: CardType;
+    cost: number;
+    buildingSlots: number;
+  }
 
   export interface PlayerState {
     playerId: string;
@@ -12,10 +21,14 @@ namespace BiomeRivalsRules {
     armor: number;
     redstone: number;
     redstoneCapacity: number;
+    hand: string[];
+    unitSlots: Array<string | null>;
+    buildingSlots: Array<string | null>;
   }
 
   export interface MatchState {
     matchId: string;
+    protocolVersion: number;
     rulesetVersion: string;
     revision: number;
     lastEventId: number;
@@ -59,7 +72,12 @@ namespace BiomeRivalsRules {
     | 'DUPLICATE_COMMAND'
     | 'NOT_A_PLAYER'
     | 'NOT_ACTIVE_PLAYER'
-    | 'MATCH_FINISHED';
+    | 'MATCH_FINISHED'
+    | 'UNKNOWN_CARD'
+    | 'CARD_NOT_IN_HAND'
+    | 'INSUFFICIENT_REDSTONE'
+    | 'INVALID_TARGET'
+    | 'SLOT_OCCUPIED';
 
   export interface CommandAccepted {
     accepted: true;

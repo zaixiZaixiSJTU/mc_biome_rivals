@@ -10,7 +10,26 @@
     "rulesetVersion": { "type": "string", "minLength": 1 },
     "commandId": { "type": "string", "minLength": 1, "maxLength": 80 },
     "expectedRevision": { "type": "integer", "minimum": 0 },
-    "type": { "enum": ["END_TURN", "CONCEDE"] },
+    "type": { "enum": ["DEPLOY_CARD", "END_TURN", "CONCEDE"] },
     "payload": { "type": "object" }
-  }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "type": { "const": "DEPLOY_CARD" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["cardId", "slotKind", "slotIndex"],
+            "properties": {
+              "cardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+              "slotKind": { "enum": ["UNIT", "BUILDING"] },
+              "slotIndex": { "type": "integer", "minimum": 0 }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

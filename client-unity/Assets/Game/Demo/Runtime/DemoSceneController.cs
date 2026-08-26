@@ -379,9 +379,10 @@ namespace BiomeRivals.Demo
                 ShowStatus("请先选择一张手牌。", true);
                 return;
             }
-            var success = _match.TryDeploy(definition, kind, index, out var message);
-            if (success) _selectedCardId = _match.Hand.FirstOrDefault();
-            ShowStatus(message, !success);
+            var command = _match.CreateDeployCommand(_selectedCardId, kind, index);
+            var result = _match.ApplyDeploy(definition, command);
+            if (result.Accepted) _selectedCardId = _match.Hand.FirstOrDefault();
+            ShowStatus(result.Accepted ? $"{result.Message} · 状态 r{result.Revision}" : result.Message, !result.Accepted);
             RefreshAll();
         }
 

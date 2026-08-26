@@ -1,6 +1,7 @@
 const BIOME_RIVALS_COMMAND_OPCODE = 1;
 const BIOME_RIVALS_EVENT_BATCH_OPCODE = 2;
 const BIOME_RIVALS_REJECTION_OPCODE = 3;
+const BIOME_RIVALS_SNAPSHOT_OPCODE = 4;
 const BIOME_RIVALS_TICK_RATE = 5;
 
 interface BiomeRivalsMatchState extends nkruntime.MatchState {
@@ -62,8 +63,8 @@ function biomeRivalsMatchJoin(
   if (state.game === null && connected.length === 2) {
     state.game = BiomeRivalsRules.createInitialState(ctx.matchId || 'unknown', [connected[0]!.userId, connected[1]!.userId]);
     dispatcher.broadcastMessage(
-      BIOME_RIVALS_EVENT_BATCH_OPCODE,
-      encodeMatchMessage({ type: 'MATCH_READY', snapshot: state.game }),
+      BIOME_RIVALS_SNAPSHOT_OPCODE,
+      encodeMatchMessage(state.game),
       connected,
       null,
       true
