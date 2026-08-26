@@ -73,7 +73,10 @@ TestHarness.test('creates a valid two-player initial state', function (): void {
   TestHarness.equal(state.protocolVersion, BiomeRivalsRules.PROTOCOL_VERSION);
   TestHarness.equal(state.players[0]!.life, 30);
   TestHarness.equal(state.players[0]!.redstone, 1);
-  TestHarness.equal(state.players[0]!.hand.length, 5);
+  TestHarness.equal(state.players[0]!.hand.length, 4);
+  TestHarness.equal(state.players[1]!.hand.length, 4);
+  TestHarness.equal(state.players[0]!.deck.length, 26);
+  TestHarness.equal(state.players[1]!.deck.length, 26);
   TestHarness.equal(state.players[0]!.unitSlots.length, 4);
   TestHarness.equal(state.players[0]!.buildingSlots.length, 3);
   TestHarness.equal(BiomeRivalsRules.validateState(state).length, 0);
@@ -83,14 +86,18 @@ TestHarness.test('redacts the opponents hand without mutating authoritative stat
   const state = BiomeRivalsRules.createInitialState('match-1', ['alice', 'bob']);
   const snapshot = BiomeRivalsRules.createClientSnapshot(state, 'alice');
   TestHarness.equal(snapshot.viewerPlayerId, 'alice');
-  TestHarness.equal(snapshot.players[0]!.hand[0], 'pf_001');
+  TestHarness.equal(snapshot.players[0]!.hand[0], state.players[0]!.hand[0]);
   TestHarness.equal(snapshot.players[1]!.hand.length, state.players[1]!.hand.length);
   TestHarness.equal(snapshot.players[1]!.hand[0], null);
-  TestHarness.equal(state.players[1]!.hand[0], 'nt_001');
+  TestHarness.equal(snapshot.players[1]!.deckCount, 26);
+  TestHarness.ok(state.players[1]!.hand[0] !== null);
+  TestHarness.equal(JSON.stringify(snapshot).indexOf('"deck":'), -1);
+  TestHarness.equal(JSON.stringify(snapshot).indexOf('processedCommandIds'), -1);
 });
 
 TestHarness.test('deploys a registered unit and emits replayable state data', function (): void {
   const state = BiomeRivalsRules.createInitialState('match-1', ['alice', 'bob']);
+  state.players[0]!.hand = ['pf_001'];
   const result = BiomeRivalsRules.applyCommand(state, 'alice', deployCommand('deploy-1', 0, 'pf_001', 'UNIT', 2));
   TestHarness.equal(result.accepted, true);
   if (!result.accepted) return;
@@ -151,6 +158,7 @@ TestHarness.test('resolves simultaneous unit combat and releases dead object slo
   TestHarness.equal(result.state.players[0]!.battlefield[0]!.health, 1);
   TestHarness.equal(result.state.players[0]!.battlefield[0]!.hasAttacked, true);
   TestHarness.equal(result.state.players[1]!.battlefield.length, 0);
+  TestHarness.equal(result.state.players[1]!.discardPile[0], 'pf_001');
   TestHarness.equal(result.state.players[1]!.unitSlots[2], null);
   TestHarness.equal(result.batch.events[0]!.type, 'ATTACK_RESOLVED');
   TestHarness.equal(result.batch.events[1]!.type, 'OBJECT_DIED');
@@ -194,6 +202,7 @@ TestHarness.test('applies armor before life and ends the match on lethal hero da
 
 TestHarness.test('rejects invalid deploys without spending redstone or moving cards', function (): void {
   const state = BiomeRivalsRules.createInitialState('match-1', ['alice', 'bob']);
+  state.players[0]!.hand = ['pf_001'];
   const wrongRow = BiomeRivalsRules.applyCommand(state, 'alice', deployCommand('deploy-1', 0, 'pf_001', 'BUILDING', 0));
   TestHarness.equal(wrongRow.accepted, false);
   if (!wrongRow.accepted) TestHarness.equal(wrongRow.code, 'INVALID_TARGET');
@@ -221,7 +230,7 @@ TestHarness.test('ends a turn and emits an ordered event batch', function (): vo
   if (!result.accepted) return;
   TestHarness.equal(result.state.revision, 1);
   TestHarness.equal(result.state.activePlayerIndex, 1);
-  TestHarness.equal(result.batch.events.length, 2);
+  TestHarness.equal(result.batch.events.length, 3);
   TestHarness.equal(result.batch.events[0]!.type, 'TURN_ENDED');
   TestHarness.equal(result.batch.events[1]!.type, 'TURN_STARTED');
   TestHarness.equal(result.batch.events[1]!.eventId, result.batch.events[0]!.eventId + 1);
@@ -229,6 +238,55 @@ TestHarness.test('ends a turn and emits an ordered event batch', function (): vo
   TestHarness.equal(result.state.players[1]!.redstone, 1);
   TestHarness.equal(result.batch.events[1]!.payload.activePlayerIndex, 1);
   TestHarness.equal(result.batch.events[1]!.payload.redstoneCapacity, 1);
+  TestHarness.equal(result.batch.events[2]!.type, 'CARD_DRAWN');
+  TestHarness.equal(result.state.players[1]!.hand.length, 5);
+  TestHarness.equal(result.state.players[1]!.deck.length, 25);
+});
+
+TestHarness.test('burns a public card when drawing with a full hand', function (): void {
+  const state = BiomeRivalsRules.createInitialState('match-1', ['alice', 'bob']);
+  state.players[1]!.hand = ['nt_001', 'nt_002', 'nt_003', 'nt_004', 'nt_005', 'nt_006', 'nt_007'];
+  state.players[1]!.deck = ['nt_008'];
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', command('turn-burn', 0, 'END_TURN'));
+  TestHarness.ok(result.accepted);
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[1]!.hand.length, 7);
+  TestHarness.equal(result.state.players[1]!.deck.length, 0);
+  TestHarness.equal(result.state.players[1]!.discardPile[0], 'nt_008');
+  TestHarness.equal(result.batch.events[2]!.type, 'CARD_BURNED');
+  const opponentProjection = BiomeRivalsRules.createClientEventBatch(result.batch, 'alice');
+  TestHarness.equal(opponentProjection.events[2]!.payload.cardId, 'nt_008', 'burned cards are public');
+});
+
+TestHarness.test('applies escalating true fatigue damage and ends the match on lethal', function (): void {
+  const state = BiomeRivalsRules.createInitialState('match-1', ['alice', 'bob']);
+  state.players[1]!.deck = [];
+  state.players[1]!.fatigueCount = 2;
+  state.players[1]!.life = 3;
+  state.players[1]!.armor = 5;
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', command('turn-fatigue', 0, 'END_TURN'));
+  TestHarness.ok(result.accepted);
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[1]!.life, 0);
+  TestHarness.equal(result.state.players[1]!.armor, 5);
+  TestHarness.equal(result.state.players[1]!.fatigueCount, 3);
+  TestHarness.equal(result.batch.events[2]!.payload.damage, 3);
+  TestHarness.equal(result.batch.events[2]!.type, 'FATIGUE_DAMAGE');
+  TestHarness.equal(result.batch.events[3]!.type, 'MATCH_ENDED');
+  TestHarness.equal(result.state.winnerPlayerId, 'alice');
+});
+
+TestHarness.test('redacts drawn card identity only for the opponent event projection', function (): void {
+  const state = BiomeRivalsRules.createInitialState('match-1', ['alice', 'bob']);
+  state.players[1]!.deck = ['nt_008'];
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', command('turn-draw', 0, 'END_TURN'));
+  TestHarness.ok(result.accepted);
+  if (!result.accepted) return;
+  const bobBatch = BiomeRivalsRules.createClientEventBatch(result.batch, 'bob');
+  const aliceBatch = BiomeRivalsRules.createClientEventBatch(result.batch, 'alice');
+  TestHarness.equal(bobBatch.events[2]!.payload.cardId, 'nt_008');
+  TestHarness.equal(aliceBatch.events[2]!.payload.cardId, null);
+  TestHarness.equal(result.batch.events[2]!.payload.cardId, 'nt_008');
 });
 
 TestHarness.test('increases each players redstone from their second personal turn', function (): void {

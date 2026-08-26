@@ -1,17 +1,38 @@
 namespace BiomeRivalsRules {
-  function starterHand(playerIndex: number): string[] {
-    const prefix = playerIndex === 0 ? 'pf' : 'nt';
-    return [prefix + '_001', prefix + '_002', prefix + '_003', prefix + '_004', prefix + '_005'];
+  const HAND_LIMIT = 7;
+
+  function prototypeDeck(prefix: string, seedText: string): string[] {
+    const deck: string[] = [];
+    for (let index = 0; index < 30; index += 1) deck.push(prefix + '_' + ('00' + String((index % 8) + 1)).slice(-3));
+    let seed = 17;
+    for (let index = 0; index < seedText.length; index += 1) {
+      seed = ((seed * 31) + seedText.charCodeAt(index)) | 0;
+    }
+    for (let index = deck.length - 1; index > 0; index -= 1) {
+      seed = ((seed * 1664525) + 1013904223) | 0;
+      const swapIndex = (seed >>> 0) % (index + 1);
+      const value = deck[index]!;
+      deck[index] = deck[swapIndex]!;
+      deck[swapIndex] = value;
+    }
+    return deck;
   }
 
-  function makePlayer(playerId: string, playerIndex: number): PlayerState {
+  function makePlayer(playerId: string, playerIndex: number, matchId: string): PlayerState {
+    const deck = prototypeDeck(playerIndex === 0 ? 'pf' : 'nt', matchId + ':' + playerId);
+    const hand: string[] = [];
+    const startingCards = playerIndex === 0 ? 3 : 4;
+    for (let index = 0; index < startingCards; index += 1) hand.push(deck.pop()!);
     return {
       playerId: playerId,
       life: 30,
       armor: 0,
       redstone: 1,
       redstoneCapacity: 1,
-      hand: starterHand(playerIndex),
+      hand: hand,
+      deck: deck,
+      discardPile: [],
+      fatigueCount: 0,
       unitSlots: [null, null, null, null],
       buildingSlots: [null, null, null],
       battlefield: []
@@ -35,10 +56,11 @@ namespace BiomeRivalsRules {
       phase: 'MAIN',
       activePlayerIndex: 0,
       nextInstanceId: 1,
-      players: [makePlayer(playerIds[0], 0), makePlayer(playerIds[1], 1)],
+      players: [makePlayer(playerIds[0], 0, matchId), makePlayer(playerIds[1], 1, matchId)],
       winnerPlayerId: null,
       processedCommandIds: []
     };
+    state.players[0]!.hand.push(state.players[0]!.deck.pop()!);
     const violations = validateState(state);
     if (violations.length > 0) throw new Error(violations.join('; '));
     return state;
@@ -69,6 +91,9 @@ namespace BiomeRivalsRules {
           hand: playerIndex === viewerIndex
             ? player.hand.slice()
             : player.hand.map(function (): null { return null; }),
+          deckCount: player.deck.length,
+          discardPile: player.discardPile.slice(),
+          fatigueCount: player.fatigueCount,
           unitSlots: player.unitSlots.slice(),
           buildingSlots: player.buildingSlots.slice(),
           battlefield: player.battlefield.map(function (object): BattlefieldObjectState {
@@ -82,6 +107,21 @@ namespace BiomeRivalsRules {
         };
       }),
       winnerPlayerId: state.winnerPlayerId
+    };
+  }
+
+  export function createClientEventBatch(batch: MatchEventBatch, viewerPlayerId: string): MatchEventBatch {
+    return {
+      protocolVersion: batch.protocolVersion,
+      rulesetVersion: batch.rulesetVersion,
+      revision: batch.revision,
+      acknowledgedCommandId: batch.acknowledgedCommandId,
+      events: batch.events.map(function (event): MatchEvent {
+        const payload: { [key: string]: unknown } = {};
+        Object.keys(event.payload).forEach(function (key): void { payload[key] = event.payload[key]; });
+        if (event.type === 'CARD_DRAWN' && payload.playerId !== viewerPlayerId) payload.cardId = null;
+        return { eventId: event.eventId, type: event.type, payload: payload };
+      })
     };
   }
 
@@ -105,6 +145,9 @@ namespace BiomeRivalsRules {
           redstone: player.redstone,
           redstoneCapacity: player.redstoneCapacity,
           hand: player.hand.slice(),
+          deck: player.deck.slice(),
+          discardPile: player.discardPile.slice(),
+          fatigueCount: player.fatigueCount,
           unitSlots: player.unitSlots.slice(),
           buildingSlots: player.buildingSlots.slice(),
           battlefield: player.battlefield.map(function (object): BattlefieldObjectState {
@@ -262,13 +305,15 @@ namespace BiomeRivalsRules {
           if (slots[slot] === object.instanceId) slots[slot] = null;
         }
         player.battlefield.splice(index, 1);
+        player.discardPile.push(object.cardId);
         emit('OBJECT_DIED', {
           playerId: player.playerId,
           instanceId: object.instanceId,
           cardId: object.cardId,
           slotKind: object.slotKind,
           slotIndex: object.slotIndex,
-          occupiedSlots: object.occupiedSlots
+          occupiedSlots: object.occupiedSlots,
+          discardCount: player.discardPile.length
         });
       }
     }
@@ -277,6 +322,42 @@ namespace BiomeRivalsRules {
       const armorDamage = Math.min(player.armor, amount);
       player.armor -= armorDamage;
       player.life = Math.max(0, player.life - (amount - armorDamage));
+    }
+
+    function drawCard(player: PlayerState): void {
+      if (player.deck.length === 0) {
+        player.fatigueCount += 1;
+        player.life = Math.max(0, player.life - player.fatigueCount);
+        emit('FATIGUE_DAMAGE', {
+          playerId: player.playerId,
+          damage: player.fatigueCount,
+          fatigueCount: player.fatigueCount,
+          life: player.life,
+          armor: player.armor,
+          handCount: player.hand.length,
+          deckCount: 0
+        });
+        return;
+      }
+      const cardId = player.deck.pop()!;
+      if (player.hand.length >= HAND_LIMIT) {
+        player.discardPile.push(cardId);
+        emit('CARD_BURNED', {
+          playerId: player.playerId,
+          cardId: cardId,
+          handCount: player.hand.length,
+          deckCount: player.deck.length,
+          discardCount: player.discardPile.length
+        });
+        return;
+      }
+      player.hand.push(cardId);
+      emit('CARD_DRAWN', {
+        playerId: player.playerId,
+        cardId: cardId,
+        handCount: player.hand.length,
+        deckCount: player.deck.length
+      });
     }
 
     function attack(): CommandRejected | null {
@@ -390,6 +471,12 @@ namespace BiomeRivalsRules {
           redstoneCapacity: nextPlayer.redstoneCapacity,
           phase: next.phase
         });
+        drawCard(nextPlayer);
+        if (nextPlayer.life <= 0) {
+          next.status = 'FINISHED';
+          next.winnerPlayerId = next.players[actorIndex]!.playerId;
+          emit('MATCH_ENDED', { winnerPlayerId: next.winnerPlayerId, reason: 'FATIGUE' });
+        }
         break;
       }
       case 'CONCEDE': {

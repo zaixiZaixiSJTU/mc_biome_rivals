@@ -8,7 +8,7 @@
   "properties": {
     "matchId": { "type": "string", "minLength": 1 },
     "viewerPlayerId": { "type": "string", "minLength": 1 },
-    "protocolVersion": { "const": 2 },
+    "protocolVersion": { "const": 3 },
     "rulesetVersion": { "type": "string", "minLength": 1 },
     "revision": { "type": "integer", "minimum": 0 },
     "lastEventId": { "type": "integer", "minimum": 0 },
@@ -24,7 +24,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["playerId", "life", "armor", "redstone", "redstoneCapacity", "hand", "unitSlots", "buildingSlots", "battlefield"],
+        "required": ["playerId", "life", "armor", "redstone", "redstoneCapacity", "hand", "deckCount", "discardPile", "fatigueCount", "unitSlots", "buildingSlots", "battlefield"],
         "properties": {
           "playerId": { "type": "string", "minLength": 1 },
           "life": { "type": "integer", "minimum": 0 },
@@ -32,6 +32,9 @@
           "redstone": { "type": "integer", "minimum": 0, "maximum": 10 },
           "redstoneCapacity": { "type": "integer", "minimum": 0, "maximum": 10 },
           "hand": { "type": "array", "items": { "type": ["string", "null"], "pattern": "^[a-z0-9_]+$" } },
+          "deckCount": { "type": "integer", "minimum": 0 },
+          "discardPile": { "type": "array", "items": { "type": "string", "pattern": "^[a-z0-9_]+$" } },
+          "fatigueCount": { "type": "integer", "minimum": 0 },
           "unitSlots": {
             "type": "array", "minItems": 4, "maxItems": 4,
             "items": { "type": ["string", "null"], "pattern": "^[a-z0-9_]+$" }

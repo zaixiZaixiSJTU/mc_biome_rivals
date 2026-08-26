@@ -1,4 +1,5 @@
 using BiomeRivals.Content;
+using BiomeRivals.Core;
 using BiomeRivals.Demo.Editor;
 using NUnit.Framework;
 using System.Linq;
@@ -30,6 +31,7 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(match.TryCast(season, out var castMessage), Is.True);
             Assert.That(castMessage, Does.Contain("后续版本"));
             Assert.That(match.Energy, Is.Zero);
+            Assert.That(match.DiscardPile, Does.Contain("pf_006"));
 
             match.EndPlayerTurn();
             Assert.That(match.IsPlayerTurn, Is.False);
@@ -37,6 +39,40 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(match.IsPlayerTurn, Is.True);
             Assert.That(match.Round, Is.EqualTo(2));
             Assert.That(match.Energy, Is.EqualTo(7));
+        }
+
+        [Test]
+        public void LocalTurnStartDrawsBurnsAndAppliesEscalatingFatigue()
+        {
+            var drawing = new DemoLocalMatch();
+            drawing.ResetDeckAndHand(new[] { "pf_001" }, new[] { "pf_002", "pf_003" });
+            drawing.EndPlayerTurn();
+            var draw = drawing.BeginNextPlayerTurn();
+            Assert.That(draw.Outcome, Is.EqualTo(DemoDrawOutcome.Drawn));
+            Assert.That(draw.CardId, Is.EqualTo("pf_003"));
+            Assert.That(drawing.Hand, Does.Contain("pf_003"));
+            Assert.That(drawing.Deck, Has.Count.EqualTo(1));
+
+            var burning = new DemoLocalMatch();
+            burning.ResetDeckAndHand(
+                new[] { "pf_001", "pf_002", "pf_003", "pf_004", "pf_005", "pf_006", "pf_007" },
+                new[] { "pf_008" });
+            burning.EndPlayerTurn();
+            var burn = burning.BeginNextPlayerTurn();
+            Assert.That(burn.Outcome, Is.EqualTo(DemoDrawOutcome.Burned));
+            Assert.That(burning.Hand, Has.Count.EqualTo(7));
+            Assert.That(burning.DiscardPile, Is.EqualTo(new[] { "pf_008" }));
+
+            var fatiguing = new DemoLocalMatch();
+            fatiguing.ResetDeckAndHand(new string[0], new string[0]);
+            fatiguing.EndPlayerTurn();
+            var firstFatigue = fatiguing.BeginNextPlayerTurn();
+            fatiguing.EndPlayerTurn();
+            var secondFatigue = fatiguing.BeginNextPlayerTurn();
+            Assert.That(firstFatigue.FatigueDamage, Is.EqualTo(1));
+            Assert.That(secondFatigue.FatigueDamage, Is.EqualTo(2));
+            Assert.That(fatiguing.PlayerLife, Is.EqualTo(27));
+            Assert.That(fatiguing.FatigueCount, Is.EqualTo(2));
         }
 
         [Test]
@@ -63,8 +99,8 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(registry.TryGetDefinition("pf_001", out var bee), Is.True);
 
             var command = match.CreateDeployCommand("pf_001", DemoSlotKind.Unit, 2);
-            Assert.That(command.protocolVersion, Is.EqualTo(2));
-            Assert.That(command.rulesetVersion, Is.EqualTo("prototype-0.2"));
+            Assert.That(command.protocolVersion, Is.EqualTo(GameVersions.Protocol));
+            Assert.That(command.rulesetVersion, Is.EqualTo(GameVersions.Ruleset));
             Assert.That(command.type, Is.EqualTo("DEPLOY_CARD"));
             Assert.That(command.payload.cardId, Is.EqualTo("pf_001"));
             Assert.That(command.payload.slotKind, Is.EqualTo("UNIT"));
@@ -245,6 +281,7 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(root.transform.Find("DemoCanvas/PlayerHUD/FrameSlice").GetComponent<UnityEngine.UI.Image>().sprite.texture.name, Does.Contain("stone_bricks"));
                 Assert.That(root.transform.Find("DemoCanvas/CardDetailsPanel/FrameSlice").GetComponent<UnityEngine.UI.Image>().sprite.texture.name, Does.Contain("stone_bricks"));
                 Assert.That(root.transform.Find("DemoCanvas/HandPlate/FrameSlice").GetComponent<UnityEngine.UI.Image>().sprite.texture.name, Does.Contain("stone_bricks"));
+                Assert.That(root.transform.Find("DemoCanvas/HandLabel").GetComponent<UnityEngine.UI.Text>().text, Does.Contain("牌库 25"));
                 Assert.That(root.transform.Find("DemoCanvas/EndTurnButton/FrameSlice").GetComponent<UnityEngine.UI.Image>().sprite.texture.name, Does.Contain("prismarine_bricks"));
                 var endTurn = root.transform.Find("DemoCanvas/EndTurnButton");
                 Assert.That(endTurn.GetComponent<PrimaryActionButton>(), Is.Not.Null);

@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["protocolVersion", "rulesetVersion", "revision", "acknowledgedCommandId", "events"],
   "properties": {
-    "protocolVersion": { "const": 2 },
+    "protocolVersion": { "const": 3 },
     "rulesetVersion": { "type": "string" },
     "revision": { "type": "integer", "minimum": 0 },
     "acknowledgedCommandId": { "type": "string" },
@@ -18,7 +18,7 @@
         "required": ["eventId", "type", "payload"],
         "properties": {
           "eventId": { "type": "integer", "minimum": 1 },
-          "type": { "enum": ["CARD_DEPLOYED", "PHASE_CHANGED", "ATTACK_RESOLVED", "OBJECT_DIED", "TURN_ENDED", "TURN_STARTED", "PLAYER_CONCEDED", "MATCH_ENDED"] },
+          "type": { "enum": ["CARD_DEPLOYED", "CARD_DRAWN", "CARD_BURNED", "FATIGUE_DAMAGE", "PHASE_CHANGED", "ATTACK_RESOLVED", "OBJECT_DIED", "TURN_ENDED", "TURN_STARTED", "PLAYER_CONCEDED", "MATCH_ENDED"] },
           "payload": { "type": "object" }
         },
         "allOf": [
@@ -44,6 +44,61 @@
                     "maxHealth": { "type": "integer", "minimum": 1 },
                     "summonedTurn": { "type": "integer", "minimum": 1 },
                     "nextInstanceId": { "type": "integer", "minimum": 1 }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": { "properties": { "type": { "const": "CARD_DRAWN" } } },
+            "then": {
+              "properties": {
+                "payload": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["playerId", "cardId", "handCount", "deckCount"],
+                  "properties": {
+                    "playerId": { "type": "string", "minLength": 1 },
+                    "cardId": { "type": ["string", "null"], "pattern": "^[a-z0-9_]+$" },
+                    "handCount": { "type": "integer", "minimum": 0, "maximum": 7 },
+                    "deckCount": { "type": "integer", "minimum": 0 }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": { "properties": { "type": { "const": "CARD_BURNED" } } },
+            "then": {
+              "properties": {
+                "payload": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["playerId", "cardId", "handCount", "deckCount", "discardCount"],
+                  "properties": {
+                    "playerId": { "type": "string", "minLength": 1 },
+                    "cardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+                    "handCount": { "type": "integer", "minimum": 0, "maximum": 7 },
+                    "deckCount": { "type": "integer", "minimum": 0 },
+                    "discardCount": { "type": "integer", "minimum": 1 }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": { "properties": { "type": { "const": "FATIGUE_DAMAGE" } } },
+            "then": {
+              "properties": {
+                "payload": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["playerId", "damage", "fatigueCount", "life", "armor", "handCount", "deckCount"],
+                  "properties": {
+                    "playerId": { "type": "string", "minLength": 1 },
+                    "damage": { "type": "integer", "minimum": 1 },
+                    "fatigueCount": { "type": "integer", "minimum": 1 },
+                    "life": { "type": "integer", "minimum": 0 },
+                    "armor": { "type": "integer", "minimum": 0 },
+                    "handCount": { "type": "integer", "minimum": 0, "maximum": 7 },
+                    "deckCount": { "const": 0 }
                   }
                 }
               }
@@ -94,14 +149,15 @@
               "properties": {
                 "payload": {
                   "type": "object", "additionalProperties": false,
-                  "required": ["playerId", "instanceId", "cardId", "slotKind", "slotIndex", "occupiedSlots"],
+                  "required": ["playerId", "instanceId", "cardId", "slotKind", "slotIndex", "occupiedSlots", "discardCount"],
                   "properties": {
                     "playerId": { "type": "string", "minLength": 1 },
                     "instanceId": { "type": "string", "pattern": "^object-[0-9]+$" },
                     "cardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
                     "slotKind": { "enum": ["UNIT", "BUILDING"] },
                     "slotIndex": { "type": "integer", "minimum": 0 },
-                    "occupiedSlots": { "type": "integer", "minimum": 1, "maximum": 3 }
+                    "occupiedSlots": { "type": "integer", "minimum": 1, "maximum": 3 },
+                    "discardCount": { "type": "integer", "minimum": 1 }
                   }
                 }
               }

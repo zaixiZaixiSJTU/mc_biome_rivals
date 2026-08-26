@@ -6,6 +6,27 @@ namespace BiomeRivals.Demo
         Combat
     }
 
+    public enum DemoDrawOutcome
+    {
+        Drawn,
+        Burned,
+        Fatigue
+    }
+
+    public sealed class DemoDrawResult
+    {
+        public DemoDrawResult(DemoDrawOutcome outcome, string cardId, int fatigueDamage)
+        {
+            Outcome = outcome;
+            CardId = cardId ?? string.Empty;
+            FatigueDamage = fatigueDamage;
+        }
+
+        public DemoDrawOutcome Outcome { get; }
+        public string CardId { get; }
+        public int FatigueDamage { get; }
+    }
+
     public sealed class DemoBattlefieldObject
     {
         public string InstanceId { get; set; }

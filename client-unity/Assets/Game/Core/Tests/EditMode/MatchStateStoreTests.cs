@@ -185,7 +185,7 @@ namespace BiomeRivals.Core.Tests
                     new MatchEventDto
                     {
                         eventId = 4, type = MatchEventTypes.ObjectDied,
-                        payload = new MatchEventPayloadDto { playerId = "bob", instanceId = "object-2" }
+                        payload = new MatchEventPayloadDto { playerId = "bob", instanceId = "object-2", discardCount = 1 }
                     }
                 }
             });
@@ -194,7 +194,83 @@ namespace BiomeRivals.Core.Tests
             Assert.That(store.Current.players[0].battlefield[0].hasAttacked, Is.True);
             Assert.That(store.Current.players[1].battlefield, Is.Empty);
             Assert.That(store.Current.players[1].unitSlots[1], Is.Null);
+            Assert.That(store.Current.players[1].discardPile, Is.EqualTo(new[] { "pf_001" }));
             Assert.That(store.Current.revision, Is.EqualTo(3));
+        }
+
+        [Test]
+        public void Apply_ReplaysPrivateDrawAndPublicBurnWithoutLeakingOpponentCard()
+        {
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "match-1", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice", hand = new[] { "pf_001" }, deckCount = 2 },
+                    new PlayerStateDto { playerId = "bob", hand = new[] { string.Empty }, deckCount = 2 }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 1, type = MatchEventTypes.CardDrawn,
+                        payload = new MatchEventPayloadDto { playerId = "bob", cardId = string.Empty, handCount = 2, deckCount = 1 }
+                    },
+                    new MatchEventDto
+                    {
+                        eventId = 2, type = MatchEventTypes.CardBurned,
+                        payload = new MatchEventPayloadDto { playerId = "alice", cardId = "pf_008", handCount = 1, deckCount = 1, discardCount = 1 }
+                    }
+                }
+            });
+
+            Assert.That(store.Current.players[1].hand, Has.Length.EqualTo(2));
+            Assert.That(store.Current.players[1].hand[1], Is.Empty);
+            Assert.That(store.Current.players[1].deckCount, Is.EqualTo(1));
+            Assert.That(store.Current.players[0].discardPile, Is.EqualTo(new[] { "pf_008" }));
+        }
+
+        [Test]
+        public void Apply_ReplaysFatigueAsTrueHeroDamage()
+        {
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "match-1", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice", life = 30 },
+                    new PlayerStateDto { playerId = "bob", life = 3, armor = 4, deckCount = 0 }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 1, type = MatchEventTypes.FatigueDamage,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "bob", damage = 2, fatigueCount = 2, life = 1, armor = 4, handCount = 0, deckCount = 0
+                        }
+                    }
+                }
+            });
+
+            Assert.That(store.Current.players[1].life, Is.EqualTo(1));
+            Assert.That(store.Current.players[1].armor, Is.EqualTo(4));
+            Assert.That(store.Current.players[1].fatigueCount, Is.EqualTo(2));
         }
 
         [Test]

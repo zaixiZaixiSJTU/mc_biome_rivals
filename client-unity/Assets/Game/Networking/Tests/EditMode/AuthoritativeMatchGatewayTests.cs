@@ -16,12 +16,12 @@ namespace BiomeRivals.Networking.Tests
                 MatchStateDto received = null;
                 gateway.SnapshotReceived += snapshot => received = snapshot;
                 transport.Emit(MatchOpcodes.Snapshot,
-                    "{\"matchId\":\"match-1\",\"viewerPlayerId\":\"alice\",\"protocolVersion\":2,\"rulesetVersion\":\"prototype-0.2\",\"revision\":0," +
+                    "{\"matchId\":\"match-1\",\"viewerPlayerId\":\"alice\",\"protocolVersion\":3,\"rulesetVersion\":\"prototype-0.3\",\"revision\":0," +
                     "\"lastEventId\":0,\"status\":\"ACTIVE\",\"turn\":1,\"phase\":\"MAIN\",\"activePlayerIndex\":0,\"nextInstanceId\":1," +
                     "\"players\":[{\"playerId\":\"alice\",\"life\":30,\"armor\":0,\"redstone\":6," +
-                    "\"redstoneCapacity\":6,\"hand\":[\"pf_001\"],\"unitSlots\":[null,null,null,null]," +
+                    "\"redstoneCapacity\":6,\"hand\":[\"pf_001\"],\"deckCount\":26,\"discardPile\":[],\"fatigueCount\":0,\"unitSlots\":[null,null,null,null]," +
                     "\"buildingSlots\":[null,null,null],\"battlefield\":[]},{\"playerId\":\"bob\",\"life\":30,\"armor\":0," +
-                    "\"redstone\":6,\"redstoneCapacity\":6,\"hand\":[null]," +
+                    "\"redstone\":6,\"redstoneCapacity\":6,\"hand\":[null],\"deckCount\":26,\"discardPile\":[],\"fatigueCount\":0," +
                     "\"unitSlots\":[null,null,null,null],\"buildingSlots\":[null,null,null],\"battlefield\":[]}]," +
                     "\"winnerPlayerId\":null}");
 
@@ -33,6 +33,28 @@ namespace BiomeRivals.Networking.Tests
                 Assert.That(received.viewerPlayerId, Is.EqualTo("alice"));
                 Assert.That(received.players[1].hand[0], Is.Empty,
                     "Unity JsonUtility represents a null string array entry as an empty string.");
+                Assert.That(received.players[1].deckCount, Is.EqualTo(26));
+            }
+        }
+
+        [Test]
+        public void EventOpcodePublishesRedactedOpponentDraw()
+        {
+            var transport = new FakeTransport();
+            using (var gateway = new AuthoritativeMatchGateway(transport))
+            {
+                MatchEventBatchDto received = null;
+                gateway.EventBatchReceived += batch => received = batch;
+                transport.Emit(MatchOpcodes.EventBatch,
+                    "{\"protocolVersion\":3,\"rulesetVersion\":\"prototype-0.3\",\"revision\":1," +
+                    "\"acknowledgedCommandId\":\"turn-1\",\"events\":[{\"eventId\":1,\"type\":\"CARD_DRAWN\"," +
+                    "\"payload\":{\"playerId\":\"bob\",\"cardId\":null,\"handCount\":5,\"deckCount\":25}}]}");
+
+                Assert.That(received, Is.Not.Null);
+                Assert.That(received.events[0].type, Is.EqualTo(MatchEventTypes.CardDrawn));
+                Assert.That(received.events[0].payload.cardId, Is.Empty);
+                Assert.That(received.events[0].payload.handCount, Is.EqualTo(5));
+                Assert.That(received.events[0].payload.deckCount, Is.EqualTo(25));
             }
         }
 

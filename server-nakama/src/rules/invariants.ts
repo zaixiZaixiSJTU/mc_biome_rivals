@@ -28,8 +28,16 @@ namespace BiomeRivalsRules {
       }
       if (player.unitSlots.length !== 4) violations.push('each player requires four unit slots');
       if (player.buildingSlots.length !== 3) violations.push('each player requires three building slots');
+      if (player.hand.length > 7) violations.push('hand cannot exceed seven cards');
+      if (player.fatigueCount < 0) violations.push('fatigue count cannot be negative');
       for (let handIndex = 0; handIndex < player.hand.length; handIndex += 1) {
         if (getCardDefinition(player.hand[handIndex]!) === null) violations.push('hand contains an unknown card');
+      }
+      for (let deckIndex = 0; deckIndex < player.deck.length; deckIndex += 1) {
+        if (getCardDefinition(player.deck[deckIndex]!) === null) violations.push('deck contains an unknown card');
+      }
+      for (let discardIndex = 0; discardIndex < player.discardPile.length; discardIndex += 1) {
+        if (getCardDefinition(player.discardPile[discardIndex]!) === null) violations.push('discard pile contains an unknown card');
       }
       const instances: { [instanceId: string]: BattlefieldObjectState } = {};
       for (let objectIndex = 0; objectIndex < player.battlefield.length; objectIndex += 1) {

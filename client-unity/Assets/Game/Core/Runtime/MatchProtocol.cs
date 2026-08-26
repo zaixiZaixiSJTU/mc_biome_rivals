@@ -22,6 +22,9 @@ namespace BiomeRivals.Core
     public static class MatchEventTypes
     {
         public const string CardDeployed = "CARD_DEPLOYED";
+        public const string CardDrawn = "CARD_DRAWN";
+        public const string CardBurned = "CARD_BURNED";
+        public const string FatigueDamage = "FATIGUE_DAMAGE";
         public const string PhaseChanged = "PHASE_CHANGED";
         public const string AttackResolved = "ATTACK_RESOLVED";
         public const string ObjectDied = "OBJECT_DIED";
@@ -147,6 +150,13 @@ namespace BiomeRivals.Core
         public int attackerHealth;
         public int targetHealth;
         public int targetArmor;
+        public int handCount;
+        public int deckCount;
+        public int discardCount;
+        public int fatigueCount;
+        public int damage;
+        public int life;
+        public int armor;
     }
 
     [Serializable]

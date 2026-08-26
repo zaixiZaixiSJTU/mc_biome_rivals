@@ -114,13 +114,21 @@ function biomeRivalsMatchLoop(
       const result = BiomeRivalsRules.applyCommand(state.game, message.sender.userId, command);
       if (result.accepted) {
         state.game = result.state;
-        dispatcher.broadcastMessage(
-          BIOME_RIVALS_EVENT_BATCH_OPCODE,
-          encodeMatchMessage(result.batch),
-          null,
-          message.sender,
-          true
-        );
+        const recipients = Object.keys(state.presences).map(function (sessionId): nkruntime.Presence {
+          return state.presences[sessionId]!;
+        });
+        for (let recipientIndex = 0; recipientIndex < recipients.length; recipientIndex += 1) {
+          const recipient = recipients[recipientIndex]!;
+          const isPlayer = state.game.players.some(function (player): boolean { return player.playerId === recipient.userId; });
+          if (!isPlayer) continue;
+          dispatcher.broadcastMessage(
+            BIOME_RIVALS_EVENT_BATCH_OPCODE,
+            encodeMatchMessage(BiomeRivalsRules.createClientEventBatch(result.batch, recipient.userId)),
+            [recipient],
+            message.sender,
+            true
+          );
+        }
       } else {
         dispatcher.broadcastMessage(
           BIOME_RIVALS_REJECTION_OPCODE,

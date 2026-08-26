@@ -28,6 +28,9 @@ namespace BiomeRivals.Core
         public int redstone;
         public int redstoneCapacity;
         public string[] hand = Array.Empty<string>();
+        public int deckCount;
+        public string[] discardPile = Array.Empty<string>();
+        public int fatigueCount;
         public string[] unitSlots = Array.Empty<string>();
         public string[] buildingSlots = Array.Empty<string>();
         public BattlefieldObjectStateDto[] battlefield = Array.Empty<BattlefieldObjectStateDto>();
@@ -127,6 +130,29 @@ namespace BiomeRivals.Core
                     Current.nextInstanceId = payload.nextInstanceId;
                     for (var index = payload.slotIndex; index < payload.slotIndex + occupiedSlots; index++) slots[index] = payload.instanceId;
                     break;
+                case MatchEventTypes.CardDrawn:
+                    var drawingPlayer = FindPlayer(payload.playerId);
+                    var drawnHand = new List<string>(drawingPlayer.hand ?? Array.Empty<string>()) { payload.cardId };
+                    if (drawnHand.Count != payload.handCount) throw new InvalidOperationException("Draw event hand count does not match projected hand.");
+                    drawingPlayer.hand = drawnHand.ToArray();
+                    drawingPlayer.deckCount = payload.deckCount;
+                    break;
+                case MatchEventTypes.CardBurned:
+                    var burningPlayer = FindPlayer(payload.playerId);
+                    if ((burningPlayer.hand?.Length ?? 0) != payload.handCount) throw new InvalidOperationException("Burn event hand count does not match projected hand.");
+                    var discard = new List<string>(burningPlayer.discardPile ?? Array.Empty<string>()) { payload.cardId };
+                    if (discard.Count != payload.discardCount) throw new InvalidOperationException("Burn event discard count does not match projected discard pile.");
+                    burningPlayer.discardPile = discard.ToArray();
+                    burningPlayer.deckCount = payload.deckCount;
+                    break;
+                case MatchEventTypes.FatigueDamage:
+                    var fatiguedPlayer = FindPlayer(payload.playerId);
+                    if ((fatiguedPlayer.hand?.Length ?? 0) != payload.handCount) throw new InvalidOperationException("Fatigue event hand count does not match projected hand.");
+                    fatiguedPlayer.deckCount = payload.deckCount;
+                    fatiguedPlayer.fatigueCount = payload.fatigueCount;
+                    fatiguedPlayer.life = payload.life;
+                    fatiguedPlayer.armor = payload.armor;
+                    break;
                 case MatchEventTypes.PhaseChanged:
                     Current.phase = payload.phase;
                     break;
@@ -147,7 +173,11 @@ namespace BiomeRivals.Core
                     }
                     break;
                 case MatchEventTypes.ObjectDied:
-                    RemoveObject(FindPlayer(payload.playerId), payload.instanceId);
+                    var deadObjectPlayer = FindPlayer(payload.playerId);
+                    var deadCardId = RemoveObject(deadObjectPlayer, payload.instanceId);
+                    var deathDiscard = new List<string>(deadObjectPlayer.discardPile ?? Array.Empty<string>()) { deadCardId };
+                    if (deathDiscard.Count != payload.discardCount) throw new InvalidOperationException("Death event discard count does not match projected discard pile.");
+                    deadObjectPlayer.discardPile = deathDiscard.ToArray();
                     break;
                 case MatchEventTypes.TurnStarted:
                     var activePlayer = FindPlayer(payload.playerId);
@@ -183,14 +213,16 @@ namespace BiomeRivals.Core
             throw new InvalidOperationException($"Event references unknown battlefield object '{instanceId}'.");
         }
 
-        private static void RemoveObject(PlayerStateDto player, string instanceId)
+        private static string RemoveObject(PlayerStateDto player, string instanceId)
         {
             var battlefield = new List<BattlefieldObjectStateDto>(player.battlefield ?? Array.Empty<BattlefieldObjectStateDto>());
-            var removed = battlefield.RemoveAll(item => item != null && string.Equals(item.instanceId, instanceId, StringComparison.Ordinal));
-            if (removed != 1) throw new InvalidOperationException($"Death event references unknown battlefield object '{instanceId}'.");
+            var removedObject = battlefield.Find(item => item != null && string.Equals(item.instanceId, instanceId, StringComparison.Ordinal));
+            if (removedObject == null) throw new InvalidOperationException($"Death event references unknown battlefield object '{instanceId}'.");
+            battlefield.Remove(removedObject);
             player.battlefield = battlefield.ToArray();
             ClearSlots(player.unitSlots, instanceId);
             ClearSlots(player.buildingSlots, instanceId);
+            return removedObject.cardId;
         }
 
         private static void ClearSlots(string[] slots, string instanceId)

@@ -14,12 +14,16 @@ namespace BiomeRivals.Demo
     public sealed class DemoLocalMatch
     {
         private readonly List<string> _hand = new List<string>();
+        private readonly List<string> _deck = new List<string>();
+        private readonly List<string> _discardPile = new List<string>();
         private readonly List<DemoBattlefieldObject> _playerBattlefield = new List<DemoBattlefieldObject>();
         private readonly List<DemoBattlefieldObject> _opponentBattlefield = new List<DemoBattlefieldObject>();
         private readonly HashSet<string> _processedCommandIds = new HashSet<string>(StringComparer.Ordinal);
         private int _nextLocalCommandId = 1;
 
         public IReadOnlyList<string> Hand => _hand;
+        public IReadOnlyList<string> Deck => _deck;
+        public IReadOnlyList<string> DiscardPile => _discardPile;
         public string[] UnitSlots { get; } = new string[4];
         public string[] BuildingSlots { get; } = new string[3];
         public string[] OpponentUnitSlots { get; } = new string[4];
@@ -32,6 +36,7 @@ namespace BiomeRivals.Demo
         public bool IsPlayerTurn { get; private set; } = true;
         public DemoTurnPhase Phase { get; private set; } = DemoTurnPhase.Main;
         public int PlayerLife { get; private set; } = 30;
+        public int FatigueCount { get; private set; }
         public int OpponentLife { get; private set; } = 30;
         public bool IsFinished { get; private set; }
         public int Revision { get; private set; }
@@ -41,6 +46,19 @@ namespace BiomeRivals.Demo
             if (cardIds == null) throw new ArgumentNullException(nameof(cardIds));
             _hand.Clear();
             _hand.AddRange(cardIds);
+        }
+
+        public void ResetDeckAndHand(IEnumerable<string> handCardIds, IEnumerable<string> deckCardIds)
+        {
+            if (handCardIds == null) throw new ArgumentNullException(nameof(handCardIds));
+            if (deckCardIds == null) throw new ArgumentNullException(nameof(deckCardIds));
+            _hand.Clear();
+            _hand.AddRange(handCardIds);
+            if (_hand.Count > 7) throw new ArgumentException("Hand cannot exceed seven cards.", nameof(handCardIds));
+            _deck.Clear();
+            _deck.AddRange(deckCardIds);
+            _discardPile.Clear();
+            FatigueCount = 0;
         }
 
         public bool TryDeploy(
@@ -117,6 +135,7 @@ namespace BiomeRivals.Demo
                 return Fail("部署牌需要先选择战场槽位。", out message);
 
             Consume(definition);
+            _discardPile.Add(definition.id);
             message = $"已打出 {definition.designId}；规则效果将在后续版本接入。";
             return true;
         }
@@ -234,7 +253,7 @@ namespace BiomeRivals.Demo
             return DemoCommandResult.Accept("已结束回合。", Revision);
         }
 
-        public void BeginNextPlayerTurn()
+        public DemoDrawResult BeginNextPlayerTurn()
         {
             Round++;
             MaxEnergy = Math.Min(10, MaxEnergy + 1);
@@ -242,6 +261,30 @@ namespace BiomeRivals.Demo
             IsPlayerTurn = true;
             Phase = DemoTurnPhase.Main;
             foreach (var battlefieldObject in _playerBattlefield) battlefieldObject.HasAttacked = false;
+            return DrawCard();
+        }
+
+        private DemoDrawResult DrawCard()
+        {
+            if (_deck.Count == 0)
+            {
+                FatigueCount++;
+                PlayerLife = Math.Max(0, PlayerLife - FatigueCount);
+                if (PlayerLife == 0) IsFinished = true;
+                return new DemoDrawResult(DemoDrawOutcome.Fatigue, string.Empty, FatigueCount);
+            }
+
+            var cardIndex = _deck.Count - 1;
+            var cardId = _deck[cardIndex];
+            _deck.RemoveAt(cardIndex);
+            if (_hand.Count >= 7)
+            {
+                _discardPile.Add(cardId);
+                return new DemoDrawResult(DemoDrawOutcome.Burned, cardId, 0);
+            }
+
+            _hand.Add(cardId);
+            return new DemoDrawResult(DemoDrawOutcome.Drawn, cardId, 0);
         }
 
         private bool CanPlay(CardDefinitionEntry definition, out string message)
@@ -308,13 +351,14 @@ namespace BiomeRivals.Demo
             for (var index = slotIndex; index < slotIndex + occupiedSlots; index++) slots[index] = definition.id;
         }
 
-        private static void RemoveObject(
+        private void RemoveObject(
             DemoBattlefieldObject value,
             List<DemoBattlefieldObject> battlefield,
             string[] unitSlots,
             string[] buildingSlots)
         {
             battlefield.Remove(value);
+            if (value.Player) _discardPile.Add(value.CardId);
             var slots = value.SlotKind == DemoSlotKind.Unit ? unitSlots : buildingSlots;
             for (var index = value.SlotIndex; index < value.SlotIndex + value.OccupiedSlots; index++) slots[index] = string.Empty;
         }

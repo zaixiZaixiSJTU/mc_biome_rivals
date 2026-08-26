@@ -39,6 +39,7 @@ namespace BiomeRivals.Demo
         private CardDetailsView _cardDetailsView;
         private RectTransform _playerHud;
         private Text _energyText;
+        private Text _handLabel;
         private Text _opponentHealthText;
         private Text _playerHealthText;
         private Text _roundText;
@@ -233,7 +234,7 @@ namespace BiomeRivals.Demo
             var handPlate = CreateBasePanel(_canvasRoot, "HandPlate", new Vector2(35, -418), new Vector2(1360, 232));
             _handRoot = CreateRect(handPlate, "HandCards", new Vector2(-20, 14), new Vector2(1250, 225));
             _handCanvasGroup = _handRoot.gameObject.AddComponent<CanvasGroup>();
-            CreateText(_canvasRoot, "HandLabel", new Vector2(-584, -508), new Vector2(130, 25), "手牌  5/7", 13, Muted, TextAnchor.MiddleLeft, FontStyle.Bold);
+            _handLabel = CreateText(_canvasRoot, "HandLabel", new Vector2(-484, -508), new Vector2(330, 25), "手牌 5/7 · 牌库 25 · 弃牌 0", 13, Muted, TextAnchor.MiddleLeft, FontStyle.Bold);
         }
 
         private void BuildInspector()
@@ -275,8 +276,9 @@ namespace BiomeRivals.Demo
         {
             _activeFaction = factionId;
             var spec = Factions.First(item => item.Id == factionId);
-            var ids = Enumerable.Range(1, 5).Select(index => $"{spec.Prefix}_{index:000}");
-            _match.ResetHand(ids);
+            var ids = Enumerable.Range(1, 5).Select(index => $"{spec.Prefix}_{index:000}").ToArray();
+            var deck = Enumerable.Range(0, 25).Select(index => $"{spec.Prefix}_{(index % 8) + 1:000}").ToArray();
+            _match.ResetDeckAndHand(ids, deck);
             _selectedCardId = _match.Hand.FirstOrDefault();
             RefreshAll();
             ShowStatus($"已切换到{spec.Label}牌组；效果文本已注册，复杂规则暂为展示。", false);
@@ -293,6 +295,7 @@ namespace BiomeRivals.Demo
             _roundText.text = $"第 {_match.Round} 回合 · {(_match.Phase == DemoTurnPhase.Main ? "主行动" : "战斗")}";
             _opponentHealthText.text = $"❤ {_match.OpponentLife}";
             _playerHealthText.text = $"❤ {_match.PlayerLife}";
+            _handLabel.text = $"手牌 {_match.Hand.Count}/7 · 牌库 {_match.Deck.Count} · 弃牌 {_match.DiscardPile.Count}";
             _handCanvasGroup.alpha = _match.Phase == DemoTurnPhase.Main ? 1f : 0.52f;
             _handCanvasGroup.interactable = _match.Phase == DemoTurnPhase.Main;
             _handCanvasGroup.blocksRaycasts = _match.Phase == DemoTurnPhase.Main;
@@ -544,9 +547,14 @@ namespace BiomeRivals.Demo
         {
             yield return ShowTurnBanner("对手回合", Ember);
             yield return new WaitForSecondsRealtime(0.55f);
-            _match.BeginNextPlayerTurn();
+            var draw = _match.BeginNextPlayerTurn();
             RefreshAll();
-            ShowStatus("新回合开始：红石能量已补满并提高上限。", false);
+            if (draw.Outcome == DemoDrawOutcome.Drawn)
+                ShowStatus($"新回合：能量已补满，抽到 {GetCardName(draw.CardId)}。", false);
+            else if (draw.Outcome == DemoDrawOutcome.Burned)
+                ShowStatus($"手牌已满，{GetCardName(draw.CardId)} 被公开并置入弃牌堆。", true);
+            else
+                ShowStatus($"牌库为空，受到 {draw.FatigueDamage} 点疲劳伤害。", true);
             yield return ShowTurnBanner("你的回合", Cyan);
         }
 

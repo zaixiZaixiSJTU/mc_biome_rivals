@@ -51,7 +51,9 @@ UGUI 样式由 `DemoUiStyleCatalog` 集中提供材质、底色、描边和交�
 | `DemoMinecraftModelFactory` | 将已注册单位构造成 Minecraft 式分件方块模型并套用对应生物皮肤 | 只负责后备表现；正式 Prefab 仍拥有最高优先级 |
 | `DemoBattlefieldPointerController` | 从主相机发射 3D 射线，维护双方槽位的悬停、按下和点击状态 | 只命中带 `DemoBattlefieldSlotTarget` 的地表，不依赖 Canvas 格子位置 |
 | `DemoSceneController` | 手牌、检查器、规则操作回调和世界坐标到文字 UI 的投影 | 保持屏幕空间布局；不创建部署格 Graphic/Button |
-| `DemoLocalMatch` | 费用、槽位、连续建筑、阶段、战场实例、攻击/反击、死亡与英雄生命 | 不访问场景对象或渲染组件；命令 DTO 与联网网关保持一致 |
+| `DemoLocalMatch` | 费用、手牌/牌库/弃牌、抽牌/爆牌/疲劳、槽位、阶段、战场实例、攻击/反击、死亡与英雄生命 | 不访问场景对象或渲染组件；命令 DTO 与联网网关保持一致 |
+
+手牌底板左下角持续显示“手牌 / 牌库 / 弃牌”三个区域计数，信息使用与 HUD 相同的低对比度浅色文字，不额外叠加 Web 风格浮层。新回合抽到的卡直接进入扇形手牌；满 7 张时卡牌公开进入弃牌堆，空牌库时状态板显示本次疲劳伤害。离线展示牌组为 5 张展示手牌加 25 张临时群系循环牌库，用于 UI 和回合测试；正式权威规则按 GDD 使用 30 张牌组与 3/4 张起手。
 
 本机原型贴图通过 `scripts/extract-minecraft-world-textures.ps1` 从已拥有的 Java 客户端 JAR 按白名单提取 17 张方块贴图和 6 张生物皮肤到 Git 忽略目录。运行时先查找 `Resources/DemoWorld/Prefabs/{cardId}`；不存在时由 `DemoMinecraftModelFactory` 为 `pf_001` 蜜蜂、`pf_002` 绵羊、`pf_003` 狼、`pf_004` 村民、`nt_001` 岩浆怪和 `nt_003` 烈焰人构造 Minecraft 式分件模型，其余单位才使用通用后备模型。因此以后注册正式 Prefab 不需要改部署逻辑。
 
