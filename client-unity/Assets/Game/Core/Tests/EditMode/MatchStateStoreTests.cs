@@ -419,6 +419,65 @@ namespace BiomeRivals.Core.Tests
         }
 
         [Test]
+        public void Apply_ReplaysFriendlyAttackBuffAndBuildingHeal()
+        {
+            var unit = new BattlefieldObjectStateDto
+            {
+                instanceId = "object-1", cardId = "pf_001", cardType = "UNIT", attack = 1,
+                health = 2, maxHealth = 2, slotKind = "UNIT", slotIndex = 0, occupiedSlots = 1, summonedTurn = 1
+            };
+            var building = new BattlefieldObjectStateDto
+            {
+                instanceId = "object-2", cardId = "db_004", cardType = "BUILDING", attack = 0,
+                health = 1, maxHealth = 5, slotKind = "BUILDING", slotIndex = 0, occupiedSlots = 1, summonedTurn = 1
+            };
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "match-1", protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                players = new[]
+                {
+                    new PlayerStateDto
+                    {
+                        playerId = "alice", unitSlots = new[] { "object-1", null, null, null },
+                        buildingSlots = new[] { "object-2", null, null }, battlefield = new[] { unit, building }
+                    },
+                    new PlayerStateDto { playerId = "bob" }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 1, type = MatchEventTypes.ObjectStatsChanged,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", instanceId = "object-1", attack = 2, health = 2,
+                            temporaryAttackModifier = 1, temporaryAttackModifierExpiresOnTurn = 1
+                        }
+                    },
+                    new MatchEventDto
+                    {
+                        eventId = 2, type = MatchEventTypes.ObjectStatsChanged,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", instanceId = "object-2", attack = 0, health = 3,
+                            temporaryAttackModifier = 0, temporaryAttackModifierExpiresOnTurn = 0
+                        }
+                    }
+                }
+            });
+
+            Assert.That(unit.attack, Is.EqualTo(2));
+            Assert.That(unit.temporaryAttackModifier, Is.EqualTo(1));
+            Assert.That(building.health, Is.EqualTo(3));
+        }
+
+        [Test]
         public void Apply_RejectsRevisionGapsBeforeMutation()
         {
             var store = new MatchStateStore();

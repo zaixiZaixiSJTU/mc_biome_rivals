@@ -282,6 +282,19 @@ namespace BiomeRivalsRules {
         summonedTurn: battlefieldObject.summonedTurn,
         nextInstanceId: next.nextInstanceId
       });
+      if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
+          definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.pf_001.01') {
+        const healedLife = Math.min(30, player.life + 1);
+        const healing = healedLife - player.life;
+        player.life = healedLife;
+        emit('HERO_HEALED', {
+          playerId: player.playerId,
+          sourceCardId: cardId,
+          effectId: definition.effectIds[0],
+          healing: healing,
+          life: player.life
+        });
+      }
       return null;
     }
 
@@ -389,19 +402,37 @@ namespace BiomeRivalsRules {
         return reject(state, 'EFFECT_NOT_IMPLEMENTED', 'card effect is registered but not implemented');
       }
       const effectId = definition.effectIds[0]!;
-      if (effectId !== 'effect.nt_006.01' && effectId !== 'effect.si_001.01' && effectId !== 'effect.tk_005.01' && effectId !== 'effect.tk_016.01') {
+      if (effectId !== 'effect.db_006.01' && effectId !== 'effect.nt_006.01' &&
+          effectId !== 'effect.si_001.01' && effectId !== 'effect.tk_005.01' &&
+          effectId !== 'effect.tk_009.01' && effectId !== 'effect.tk_010.01' &&
+          effectId !== 'effect.tk_016.01') {
         return reject(state, 'EFFECT_NOT_IMPLEMENTED', 'effect handler is not registered');
       }
       const player = next.players[actorIndex]!;
       const opponent = next.players[actorIndex === 0 ? 1 : 0]!;
       let targetedObject: BattlefieldObjectState | null = null;
-      if (effectId === 'effect.si_001.01') {
+      let targetedPlayer: PlayerState | null = null;
+      if (effectId === 'effect.si_001.01' || effectId === 'effect.tk_009.01') {
         if (command.payload.targetType !== 'UNIT' || typeof command.payload.targetInstanceId !== 'string') {
-          return reject(state, 'INVALID_TARGET', 'snowball requires an enemy unit target');
+          return reject(state, 'INVALID_TARGET', effectId === 'effect.si_001.01'
+            ? 'snowball requires an enemy unit target'
+            : 'bone requires a friendly unit target');
         }
-        targetedObject = findObject(opponent, command.payload.targetInstanceId);
+        targetedPlayer = effectId === 'effect.si_001.01' ? opponent : player;
+        targetedObject = findObject(targetedPlayer, command.payload.targetInstanceId);
         if (targetedObject === null || targetedObject.cardType !== 'UNIT') {
-          return reject(state, 'INVALID_TARGET', 'snowball target must be a living enemy unit');
+          return reject(state, 'INVALID_TARGET', effectId === 'effect.si_001.01'
+            ? 'snowball target must be a living enemy unit'
+            : 'bone target must be a living friendly unit');
+        }
+      } else if (effectId === 'effect.tk_010.01') {
+        if (command.payload.targetType !== 'BUILDING' || typeof command.payload.targetInstanceId !== 'string') {
+          return reject(state, 'INVALID_TARGET', 'cobblestone requires a friendly building target');
+        }
+        targetedPlayer = player;
+        targetedObject = findObject(player, command.payload.targetInstanceId);
+        if (targetedObject === null || (targetedObject.cardType !== 'BUILDING' && targetedObject.cardType !== 'STRUCTURE')) {
+          return reject(state, 'INVALID_TARGET', 'cobblestone target must be a living friendly building or structure');
         }
       }
       const handIndex = player.hand.indexOf(cardId);
@@ -422,6 +453,29 @@ namespace BiomeRivalsRules {
       });
 
       switch (effectId) {
+        case 'effect.db_006.01':
+          for (let playerIndex = 0; playerIndex < next.players.length; playerIndex += 1) {
+            const damagedPlayer = next.players[playerIndex]!;
+            for (let objectIndex = 0; objectIndex < damagedPlayer.battlefield.length; objectIndex += 1) {
+              const damagedObject = damagedPlayer.battlefield[objectIndex]!;
+              if (damagedObject.cardType !== 'UNIT') continue;
+              damagedObject.health = Math.max(0, damagedObject.health - 2);
+              emit('OBJECT_STATS_CHANGED', {
+                playerId: damagedPlayer.playerId,
+                instanceId: damagedObject.instanceId,
+                sourceCardId: cardId,
+                effectId: effectId,
+                reason: 'DAMAGE',
+                attack: damagedObject.attack,
+                health: damagedObject.health,
+                temporaryAttackModifier: damagedObject.temporaryAttackModifier,
+                temporaryAttackModifierExpiresOnTurn: damagedObject.temporaryAttackModifierExpiresOnTurn
+              });
+            }
+          }
+          removeDeadObjects(player);
+          removeDeadObjects(opponent);
+          return null;
         case 'effect.nt_006.01':
           player.life = Math.max(0, player.life - 2);
           emit('HERO_DAMAGED', {
@@ -433,13 +487,13 @@ namespace BiomeRivalsRules {
           finishForSelfDefeat(player, 'FATIGUE');
           return null;
         case 'effect.si_001.01': {
-          if (targetedObject === null) throw new Error('validated snowball target was not resolved');
+          if (targetedObject === null || targetedPlayer === null) throw new Error('validated snowball target was not resolved');
           const attackBefore = targetedObject.attack;
           targetedObject.attack = Math.max(0, targetedObject.attack - 1);
           targetedObject.temporaryAttackModifier += targetedObject.attack - attackBefore;
           if (targetedObject.temporaryAttackModifier !== 0) targetedObject.temporaryAttackModifierExpiresOnTurn = state.turn;
           emit('OBJECT_STATS_CHANGED', {
-            playerId: opponent.playerId,
+            playerId: targetedPlayer.playerId,
             instanceId: targetedObject.instanceId,
             sourceCardId: cardId,
             effectId: effectId,
@@ -465,6 +519,40 @@ namespace BiomeRivalsRules {
             damage: 1, damageType: 'TRUE', life: player.life, armor: player.armor
           });
           finishForSelfDefeat(player, 'SELF_DAMAGE');
+          return null;
+        }
+        case 'effect.tk_009.01': {
+          if (targetedObject === null || targetedPlayer === null) throw new Error('validated bone target was not resolved');
+          targetedObject.attack += 1;
+          targetedObject.temporaryAttackModifier += 1;
+          targetedObject.temporaryAttackModifierExpiresOnTurn = state.turn;
+          emit('OBJECT_STATS_CHANGED', {
+            playerId: targetedPlayer.playerId,
+            instanceId: targetedObject.instanceId,
+            sourceCardId: cardId,
+            effectId: effectId,
+            reason: 'TEMPORARY_ATTACK_MODIFIER',
+            attack: targetedObject.attack,
+            health: targetedObject.health,
+            temporaryAttackModifier: targetedObject.temporaryAttackModifier,
+            temporaryAttackModifierExpiresOnTurn: targetedObject.temporaryAttackModifierExpiresOnTurn
+          });
+          return null;
+        }
+        case 'effect.tk_010.01': {
+          if (targetedObject === null || targetedPlayer === null) throw new Error('validated cobblestone target was not resolved');
+          targetedObject.health = Math.min(targetedObject.maxHealth, targetedObject.health + 2);
+          emit('OBJECT_STATS_CHANGED', {
+            playerId: targetedPlayer.playerId,
+            instanceId: targetedObject.instanceId,
+            sourceCardId: cardId,
+            effectId: effectId,
+            reason: 'HEAL',
+            attack: targetedObject.attack,
+            health: targetedObject.health,
+            temporaryAttackModifier: targetedObject.temporaryAttackModifier,
+            temporaryAttackModifierExpiresOnTurn: targetedObject.temporaryAttackModifierExpiresOnTurn
+          });
           return null;
         }
         case 'effect.tk_016.01':

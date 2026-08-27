@@ -27,7 +27,7 @@
                                      "arthropod",
                                      "animal"
                                  ],
-                        "effectImplementationStatus":  "PENDING",
+                        "effectImplementationStatus":  "IMPLEMENTED",
                         "effectIds":  [
                                           "effect.pf_001.01"
                                       ]
@@ -398,7 +398,7 @@
                         "tags":  [
                                      "nature"
                                  ],
-                        "effectImplementationStatus":  "PENDING",
+                        "effectImplementationStatus":  "IMPLEMENTED",
                         "effectIds":  [
                                           "effect.db_006.01"
                                       ]
@@ -1861,7 +1861,7 @@
                         "tags":  [
                                      "material"
                                  ],
-                        "effectImplementationStatus":  "PENDING",
+                        "effectImplementationStatus":  "IMPLEMENTED",
                         "effectIds":  [
                                           "effect.tk_009.01"
                                       ]
@@ -1890,7 +1890,7 @@
                                      "material",
                                      "stone"
                                  ],
-                        "effectImplementationStatus":  "PENDING",
+                        "effectImplementationStatus":  "IMPLEMENTED",
                         "effectIds":  [
                                           "effect.tk_010.01"
                                       ]

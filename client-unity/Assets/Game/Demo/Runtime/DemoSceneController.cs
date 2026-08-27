@@ -447,6 +447,37 @@ namespace BiomeRivals.Demo
             if (!IsOnlineBoard || matchEvent == null) yield break;
             switch (matchEvent.type)
             {
+                case MatchEventTypes.CardDeployed: {
+                    if (matchEvent.payload?.cardId == "pf_001")
+                    {
+                        var deployViewerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
+                        var healing = matchEvent.payload.healing;
+                        ShowStatus(matchEvent.payload.playerId == deployViewerId
+                            ? $"蜜蜂落地：战吼为你恢复 {healing} 点生命。"
+                            : $"敌方蜜蜂落地：战吼为对手恢复 {healing} 点生命。", false);
+                    }
+                    yield return null;
+                    break;
+                }
+                case MatchEventTypes.CardPlayed: {
+                    var effectViewerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
+                    var ownEffect = matchEvent.payload?.playerId == effectViewerId;
+                    switch (matchEvent.payload?.effectId)
+                    {
+                        case "effect.db_006.01":
+                            ShowStatus("沙尘暴席卷战场：所有生物受到 2 点伤害。", false);
+                            yield return ShowTurnBanner("沙尘暴", Ember);
+                            break;
+                        case "effect.tk_009.01":
+                            ShowStatus(ownEffect ? "骨头已生效：己方目标本回合获得 +1 攻击力。" : "对手使用骨头强化了一个生物。", false);
+                            break;
+                        case "effect.tk_010.01":
+                            ShowStatus(ownEffect ? "圆石已生效：己方建筑恢复至新的生命值。" : "对手使用圆石修复了一个建筑。", false);
+                            break;
+                    }
+                    yield return null;
+                    break;
+                }
                 case MatchEventTypes.PhaseChanged:
                     yield return ShowTurnBanner("进入战斗阶段", Cyan);
                     break;
@@ -469,6 +500,9 @@ namespace BiomeRivals.Demo
                 case MatchEventTypes.ArmorGained:
                     if (matchEvent.payload?.playerId == GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId)
                         yield return PulsePlayerHud(Cyan);
+                    break;
+                case MatchEventTypes.ObjectStatsChanged:
+                    yield return PulseBattlefieldObject(matchEvent.payload?.instanceId);
                     break;
                 default:
                     yield return null;
@@ -741,7 +775,7 @@ namespace BiomeRivals.Demo
             var selectingCardTarget = !string.IsNullOrEmpty(_pendingTargetCardId);
             var canInteract = !IsOnlineBoard || _onlineSession.CanIssueCommand;
             var valid = canInteract && (selectingCardTarget
-                ? !player && view.Kind == DemoSlotKind.Unit && !empty
+                ? IsValidPendingCardTarget(player, view.Kind, battlefieldObject)
                 : player
                     ? match.Phase == DemoTurnPhase.Main
                         ? empty && IsSelectedValidFor(view.Kind)
@@ -794,9 +828,9 @@ namespace BiomeRivals.Demo
             {
                 var implemented = definition.effectImplementationStatus == "IMPLEMENTED";
                 var targeting = _pendingTargetCardId == definition.id;
-                var requiresTarget = RequiresEnemyUnitTarget(definition);
-                var hasLegalTarget = !requiresTarget || HasEnemyUnitTarget();
-                var actionLabel = !implemented ? "效果尚未接入" : targeting ? "取消目标选择" : !hasLegalTarget ? "没有合法目标" : requiresTarget ? "选择敌方目标" : "释放卡牌";
+                var requiresTarget = DemoCardTargeting.TryGetRule(definition, out var targetRule);
+                var hasLegalTarget = !requiresTarget || DemoCardTargeting.HasLegalTarget(match, targetRule);
+                var actionLabel = !implemented ? "效果尚未接入" : targeting ? "取消目标选择" : !hasLegalTarget ? "没有合法目标" : requiresTarget ? targetRule.ActionLabel : "释放卡牌";
                 var cast = CreateSecondaryButton(_inspectorRoot, "Cast", new Vector2(0, -118), new Vector2(235, 60), actionLabel, 17);
                 var canPlay = match.IsPlayerTurn && match.Phase == DemoTurnPhase.Main && match.Hand.Contains(definition.id) && definition.cost <= match.Energy;
                 cast.interactable = targeting || (implemented && hasLegalTarget && canPlay && (!IsOnlineBoard || _onlineSession.CanIssueCommand));
@@ -953,15 +987,15 @@ namespace BiomeRivals.Demo
         private async void CastSelectedCard()
         {
             if (string.IsNullOrEmpty(_selectedCardId) || !_registry.TryGetDefinition(_selectedCardId, out var definition)) return;
-            if (RequiresEnemyUnitTarget(definition))
+            if (DemoCardTargeting.TryGetRule(definition, out var targetRule))
             {
-                if (!HasEnemyUnitTarget())
+                if (!DemoCardTargeting.HasLegalTarget(MatchView, targetRule))
                 {
-                    ShowStatus("当前没有可选择的敌方生物。", true);
+                    ShowStatus(targetRule.MissingTargetMessage, true);
                     return;
                 }
                 _pendingTargetCardId = definition.id;
-                ShowStatus("请选择一个发光的敌方生物；右键或 Esc 取消。", false);
+                ShowStatus(targetRule.SelectionPrompt, false);
                 RefreshAll();
                 return;
             }
@@ -989,20 +1023,21 @@ namespace BiomeRivals.Demo
 
         private async void ResolveTargetedCard(bool player, DemoSlotKind kind, int index)
         {
-            if (player || kind != DemoSlotKind.Unit)
+            if (!_registry.TryGetDefinition(_pendingTargetCardId, out var definition) ||
+                !DemoCardTargeting.TryGetRule(definition, out var targetRule))
             {
-                ShowStatus("该卡牌只能选择发光的敌方生物。", true);
+                CancelTargetSelection();
                 return;
             }
-            var target = MatchView.GetObject(false, kind, index);
-            if (target == null || !_registry.TryGetDefinition(_pendingTargetCardId, out var definition))
+            var target = MatchView.GetObject(player, kind, index);
+            if (!targetRule.IsLegal(player, kind, target))
             {
-                ShowStatus("目标已经离场，请重新选择。", true);
+                ShowStatus(targetRule.SelectionPrompt, true);
                 return;
             }
             if (IsOnlineBoard)
             {
-                var onlineResult = await SendOnline(() => _onlineSession.PlayCardAsync(definition.id, "UNIT", target.InstanceId));
+                var onlineResult = await SendOnline(() => _onlineSession.PlayCardAsync(definition.id, targetRule.TargetType, target.InstanceId));
                 if (onlineResult?.Outcome == MatchCommandOutcome.Accepted)
                 {
                     _pendingTargetCardId = null;
@@ -1011,7 +1046,7 @@ namespace BiomeRivals.Demo
                 RefreshAll();
                 return;
             }
-            var command = _match.CreatePlayCardCommand(definition.id, "UNIT", target.InstanceId);
+            var command = _match.CreatePlayCardCommand(definition.id, targetRule.TargetType, target.InstanceId);
             var result = _match.ApplyPlayCard(definition, command);
             if (result.Accepted)
             {
@@ -1031,11 +1066,12 @@ namespace BiomeRivals.Demo
             RefreshAll();
         }
 
-        private static bool RequiresEnemyUnitTarget(CardDefinitionEntry definition) =>
-            definition != null && definition.effectIds != null && definition.effectIds.Contains("effect.si_001.01");
-
-        private bool HasEnemyUnitTarget() =>
-            MatchView.OpponentBattlefield.Any(value => value != null && value.SlotKind == DemoSlotKind.Unit && value.Health > 0);
+        private bool IsValidPendingCardTarget(bool player, DemoSlotKind kind, DemoBattlefieldObject target)
+        {
+            if (!_registry.TryGetDefinition(_pendingTargetCardId, out var definition) ||
+                !DemoCardTargeting.TryGetRule(definition, out var targetRule)) return false;
+            return targetRule.IsLegal(player, kind, target);
+        }
 
         private async Task<MatchCommandDispatchResult?> SendOnline(Func<Task<MatchCommandDispatchResult>> send)
         {
@@ -1142,6 +1178,23 @@ namespace BiomeRivals.Demo
             }
             _playerEffectFlash.alpha = 0f;
             _playerHud.localScale = Vector3.one;
+        }
+
+        private IEnumerator PulseBattlefieldObject(string instanceId)
+        {
+            if (string.IsNullOrEmpty(instanceId) || _battlefield == null) yield break;
+            var target = MatchView.PlayerBattlefield.Concat(MatchView.OpponentBattlefield)
+                .FirstOrDefault(value => value != null && value.InstanceId == instanceId);
+            if (target == null) yield break;
+            for (var index = target.SlotIndex; index < target.SlotIndex + target.OccupiedSlots; index++)
+            {
+                _battlefield.SetSlotState(target.Player, target.SlotKind, index, true, true);
+                _battlefield.SetSlotPressed(target.Player, target.SlotKind, index, true);
+            }
+            yield return new WaitForSecondsRealtime(0.2f);
+            for (var index = target.SlotIndex; index < target.SlotIndex + target.OccupiedSlots; index++)
+                _battlefield.SetSlotPressed(target.Player, target.SlotKind, index, false);
+            RefreshAll();
         }
 
         private async void OnEndTurn()

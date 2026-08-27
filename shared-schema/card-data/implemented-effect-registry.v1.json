@@ -3,9 +3,13 @@
   "schemaVersion": 1,
   "contentVersion": 1,
   "implementedEffectIds": [
+    "effect.db_006.01",
     "effect.nt_006.01",
+    "effect.pf_001.01",
     "effect.si_001.01",
     "effect.tk_005.01",
+    "effect.tk_009.01",
+    "effect.tk_010.01",
     "effect.tk_016.01"
   ]
 }

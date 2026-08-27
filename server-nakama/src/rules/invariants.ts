@@ -58,7 +58,7 @@ namespace BiomeRivalsRules {
         }
         if (object.health <= 0 || object.health > object.maxHealth || object.maxHealth <= 0) violations.push('battlefield health is out of range');
         if (object.attack < 0 || object.summonedTurn < 1 || object.summonedTurn > state.turn) violations.push('battlefield combat values are invalid');
-        if (object.temporaryAttackModifier > 0 || object.temporaryAttackModifierExpiresOnTurn < 0) {
+        if (object.temporaryAttackModifierExpiresOnTurn < 0) {
           violations.push('temporary attack modifier state is invalid');
         }
         if ((object.temporaryAttackModifier === 0) !== (object.temporaryAttackModifierExpiresOnTurn === 0)) {

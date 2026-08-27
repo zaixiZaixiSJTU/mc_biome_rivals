@@ -77,6 +77,35 @@ function placeUnit(
   });
 }
 
+function placeBuilding(
+  state: BiomeRivalsRules.MatchState,
+  playerIndex: number,
+  cardId: string,
+  slotIndex: number,
+  instanceId: string,
+  health?: number
+): void {
+  const definition = BiomeRivalsRules.getCardDefinition(cardId)!;
+  const player = state.players[playerIndex]!;
+  const occupiedSlots = Math.max(1, definition.buildingSlots);
+  for (let index = slotIndex; index < slotIndex + occupiedSlots; index += 1) player.buildingSlots[index] = instanceId;
+  player.battlefield.push({
+    instanceId: instanceId,
+    cardId: cardId,
+    cardType: definition.cardType === 'STRUCTURE' ? 'STRUCTURE' : 'BUILDING',
+    attack: definition.attack,
+    health: health === undefined ? definition.health : health,
+    maxHealth: definition.health,
+    slotKind: 'BUILDING',
+    slotIndex: slotIndex,
+    occupiedSlots: occupiedSlots,
+    summonedTurn: state.turn,
+    hasAttacked: false,
+    temporaryAttackModifier: 0,
+    temporaryAttackModifierExpiresOnTurn: 0
+  });
+}
+
 TestHarness.test('creates a valid two-player initial state', function (): void {
   const state = BiomeRivalsRules.createInitialState('match-1', ['alice', 'bob']);
   TestHarness.equal(state.revision, 0);
@@ -107,14 +136,14 @@ TestHarness.test('redacts the opponents hand without mutating authoritative stat
 
 TestHarness.test('deploys a registered unit and emits replayable state data', function (): void {
   const state = BiomeRivalsRules.createInitialState('match-1', ['alice', 'bob']);
-  state.players[0]!.hand = ['pf_001'];
-  const result = BiomeRivalsRules.applyCommand(state, 'alice', deployCommand('deploy-1', 0, 'pf_001', 'UNIT', 2));
+  state.players[0]!.hand = ['tk_003'];
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', deployCommand('deploy-1', 0, 'tk_003', 'UNIT', 2));
   TestHarness.equal(result.accepted, true);
   if (!result.accepted) return;
   TestHarness.equal(result.state.players[0]!.unitSlots[2], 'object-1');
-  TestHarness.equal(result.state.players[0]!.battlefield[0]!.cardId, 'pf_001');
+  TestHarness.equal(result.state.players[0]!.battlefield[0]!.cardId, 'tk_003');
   TestHarness.equal(result.state.players[0]!.battlefield[0]!.health, 2);
-  TestHarness.equal(result.state.players[0]!.hand.indexOf('pf_001'), -1);
+  TestHarness.equal(result.state.players[0]!.hand.indexOf('tk_003'), -1);
   TestHarness.equal(result.state.players[0]!.redstone, 0);
   TestHarness.equal(result.batch.events.length, 1);
   TestHarness.equal(result.batch.events[0]!.type, 'CARD_DEPLOYED');
@@ -122,6 +151,21 @@ TestHarness.test('deploys a registered unit and emits replayable state data', fu
   TestHarness.equal(result.batch.events[0]!.payload.instanceId, 'object-1');
   TestHarness.equal(result.batch.events[0]!.payload.redstone, 0);
   TestHarness.equal(state.players[0]!.unitSlots[2], null, 'accepted commands must not mutate their input state');
+});
+
+TestHarness.test('resolves the bee battlecry after deployment', function (): void {
+  const state = BiomeRivalsRules.createInitialState('match-1', ['alice', 'bob']);
+  state.players[0]!.hand = ['pf_001'];
+  state.players[0]!.life = 28;
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', deployCommand('deploy-bee', 0, 'pf_001', 'UNIT', 0));
+  TestHarness.ok(result.accepted);
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[0]!.life, 29);
+  TestHarness.equal(result.batch.events.length, 2);
+  TestHarness.equal(result.batch.events[0]!.type, 'CARD_DEPLOYED');
+  TestHarness.equal(result.batch.events[1]!.type, 'HERO_HEALED');
+  TestHarness.equal(result.batch.events[1]!.payload.effectId, 'effect.pf_001.01');
+  TestHarness.equal(result.batch.events[1]!.payload.healing, 1);
 });
 
 TestHarness.test('deploys a structure only across consecutive free building slots', function (): void {
@@ -212,6 +256,68 @@ TestHarness.test('applies a targeted snowball debuff and restores it when the ca
   TestHarness.equal(ended.batch.events[0]!.type, 'OBJECT_STATS_CHANGED');
   TestHarness.equal(ended.batch.events[0]!.payload.reason, 'TEMPORARY_EXPIRED');
   TestHarness.equal(ended.batch.events[1]!.type, 'TURN_ENDED');
+});
+
+TestHarness.test('sandstorm damages every unit and removes deaths in event order', function (): void {
+  const state = BiomeRivalsRules.createInitialState('match-1', ['alice', 'bob']);
+  state.players[0]!.hand = ['db_006'];
+  state.players[0]!.redstone = 3;
+  state.players[0]!.redstoneCapacity = 3;
+  placeUnit(state, 0, 'pf_001', 0, 'object-1', 1);
+  placeUnit(state, 1, 'nt_003', 1, 'object-2', 1);
+  state.nextInstanceId = 3;
+
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', playCommand('play-sandstorm', 0, 'db_006'));
+  TestHarness.ok(result.accepted);
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[0]!.battlefield.length, 0);
+  TestHarness.equal(result.state.players[0]!.unitSlots[0], null);
+  TestHarness.equal(result.state.players[1]!.battlefield[0]!.health, 1);
+  TestHarness.equal(result.batch.events[0]!.type, 'CARD_PLAYED');
+  TestHarness.equal(result.batch.events[1]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(result.batch.events[1]!.payload.health, 0);
+  TestHarness.equal(result.batch.events[2]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(result.batch.events[3]!.type, 'OBJECT_DIED');
+});
+
+TestHarness.test('bone buffs a friendly unit for the current turn only', function (): void {
+  const state = BiomeRivalsRules.createInitialState('match-1', ['alice', 'bob']);
+  state.players[0]!.hand = ['tk_009'];
+  placeUnit(state, 0, 'pf_001', 0, 'object-1', 1);
+  state.nextInstanceId = 2;
+
+  const played = BiomeRivalsRules.applyCommand(state, 'alice', playCommand('play-bone', 0, 'tk_009', 'UNIT', 'object-1'));
+  TestHarness.ok(played.accepted);
+  if (!played.accepted) return;
+  TestHarness.equal(played.state.players[0]!.battlefield[0]!.attack, 2);
+  TestHarness.equal(played.state.players[0]!.battlefield[0]!.temporaryAttackModifier, 1);
+  TestHarness.equal(played.batch.events[1]!.payload.playerId, 'alice');
+
+  const ended = BiomeRivalsRules.applyCommand(played.state, 'alice', command('end-bone', 1, 'END_TURN'));
+  TestHarness.ok(ended.accepted);
+  if (!ended.accepted) return;
+  TestHarness.equal(ended.state.players[0]!.battlefield[0]!.attack, 1);
+  TestHarness.equal(ended.state.players[0]!.battlefield[0]!.temporaryAttackModifier, 0);
+});
+
+TestHarness.test('cobblestone heals only a friendly building or structure', function (): void {
+  const state = BiomeRivalsRules.createInitialState('match-1', ['alice', 'bob']);
+  state.players[0]!.hand = ['tk_010'];
+  placeBuilding(state, 0, 'db_004', 0, 'object-1', 1);
+  placeUnit(state, 0, 'pf_001', 0, 'object-2', 1);
+  state.nextInstanceId = 3;
+
+  const invalid = BiomeRivalsRules.applyCommand(state, 'alice', playCommand('bad-cobble', 0, 'tk_010', 'BUILDING', 'object-2'));
+  TestHarness.equal(invalid.accepted, false);
+  if (!invalid.accepted) TestHarness.equal(invalid.code, 'INVALID_TARGET');
+  TestHarness.equal(state.players[0]!.hand[0], 'tk_010');
+
+  const played = BiomeRivalsRules.applyCommand(state, 'alice', playCommand('play-cobble', 0, 'tk_010', 'BUILDING', 'object-1'));
+  TestHarness.ok(played.accepted);
+  if (!played.accepted) return;
+  TestHarness.equal(played.state.players[0]!.battlefield[0]!.health, 3);
+  TestHarness.equal(played.batch.events[1]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(played.batch.events[1]!.payload.reason, 'HEAL');
 });
 
 TestHarness.test('rejects a snowball without a living enemy unit target before payment', function (): void {

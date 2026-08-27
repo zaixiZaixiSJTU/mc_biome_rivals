@@ -2,7 +2,7 @@
 namespace BiomeRivalsRules {
   export const CARD_CATALOG_CONTENT_VERSION = 1;
   const CARD_DEFINITIONS: { [cardId: string]: CardRuleDefinition } = {
-    'pf_001': { id: 'pf_001', cardType: 'UNIT', cost: 1, buildingSlots: 0, attack: 1, health: 2, effectImplementationStatus: 'PENDING', effectIds: ['effect.pf_001.01'] },
+    'pf_001': { id: 'pf_001', cardType: 'UNIT', cost: 1, buildingSlots: 0, attack: 1, health: 2, effectImplementationStatus: 'IMPLEMENTED', effectIds: ['effect.pf_001.01'] },
     'pf_002': { id: 'pf_002', cardType: 'UNIT', cost: 2, buildingSlots: 0, attack: 2, health: 3, effectImplementationStatus: 'PENDING', effectIds: ['effect.pf_002.01'] },
     'pf_003': { id: 'pf_003', cardType: 'UNIT', cost: 2, buildingSlots: 0, attack: 3, health: 2, effectImplementationStatus: 'PENDING', effectIds: ['effect.pf_003.01'] },
     'pf_004': { id: 'pf_004', cardType: 'UNIT', cost: 3, buildingSlots: 0, attack: 2, health: 4, effectImplementationStatus: 'PENDING', effectIds: ['effect.pf_004.01'] },
@@ -15,7 +15,7 @@ namespace BiomeRivalsRules {
     'db_003': { id: 'db_003', cardType: 'UNIT', cost: 2, buildingSlots: 0, attack: 2, health: 3, effectImplementationStatus: 'PENDING', effectIds: ['effect.db_003.01'] },
     'db_004': { id: 'db_004', cardType: 'BUILDING', cost: 2, buildingSlots: 1, attack: 0, health: 5, effectImplementationStatus: 'PENDING', effectIds: ['effect.db_004.01'] },
     'db_005': { id: 'db_005', cardType: 'UNIT', cost: 3, buildingSlots: 0, attack: 4, health: 3, effectImplementationStatus: 'PENDING', effectIds: ['effect.db_005.01'] },
-    'db_006': { id: 'db_006', cardType: 'SPELL', cost: 3, buildingSlots: 0, attack: 0, health: 0, effectImplementationStatus: 'PENDING', effectIds: ['effect.db_006.01'] },
+    'db_006': { id: 'db_006', cardType: 'SPELL', cost: 3, buildingSlots: 0, attack: 0, health: 0, effectImplementationStatus: 'IMPLEMENTED', effectIds: ['effect.db_006.01'] },
     'db_007': { id: 'db_007', cardType: 'STRUCTURE', cost: 5, buildingSlots: 2, attack: 0, health: 8, effectImplementationStatus: 'PENDING', effectIds: ['effect.db_007.01'] },
     'db_008': { id: 'db_008', cardType: 'UNIT', cost: 5, buildingSlots: 0, attack: 4, health: 7, effectImplementationStatus: 'PENDING', effectIds: ['effect.db_008.01'] },
     'si_001': { id: 'si_001', cardType: 'MATERIAL', cost: 0, buildingSlots: 0, attack: 0, health: 0, effectImplementationStatus: 'IMPLEMENTED', effectIds: ['effect.si_001.01'] },
@@ -66,8 +66,8 @@ namespace BiomeRivalsRules {
     'tk_006': { id: 'tk_006', cardType: 'MATERIAL', cost: 0, buildingSlots: 0, attack: 0, health: 0, effectImplementationStatus: 'PENDING', effectIds: ['effect.tk_006.01'] },
     'tk_007': { id: 'tk_007', cardType: 'MATERIAL', cost: 0, buildingSlots: 0, attack: 0, health: 0, effectImplementationStatus: 'PENDING', effectIds: ['effect.tk_007.01'] },
     'tk_008': { id: 'tk_008', cardType: 'MATERIAL', cost: 0, buildingSlots: 0, attack: 0, health: 0, effectImplementationStatus: 'PENDING', effectIds: ['effect.tk_008.01'] },
-    'tk_009': { id: 'tk_009', cardType: 'MATERIAL', cost: 0, buildingSlots: 0, attack: 0, health: 0, effectImplementationStatus: 'PENDING', effectIds: ['effect.tk_009.01'] },
-    'tk_010': { id: 'tk_010', cardType: 'MATERIAL', cost: 0, buildingSlots: 0, attack: 0, health: 0, effectImplementationStatus: 'PENDING', effectIds: ['effect.tk_010.01'] },
+    'tk_009': { id: 'tk_009', cardType: 'MATERIAL', cost: 0, buildingSlots: 0, attack: 0, health: 0, effectImplementationStatus: 'IMPLEMENTED', effectIds: ['effect.tk_009.01'] },
+    'tk_010': { id: 'tk_010', cardType: 'MATERIAL', cost: 0, buildingSlots: 0, attack: 0, health: 0, effectImplementationStatus: 'IMPLEMENTED', effectIds: ['effect.tk_010.01'] },
     'tk_011': { id: 'tk_011', cardType: 'UNIT', cost: 2, buildingSlots: 0, attack: 2, health: 2, effectImplementationStatus: 'NONE', effectIds: [] },
     'tk_012': { id: 'tk_012', cardType: 'MATERIAL', cost: 0, buildingSlots: 0, attack: 0, health: 0, effectImplementationStatus: 'PENDING', effectIds: ['effect.tk_012.01'] },
     'tk_013': { id: 'tk_013', cardType: 'MATERIAL', cost: 1, buildingSlots: 0, attack: 0, health: 0, effectImplementationStatus: 'PENDING', effectIds: ['effect.tk_013.01'] },

@@ -22,4 +22,6 @@
 
 Demo 顶部的联机状态条用于认证、Socket、匹配、权威 Match 加入和重连。收到私有快照后，`DemoOnlineMatchSession` 会切换到权威棋盘视图；手牌、能量、生命、阶段、双排槽位与生物状态均来自 `MatchStateStore`。部署、施法、进入战斗、攻击和结束回合不做本地乐观结算，必须等 `acknowledgedCommandId` 对应的事件批次后才更新界面。
 
+卡牌目标选择由稳定 `effectId` 规则注册，不再写死为敌方单位：当前可区分敌方生物、己方生物与己方建筑/结构，并以贴地高亮只标记合法目标。离线规则镜像与 Nakama 权威规则共同支持 8 个已注册效果，其余 `PENDING` 效果仍会在扣费前拒绝。
+
 自动化双客户端验证可用 `-autoOnline -autoOnlineAction -nakamaDeviceId <独立ID> -onlineProbe <报告路径>`。测试设备覆盖值拥有独立的会话缓存键，不会让同机两个进程误用同一玩家身份。

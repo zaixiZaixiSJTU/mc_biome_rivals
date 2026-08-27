@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using BiomeRivals.Content;
 using BiomeRivals.Core;
 
@@ -120,7 +121,7 @@ namespace BiomeRivals.Demo
             }
 
             Consume(definition);
-            _playerBattlefield.Add(new DemoBattlefieldObject
+            var deployedObject = new DemoBattlefieldObject
             {
                 InstanceId = $"object-{_nextBattlefieldInstanceId++}",
                 CardId = definition.id,
@@ -132,9 +133,18 @@ namespace BiomeRivals.Demo
                 Health = definition.health,
                 MaxHealth = definition.health,
                 SummonedRound = Round
-            });
+            };
+            _playerBattlefield.Add(deployedObject);
+            var deployMessage = $"已部署：{definition.designId}";
+            if (definition.effectImplementationStatus == "IMPLEMENTED" &&
+                definition.effectIds != null && definition.effectIds.Contains("effect.pf_001.01"))
+            {
+                var lifeBefore = PlayerLife;
+                PlayerLife = Math.Min(30, PlayerLife + 1);
+                deployMessage += $"；蜜蜂战吼恢复 {PlayerLife - lifeBefore} 点生命。";
+            }
             AcceptCommand(command);
-            return DemoCommandResult.Accept($"已部署：{definition.designId}", Revision);
+            return DemoCommandResult.Accept(deployMessage, Revision);
         }
 
         public bool TryCast(CardDefinitionEntry definition, out string message)
@@ -157,21 +167,53 @@ namespace BiomeRivals.Demo
                 return Reject(DemoCommandRejectionCode.EffectNotImplemented, "该卡牌效果已注册，但尚未接入规则执行器。");
 
             var effectId = definition.effectIds[0];
-            if (effectId != "effect.nt_006.01" && effectId != "effect.si_001.01" && effectId != "effect.tk_005.01" && effectId != "effect.tk_016.01")
+            if (effectId != "effect.db_006.01" && effectId != "effect.nt_006.01" &&
+                effectId != "effect.si_001.01" && effectId != "effect.tk_005.01" &&
+                effectId != "effect.tk_009.01" && effectId != "effect.tk_010.01" &&
+                effectId != "effect.tk_016.01")
                 return Reject(DemoCommandRejectionCode.EffectNotImplemented, "找不到该 effectId 的规则处理器。");
             DemoBattlefieldObject targetedObject = null;
-            if (effectId == "effect.si_001.01")
+            if (DemoCardTargeting.TryGetRule(definition, out var targetRule))
             {
-                if (command.payload == null || command.payload.targetType != "UNIT")
-                    return Reject(DemoCommandRejectionCode.InvalidTarget, "雪球需要选择一个敌方生物。");
-                targetedObject = _opponentBattlefield.Find(value => value.InstanceId == command.payload.targetInstanceId);
-                if (targetedObject == null || targetedObject.SlotKind != DemoSlotKind.Unit)
-                    return Reject(DemoCommandRejectionCode.InvalidTarget, "雪球目标必须是仍在战场上的敌方生物。");
+                if (command.payload == null || command.payload.targetType != targetRule.TargetType)
+                    return Reject(DemoCommandRejectionCode.InvalidTarget, targetRule.MissingTargetMessage);
+                var playerTarget = targetRule.Owner == DemoTargetOwner.Friendly;
+                var battlefield = playerTarget ? _playerBattlefield : _opponentBattlefield;
+                targetedObject = battlefield.Find(value => value.InstanceId == command.payload.targetInstanceId);
+                if (!targetRule.IsLegal(playerTarget, targetRule.SlotKind, targetedObject))
+                    return Reject(DemoCommandRejectionCode.InvalidTarget, targetRule.MissingTargetMessage);
             }
             Consume(definition);
             _discardPile.Add(definition.id);
             switch (effectId)
             {
+                case "effect.db_006.01":
+                    var damaged = 0;
+                    var destroyed = 0;
+                    foreach (var value in _playerBattlefield.ToArray())
+                    {
+                        if (value.SlotKind != DemoSlotKind.Unit) continue;
+                        value.Health = Math.Max(0, value.Health - 2);
+                        damaged++;
+                        if (value.Health == 0)
+                        {
+                            RemoveObject(value, _playerBattlefield, UnitSlots, BuildingSlots);
+                            destroyed++;
+                        }
+                    }
+                    foreach (var value in _opponentBattlefield.ToArray())
+                    {
+                        if (value.SlotKind != DemoSlotKind.Unit) continue;
+                        value.Health = Math.Max(0, value.Health - 2);
+                        damaged++;
+                        if (value.Health == 0)
+                        {
+                            RemoveObject(value, _opponentBattlefield, OpponentUnitSlots, OpponentBuildingSlots);
+                            destroyed++;
+                        }
+                    }
+                    message = $"沙尘暴：对 {damaged} 个生物造成 2 点伤害，消灭 {destroyed} 个。";
+                    break;
                 case "effect.nt_006.01":
                     PlayerLife = Math.Max(0, PlayerLife - 2);
                     if (PlayerLife == 0)
@@ -203,6 +245,17 @@ namespace BiomeRivals.Demo
                     PlayerLife = Math.Min(30, PlayerLife + 2);
                     PlayerLife = Math.Max(0, PlayerLife - 1);
                     message = "腐肉：先恢复 2 点生命，再受到 1 点真实伤害。";
+                    break;
+                case "effect.tk_009.01":
+                    targetedObject.Attack += 1;
+                    targetedObject.TemporaryAttackModifier += 1;
+                    targetedObject.TemporaryAttackModifierExpiresOnRound = Round;
+                    message = $"骨头：{targetedObject.CardId} 本回合获得 +1 攻击力。";
+                    break;
+                case "effect.tk_010.01":
+                    var healthBefore = targetedObject.Health;
+                    targetedObject.Health = Math.Min(targetedObject.MaxHealth, targetedObject.Health + 2);
+                    message = $"圆石：{targetedObject.CardId} 恢复 {targetedObject.Health - healthBefore} 点生命。";
                     break;
                 case "effect.tk_016.01":
                     PlayerArmor += 2;

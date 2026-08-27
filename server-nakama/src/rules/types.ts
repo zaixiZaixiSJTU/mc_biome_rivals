@@ -1,6 +1,6 @@
 namespace BiomeRivalsRules {
   export const PROTOCOL_VERSION = 5;
-  export const RULESET_VERSION = 'prototype-0.5';
+  export const RULESET_VERSION = 'prototype-0.6';
 
   export type MatchStatus = 'WAITING' | 'ACTIVE' | 'FINISHED';
   export type CommandType = 'DEPLOY_CARD' | 'PLAY_CARD' | 'ENTER_COMBAT' | 'ATTACK' | 'END_TURN' | 'CONCEDE';

@@ -16,7 +16,7 @@ namespace BiomeRivals.Networking.Tests
                 MatchStateDto received = null;
                 gateway.SnapshotReceived += snapshot => received = snapshot;
                 transport.Emit(MatchOpcodes.Snapshot,
-                    "{\"matchId\":\"match-1\",\"viewerPlayerId\":\"alice\",\"protocolVersion\":5,\"rulesetVersion\":\"prototype-0.5\",\"revision\":0," +
+                    "{\"matchId\":\"match-1\",\"viewerPlayerId\":\"alice\",\"protocolVersion\":5,\"rulesetVersion\":\"prototype-0.6\",\"revision\":0," +
                     "\"lastEventId\":0,\"status\":\"ACTIVE\",\"turn\":1,\"phase\":\"MAIN\",\"activePlayerIndex\":0,\"nextInstanceId\":1," +
                     "\"players\":[{\"playerId\":\"alice\",\"life\":30,\"armor\":0,\"redstone\":6," +
                     "\"redstoneCapacity\":6,\"hand\":[\"pf_001\"],\"deckCount\":26,\"discardPile\":[],\"fatigueCount\":0,\"unitSlots\":[null,null,null,null]," +
@@ -46,7 +46,7 @@ namespace BiomeRivals.Networking.Tests
                 MatchEventBatchDto received = null;
                 gateway.EventBatchReceived += batch => received = batch;
                 transport.Emit(MatchOpcodes.EventBatch,
-                    "{\"protocolVersion\":5,\"rulesetVersion\":\"prototype-0.5\",\"revision\":1," +
+                    "{\"protocolVersion\":5,\"rulesetVersion\":\"prototype-0.6\",\"revision\":1," +
                     "\"acknowledgedCommandId\":\"turn-1\",\"events\":[{\"eventId\":1,\"type\":\"CARD_DRAWN\"," +
                     "\"payload\":{\"playerId\":\"bob\",\"cardId\":null,\"handCount\":5,\"deckCount\":25}}]}");
 
@@ -159,7 +159,7 @@ namespace BiomeRivals.Networking.Tests
                     TimeSpan.FromSeconds(1));
                 Assert.That(dispatcher.PendingCount, Is.EqualTo(1));
                 transport.Emit(MatchOpcodes.EventBatch,
-                    "{\"protocolVersion\":5,\"rulesetVersion\":\"prototype-0.5\",\"revision\":5," +
+                    "{\"protocolVersion\":5,\"rulesetVersion\":\"prototype-0.6\",\"revision\":5," +
                     "\"acknowledgedCommandId\":\"ack-1\",\"events\":[]}");
 
                 var result = await pending;

@@ -60,7 +60,7 @@
                 "occupiedSlots": { "type": "integer", "minimum": 1, "maximum": 3 },
                 "summonedTurn": { "type": "integer", "minimum": 1 },
                 "hasAttacked": { "type": "boolean" },
-                "temporaryAttackModifier": { "type": "integer", "maximum": 0 },
+                "temporaryAttackModifier": { "type": "integer" },
                 "temporaryAttackModifierExpiresOnTurn": { "type": "integer", "minimum": 0 }
               }
             }

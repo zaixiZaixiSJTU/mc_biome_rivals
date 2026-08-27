@@ -134,6 +134,78 @@ namespace BiomeRivals.Demo.Tests
         }
 
         [Test]
+        public void ExpandedImplementedEffectsResolveInLocalParityMode()
+        {
+            var registry = CardContentLoader.Load();
+
+            var beeMatch = new DemoLocalMatch();
+            beeMatch.ResetDeckAndHand(new[] { "nt_006", "pf_001" }, new[] { "nt_001" });
+            Assert.That(registry.TryGetDefinition("nt_006", out var sacrifice), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_001", out var bee), Is.True);
+            Assert.That(beeMatch.TryCast(sacrifice, out _), Is.True);
+            Assert.That(beeMatch.PlayerLife, Is.EqualTo(28));
+            Assert.That(beeMatch.TryDeploy(bee, DemoSlotKind.Unit, 0, out var beeMessage), Is.True);
+            Assert.That(beeMatch.PlayerLife, Is.EqualTo(29));
+            Assert.That(beeMessage, Does.Contain("战吼"));
+
+            var boneMatch = new DemoLocalMatch();
+            boneMatch.ResetHand(new[] { "pf_001", "tk_009" });
+            Assert.That(registry.TryGetDefinition("tk_009", out var bone), Is.True);
+            Assert.That(boneMatch.TryDeploy(bee, DemoSlotKind.Unit, 0, out _), Is.True);
+            var friendlyUnit = boneMatch.GetObject(true, DemoSlotKind.Unit, 0);
+            var boneResult = boneMatch.ApplyPlayCard(bone,
+                boneMatch.CreatePlayCardCommand("tk_009", "UNIT", friendlyUnit.InstanceId));
+            Assert.That(boneResult.Accepted, Is.True);
+            Assert.That(friendlyUnit.Attack, Is.EqualTo(2));
+            Assert.That(friendlyUnit.TemporaryAttackModifier, Is.EqualTo(1));
+            boneMatch.EndPlayerTurn();
+            Assert.That(friendlyUnit.Attack, Is.EqualTo(1));
+
+            var cobbleMatch = new DemoLocalMatch();
+            cobbleMatch.ResetHand(new[] { "db_004", "tk_010" });
+            Assert.That(registry.TryGetDefinition("db_004", out var fence), Is.True);
+            Assert.That(registry.TryGetDefinition("tk_010", out var cobblestone), Is.True);
+            Assert.That(cobbleMatch.TryDeploy(fence, DemoSlotKind.Building, 0, out _), Is.True);
+            var friendlyBuilding = cobbleMatch.GetObject(true, DemoSlotKind.Building, 0);
+            friendlyBuilding.Health = 1;
+            var cobbleResult = cobbleMatch.ApplyPlayCard(cobblestone,
+                cobbleMatch.CreatePlayCardCommand("tk_010", "BUILDING", friendlyBuilding.InstanceId));
+            Assert.That(cobbleResult.Accepted, Is.True);
+            Assert.That(friendlyBuilding.Health, Is.EqualTo(3));
+
+            var stormMatch = new DemoLocalMatch();
+            stormMatch.ResetHand(new[] { "pf_001", "db_006" });
+            Assert.That(registry.TryGetDefinition("db_006", out var sandstorm), Is.True);
+            Assert.That(registry.TryGetDefinition("nt_003", out var blaze), Is.True);
+            Assert.That(stormMatch.TryDeploy(bee, DemoSlotKind.Unit, 0, out _), Is.True);
+            stormMatch.ResetOpponent(new[] { blaze });
+            Assert.That(stormMatch.TryCast(sandstorm, out var stormMessage), Is.True);
+            Assert.That(stormMatch.GetObject(true, DemoSlotKind.Unit, 0), Is.Null);
+            Assert.That(stormMatch.GetObject(false, DemoSlotKind.Unit, 0).Health, Is.EqualTo(1));
+            Assert.That(stormMessage, Does.Contain("沙尘暴"));
+        }
+
+        [Test]
+        public void TargetRegistrySeparatesFriendlyEnemyAndBuildingTargets()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("si_001", out var snowball), Is.True);
+            Assert.That(registry.TryGetDefinition("tk_009", out var bone), Is.True);
+            Assert.That(registry.TryGetDefinition("tk_010", out var cobblestone), Is.True);
+
+            Assert.That(DemoCardTargeting.TryGetRule(snowball, out var snowballRule), Is.True);
+            Assert.That(snowballRule.Owner, Is.EqualTo(DemoTargetOwner.Enemy));
+            Assert.That(snowballRule.SlotKind, Is.EqualTo(DemoSlotKind.Unit));
+            Assert.That(DemoCardTargeting.TryGetRule(bone, out var boneRule), Is.True);
+            Assert.That(boneRule.Owner, Is.EqualTo(DemoTargetOwner.Friendly));
+            Assert.That(boneRule.TargetType, Is.EqualTo("UNIT"));
+            Assert.That(DemoCardTargeting.TryGetRule(cobblestone, out var cobbleRule), Is.True);
+            Assert.That(cobbleRule.Owner, Is.EqualTo(DemoTargetOwner.Friendly));
+            Assert.That(cobbleRule.SlotKind, Is.EqualTo(DemoSlotKind.Building));
+            Assert.That(cobbleRule.TargetType, Is.EqualTo("BUILDING"));
+        }
+
+        [Test]
         public void StructureRequiresConsecutiveBuildingSlots()
         {
             var registry = CardContentLoader.Load();
