@@ -26,6 +26,7 @@ namespace BiomeRivals.Core
     {
         public string playerId = string.Empty;
         public string factionId = FactionIds.PlainsForest;
+        public bool mulliganCompleted;
         public int life;
         public int armor;
         public int redstone;
@@ -110,6 +111,23 @@ namespace BiomeRivals.Core
             var payload = matchEvent.payload;
             switch (matchEvent.type)
             {
+                case MatchEventTypes.MulliganCompleted:
+                    var mulliganPlayer = FindPlayer(payload.playerId);
+                    mulliganPlayer.mulliganCompleted = true;
+                    mulliganPlayer.hand = payload.hand ?? Array.Empty<string>();
+                    if (mulliganPlayer.hand.Length != payload.handCount)
+                        throw new InvalidOperationException("Mulligan event hand count does not match projected hand.");
+                    mulliganPlayer.deckCount = payload.deckCount;
+                    break;
+                case MatchEventTypes.MatchStarted:
+                    if (payload.activePlayerIndex < 0 || payload.activePlayerIndex >= Current.players.Length ||
+                        Current.players[payload.activePlayerIndex].playerId != payload.playerId)
+                        throw new InvalidOperationException("Match start event active player does not match its index.");
+                    Current.status = "ACTIVE";
+                    Current.turn = payload.turn;
+                    Current.phase = payload.phase;
+                    Current.activePlayerIndex = payload.activePlayerIndex;
+                    break;
                 case MatchEventTypes.CardDeployed:
                     var player = FindPlayer(payload.playerId);
                     if (payload.slotKind != "UNIT" && payload.slotKind != "BUILDING")

@@ -16,11 +16,11 @@ namespace BiomeRivals.Networking.Tests
                 MatchStateDto received = null;
                 gateway.SnapshotReceived += snapshot => received = snapshot;
                 transport.Emit(MatchOpcodes.Snapshot,
-                    "{\"matchId\":\"match-1\",\"viewerPlayerId\":\"alice\",\"protocolVersion\":6,\"rulesetVersion\":\"prototype-0.7\",\"revision\":0," +
+                    "{\"matchId\":\"match-1\",\"viewerPlayerId\":\"alice\",\"protocolVersion\":7,\"rulesetVersion\":\"prototype-0.8\",\"revision\":0," +
                     "\"lastEventId\":0,\"status\":\"ACTIVE\",\"turn\":1,\"phase\":\"MAIN\",\"activePlayerIndex\":0,\"nextInstanceId\":1," +
-                    "\"players\":[{\"playerId\":\"alice\",\"factionId\":\"ocean_river\",\"life\":30,\"armor\":0,\"redstone\":6," +
+                    "\"players\":[{\"playerId\":\"alice\",\"factionId\":\"ocean_river\",\"mulliganCompleted\":true,\"life\":30,\"armor\":0,\"redstone\":6," +
                     "\"redstoneCapacity\":6,\"hand\":[\"pf_001\"],\"deckCount\":26,\"discardPile\":[],\"fatigueCount\":0,\"unitSlots\":[null,null,null,null]," +
-                    "\"buildingSlots\":[null,null,null],\"battlefield\":[]},{\"playerId\":\"bob\",\"factionId\":\"end\",\"life\":30,\"armor\":0," +
+                    "\"buildingSlots\":[null,null,null],\"battlefield\":[]},{\"playerId\":\"bob\",\"factionId\":\"end\",\"mulliganCompleted\":true,\"life\":30,\"armor\":0," +
                     "\"redstone\":6,\"redstoneCapacity\":6,\"hand\":[null],\"deckCount\":26,\"discardPile\":[],\"fatigueCount\":0," +
                     "\"unitSlots\":[null,null,null,null],\"buildingSlots\":[null,null,null],\"battlefield\":[]}]," +
                     "\"winnerPlayerId\":null}");
@@ -48,7 +48,7 @@ namespace BiomeRivals.Networking.Tests
                 MatchEventBatchDto received = null;
                 gateway.EventBatchReceived += batch => received = batch;
                 transport.Emit(MatchOpcodes.EventBatch,
-                    "{\"protocolVersion\":6,\"rulesetVersion\":\"prototype-0.7\",\"revision\":1," +
+                    "{\"protocolVersion\":7,\"rulesetVersion\":\"prototype-0.8\",\"revision\":1," +
                     "\"acknowledgedCommandId\":\"turn-1\",\"events\":[{\"eventId\":1,\"type\":\"CARD_DRAWN\"," +
                     "\"payload\":{\"playerId\":\"bob\",\"cardId\":null,\"handCount\":5,\"deckCount\":25}}]}");
 
@@ -75,6 +75,17 @@ namespace BiomeRivals.Networking.Tests
                 Assert.That(transport.LastJson, Does.Contain("\"slotKind\":\"UNIT\""));
                 Assert.That(transport.LastJson, Does.Not.Contain("attackerInstanceId"));
             }
+        }
+
+        [Test]
+        public void MulliganWirePayloadUsesStableOpeningHandIndices()
+        {
+            var json = AuthoritativeMatchGateway.SerializeCommand(
+                MatchCommandFactory.Mulligan("mulligan-1", 0, new[] { 0, 2 }));
+
+            Assert.That(json, Does.Contain("\"type\":\"MULLIGAN\""));
+            Assert.That(json, Does.Contain("\"cardIndices\":[0,2]"));
+            Assert.That(json, Does.Not.Contain("cardId"));
         }
 
         [Test]
@@ -161,7 +172,7 @@ namespace BiomeRivals.Networking.Tests
                     TimeSpan.FromSeconds(1));
                 Assert.That(dispatcher.PendingCount, Is.EqualTo(1));
                 transport.Emit(MatchOpcodes.EventBatch,
-                    "{\"protocolVersion\":6,\"rulesetVersion\":\"prototype-0.7\",\"revision\":5," +
+                    "{\"protocolVersion\":7,\"rulesetVersion\":\"prototype-0.8\",\"revision\":5," +
                     "\"acknowledgedCommandId\":\"ack-1\",\"events\":[]}");
 
                 var result = await pending;

@@ -1,10 +1,10 @@
 namespace BiomeRivalsRules {
-  export const PROTOCOL_VERSION = 6;
-  export const RULESET_VERSION = 'prototype-0.7';
+  export const PROTOCOL_VERSION = 7;
+  export const RULESET_VERSION = 'prototype-0.8';
 
-  export type MatchStatus = 'WAITING' | 'ACTIVE' | 'FINISHED';
-  export type CommandType = 'DEPLOY_CARD' | 'PLAY_CARD' | 'ENTER_COMBAT' | 'ATTACK' | 'END_TURN' | 'CONCEDE';
-  export type EventType = 'CARD_DEPLOYED' | 'CARD_PLAYED' | 'CARD_DRAWN' | 'CARD_BURNED' | 'FATIGUE_DAMAGE' | 'HERO_DAMAGED' | 'HERO_HEALED' | 'ARMOR_GAINED' | 'OBJECT_STATS_CHANGED' | 'PHASE_CHANGED' | 'ATTACK_RESOLVED' | 'OBJECT_DIED' | 'TURN_ENDED' | 'TURN_STARTED' | 'PLAYER_CONCEDED' | 'MATCH_ENDED';
+  export type MatchStatus = 'WAITING' | 'MULLIGAN' | 'ACTIVE' | 'FINISHED';
+  export type CommandType = 'MULLIGAN' | 'DEPLOY_CARD' | 'PLAY_CARD' | 'ENTER_COMBAT' | 'ATTACK' | 'END_TURN' | 'CONCEDE';
+  export type EventType = 'MULLIGAN_COMPLETED' | 'MATCH_STARTED' | 'CARD_DEPLOYED' | 'CARD_PLAYED' | 'CARD_DRAWN' | 'CARD_BURNED' | 'FATIGUE_DAMAGE' | 'HERO_DAMAGED' | 'HERO_HEALED' | 'ARMOR_GAINED' | 'OBJECT_STATS_CHANGED' | 'PHASE_CHANGED' | 'ATTACK_RESOLVED' | 'OBJECT_DIED' | 'TURN_ENDED' | 'TURN_STARTED' | 'PLAYER_CONCEDED' | 'MATCH_ENDED';
   export type DeploySlotKind = 'UNIT' | 'BUILDING';
   export type TurnPhase = 'MAIN' | 'COMBAT';
   export type AttackTargetType = 'HERO' | 'UNIT' | 'BUILDING';
@@ -55,6 +55,7 @@ namespace BiomeRivalsRules {
   export interface PlayerState {
     playerId: string;
     factionId: FactionId;
+    mulliganCompleted: boolean;
     life: number;
     armor: number;
     redstone: number;
@@ -87,6 +88,7 @@ namespace BiomeRivalsRules {
   export interface PlayerSnapshot {
     playerId: string;
     factionId: FactionId;
+    mulliganCompleted: boolean;
     life: number;
     armor: number;
     redstone: number;
@@ -147,6 +149,8 @@ namespace BiomeRivalsRules {
     | 'REVISION_MISMATCH'
     | 'DUPLICATE_COMMAND'
     | 'NOT_A_PLAYER'
+    | 'MULLIGAN_REQUIRED'
+    | 'MULLIGAN_ALREADY_COMPLETED'
     | 'NOT_ACTIVE_PLAYER'
     | 'MATCH_FINISHED'
     | 'UNKNOWN_CARD'

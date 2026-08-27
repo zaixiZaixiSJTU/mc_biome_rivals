@@ -24,28 +24,52 @@ function deferred(label) {
   };
 }
 
+function eventStream(playerIndex) {
+  const queued = [];
+  const waiters = [];
+  let terminalError = null;
+  return {
+    push(payload) {
+      const waiter = waiters.shift();
+      if (waiter) waiter.resolve(payload);
+      else queued.push(payload);
+    },
+    fail(error) {
+      terminalError = error;
+      while (waiters.length > 0) waiters.shift().reject(error);
+    },
+    next(label) {
+      if (terminalError) return Promise.reject(terminalError);
+      if (queued.length > 0) return Promise.resolve(queued.shift());
+      const waiter = deferred(`player ${playerIndex} ${label}`);
+      waiters.push(waiter);
+      return waiter.promise;
+    }
+  };
+}
+
 async function createPlayer(index, factionId) {
   const client = new Client(serverKey, host, port, false);
   const session = await client.authenticateDevice(`biome-rivals-smoke-${index}-${randomUUID()}`, true);
   const socket = client.createSocket(false, false);
   const matched = deferred(`player ${index} matchmaking`);
   const snapshot = deferred(`player ${index} snapshot`);
-  const eventBatch = deferred(`player ${index} event batch`);
+  const batches = eventStream(index);
   socket.onmatchmakermatched = matched.resolve;
   socket.onmatchdata = (message) => {
     const payload = JSON.parse(new TextDecoder().decode(message.data));
     if (message.op_code === 4) snapshot.resolve(payload);
-    if (message.op_code === 2) eventBatch.resolve(payload);
-    if (message.op_code === 3) eventBatch.reject(new Error(`command rejected: ${JSON.stringify(payload)}`));
+    if (message.op_code === 2) batches.push(payload);
+    if (message.op_code === 3) batches.fail(new Error(`command rejected: ${JSON.stringify(payload)}`));
   };
   socket.onerror = (event) => {
     const error = new Error(`player ${index} socket error: ${event?.message || String(event)}`);
     matched.reject(error);
     snapshot.reject(error);
-    eventBatch.reject(error);
+    batches.fail(error);
   };
   await socket.connect(session, true, timeoutMs);
-  return { index, factionId, session, socket, matched, snapshot, eventBatch };
+  return { index, factionId, session, socket, matched, snapshot, nextEventBatch: batches.next };
 }
 
 const players = [];
@@ -70,6 +94,28 @@ try {
     if (!publicFactions.has('ocean_river') || !publicFactions.has('end')) {
       throw new Error(`snapshot ${index + 1} did not expose both authoritative factions`);
     }
+    if (snapshot.status !== 'MULLIGAN' || ownPlayer.mulliganCompleted) {
+      throw new Error(`snapshot ${index + 1} did not begin in an unconfirmed mulligan state`);
+    }
+  }
+
+
+  const mulliganCommandIds = players.map(() => `smoke-mulligan-${randomUUID()}`);
+  await Promise.all(players.map((player, index) => player.socket.sendMatchState(joined[index].match_id, 1, JSON.stringify({
+    protocolVersion: snapshots[index].protocolVersion,
+    rulesetVersion: snapshots[index].rulesetVersion,
+    commandId: mulliganCommandIds[index],
+    expectedRevision: snapshots[index].revision,
+    type: 'MULLIGAN',
+    payload: { cardIndices: index === 0 ? [0] : [] }
+  }))));
+  const openingBatches = await Promise.all(players.map(async (player) => [
+    await player.nextEventBatch('first mulligan batch'),
+    await player.nextEventBatch('second mulligan batch')
+  ]));
+  if (!openingBatches.every((viewerBatches) =>
+    viewerBatches[1].revision === 2 && viewerBatches[1].events.some((event) => event.type === 'MATCH_STARTED'))) {
+    throw new Error('both clients did not observe the authoritative opening hand transition');
   }
   const activePlayerId = snapshots[0].players[snapshots[0].activePlayerIndex].playerId;
   const activeIndex = snapshots.findIndex((snapshot) => snapshot.viewerPlayerId === activePlayerId);
@@ -80,12 +126,12 @@ try {
     protocolVersion: snapshots[activeIndex].protocolVersion,
     rulesetVersion: snapshots[activeIndex].rulesetVersion,
     commandId,
-    expectedRevision: snapshots[activeIndex].revision,
+    expectedRevision: 2,
     type: 'END_TURN',
     payload: {}
   }));
-  const batches = await Promise.all(players.map((player) => player.eventBatch.promise));
-  if (!batches.every((batch) => batch.acknowledgedCommandId === commandId)) {
+  const turnBatches = await Promise.all(players.map((player) => player.nextEventBatch('end turn batch')));
+  if (!turnBatches.every((batch) => batch.acknowledgedCommandId === commandId)) {
     throw new Error('authoritative event batch did not acknowledge the submitted command');
   }
 
@@ -95,8 +141,9 @@ try {
     players: players.map((player) => player.session.user_id),
     factions: players.map((player) => player.factionId),
     initialRevision: snapshots[0].revision,
+    openingRevision: openingBatches[0][1].revision,
     acknowledgedCommandId: commandId,
-    resultingRevision: batches[0].revision
+    resultingRevision: turnBatches[0].revision
   }, null, 2));
 } finally {
   for (const player of players) player.socket.disconnect(false);

@@ -51,6 +51,9 @@ namespace BiomeRivals.Demo
         bool IsAuthoritative { get; }
         string PlayerFactionId { get; }
         string OpponentFactionId { get; }
+        bool IsMulligan { get; }
+        bool PlayerMulliganCompleted { get; }
+        bool OpponentMulliganCompleted { get; }
         IReadOnlyList<string> Hand { get; }
         string[] UnitSlots { get; }
         string[] BuildingSlots { get; }

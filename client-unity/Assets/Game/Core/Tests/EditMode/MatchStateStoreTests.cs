@@ -64,6 +64,89 @@ namespace BiomeRivals.Core.Tests
         }
 
         [Test]
+        public void Apply_ReplaysPrivateMulliganThenStartsFirstTurn()
+        {
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "opening-1",
+                viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol,
+                rulesetVersion = GameVersions.Ruleset,
+                status = "MULLIGAN",
+                turn = 1,
+                phase = "MAIN",
+                activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice", hand = new[] { "pf_001", "pf_002", "pf_003" }, deckCount = 27 },
+                    new PlayerStateDto { playerId = "bob", hand = new[] { string.Empty, string.Empty, string.Empty, string.Empty }, deckCount = 26 }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol,
+                rulesetVersion = GameVersions.Ruleset,
+                revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 1,
+                        type = MatchEventTypes.MulliganCompleted,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", hand = new[] { "pf_002", "pf_004", "pf_005" },
+                            handCount = 3, deckCount = 27, replacedCount = 2
+                        }
+                    }
+                }
+            });
+
+            Assert.That(store.Current.status, Is.EqualTo("MULLIGAN"));
+            Assert.That(store.Current.players[0].mulliganCompleted, Is.True);
+            Assert.That(store.Current.players[0].hand, Is.EqualTo(new[] { "pf_002", "pf_004", "pf_005" }));
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol,
+                rulesetVersion = GameVersions.Ruleset,
+                revision = 2,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 2,
+                        type = MatchEventTypes.MulliganCompleted,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "bob", hand = new[] { string.Empty, string.Empty, string.Empty, string.Empty },
+                            handCount = 4, deckCount = 26, replacedCount = 1
+                        }
+                    },
+                    new MatchEventDto
+                    {
+                        eventId = 3,
+                        type = MatchEventTypes.MatchStarted,
+                        payload = new MatchEventPayloadDto { playerId = "alice", turn = 1, activePlayerIndex = 0, phase = "MAIN" }
+                    },
+                    new MatchEventDto
+                    {
+                        eventId = 4,
+                        type = MatchEventTypes.CardDrawn,
+                        payload = new MatchEventPayloadDto { playerId = "alice", cardId = "pf_006", handCount = 4, deckCount = 26 }
+                    }
+                }
+            });
+
+            Assert.That(store.Current.status, Is.EqualTo("ACTIVE"));
+            Assert.That(store.Current.players[1].mulliganCompleted, Is.True);
+            Assert.That(store.Current.players[0].hand, Is.EqualTo(new[] { "pf_002", "pf_004", "pf_005", "pf_006" }));
+            Assert.That(store.Current.revision, Is.EqualTo(2));
+        }
+
+        [Test]
         public void Apply_ReplaysDeploymentAndTurnState()
         {
             var store = new MatchStateStore();

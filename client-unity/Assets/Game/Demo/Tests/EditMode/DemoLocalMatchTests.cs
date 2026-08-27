@@ -421,7 +421,11 @@ namespace BiomeRivals.Demo.Tests
                 var endTurn = root.transform.Find("DemoCanvas/EndTurnButton");
                 Assert.That(endTurn.GetComponent<PrimaryActionButton>(), Is.Not.Null);
                 Assert.That(endTurn.GetComponent<SecondaryButton>(), Is.Null);
-                Assert.That(root.GetComponentsInChildren<PrimaryActionButton>(true), Has.Length.EqualTo(1));
+                Assert.That(root.GetComponentsInChildren<PrimaryActionButton>(true), Has.Length.EqualTo(2));
+                var mulliganOverlay = root.transform.Find("DemoCanvas/MulliganOverlay");
+                Assert.That(mulliganOverlay, Is.Not.Null);
+                Assert.That(mulliganOverlay.gameObject.activeSelf, Is.False, "Opening-hand UI stays hidden in the offline sandbox.");
+                Assert.That(mulliganOverlay.Find("MulliganPanel/ConfirmMulligan").GetComponent<PrimaryActionButton>(), Is.Not.Null);
                 var factionButtons = root.GetComponentsInChildren<SecondaryButton>(true)
                     .Where(style => style.name.StartsWith("Faction_", System.StringComparison.Ordinal))
                     .ToArray();

@@ -12,6 +12,7 @@ namespace BiomeRivals.Core
 
     public static class MatchCommandTypes
     {
+        public const string Mulligan = "MULLIGAN";
         public const string DeployCard = "DEPLOY_CARD";
         public const string PlayCard = "PLAY_CARD";
         public const string EnterCombat = "ENTER_COMBAT";
@@ -22,6 +23,8 @@ namespace BiomeRivals.Core
 
     public static class MatchEventTypes
     {
+        public const string MulliganCompleted = "MULLIGAN_COMPLETED";
+        public const string MatchStarted = "MATCH_STARTED";
         public const string CardDeployed = "CARD_DEPLOYED";
         public const string CardPlayed = "CARD_PLAYED";
         public const string CardDrawn = "CARD_DRAWN";
@@ -43,6 +46,7 @@ namespace BiomeRivals.Core
     [Serializable]
     public sealed class MatchCommandPayloadDto
     {
+        public int[] cardIndices = Array.Empty<int>();
         public string cardId = string.Empty;
         public string slotKind = string.Empty;
         public int slotIndex;
@@ -64,6 +68,17 @@ namespace BiomeRivals.Core
 
     public static class MatchCommandFactory
     {
+        public static MatchCommandDto Mulligan(string commandId, int revision, int[] cardIndices) =>
+            new MatchCommandDto
+            {
+                protocolVersion = GameVersions.Protocol,
+                rulesetVersion = GameVersions.Ruleset,
+                commandId = commandId,
+                expectedRevision = revision,
+                type = MatchCommandTypes.Mulligan,
+                payload = new MatchCommandPayloadDto { cardIndices = cardIndices ?? Array.Empty<int>() }
+            };
+
         public static MatchCommandDto DeployCard(string commandId, int revision, string cardId, string slotKind, int slotIndex) =>
             new MatchCommandDto
             {
@@ -148,6 +163,7 @@ namespace BiomeRivals.Core
         public string winnerPlayerId = string.Empty;
         public string reason = string.Empty;
         public string cardId = string.Empty;
+        public string[] hand = Array.Empty<string>();
         public string slotKind = string.Empty;
         public int slotIndex;
         public int occupiedSlots;
@@ -173,6 +189,7 @@ namespace BiomeRivals.Core
         public int targetHealth;
         public int targetArmor;
         public int handCount;
+        public int replacedCount;
         public int deckCount;
         public int discardCount;
         public int fatigueCount;

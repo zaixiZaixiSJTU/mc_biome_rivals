@@ -35,6 +35,9 @@ namespace BiomeRivals.Demo
         public bool IsAuthoritative => false;
         public string PlayerFactionId { get; private set; } = FactionIds.PlainsForest;
         public string OpponentFactionId { get; private set; } = FactionIds.Nether;
+        public bool IsMulligan => false;
+        public bool PlayerMulliganCompleted => true;
+        public bool OpponentMulliganCompleted => true;
         public int ViewerIndex => 0;
         public int DeckCount => _deck.Count;
         public int DiscardCount => _discardPile.Count;

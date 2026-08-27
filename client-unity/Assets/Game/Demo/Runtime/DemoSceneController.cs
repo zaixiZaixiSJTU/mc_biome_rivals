@@ -35,6 +35,7 @@ namespace BiomeRivals.Demo
         private readonly List<SlotView> _opponentBuildingSlots = new List<SlotView>();
         private readonly List<FactionButtonView> _factionButtons = new List<FactionButtonView>();
         private readonly List<IMatchEventPresenter> _eventPresenters = new List<IMatchEventPresenter>();
+        private readonly HashSet<int> _mulliganSelectedIndices = new HashSet<int>();
 
         private CardContentRegistry _registry;
         private DemoBattlefield3D _battlefield;
@@ -67,6 +68,11 @@ namespace BiomeRivals.Demo
         private Text _onlineStatusText;
         private Text _onlineActionLabel;
         private Button _onlineActionButton;
+        private RectTransform _mulliganOverlay;
+        private RectTransform _mulliganCardsRoot;
+        private Text _mulliganStatusText;
+        private Text _mulliganConfirmLabel;
+        private Button _mulliganConfirmButton;
         private IMatchGateway _onlineGateway;
         private DemoOnlineMatchSession _onlineSession;
         private Image _opponentTint;
@@ -77,6 +83,7 @@ namespace BiomeRivals.Demo
         private string _activeFaction = "plains_forest";
         private string _opponentFaction = "nether";
         private bool _built;
+        private bool _previewMulligan;
         private Font _font;
         private DemoHudMaterialFactory _hudMaterialFactory;
 
@@ -107,6 +114,12 @@ namespace BiomeRivals.Demo
             if (Factions.Any(item => item.Id == previewPlayerFaction)) SelectFaction(previewPlayerFaction);
             var previewOpponentFaction = GetCommandLineValue("-previewOpponentFaction");
             if (Factions.Any(item => item.Id == previewOpponentFaction)) SelectOpponentFaction(previewOpponentFaction);
+            if (HasCommandLineFlag("-previewMulligan"))
+            {
+                _previewMulligan = true;
+                _mulliganSelectedIndices.Add(1);
+                RefreshAll();
+            }
             if (HasCommandLineFlag("-previewEffect"))
             {
                 SelectFaction("nether");
@@ -201,6 +214,7 @@ namespace BiomeRivals.Demo
             BuildTurnControls();
             BuildBanner();
             _playerHud.SetAsLastSibling();
+            BuildMulliganOverlay();
         }
 
         private void BuildTopChrome()
@@ -588,6 +602,25 @@ namespace BiomeRivals.Demo
             _turnBannerText = CreateText(banner, "Text", Vector2.zero, new Vector2(530, 82), string.Empty, 30, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
         }
 
+        private void BuildMulliganOverlay()
+        {
+            _mulliganOverlay = CreateRect(_canvasRoot, "MulliganOverlay", Vector2.zero, new Vector2(ReferenceWidth, ReferenceHeight));
+            var dim = _mulliganOverlay.gameObject.AddComponent<Image>();
+            dim.color = new Color(0.025f, 0.03f, 0.035f, 0.82f);
+            dim.raycastTarget = true;
+
+            var panel = CreateBasePanel(_mulliganOverlay, "MulliganPanel", new Vector2(0, 12), new Vector2(1120, 690));
+            CreateText(panel, "Title", new Vector2(0, 292), new Vector2(970, 54), "选择起手牌", 30, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
+            CreateText(panel, "Rule", new Vector2(0, 245), new Vector2(940, 42), "点击任意卡牌标记替换；新牌抽出后，换出的牌才会洗回牌库", 16, Muted, TextAnchor.MiddleCenter, FontStyle.Normal);
+            _mulliganCardsRoot = CreateRect(panel, "OpeningHand", new Vector2(0, 25), new Vector2(960, 410));
+            _mulliganStatusText = CreateText(panel, "ReadyStatus", new Vector2(0, -220), new Vector2(760, 44), string.Empty, 16, Cyan, TextAnchor.MiddleCenter, FontStyle.Bold);
+            _mulliganConfirmButton = CreatePrimaryActionButton(panel, "ConfirmMulligan", new Vector2(0, -282), new Vector2(310, 66), "保留全部", 20);
+            _mulliganConfirmLabel = _mulliganConfirmButton.GetComponentInChildren<Text>();
+            _mulliganConfirmButton.onClick.AddListener(ConfirmMulligan);
+            _mulliganConfirmButton.gameObject.AddComponent<DemoHoverScale>().Configure(1.035f, 16f);
+            _mulliganOverlay.gameObject.SetActive(false);
+        }
+
         private void SelectFaction(string factionId)
         {
             if (IsFactionSelectionLocked)
@@ -691,6 +724,7 @@ namespace BiomeRivals.Demo
         {
             if (!_built || _battlefield == null) return;
             var match = MatchView;
+            RefreshMulligan();
             RefreshFactionButtons();
             RefreshHand();
             RefreshOpponentHand(match.OpponentHandCount);
@@ -699,18 +733,92 @@ namespace BiomeRivals.Demo
             RefreshInspector();
             _energyText.text = $"◆ {match.Energy}/{match.MaxEnergy}";
             _titleText.text = IsOnlineBoard ? "群系竞逐  ·  权威联机对局" : "群系竞逐  ·  本地战场演示";
-            _roundText.text = $"第 {match.Round} 回合 · {(match.Phase == DemoTurnPhase.Main ? "主行动" : "战斗")}";
+            _roundText.text = match.IsMulligan ? "开局 · 起手调度" : $"第 {match.Round} 回合 · {(match.Phase == DemoTurnPhase.Main ? "主行动" : "战斗")}";
             _opponentHealthText.text = $"❤ {match.OpponentLife}";
             _playerHealthText.text = match.PlayerArmor > 0 ? $"❤ {match.PlayerLife}  ◈ {match.PlayerArmor}" : $"❤ {match.PlayerLife}";
             _handLabel.text = $"手牌 {match.Hand.Count}/7 · 牌库 {match.DeckCount} · 弃牌 {match.DiscardCount}";
-            var canUseHand = match.Phase == DemoTurnPhase.Main && match.IsPlayerTurn && (!IsOnlineBoard || _onlineSession.CanIssueCommand);
+            var canUseHand = !match.IsMulligan && match.Phase == DemoTurnPhase.Main && match.IsPlayerTurn && (!IsOnlineBoard || _onlineSession.CanIssueCommand);
             _handCanvasGroup.alpha = canUseHand ? 1f : 0.52f;
             _handCanvasGroup.interactable = canUseHand;
             _handCanvasGroup.blocksRaycasts = canUseHand;
-            _endTurnButton.interactable = match.IsPlayerTurn && !match.IsFinished && (!IsOnlineBoard || _onlineSession.CanIssueCommand);
+            _endTurnButton.interactable = !match.IsMulligan && match.IsPlayerTurn && !match.IsFinished && (!IsOnlineBoard || _onlineSession.CanIssueCommand);
             _endTurnLabel.text = IsOnlineBoard && _onlineSession.HasPendingCommand
                 ? "等待服务器"
+                : match.IsMulligan ? "等待起手确认"
                 : !match.IsPlayerTurn ? "对手行动中" : match.IsFinished ? "对局结束" : match.Phase == DemoTurnPhase.Main ? "进入战斗" : "结束回合";
+        }
+
+        private void RefreshMulligan()
+        {
+            if (_mulliganOverlay == null) return;
+            var match = MatchView;
+            var preview = _previewMulligan && !IsOnlineBoard;
+            var visible = preview || (IsOnlineBoard && match.IsMulligan);
+            _mulliganOverlay.gameObject.SetActive(visible);
+            if (!visible)
+            {
+                _mulliganSelectedIndices.Clear();
+                return;
+            }
+
+            _mulliganOverlay.SetAsLastSibling();
+            var openingHand = preview ? match.Hand.Take(4).ToArray() : match.Hand.ToArray();
+            _mulliganSelectedIndices.RemoveWhere(index => index < 0 || index >= openingHand.Length);
+            ClearChildren(_mulliganCardsRoot);
+            var count = openingHand.Length;
+            for (var index = 0; index < count; index++)
+            {
+                var selectedIndex = index;
+                var selected = _mulliganSelectedIndices.Contains(index);
+                var x = (index - (count - 1) * 0.5f) * 224f;
+                var slot = CreateBasePanel(_mulliganCardsRoot, "MulliganSlot" + index, new Vector2(x, selected ? 18f : 0f), new Vector2(206, 330));
+                slot.GetComponent<Image>().color = selected
+                    ? Color.Lerp(DemoUiStyleCatalog.GetRootFill(DemoUiStyleClass.BasePanel), Cyan, 0.42f)
+                    : DemoUiStyleCatalog.GetRootFill(DemoUiStyleClass.BasePanel);
+                var materialFill = slot.Find("MaterialFill")?.GetComponent<Image>();
+                if (selected && materialFill != null) materialFill.color = Color.Lerp(materialFill.color, Cyan, 0.34f);
+                var frameSlice = slot.Find("FrameSlice")?.GetComponent<Image>();
+                if (selected && frameSlice != null) frameSlice.color = Color.Lerp(frameSlice.color, Cyan, 0.28f);
+                var card = DemoCardUiFactory.Create(slot, _registry, openingHand[index], new Vector2(184, 262), true, UiFont, () => ToggleMulliganCard(selectedIndex));
+                card.RectTransform.anchoredPosition = new Vector2(0, 16);
+                card.gameObject.AddComponent<DemoHoverScale>().Configure(1.045f, 16f);
+                CreateText(slot, "Choice", new Vector2(0, -142), new Vector2(178, 30), selected ? "将替换" : "保留", 15, selected ? Cyan : Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
+            }
+
+            if (!preview && match.PlayerMulliganCompleted)
+            {
+                _mulliganStatusText.text = match.OpponentMulliganCompleted ? "双方已确认，正在进入第一回合…" : "起手已锁定 · 等待对手确认";
+                _mulliganConfirmLabel.text = "已确认";
+                _mulliganConfirmButton.interactable = false;
+            }
+            else
+            {
+                _mulliganStatusText.text = preview ? "预览模式 · 点击卡牌检查替换反馈" : match.OpponentMulliganCompleted ? "对手已确认 · 请选择你的起手牌" : "双方正在选择起手牌";
+                _mulliganConfirmLabel.text = _mulliganSelectedIndices.Count == 0 ? "保留全部" : $"替换 {_mulliganSelectedIndices.Count} 张";
+                _mulliganConfirmButton.interactable = !preview && _onlineSession?.CanIssueCommand == true;
+            }
+        }
+
+        private void ToggleMulliganCard(int index)
+        {
+            if (_previewMulligan && !IsOnlineBoard)
+            {
+                if (!_mulliganSelectedIndices.Add(index)) _mulliganSelectedIndices.Remove(index);
+                RefreshMulligan();
+                return;
+            }
+            if (!IsOnlineBoard || !MatchView.IsMulligan || MatchView.PlayerMulliganCompleted || _onlineSession?.CanIssueCommand != true) return;
+            if (!_mulliganSelectedIndices.Add(index)) _mulliganSelectedIndices.Remove(index);
+            RefreshMulligan();
+        }
+
+        private async void ConfirmMulligan()
+        {
+            if (!IsOnlineBoard || !MatchView.IsMulligan || MatchView.PlayerMulliganCompleted || _onlineSession?.CanIssueCommand != true) return;
+            var selected = _mulliganSelectedIndices.OrderBy(index => index).ToArray();
+            var result = await SendOnline(() => _onlineSession.MulliganAsync(selected));
+            if (result?.Outcome == MatchCommandOutcome.Accepted) _mulliganSelectedIndices.Clear();
+            RefreshAll();
         }
 
         private void RefreshFactionButtons()
@@ -1093,7 +1201,17 @@ namespace BiomeRivals.Demo
                 if (!IsOnlineBoard || _onlineGateway.CurrentStatus.Phase != MatchConnectionPhase.Ready)
                     throw new TimeoutException("Unity client did not receive an authoritative snapshot within 45 seconds.");
 
-                if (performAction && MatchView.Revision == 0 && MatchView.IsPlayerTurn && MatchView.Phase == DemoTurnPhase.Main)
+                if (MatchView.IsMulligan && !MatchView.PlayerMulliganCompleted)
+                {
+                    var mulliganResult = await SendOnline(() => _onlineSession.MulliganAsync(Array.Empty<int>()));
+                    if (mulliganResult?.Outcome != MatchCommandOutcome.Accepted)
+                        throw new InvalidOperationException("The Unity client did not receive an accepted MULLIGAN acknowledgement.");
+                }
+                while (MatchView.IsMulligan && Time.realtimeSinceStartup < deadline) await Task.Yield();
+                if (MatchView.IsMulligan) throw new TimeoutException("Both Unity clients did not finish opening hand selection.");
+
+                var actionStartRevision = MatchView.Revision;
+                if (performAction && MatchView.IsPlayerTurn && MatchView.Phase == DemoTurnPhase.Main)
                 {
                     var combatResult = await SendOnline(() => _onlineSession.EnterCombatAsync());
                     if (combatResult?.Outcome != MatchCommandOutcome.Accepted)
@@ -1104,8 +1222,9 @@ namespace BiomeRivals.Demo
                 }
                 if (performAction)
                 {
-                    while (MatchView.Revision < 2 && Time.realtimeSinceStartup < deadline) await Task.Yield();
-                    if (MatchView.Revision < 2)
+                    var expectedActionRevision = actionStartRevision + 2;
+                    while (MatchView.Revision < expectedActionRevision && Time.realtimeSinceStartup < deadline) await Task.Yield();
+                    if (MatchView.Revision < expectedActionRevision)
                         throw new TimeoutException("The Unity clients did not observe the authoritative action revision.");
                     var presentationQueue = GameCompositionRoot.Instance?.PresentationQueue;
                     while (presentationQueue != null && presentationQueue.IsPlaying && Time.realtimeSinceStartup < deadline) await Task.Yield();
@@ -1121,6 +1240,9 @@ namespace BiomeRivals.Demo
                         matchId = GameCompositionRoot.Instance.MatchStateStore.Current.matchId,
                         viewerPlayerId = GameCompositionRoot.Instance.MatchStateStore.Current.viewerPlayerId,
                         revision = MatchView.Revision,
+                        matchStatus = GameCompositionRoot.Instance.MatchStateStore.Current.status,
+                        playerMulliganCompleted = MatchView.PlayerMulliganCompleted,
+                        opponentMulliganCompleted = MatchView.OpponentMulliganCompleted,
                         phase = MatchView.Phase == DemoTurnPhase.Main ? "MAIN" : "COMBAT",
                         isPlayerTurn = MatchView.IsPlayerTurn,
                         hand = MatchView.Hand.ToArray(),
@@ -1551,6 +1673,9 @@ namespace BiomeRivals.Demo
             public string matchId;
             public string viewerPlayerId;
             public int revision;
+            public string matchStatus;
+            public bool playerMulliganCompleted;
+            public bool opponentMulliganCompleted;
             public string phase;
             public bool isPlayerTurn;
             public string[] hand;

@@ -1,13 +1,16 @@
 namespace BiomeRivalsRules {
   const HAND_LIMIT = 7;
 
-  function prototypeDeck(prefix: string, seedText: string): string[] {
-    const deck: string[] = [];
-    for (let index = 0; index < 30; index += 1) deck.push(prefix + '_' + ('00' + String((index % 8) + 1)).slice(-3));
+  function seedFromText(seedText: string): number {
     let seed = 17;
     for (let index = 0; index < seedText.length; index += 1) {
       seed = ((seed * 31) + seedText.charCodeAt(index)) | 0;
     }
+    return seed;
+  }
+
+  function shuffleDeck(deck: string[], seedText: string): void {
+    let seed = seedFromText(seedText);
     for (let index = deck.length - 1; index > 0; index -= 1) {
       seed = ((seed * 1664525) + 1013904223) | 0;
       const swapIndex = (seed >>> 0) % (index + 1);
@@ -15,17 +18,23 @@ namespace BiomeRivalsRules {
       deck[index] = deck[swapIndex]!;
       deck[swapIndex] = value;
     }
+  }
+
+  function prototypeDeck(prefix: string, seedText: string): string[] {
+    const deck: string[] = [];
+    for (let index = 0; index < 30; index += 1) deck.push(prefix + '_' + ('00' + String((index % 8) + 1)).slice(-3));
+    shuffleDeck(deck, seedText);
     return deck;
   }
 
-  function makePlayer(playerId: string, playerIndex: number, matchId: string, factionId: FactionId): PlayerState {
+  function makePlayer(playerId: string, startingCards: number, matchId: string, factionId: FactionId): PlayerState {
     const deck = prototypeDeck(FACTION_CARD_PREFIXES[factionId]!, matchId + ':' + playerId + ':' + factionId);
     const hand: string[] = [];
-    const startingCards = playerIndex === 0 ? 3 : 4;
     for (let index = 0; index < startingCards; index += 1) hand.push(deck.pop()!);
     return {
       playerId: playerId,
       factionId: factionId,
+      mulliganCompleted: false,
       life: 30,
       armor: 0,
       redstone: 1,
@@ -50,25 +59,27 @@ namespace BiomeRivalsRules {
     if (selectedFactions.length !== 2 || !isFactionId(selectedFactions[0]) || !isFactionId(selectedFactions[1])) {
       throw new Error('exactly two supported faction ids are required');
     }
+    const initiativeSourceIndex = (seedFromText(matchId + ':initiative') >>> 0) % 2;
+    const orderedPlayerIds = initiativeSourceIndex === 0 ? playerIds : [playerIds[1]!, playerIds[0]!];
+    const orderedFactions = initiativeSourceIndex === 0 ? selectedFactions : [selectedFactions[1]!, selectedFactions[0]!];
     const state: MatchState = {
       matchId: matchId,
       protocolVersion: PROTOCOL_VERSION,
       rulesetVersion: RULESET_VERSION,
       revision: 0,
       lastEventId: 0,
-      status: 'ACTIVE',
+      status: 'MULLIGAN',
       turn: 1,
       phase: 'MAIN',
       activePlayerIndex: 0,
       nextInstanceId: 1,
       players: [
-        makePlayer(playerIds[0], 0, matchId, selectedFactions[0]!),
-        makePlayer(playerIds[1], 1, matchId, selectedFactions[1]!)
+        makePlayer(orderedPlayerIds[0]!, 3, matchId, orderedFactions[0]!),
+        makePlayer(orderedPlayerIds[1]!, 4, matchId, orderedFactions[1]!)
       ],
       winnerPlayerId: null,
       processedCommandIds: []
     };
-    state.players[0]!.hand.push(state.players[0]!.deck.pop()!);
     const violations = validateState(state);
     if (violations.length > 0) throw new Error(violations.join('; '));
     return state;
@@ -93,6 +104,7 @@ namespace BiomeRivalsRules {
         return {
           playerId: player.playerId,
           factionId: player.factionId,
+          mulliganCompleted: player.mulliganCompleted,
           life: player.life,
           armor: player.armor,
           redstone: player.redstone,
@@ -131,6 +143,9 @@ namespace BiomeRivalsRules {
         const payload: { [key: string]: unknown } = {};
         Object.keys(event.payload).forEach(function (key): void { payload[key] = event.payload[key]; });
         if (event.type === 'CARD_DRAWN' && payload.playerId !== viewerPlayerId) payload.cardId = null;
+        if (event.type === 'MULLIGAN_COMPLETED' && payload.playerId !== viewerPlayerId && Array.isArray(payload.hand)) {
+          payload.hand = (payload.hand as string[]).map(function (): null { return null; });
+        }
         return { eventId: event.eventId, type: event.type, payload: payload };
       })
     };
@@ -152,6 +167,7 @@ namespace BiomeRivalsRules {
         return {
           playerId: player.playerId,
           factionId: player.factionId,
+          mulliganCompleted: player.mulliganCompleted,
           life: player.life,
           armor: player.armor,
           redstone: player.redstone,
@@ -196,7 +212,9 @@ namespace BiomeRivalsRules {
     if (!command || !command.commandId || !command.type) return reject(state, 'INVALID_COMMAND', 'command is incomplete');
     if (command.protocolVersion !== PROTOCOL_VERSION) return reject(state, 'PROTOCOL_MISMATCH', 'unsupported protocol version');
     if (command.rulesetVersion !== state.rulesetVersion) return reject(state, 'RULESET_MISMATCH', 'ruleset version differs from match');
-    if (command.expectedRevision !== state.revision) return reject(state, 'REVISION_MISMATCH', 'client state is stale');
+    const isConcurrentMulligan = command.type === 'MULLIGAN' && state.status === 'MULLIGAN' &&
+      typeof command.expectedRevision === 'number' && command.expectedRevision >= 0 && command.expectedRevision <= state.revision;
+    if (command.expectedRevision !== state.revision && !isConcurrentMulligan) return reject(state, 'REVISION_MISMATCH', 'client state is stale');
     if (state.processedCommandIds.indexOf(command.commandId) >= 0) return reject(state, 'DUPLICATE_COMMAND', 'command was already processed');
     if (state.status === 'FINISHED') return reject(state, 'MATCH_FINISHED', 'match has finished');
 
@@ -208,6 +226,55 @@ namespace BiomeRivalsRules {
     function emit(type: EventType, payload: { [key: string]: unknown }): void {
       next.lastEventId += 1;
       events.push({ eventId: next.lastEventId, type: type, payload: payload });
+    }
+
+    function completeMulligan(): CommandRejected | null {
+      if (state.status !== 'MULLIGAN') return reject(state, 'MULLIGAN_ALREADY_COMPLETED', 'the opening hand phase has ended');
+      const player = next.players[actorIndex]!;
+      if (player.mulliganCompleted) return reject(state, 'MULLIGAN_ALREADY_COMPLETED', 'this player already confirmed an opening hand');
+      const cardIndices = command.payload && command.payload.cardIndices;
+      if (!Array.isArray(cardIndices) || cardIndices.length > player.hand.length) {
+        return reject(state, 'INVALID_COMMAND', 'MULLIGAN requires an array of opening hand indices');
+      }
+      const selected: { [index: string]: boolean } = {};
+      for (let index = 0; index < cardIndices.length; index += 1) {
+        const handIndex = cardIndices[index];
+        if (typeof handIndex !== 'number' || handIndex % 1 !== 0 || handIndex < 0 || handIndex >= player.hand.length || selected[String(handIndex)]) {
+          return reject(state, 'INVALID_COMMAND', 'mulligan indices must be unique positions in the opening hand');
+        }
+        selected[String(handIndex)] = true;
+      }
+
+      const replacedCards: string[] = [];
+      const keptCards: string[] = [];
+      for (let handIndex = 0; handIndex < player.hand.length; handIndex += 1) {
+        if (selected[String(handIndex)]) replacedCards.push(player.hand[handIndex]!);
+        else keptCards.push(player.hand[handIndex]!);
+      }
+      for (let index = 0; index < replacedCards.length; index += 1) keptCards.push(player.deck.pop()!);
+      for (let index = 0; index < replacedCards.length; index += 1) player.deck.push(replacedCards[index]!);
+      if (replacedCards.length > 0) shuffleDeck(player.deck, next.matchId + ':' + player.playerId + ':mulligan');
+      player.hand = keptCards;
+      player.mulliganCompleted = true;
+      emit('MULLIGAN_COMPLETED', {
+        playerId: player.playerId,
+        hand: player.hand.slice(),
+        handCount: player.hand.length,
+        deckCount: player.deck.length,
+        replacedCount: replacedCards.length
+      });
+
+      if (next.players.every(function (candidate): boolean { return candidate.mulliganCompleted; })) {
+        next.status = 'ACTIVE';
+        emit('MATCH_STARTED', {
+          turn: next.turn,
+          activePlayerIndex: next.activePlayerIndex,
+          playerId: next.players[next.activePlayerIndex]!.playerId,
+          phase: next.phase
+        });
+        drawCard(next.players[next.activePlayerIndex]!);
+      }
+      return null;
     }
 
     function deployCard(): CommandRejected | null {
@@ -653,27 +720,37 @@ namespace BiomeRivalsRules {
     }
 
     switch (command.type) {
+      case 'MULLIGAN': {
+        const mulliganRejection = completeMulligan();
+        if (mulliganRejection !== null) return mulliganRejection;
+        break;
+      }
       case 'DEPLOY_CARD': {
+        if (state.status !== 'ACTIVE') return reject(state, 'MULLIGAN_REQUIRED', 'both players must confirm their opening hands first');
         const deploymentRejection = deployCard();
         if (deploymentRejection !== null) return deploymentRejection;
         break;
       }
       case 'PLAY_CARD': {
+        if (state.status !== 'ACTIVE') return reject(state, 'MULLIGAN_REQUIRED', 'both players must confirm their opening hands first');
         const playRejection = playCard();
         if (playRejection !== null) return playRejection;
         break;
       }
       case 'ENTER_COMBAT': {
+        if (state.status !== 'ACTIVE') return reject(state, 'MULLIGAN_REQUIRED', 'both players must confirm their opening hands first');
         const phaseRejection = enterCombat();
         if (phaseRejection !== null) return phaseRejection;
         break;
       }
       case 'ATTACK': {
+        if (state.status !== 'ACTIVE') return reject(state, 'MULLIGAN_REQUIRED', 'both players must confirm their opening hands first');
         const attackRejection = attack();
         if (attackRejection !== null) return attackRejection;
         break;
       }
       case 'END_TURN': {
+        if (state.status !== 'ACTIVE') return reject(state, 'MULLIGAN_REQUIRED', 'both players must confirm their opening hands first');
         if (actorIndex !== state.activePlayerIndex) return reject(state, 'NOT_ACTIVE_PLAYER', 'only the active player may end the turn');
         for (let playerIndex = 0; playerIndex < next.players.length; playerIndex += 1) {
           const effectPlayer = next.players[playerIndex]!;

@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["protocolVersion", "rulesetVersion", "revision", "acknowledgedCommandId", "events"],
   "properties": {
-    "protocolVersion": { "const": 6 },
+    "protocolVersion": { "const": 7 },
     "rulesetVersion": { "type": "string" },
     "revision": { "type": "integer", "minimum": 0 },
     "acknowledgedCommandId": { "type": "string" },
@@ -18,10 +18,45 @@
         "required": ["eventId", "type", "payload"],
         "properties": {
           "eventId": { "type": "integer", "minimum": 1 },
-          "type": { "enum": ["CARD_DEPLOYED", "CARD_PLAYED", "CARD_DRAWN", "CARD_BURNED", "FATIGUE_DAMAGE", "HERO_DAMAGED", "HERO_HEALED", "ARMOR_GAINED", "OBJECT_STATS_CHANGED", "PHASE_CHANGED", "ATTACK_RESOLVED", "OBJECT_DIED", "TURN_ENDED", "TURN_STARTED", "PLAYER_CONCEDED", "MATCH_ENDED"] },
+          "type": { "enum": ["MULLIGAN_COMPLETED", "MATCH_STARTED", "CARD_DEPLOYED", "CARD_PLAYED", "CARD_DRAWN", "CARD_BURNED", "FATIGUE_DAMAGE", "HERO_DAMAGED", "HERO_HEALED", "ARMOR_GAINED", "OBJECT_STATS_CHANGED", "PHASE_CHANGED", "ATTACK_RESOLVED", "OBJECT_DIED", "TURN_ENDED", "TURN_STARTED", "PLAYER_CONCEDED", "MATCH_ENDED"] },
           "payload": { "type": "object" }
         },
         "allOf": [
+          {
+            "if": { "properties": { "type": { "const": "MULLIGAN_COMPLETED" } } },
+            "then": {
+              "properties": {
+                "payload": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["playerId", "hand", "handCount", "deckCount", "replacedCount"],
+                  "properties": {
+                    "playerId": { "type": "string", "minLength": 1 },
+                    "hand": { "type": "array", "items": { "type": ["string", "null"], "pattern": "^[a-z0-9_]+$" } },
+                    "handCount": { "type": "integer", "minimum": 3, "maximum": 4 },
+                    "deckCount": { "type": "integer", "minimum": 26, "maximum": 27 },
+                    "replacedCount": { "type": "integer", "minimum": 0, "maximum": 4 }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": { "properties": { "type": { "const": "MATCH_STARTED" } } },
+            "then": {
+              "properties": {
+                "payload": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["playerId", "turn", "activePlayerIndex", "phase"],
+                  "properties": {
+                    "playerId": { "type": "string", "minLength": 1 },
+                    "turn": { "const": 1 },
+                    "activePlayerIndex": { "type": "integer", "minimum": 0, "maximum": 1 },
+                    "phase": { "const": "MAIN" }
+                  }
+                }
+              }
+            }
+          },
           {
             "if": { "properties": { "type": { "const": "CARD_DEPLOYED" } } },
             "then": {

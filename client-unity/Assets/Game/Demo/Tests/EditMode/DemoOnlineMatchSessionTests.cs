@@ -75,6 +75,23 @@ namespace BiomeRivals.Demo.Tests
         }
 
         [Test]
+        public async Task OnlineSessionSendsOpeningHandSelectionAtCurrentRevision()
+        {
+            var store = CreateStore(viewerIndex: 0);
+            store.Current.status = "MULLIGAN";
+            var gateway = new FakeGateway();
+            using (var session = new DemoOnlineMatchSession(gateway, store))
+            {
+                _ = session.MulliganAsync(new[] { 1, 2 });
+
+                Assert.That(gateway.LastCommand.type, Is.EqualTo(MatchCommandTypes.Mulligan));
+                Assert.That(gateway.LastCommand.expectedRevision, Is.Zero);
+                Assert.That(gateway.LastCommand.payload.cardIndices, Is.EqualTo(new[] { 1, 2 }));
+                await Task.Yield();
+            }
+        }
+
+        [Test]
         public void OnlineSessionRejectsSecondCommandWhileFirstIsPending()
         {
             var store = CreateStore(viewerIndex: 0);

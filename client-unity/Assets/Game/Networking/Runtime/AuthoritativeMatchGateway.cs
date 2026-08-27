@@ -41,6 +41,8 @@ namespace BiomeRivals.Networking
             if (command == null) throw new ArgumentNullException(nameof(command));
             switch (command.type)
             {
+                case MatchCommandTypes.Mulligan:
+                    return JsonUtility.ToJson(new MulliganCommandWire(command));
                 case MatchCommandTypes.DeployCard:
                     return JsonUtility.ToJson(new DeployCommandWire(command));
                 case MatchCommandTypes.PlayCard:
@@ -109,6 +111,12 @@ namespace BiomeRivals.Networking
         private sealed class EmptyWirePayload { }
 
         [Serializable]
+        private sealed class MulliganWirePayload
+        {
+            public int[] cardIndices;
+        }
+
+        [Serializable]
         private sealed class DeployWirePayload
         {
             public string cardId;
@@ -169,6 +177,17 @@ namespace BiomeRivals.Networking
         {
             public EmptyWirePayload payload = new EmptyWirePayload();
             public EmptyCommandWire(MatchCommandDto command) : base(command) { }
+        }
+
+        [Serializable]
+        private sealed class MulliganCommandWire : CommandWireBase
+        {
+            public MulliganWirePayload payload;
+
+            public MulliganCommandWire(MatchCommandDto command) : base(command)
+            {
+                payload = new MulliganWirePayload { cardIndices = command.payload.cardIndices ?? Array.Empty<int>() };
+            }
         }
 
         [Serializable]

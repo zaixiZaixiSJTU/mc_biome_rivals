@@ -41,6 +41,9 @@ namespace BiomeRivals.Demo
         public Task<MatchCommandDispatchResult> DeployAsync(string cardId, DemoSlotKind kind, int slotIndex) =>
             Send(MatchCommandFactory.DeployCard(NewCommandId(), Revision, cardId, kind == DemoSlotKind.Unit ? "UNIT" : "BUILDING", slotIndex));
 
+        public Task<MatchCommandDispatchResult> MulliganAsync(int[] cardIndices) =>
+            Send(MatchCommandFactory.Mulligan(NewCommandId(), Revision, cardIndices));
+
         public Task<MatchCommandDispatchResult> PlayCardAsync(string cardId, string targetType = "", string targetInstanceId = "") =>
             Send(MatchCommandFactory.PlayCard(NewCommandId(), Revision, cardId, targetType, targetInstanceId));
 

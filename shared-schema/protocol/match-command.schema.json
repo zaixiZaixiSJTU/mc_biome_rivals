@@ -6,14 +6,32 @@
   "additionalProperties": false,
   "required": ["protocolVersion", "rulesetVersion", "commandId", "expectedRevision", "type", "payload"],
   "properties": {
-    "protocolVersion": { "const": 6 },
+    "protocolVersion": { "const": 7 },
     "rulesetVersion": { "type": "string", "minLength": 1 },
     "commandId": { "type": "string", "minLength": 1, "maxLength": 80 },
     "expectedRevision": { "type": "integer", "minimum": 0 },
-    "type": { "enum": ["DEPLOY_CARD", "PLAY_CARD", "ENTER_COMBAT", "ATTACK", "END_TURN", "CONCEDE"] },
+    "type": { "enum": ["MULLIGAN", "DEPLOY_CARD", "PLAY_CARD", "ENTER_COMBAT", "ATTACK", "END_TURN", "CONCEDE"] },
     "payload": { "type": "object" }
   },
   "allOf": [
+    {
+      "if": { "properties": { "type": { "const": "MULLIGAN" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["cardIndices"],
+            "properties": {
+              "cardIndices": {
+                "type": "array", "maxItems": 4, "uniqueItems": true,
+                "items": { "type": "integer", "minimum": 0, "maximum": 3 }
+              }
+            }
+          }
+        }
+      }
+    },
     {
       "if": { "properties": { "type": { "const": "DEPLOY_CARD" } } },
       "then": {

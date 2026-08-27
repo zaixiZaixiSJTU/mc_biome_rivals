@@ -8,11 +8,11 @@
   "properties": {
     "matchId": { "type": "string", "minLength": 1 },
     "viewerPlayerId": { "type": "string", "minLength": 1 },
-    "protocolVersion": { "const": 6 },
+    "protocolVersion": { "const": 7 },
     "rulesetVersion": { "type": "string", "minLength": 1 },
     "revision": { "type": "integer", "minimum": 0 },
     "lastEventId": { "type": "integer", "minimum": 0 },
-    "status": { "enum": ["WAITING", "ACTIVE", "FINISHED"] },
+    "status": { "enum": ["WAITING", "MULLIGAN", "ACTIVE", "FINISHED"] },
     "turn": { "type": "integer", "minimum": 1 },
     "phase": { "enum": ["MAIN", "COMBAT"] },
     "activePlayerIndex": { "type": "integer", "minimum": 0, "maximum": 1 },
@@ -24,10 +24,11 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["playerId", "factionId", "life", "armor", "redstone", "redstoneCapacity", "hand", "deckCount", "discardPile", "fatigueCount", "unitSlots", "buildingSlots", "battlefield"],
+        "required": ["playerId", "factionId", "mulliganCompleted", "life", "armor", "redstone", "redstoneCapacity", "hand", "deckCount", "discardPile", "fatigueCount", "unitSlots", "buildingSlots", "battlefield"],
         "properties": {
           "playerId": { "type": "string", "minLength": 1 },
           "factionId": { "enum": ["plains_forest", "desert_badlands", "snow_ice", "cave_dark_forest", "ocean_river", "nether", "end"] },
+          "mulliganCompleted": { "type": "boolean" },
           "life": { "type": "integer", "minimum": 0 },
           "armor": { "type": "integer", "minimum": 0 },
           "redstone": { "type": "integer", "minimum": 0, "maximum": 10 },

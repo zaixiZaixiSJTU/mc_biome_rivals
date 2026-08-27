@@ -20,9 +20,17 @@ namespace BiomeRivalsRules {
     if (state.status !== 'FINISHED' && state.winnerPlayerId !== null) {
       violations.push('unfinished match cannot have a winner');
     }
+    const completedMulligans = state.players.filter(function (player): boolean { return player.mulliganCompleted; }).length;
+    if (state.status === 'MULLIGAN' && completedMulligans === state.players.length) {
+      violations.push('mulligan state cannot have every player confirmed');
+    }
+    if (state.status === 'ACTIVE' && completedMulligans !== state.players.length) {
+      violations.push('active match requires every opening hand to be confirmed');
+    }
     for (let playerIndex = 0; playerIndex < state.players.length; playerIndex += 1) {
       const player = state.players[playerIndex]!;
       if (!isFactionId(player.factionId)) violations.push('player faction is unsupported');
+      if (typeof player.mulliganCompleted !== 'boolean') violations.push('player mulligan state is invalid');
       if (player.life < 0 || player.armor < 0) violations.push('player combat values cannot be negative');
       if (player.redstone < 0 || player.redstone > player.redstoneCapacity || player.redstoneCapacity < 0 || player.redstoneCapacity > 10) {
         violations.push('player redstone is out of range');

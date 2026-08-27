@@ -19,7 +19,7 @@ npm run smoke:integration --workspace server-nakama
 
 服务端应记录一次 `Created authoritative Biome Rivals match`，随后两个客户端各收到只针对自己的 opcode `4` 初始快照。
 
-`smoke:integration` 会自动创建两个临时设备用户，分别以海洋河流和末地群系进入严格双人匹配，验证进入同一个权威房间、双方私有初始快照中的公开群系映射，以及一次 `END_TURN` 命令获得双方 opcode `2` 事件批次回执。它不会修改持久化玩家资产。
+`smoke:integration` 会自动创建两个临时设备用户，分别以海洋河流和末地群系进入严格双人匹配，验证进入同一个权威房间、双方私有初始快照中的公开群系映射、并发起手确认、正式开局事件，以及一次 `END_TURN` 命令获得双方 opcode `2` 事件批次回执。它不会修改持久化玩家资产。
 
 ## 配置
 
@@ -46,12 +46,15 @@ Windows Development Player 支持以下仅用于自动验证的参数：
 - `-autoOnline`：启动后自动进入匹配。
 - `-previewPlayerFaction <ID>`：在进入匹配前选择本机群系；双进程验证应为两端传入不同 ID。
 - `-previewOpponentFaction <ID>`：只用于离线预览远端半场；权威联机后会被服务器快照覆盖。
-- `-autoOnlineAction`：当前行动方依次发送 `ENTER_COMBAT` 与 `END_TURN`，两端等待 revision 2。
+- `-previewMulligan`：离线显示真实卡面与材质化起手调度层，用于视觉回归，不提交规则命令。
+- `-autoOnlineAction`：双方先自动保留全部起手牌；当前行动方随后发送 `ENTER_COMBAT` 与 `END_TURN`，两端等待相同的最终 revision。
 - `-nakamaDeviceId <ID>`：为同机并行实例指定不同设备身份，长度 10–128。
 - `-onlineProbe <json>`：写出 Match ID、观察者 ID、revision、阶段、手牌、能量、生命和双方群系。
 - `-captureOnline <png>`：权威状态稳定且事件动画队列清空后截图。
 - `-quitAfterOnlineProbe`：报告写完后退出。
 
-两个报告必须具有相同 Match ID、不同观察者 ID、相同 revision；私有手牌应不同，且双方 `playerFaction/opponentFaction` 互为镜像。
+两个报告必须具有相同 Match ID、不同观察者 ID、`ACTIVE` 状态和相同 revision；双方起手确认字段均为 `true`，私有手牌应不同，且 `playerFaction/opponentFaction` 互为镜像。
 
 海洋河流对末地的权威双客户端验证截图：[`../design/assets/demo-authoritative-ocean-vs-end-v1.png`](../design/assets/demo-authoritative-ocean-vs-end-v1.png)。截图中的近端海洋与远端末地由各自玩家提交并经服务器快照确认，两块半场仍共用同一透视平面。
+
+双方完成调度并进入正式回合后的权威截图：[`../design/assets/demo-authoritative-after-mulligan-v1.png`](../design/assets/demo-authoritative-after-mulligan-v1.png)。
