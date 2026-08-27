@@ -1,6 +1,6 @@
 namespace BiomeRivalsRules {
-  export const PROTOCOL_VERSION = 5;
-  export const RULESET_VERSION = 'prototype-0.6';
+  export const PROTOCOL_VERSION = 6;
+  export const RULESET_VERSION = 'prototype-0.7';
 
   export type MatchStatus = 'WAITING' | 'ACTIVE' | 'FINISHED';
   export type CommandType = 'DEPLOY_CARD' | 'PLAY_CARD' | 'ENTER_COMBAT' | 'ATTACK' | 'END_TURN' | 'CONCEDE';
@@ -9,6 +9,21 @@ namespace BiomeRivalsRules {
   export type TurnPhase = 'MAIN' | 'COMBAT';
   export type AttackTargetType = 'HERO' | 'UNIT' | 'BUILDING';
   export type CardType = 'UNIT' | 'SPELL' | 'BUILDING' | 'STRUCTURE' | 'EQUIPMENT' | 'MATERIAL';
+  export type FactionId = 'plains_forest' | 'desert_badlands' | 'snow_ice' | 'cave_dark_forest' | 'ocean_river' | 'nether' | 'end';
+
+  export const FACTION_CARD_PREFIXES: { [factionId: string]: string } = {
+    plains_forest: 'pf',
+    desert_badlands: 'db',
+    snow_ice: 'si',
+    cave_dark_forest: 'cd',
+    ocean_river: 'or',
+    nether: 'nt',
+    end: 'ed'
+  };
+
+  export function isFactionId(value: unknown): value is FactionId {
+    return typeof value === 'string' && Object.prototype.hasOwnProperty.call(FACTION_CARD_PREFIXES, value);
+  }
 
   export interface CardRuleDefinition {
     id: string;
@@ -39,6 +54,7 @@ namespace BiomeRivalsRules {
 
   export interface PlayerState {
     playerId: string;
+    factionId: FactionId;
     life: number;
     armor: number;
     redstone: number;
@@ -70,6 +86,7 @@ namespace BiomeRivalsRules {
 
   export interface PlayerSnapshot {
     playerId: string;
+    factionId: FactionId;
     life: number;
     armor: number;
     redstone: number;

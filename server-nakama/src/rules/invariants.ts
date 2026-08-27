@@ -22,6 +22,7 @@ namespace BiomeRivalsRules {
     }
     for (let playerIndex = 0; playerIndex < state.players.length; playerIndex += 1) {
       const player = state.players[playerIndex]!;
+      if (!isFactionId(player.factionId)) violations.push('player faction is unsupported');
       if (player.life < 0 || player.armor < 0) violations.push('player combat values cannot be negative');
       if (player.redstone < 0 || player.redstone > player.redstoneCapacity || player.redstoneCapacity < 0 || player.redstoneCapacity > 10) {
         violations.push('player redstone is out of range');

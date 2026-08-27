@@ -52,9 +52,11 @@ namespace BiomeRivals.Bootstrap
             BindGateway(new AuthoritativeMatchGateway(transport));
         }
 
-        public IMatchGateway RegisterDefaultOnlineTransport()
+        public IMatchGateway RegisterDefaultOnlineTransport(string factionId = FactionIds.PlainsForest)
         {
-            RegisterOnlineTransport(new NakamaMatchTransport(NakamaConnectionSettings.Load()));
+            RegisterOnlineTransport(new NakamaMatchTransport(
+                NakamaConnectionSettings.Load(),
+                new MatchmakingPreferences(factionId)));
             return _matchGateway;
         }
 

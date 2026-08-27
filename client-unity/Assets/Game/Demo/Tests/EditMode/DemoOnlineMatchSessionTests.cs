@@ -23,6 +23,8 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(view.OpponentLife, Is.EqualTo(30));
             Assert.That(view.Energy, Is.EqualTo(2));
             Assert.That(view.IsPlayerTurn, Is.True);
+            Assert.That(view.PlayerFactionId, Is.EqualTo(FactionIds.End));
+            Assert.That(view.OpponentFactionId, Is.EqualTo(FactionIds.OceanRiver));
         }
 
         [Test]
@@ -111,12 +113,12 @@ namespace BiomeRivals.Demo.Tests
             {
                 new PlayerStateDto
                 {
-                    playerId = "alice", life = 30, redstone = 1, redstoneCapacity = 1,
+                    playerId = "alice", factionId = FactionIds.OceanRiver, life = 30, redstone = 1, redstoneCapacity = 1,
                     hand = new[] { "pf_001" }, unitSlots = new string[4], buildingSlots = new string[3]
                 },
                 new PlayerStateDto
                 {
-                    playerId = "bob", life = 27, redstone = 2, redstoneCapacity = 2,
+                    playerId = "bob", factionId = FactionIds.End, life = 27, redstone = 2, redstoneCapacity = 2,
                     hand = new[] { "nt_001" }, unitSlots = new string[4], buildingSlots = new string[3]
                 }
             };

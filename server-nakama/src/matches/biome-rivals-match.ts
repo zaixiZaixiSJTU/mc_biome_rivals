@@ -6,7 +6,23 @@ const BIOME_RIVALS_TICK_RATE = 5;
 
 interface BiomeRivalsMatchState extends nkruntime.MatchState {
   presences: { [sessionId: string]: nkruntime.Presence };
+  factionByPlayerId: { [playerId: string]: BiomeRivalsRules.FactionId };
   game: BiomeRivalsRules.MatchState | null;
+}
+
+function parseRequestedFactions(params: { [key: string]: unknown }): { [playerId: string]: BiomeRivalsRules.FactionId } {
+  const result: { [playerId: string]: BiomeRivalsRules.FactionId } = {};
+  if (typeof params.playerFactions !== 'string') return result;
+  const entries = JSON.parse(params.playerFactions) as Array<{ playerId?: unknown; factionId?: unknown }>;
+  if (!Array.isArray(entries) || entries.length !== 2) throw new Error('match requires exactly two faction selections');
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index]!;
+    if (typeof entry.playerId !== 'string' || !entry.playerId || !BiomeRivalsRules.isFactionId(entry.factionId) || result[entry.playerId]) {
+      throw new Error('match contains an invalid faction selection');
+    }
+    result[entry.playerId] = entry.factionId;
+  }
+  return result;
 }
 
 function encodeMatchMessage(value: unknown): string {
@@ -21,7 +37,7 @@ function biomeRivalsMatchInit(
 ): { state: BiomeRivalsMatchState; tickRate: number; label: string } {
   logger.info('Biome Rivals match created: %s', ctx.matchId || 'pending');
   return {
-    state: { presences: {}, game: null },
+    state: { presences: {}, factionByPlayerId: parseRequestedFactions(params), game: null },
     tickRate: BIOME_RIVALS_TICK_RATE,
     label: JSON.stringify({ mode: 'prototype', open: true })
   };
@@ -37,6 +53,10 @@ function biomeRivalsMatchJoinAttempt(
   presence: nkruntime.Presence,
   metadata: { [key: string]: unknown }
 ): { state: BiomeRivalsMatchState; accept: boolean; rejectMessage?: string } {
+  const assignedPlayerIds = Object.keys(state.factionByPlayerId);
+  if (assignedPlayerIds.length > 0 && !state.factionByPlayerId[presence.userId]) {
+    return { state: state, accept: false, rejectMessage: 'player was not assigned to this match' };
+  }
   const count = Object.keys(state.presences).length;
   if (!state.presences[presence.sessionId] && count >= 2) {
     return { state: state, accept: false, rejectMessage: 'match is full' };
@@ -62,7 +82,11 @@ function biomeRivalsMatchJoin(
   });
   let snapshotRecipients = presences;
   if (state.game === null && connected.length === 2) {
-    state.game = BiomeRivalsRules.createInitialState(ctx.matchId || 'unknown', [connected[0]!.userId, connected[1]!.userId]);
+    const playerIds = [connected[0]!.userId, connected[1]!.userId];
+    const factionIds = playerIds.map(function (playerId, index): BiomeRivalsRules.FactionId {
+      return state.factionByPlayerId[playerId] || (index === 0 ? 'plains_forest' : 'nether');
+    });
+    state.game = BiomeRivalsRules.createInitialState(ctx.matchId || 'unknown', playerIds, factionIds);
     snapshotRecipients = connected;
   }
   if (state.game !== null) {

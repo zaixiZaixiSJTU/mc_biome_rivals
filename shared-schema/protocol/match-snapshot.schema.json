@@ -8,7 +8,7 @@
   "properties": {
     "matchId": { "type": "string", "minLength": 1 },
     "viewerPlayerId": { "type": "string", "minLength": 1 },
-    "protocolVersion": { "const": 5 },
+    "protocolVersion": { "const": 6 },
     "rulesetVersion": { "type": "string", "minLength": 1 },
     "revision": { "type": "integer", "minimum": 0 },
     "lastEventId": { "type": "integer", "minimum": 0 },
@@ -24,9 +24,10 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["playerId", "life", "armor", "redstone", "redstoneCapacity", "hand", "deckCount", "discardPile", "fatigueCount", "unitSlots", "buildingSlots", "battlefield"],
+        "required": ["playerId", "factionId", "life", "armor", "redstone", "redstoneCapacity", "hand", "deckCount", "discardPile", "fatigueCount", "unitSlots", "buildingSlots", "battlefield"],
         "properties": {
           "playerId": { "type": "string", "minLength": 1 },
+          "factionId": { "enum": ["plains_forest", "desert_badlands", "snow_ice", "cave_dark_forest", "ocean_river", "nether", "end"] },
           "life": { "type": "integer", "minimum": 0 },
           "armor": { "type": "integer", "minimum": 0 },
           "redstone": { "type": "integer", "minimum": 0, "maximum": 10 },

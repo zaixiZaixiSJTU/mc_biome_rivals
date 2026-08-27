@@ -121,6 +121,28 @@ TestHarness.test('creates a valid two-player initial state', function (): void {
   TestHarness.equal(BiomeRivalsRules.validateState(state).length, 0);
 });
 
+TestHarness.test('creates faction-specific decks and exposes both public faction ids', function (): void {
+  const state = BiomeRivalsRules.createInitialState('match-factions', ['alice', 'bob'], ['ocean_river', 'end']);
+  TestHarness.equal(state.players[0]!.factionId, 'ocean_river');
+  TestHarness.equal(state.players[1]!.factionId, 'end');
+  TestHarness.ok(state.players[0]!.hand.concat(state.players[0]!.deck).every(function (cardId): boolean { return cardId.indexOf('or_') === 0; }));
+  TestHarness.ok(state.players[1]!.hand.concat(state.players[1]!.deck).every(function (cardId): boolean { return cardId.indexOf('ed_') === 0; }));
+  const snapshot = BiomeRivalsRules.createClientSnapshot(state, 'alice');
+  TestHarness.equal(snapshot.players[0]!.factionId, 'ocean_river');
+  TestHarness.equal(snapshot.players[1]!.factionId, 'end');
+  TestHarness.equal(snapshot.players[1]!.hand[0], null);
+});
+
+TestHarness.test('rejects unsupported initial faction selections', function (): void {
+  let rejected = false;
+  try {
+    BiomeRivalsRules.createInitialState('match-factions', ['alice', 'bob'], ['plains_forest', 'invalid'] as BiomeRivalsRules.FactionId[]);
+  } catch (error) {
+    rejected = String(error).indexOf('supported faction ids') >= 0;
+  }
+  TestHarness.ok(rejected);
+});
+
 TestHarness.test('redacts the opponents hand without mutating authoritative state', function (): void {
   const state = BiomeRivalsRules.createInitialState('match-1', ['alice', 'bob']);
   const snapshot = BiomeRivalsRules.createClientSnapshot(state, 'alice');

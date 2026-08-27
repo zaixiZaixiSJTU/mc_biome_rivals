@@ -16,6 +16,8 @@ namespace BiomeRivals.Demo
         }
 
         public bool IsAuthoritative => Current != null;
+        public string PlayerFactionId => Player?.factionId ?? FactionIds.PlainsForest;
+        public string OpponentFactionId => Opponent?.factionId ?? FactionIds.Nether;
         public int ViewerIndex => FindViewerIndex();
         public IReadOnlyList<string> Hand => Player?.hand ?? EmptySlots;
         public string[] UnitSlots => MapSlots(Player, DemoSlotKind.Unit);

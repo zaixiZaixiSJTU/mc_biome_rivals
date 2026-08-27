@@ -18,13 +18,14 @@ namespace BiomeRivalsRules {
     return deck;
   }
 
-  function makePlayer(playerId: string, playerIndex: number, matchId: string): PlayerState {
-    const deck = prototypeDeck(playerIndex === 0 ? 'pf' : 'nt', matchId + ':' + playerId);
+  function makePlayer(playerId: string, playerIndex: number, matchId: string, factionId: FactionId): PlayerState {
+    const deck = prototypeDeck(FACTION_CARD_PREFIXES[factionId]!, matchId + ':' + playerId + ':' + factionId);
     const hand: string[] = [];
     const startingCards = playerIndex === 0 ? 3 : 4;
     for (let index = 0; index < startingCards; index += 1) hand.push(deck.pop()!);
     return {
       playerId: playerId,
+      factionId: factionId,
       life: 30,
       armor: 0,
       redstone: 1,
@@ -39,12 +40,16 @@ namespace BiomeRivalsRules {
     };
   }
 
-  export function createInitialState(matchId: string, playerIds: string[]): MatchState {
+  export function createInitialState(matchId: string, playerIds: string[], factionIds?: FactionId[]): MatchState {
     if (!matchId) throw new Error('matchId is required');
     if (playerIds.length !== 2 || !playerIds[0] || !playerIds[1] || playerIds[0] === playerIds[1]) {
       throw new Error('exactly two unique player ids are required');
     }
 
+    const selectedFactions = factionIds === undefined ? ['plains_forest', 'nether'] as FactionId[] : factionIds;
+    if (selectedFactions.length !== 2 || !isFactionId(selectedFactions[0]) || !isFactionId(selectedFactions[1])) {
+      throw new Error('exactly two supported faction ids are required');
+    }
     const state: MatchState = {
       matchId: matchId,
       protocolVersion: PROTOCOL_VERSION,
@@ -56,7 +61,10 @@ namespace BiomeRivalsRules {
       phase: 'MAIN',
       activePlayerIndex: 0,
       nextInstanceId: 1,
-      players: [makePlayer(playerIds[0], 0, matchId), makePlayer(playerIds[1], 1, matchId)],
+      players: [
+        makePlayer(playerIds[0], 0, matchId, selectedFactions[0]!),
+        makePlayer(playerIds[1], 1, matchId, selectedFactions[1]!)
+      ],
       winnerPlayerId: null,
       processedCommandIds: []
     };
@@ -84,6 +92,7 @@ namespace BiomeRivalsRules {
       players: state.players.map(function (player, playerIndex): PlayerSnapshot {
         return {
           playerId: player.playerId,
+          factionId: player.factionId,
           life: player.life,
           armor: player.armor,
           redstone: player.redstone,
@@ -142,6 +151,7 @@ namespace BiomeRivalsRules {
       players: state.players.map(function (player): PlayerState {
         return {
           playerId: player.playerId,
+          factionId: player.factionId,
           life: player.life,
           armor: player.armor,
           redstone: player.redstone,

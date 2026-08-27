@@ -33,6 +33,8 @@ namespace BiomeRivals.Demo
         public IReadOnlyList<DemoBattlefieldObject> PlayerBattlefield => _playerBattlefield;
         public IReadOnlyList<DemoBattlefieldObject> OpponentBattlefield => _opponentBattlefield;
         public bool IsAuthoritative => false;
+        public string PlayerFactionId { get; private set; } = FactionIds.PlainsForest;
+        public string OpponentFactionId { get; private set; } = FactionIds.Nether;
         public int ViewerIndex => 0;
         public int DeckCount => _deck.Count;
         public int DiscardCount => _discardPile.Count;
@@ -49,6 +51,18 @@ namespace BiomeRivals.Demo
         public int OpponentLife { get; private set; } = 30;
         public bool IsFinished { get; private set; }
         public int Revision { get; private set; }
+
+        public void SetPlayerFaction(string factionId)
+        {
+            if (!FactionIds.IsSupported(factionId)) throw new ArgumentOutOfRangeException(nameof(factionId));
+            PlayerFactionId = factionId;
+        }
+
+        public void SetOpponentFaction(string factionId)
+        {
+            if (!FactionIds.IsSupported(factionId)) throw new ArgumentOutOfRangeException(nameof(factionId));
+            OpponentFactionId = factionId;
+        }
 
         public void ResetHand(IEnumerable<string> cardIds)
         {

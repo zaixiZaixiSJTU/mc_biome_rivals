@@ -81,6 +81,9 @@ namespace BiomeRivals.Demo
         private DemoHudMaterialFactory _hudMaterialFactory;
 
         private bool IsOnlineBoard => _onlineSession?.HasAuthoritativeState == true;
+        private bool IsFactionSelectionLocked => _onlineGateway != null &&
+            _onlineGateway.CurrentStatus.Phase != MatchConnectionPhase.Offline &&
+            _onlineGateway.CurrentStatus.Phase != MatchConnectionPhase.Failed;
         private IDemoMatchView MatchView => IsOnlineBoard ? _onlineSession.View : _match;
 
         private static readonly FactionSpec[] Factions =
@@ -312,7 +315,7 @@ namespace BiomeRivals.Demo
                 }
                 if (_onlineGateway != null) _onlineGateway.ConnectionStateChanged -= HandleOnlineConnectionState;
                 DisposeOnlineSession();
-                _onlineGateway = compositionRoot.RegisterDefaultOnlineTransport();
+                _onlineGateway = compositionRoot.RegisterDefaultOnlineTransport(_activeFaction);
                 _onlineSession = new DemoOnlineMatchSession(_onlineGateway, compositionRoot.MatchStateStore);
                 _onlineSession.StateChanged += HandleOnlineBoardChanged;
                 _onlineSession.CommandPending += HandleOnlineCommandPending;
@@ -344,7 +347,7 @@ namespace BiomeRivals.Demo
                     _onlineStatusText.text = "连接服务器";
                     break;
                 case MatchConnectionPhase.Matchmaking:
-                    _onlineStatusText.text = "寻找对手中";
+                    _onlineStatusText.text = "寻找对手中 · " + Factions.First(item => item.Id == _activeFaction).Label;
                     break;
                 case MatchConnectionPhase.Joining:
                     _onlineStatusText.text = "进入权威对局";
@@ -587,13 +590,14 @@ namespace BiomeRivals.Demo
 
         private void SelectFaction(string factionId)
         {
-            if (IsOnlineBoard)
+            if (IsFactionSelectionLocked)
             {
-                ShowStatus("在线对局的己方牌组由权威房间决定。", true);
+                ShowStatus("匹配请求已经锁定群系；取消联机后可重新选择。", true);
                 return;
             }
             _pendingTargetCardId = null;
             _activeFaction = factionId;
+            _match.SetPlayerFaction(factionId);
             var spec = Factions.First(item => item.Id == factionId);
             ApplyPlayerFactionVisuals(spec);
             var handNumbers = spec.Prefix == "nt" ? new[] { 1, 2, 3, 4, 6 } : Enumerable.Range(1, 5).ToArray();
@@ -628,13 +632,14 @@ namespace BiomeRivals.Demo
 
         private void SelectOpponentFaction(string factionId)
         {
-            if (IsOnlineBoard)
+            if (IsFactionSelectionLocked)
             {
                 ShowStatus("在线对局的敌方阵营由权威房间决定。", true);
                 return;
             }
             var spec = Factions.First(item => item.Id == factionId);
             _opponentFaction = factionId;
+            _match.SetOpponentFaction(factionId);
             _pendingTargetCardId = null;
             _selectedAttackerInstanceId = null;
             _match.ResetOpponent(GetOpponentDefinitions(factionId));
@@ -660,26 +665,11 @@ namespace BiomeRivals.Demo
 
         private void ApplyAuthoritativeFactionVisuals()
         {
-            var playerFaction = DetectFaction(MatchView.Hand.Concat(MatchView.PlayerBattlefield.Select(value => value.CardId)));
-            if (playerFaction == null) playerFaction = MatchView.ViewerIndex == 0 ? Factions[0] : Factions[5];
-            var opponentFaction = DetectFaction(MatchView.OpponentBattlefield.Select(value => value.CardId));
-            if (opponentFaction == null) opponentFaction = MatchView.ViewerIndex == 0 ? Factions[5] : Factions[0];
+            var playerFaction = Factions.FirstOrDefault(value => value.Id == MatchView.PlayerFactionId) ?? Factions[0];
+            var opponentFaction = Factions.FirstOrDefault(value => value.Id == MatchView.OpponentFactionId) ?? Factions[5];
             ApplyPlayerFactionVisuals(playerFaction);
             ApplyOpponentFactionVisuals(opponentFaction);
             _battlefield.SetBattlefieldThemes(_activeFaction, _opponentFaction);
-        }
-
-        private static FactionSpec DetectFaction(IEnumerable<string> cardIds)
-        {
-            foreach (var cardId in cardIds ?? Enumerable.Empty<string>())
-            {
-                if (string.IsNullOrEmpty(cardId)) continue;
-                var separator = cardId.IndexOf('_');
-                var prefix = separator > 0 ? cardId.Substring(0, separator) : cardId;
-                var faction = Factions.FirstOrDefault(value => value.Prefix == prefix);
-                if (faction != null) return faction;
-            }
-            return null;
         }
 
         private IEnumerable<CardDefinitionEntry> GetOpponentDefinitions(string factionId)
@@ -730,7 +720,7 @@ namespace BiomeRivals.Demo
                 var active = view.Id == _activeFaction;
                 view.Image.color = DemoUiStyleCatalog.GetRootFill(DemoUiStyleClass.SecondaryButton);
                 view.SelectionAccent.gameObject.SetActive(active);
-                view.Button.interactable = !IsOnlineBoard;
+                view.Button.interactable = !IsFactionSelectionLocked;
             }
         }
 

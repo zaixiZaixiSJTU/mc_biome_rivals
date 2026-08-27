@@ -24,7 +24,7 @@ function deferred(label) {
   };
 }
 
-async function createPlayer(index) {
+async function createPlayer(index, factionId) {
   const client = new Client(serverKey, host, port, false);
   const session = await client.authenticateDevice(`biome-rivals-smoke-${index}-${randomUUID()}`, true);
   const socket = client.createSocket(false, false);
@@ -45,13 +45,14 @@ async function createPlayer(index) {
     eventBatch.reject(error);
   };
   await socket.connect(session, true, timeoutMs);
-  return { index, session, socket, matched, snapshot, eventBatch };
+  return { index, factionId, session, socket, matched, snapshot, eventBatch };
 }
 
 const players = [];
 try {
-  players.push(await createPlayer(1), await createPlayer(2));
-  await Promise.all(players.map((player) => player.socket.addMatchmaker('*', 2, 2)));
+  players.push(await createPlayer(1, 'ocean_river'), await createPlayer(2, 'end'));
+  await Promise.all(players.map((player) =>
+    player.socket.addMatchmaker('*', 2, 2, { factionId: player.factionId })));
   const matches = await Promise.all(players.map((player) => player.matched.promise));
   const joined = await Promise.all(players.map((player, index) =>
     player.socket.joinMatch(matches[index].match_id, matches[index].token)));
@@ -59,6 +60,17 @@ try {
   if (joined[0].match_id !== joined[1].match_id) throw new Error('players joined different matches');
 
   const snapshots = await Promise.all(players.map((player) => player.snapshot.promise));
+  for (let index = 0; index < players.length; index += 1) {
+    const snapshot = snapshots[index];
+    const ownPlayer = snapshot.players.find((entry) => entry.playerId === snapshot.viewerPlayerId);
+    if (ownPlayer?.factionId !== players[index].factionId) {
+      throw new Error(`player ${index + 1} faction mismatch: expected ${players[index].factionId}, got ${ownPlayer?.factionId}`);
+    }
+    const publicFactions = new Set(snapshot.players.map((entry) => entry.factionId));
+    if (!publicFactions.has('ocean_river') || !publicFactions.has('end')) {
+      throw new Error(`snapshot ${index + 1} did not expose both authoritative factions`);
+    }
+  }
   const activePlayerId = snapshots[0].players[snapshots[0].activePlayerIndex].playerId;
   const activeIndex = snapshots.findIndex((snapshot) => snapshot.viewerPlayerId === activePlayerId);
   if (activeIndex < 0) throw new Error('active player was not present in the two private snapshots');
@@ -81,6 +93,7 @@ try {
     ok: true,
     matchId: joined[0].match_id,
     players: players.map((player) => player.session.user_id),
+    factions: players.map((player) => player.factionId),
     initialRevision: snapshots[0].revision,
     acknowledgedCommandId: commandId,
     resultingRevision: batches[0].revision

@@ -49,6 +49,8 @@ namespace BiomeRivals.Demo
     public interface IDemoMatchView
     {
         bool IsAuthoritative { get; }
+        string PlayerFactionId { get; }
+        string OpponentFactionId { get; }
         IReadOnlyList<string> Hand { get; }
         string[] UnitSlots { get; }
         string[] BuildingSlots { get; }

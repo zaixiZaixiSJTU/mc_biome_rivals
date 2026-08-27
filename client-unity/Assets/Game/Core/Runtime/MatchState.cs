@@ -25,6 +25,7 @@ namespace BiomeRivals.Core
     public sealed class PlayerStateDto
     {
         public string playerId = string.Empty;
+        public string factionId = FactionIds.PlainsForest;
         public int life;
         public int armor;
         public int redstone;
@@ -68,6 +69,9 @@ namespace BiomeRivals.Core
                 throw new InvalidOperationException("Snapshot protocol or ruleset version is unsupported.");
             if (snapshot.players == null || snapshot.players.Length != 2)
                 throw new InvalidOperationException("Snapshot must contain exactly two players.");
+            foreach (var player in snapshot.players)
+                if (player == null || !FactionIds.IsSupported(player.factionId))
+                    throw new InvalidOperationException("Snapshot contains an unsupported player faction.");
             Current = snapshot;
             Changed?.Invoke(Current);
         }

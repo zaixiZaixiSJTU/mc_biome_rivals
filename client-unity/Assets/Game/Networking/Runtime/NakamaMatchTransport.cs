@@ -2,6 +2,7 @@ using System;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using BiomeRivals.Core;
 using Nakama;
 using UnityEngine;
 
@@ -14,6 +15,7 @@ namespace BiomeRivals.Networking
         private const string RefreshTokenPreference = "biome_rivals.nakama.refresh_token";
 
         private readonly NakamaConnectionSettings _settings;
+        private readonly MatchmakingPreferences _matchmakingPreferences;
         private readonly SemaphoreSlim _lifecycle = new SemaphoreSlim(1, 1);
         private readonly string _deviceId;
         private readonly string _sessionKeySuffix;
@@ -37,10 +39,11 @@ namespace BiomeRivals.Networking
         public MatchConnectionStatus CurrentStatus { get; private set; } =
             new MatchConnectionStatus(MatchConnectionPhase.Offline);
 
-        public NakamaMatchTransport(NakamaConnectionSettings settings)
+        public NakamaMatchTransport(NakamaConnectionSettings settings, MatchmakingPreferences matchmakingPreferences = null)
         {
             _settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _settings.Validate();
+            _matchmakingPreferences = matchmakingPreferences ?? new MatchmakingPreferences(FactionIds.PlainsForest);
             _deviceId = ResolveDeviceId(out var overridden);
             _sessionKeySuffix = overridden ? "." + _deviceId : string.Empty;
         }
@@ -150,7 +153,7 @@ namespace BiomeRivals.Networking
             {
                 Publish(new MatchConnectionStatus(MatchConnectionPhase.Matchmaking, "Waiting for one opponent."));
                 _matchedSource = new TaskCompletionSource<IMatchmakerMatched>(TaskCreationOptions.RunContinuationsAsynchronously);
-                _ticket = await _socket.AddMatchmakerAsync("*", 2, 2);
+                _ticket = await _socket.AddMatchmakerAsync("*", 2, 2, _matchmakingPreferences.ToStringProperties());
                 var timeout = Task.Delay(TimeSpan.FromSeconds(_settings.matchmakingTimeoutSeconds), cancellationToken);
                 var completed = await Task.WhenAny(_matchedSource.Task, timeout);
                 cancellationToken.ThrowIfCancellationRequested();

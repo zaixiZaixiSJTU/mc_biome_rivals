@@ -25,6 +25,26 @@ namespace BiomeRivals.Core.Tests
         }
 
         [Test]
+        public void Replace_RejectsUnsupportedAuthoritativeFaction()
+        {
+            var store = new MatchStateStore();
+            var snapshot = new MatchStateDto
+            {
+                matchId = "match-1",
+                protocolVersion = GameVersions.Protocol,
+                rulesetVersion = GameVersions.Ruleset,
+                players = new[]
+                {
+                    new PlayerStateDto { factionId = FactionIds.PlainsForest },
+                    new PlayerStateDto { factionId = "unsupported" }
+                }
+            };
+
+            Assert.Throws<InvalidOperationException>(() => store.Replace(snapshot));
+            Assert.That(store.Current, Is.Null);
+        }
+
+        [Test]
         public void Clear_NotifiesSubscribersThatAuthoritativeStateEnded()
         {
             var store = new MatchStateStore();
