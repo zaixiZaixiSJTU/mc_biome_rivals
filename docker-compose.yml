@@ -27,7 +27,7 @@ services:
       - |
         /nakama/nakama migrate up --database.address ${POSTGRES_USER:-nakama}:${POSTGRES_PASSWORD:-local_only_change_me}@postgres:5432/${POSTGRES_DB:-nakama}
         exec /nakama/nakama \
-          --name biome-rivals-local \
+          --name biome-rivals \
           --database.address ${POSTGRES_USER:-nakama}:${POSTGRES_PASSWORD:-local_only_change_me}@postgres:5432/${POSTGRES_DB:-nakama} \
           --logger.level DEBUG \
           --runtime.path /nakama/data/modules \

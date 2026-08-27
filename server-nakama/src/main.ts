@@ -13,9 +13,10 @@ function InitModule(
     matchTerminate: biomeRivalsMatchTerminate,
     matchSignal: biomeRivalsMatchSignal
   });
+  initializer.registerMatchmakerMatched(biomeRivalsMatchmakerMatched);
   initializer.registerRpc('biome_rivals_health', rpcHealth);
   logger.info(
-    'Biome Rivals module loaded (protocol=%s ruleset=%s)',
+    'Biome Rivals module loaded (protocol=%d ruleset=%s)',
     BiomeRivalsRules.PROTOCOL_VERSION,
     BiomeRivalsRules.RULESET_VERSION
   );

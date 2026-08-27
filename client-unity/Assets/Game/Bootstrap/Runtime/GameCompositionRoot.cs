@@ -49,6 +49,12 @@ namespace BiomeRivals.Bootstrap
             BindGateway(new AuthoritativeMatchGateway(transport));
         }
 
+        public IMatchGateway RegisterDefaultOnlineTransport()
+        {
+            RegisterOnlineTransport(new NakamaMatchTransport(NakamaConnectionSettings.Load()));
+            return _matchGateway;
+        }
+
         private void BindGateway(IMatchGateway gateway)
         {
             _matchGateway = gateway;
@@ -57,6 +63,7 @@ namespace BiomeRivals.Bootstrap
             _matchGateway.EventBatchReceived += _presentationQueue.Enqueue;
             _matchGateway.CommandRejected += HandleCommandRejected;
             _matchGateway.Faulted += HandleGatewayFault;
+            _matchGateway.ConnectionStateChanged += HandleConnectionState;
         }
 
         private void UnbindGateway()
@@ -67,6 +74,7 @@ namespace BiomeRivals.Bootstrap
             _matchGateway.EventBatchReceived -= _presentationQueue.Enqueue;
             _matchGateway.CommandRejected -= HandleCommandRejected;
             _matchGateway.Faulted -= HandleGatewayFault;
+            _matchGateway.ConnectionStateChanged -= HandleConnectionState;
             _matchGateway.Dispose();
             _matchGateway = null;
         }
@@ -79,5 +87,8 @@ namespace BiomeRivals.Bootstrap
         }
 
         private void HandleGatewayFault(System.Exception exception) => Debug.LogException(exception, this);
+
+        private void HandleConnectionState(MatchConnectionStatus status) =>
+            Debug.Log($"Match connection: {status.Phase} {status.Detail}", this);
     }
 }

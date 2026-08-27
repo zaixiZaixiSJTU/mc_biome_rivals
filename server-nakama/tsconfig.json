@@ -17,6 +17,7 @@
     "src/generated/card-catalog.ts",
     "src/rules/invariants.ts",
     "src/rules/match-engine.ts",
+    "src/matches/biome-rivals-matchmaker.ts",
     "src/matches/biome-rivals-match.ts",
     "src/rpc/health.ts",
     "src/main.ts"

@@ -10,6 +10,9 @@ namespace BiomeRivals.Networking
         event Action<MatchStateDto> SnapshotReceived;
         event Action<CommandRejectionDto> CommandRejected;
         event Action<Exception> Faulted;
+        event Action<MatchConnectionStatus> ConnectionStateChanged;
+
+        MatchConnectionStatus CurrentStatus { get; }
 
         Task ConnectAsync();
         Task SendCommandAsync(MatchCommandDto command);

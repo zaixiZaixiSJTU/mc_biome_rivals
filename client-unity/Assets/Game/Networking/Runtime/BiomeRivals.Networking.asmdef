@@ -1,6 +1,6 @@
 {
   "name": "BiomeRivals.Networking",
   "rootNamespace": "BiomeRivals.Networking",
-  "references": ["BiomeRivals.Core"],
+  "references": ["BiomeRivals.Core", "NakamaRuntime"],
   "autoReferenced": true
 }

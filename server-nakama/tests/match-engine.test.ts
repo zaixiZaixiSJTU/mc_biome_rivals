@@ -436,5 +436,3 @@ TestHarness.test('rejects duplicate command ids after acceptance', function (): 
   TestHarness.equal(duplicate.accepted, false);
   if (!duplicate.accepted) TestHarness.equal(duplicate.code, 'DUPLICATE_COMMAND');
 });
-
-TestHarness.finish();

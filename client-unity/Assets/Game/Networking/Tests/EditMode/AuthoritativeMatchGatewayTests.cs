@@ -129,12 +129,113 @@ namespace BiomeRivals.Networking.Tests
             Assert.That(json, Does.Not.Contain("targetInstanceId"));
         }
 
+        [Test]
+        public void ConnectionLifecycleIsForwardedWithoutSdkTypes()
+        {
+            var transport = new FakeTransport();
+            using (var gateway = new AuthoritativeMatchGateway(transport))
+            {
+                MatchConnectionStatus received = default;
+                gateway.ConnectionStateChanged += status => received = status;
+                transport.EmitStatus(new MatchConnectionStatus(MatchConnectionPhase.Ready, "ready", "match-7"));
+
+                Assert.That(received.Phase, Is.EqualTo(MatchConnectionPhase.Ready));
+                Assert.That(received.MatchId, Is.EqualTo("match-7"));
+                Assert.That(received.CanSendCommands, Is.True);
+                Assert.That(gateway.CurrentStatus.MatchId, Is.EqualTo("match-7"));
+            }
+        }
+
+        [Test]
+        public async Task CommandDispatcherWaitsForAuthoritativeAcknowledgement()
+        {
+            var transport = new FakeTransport();
+            using (var gateway = new AuthoritativeMatchGateway(transport))
+            using (var dispatcher = new MatchCommandDispatcher(gateway))
+            {
+                transport.EmitStatus(new MatchConnectionStatus(MatchConnectionPhase.Ready, "ready", "match-1"));
+                var pending = dispatcher.SendAndWaitAsync(
+                    MatchCommandFactory.EndTurn("ack-1", 4),
+                    TimeSpan.FromSeconds(1));
+                Assert.That(dispatcher.PendingCount, Is.EqualTo(1));
+                transport.Emit(MatchOpcodes.EventBatch,
+                    "{\"protocolVersion\":5,\"rulesetVersion\":\"prototype-0.5\",\"revision\":5," +
+                    "\"acknowledgedCommandId\":\"ack-1\",\"events\":[]}");
+
+                var result = await pending;
+                Assert.That(result.Outcome, Is.EqualTo(MatchCommandOutcome.Accepted));
+                Assert.That(result.Revision, Is.EqualTo(5));
+                Assert.That(dispatcher.PendingCount, Is.Zero);
+            }
+        }
+
+        [Test]
+        public async Task CommandDispatcherSurfacesServerRejection()
+        {
+            var transport = new FakeTransport();
+            using (var gateway = new AuthoritativeMatchGateway(transport))
+            using (var dispatcher = new MatchCommandDispatcher(gateway))
+            {
+                transport.EmitStatus(new MatchConnectionStatus(MatchConnectionPhase.Ready, "ready", "match-1"));
+                var pending = dispatcher.SendAndWaitAsync(
+                    MatchCommandFactory.EndTurn("reject-1", 7),
+                    TimeSpan.FromSeconds(1));
+                transport.Emit(MatchOpcodes.Rejection,
+                    "{\"commandId\":\"reject-1\",\"code\":\"REVISION_MISMATCH\",\"message\":\"stale\",\"revision\":8}");
+
+                var result = await pending;
+                Assert.That(result.Outcome, Is.EqualTo(MatchCommandOutcome.Rejected));
+                Assert.That(result.Code, Is.EqualTo("REVISION_MISMATCH"));
+                Assert.That(result.Revision, Is.EqualTo(8));
+            }
+        }
+
+        [Test]
+        public async Task CommandDispatcherRefusesCommandsBeforeMatchReady()
+        {
+            var transport = new FakeTransport();
+            using (var gateway = new AuthoritativeMatchGateway(transport))
+            using (var dispatcher = new MatchCommandDispatcher(gateway))
+            {
+                var result = await dispatcher.SendAndWaitAsync(
+                    MatchCommandFactory.EndTurn("offline-1", 0),
+                    TimeSpan.FromSeconds(1));
+
+                Assert.That(result.Outcome, Is.EqualTo(MatchCommandOutcome.TransportFailed));
+                Assert.That(result.Code, Is.EqualTo("NOT_CONNECTED"));
+                Assert.That(transport.LastOpcode, Is.Zero);
+            }
+        }
+
+        [Test]
+        public async Task CommandDispatcherFailsPendingCommandWhenConnectionStops()
+        {
+            var transport = new FakeTransport();
+            using (var gateway = new AuthoritativeMatchGateway(transport))
+            using (var dispatcher = new MatchCommandDispatcher(gateway))
+            {
+                transport.EmitStatus(new MatchConnectionStatus(MatchConnectionPhase.Ready, "ready", "match-1"));
+                var pending = dispatcher.SendAndWaitAsync(
+                    MatchCommandFactory.EndTurn("disconnect-1", 2),
+                    TimeSpan.FromSeconds(5));
+                transport.EmitStatus(new MatchConnectionStatus(MatchConnectionPhase.Disconnecting));
+
+                var result = await pending;
+                Assert.That(result.Outcome, Is.EqualTo(MatchCommandOutcome.TransportFailed));
+                Assert.That(result.Code, Is.EqualTo("TRANSPORT_FAULT"));
+                Assert.That(dispatcher.PendingCount, Is.Zero);
+            }
+        }
+
         private sealed class FakeTransport : IMatchTransport
         {
             public event Action<int, string> MessageReceived;
             public event Action<Exception> Faulted;
+            public event Action<MatchConnectionStatus> ConnectionStateChanged;
             public int LastOpcode { get; private set; }
             public string LastJson { get; private set; }
+            public MatchConnectionStatus CurrentStatus { get; private set; } =
+                new MatchConnectionStatus(MatchConnectionPhase.Offline);
 
             public Task ConnectAsync() => Task.CompletedTask;
             public Task DisconnectAsync() => Task.CompletedTask;
@@ -148,6 +249,12 @@ namespace BiomeRivals.Networking.Tests
             }
 
             public void Emit(int opcode, string json) => MessageReceived?.Invoke(opcode, json);
+
+            public void EmitStatus(MatchConnectionStatus status)
+            {
+                CurrentStatus = status;
+                ConnectionStateChanged?.Invoke(status);
+            }
         }
     }
 }

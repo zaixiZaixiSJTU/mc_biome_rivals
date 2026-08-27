@@ -3,7 +3,9 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using BiomeRivals.Bootstrap;
 using BiomeRivals.Content;
+using BiomeRivals.Networking;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -56,6 +58,10 @@ namespace BiomeRivals.Demo
         private Button _endTurnButton;
         private CanvasGroup _turnBanner;
         private Text _turnBannerText;
+        private Text _onlineStatusText;
+        private Text _onlineActionLabel;
+        private Button _onlineActionButton;
+        private IMatchGateway _onlineGateway;
         private Image _opponentTint;
         private Image _playerTint;
         private string _selectedCardId;
@@ -108,9 +114,12 @@ namespace BiomeRivals.Demo
 
         private void OnDestroy()
         {
-            if (_hudMaterialFactory == null) return;
-            _hudMaterialFactory.Dispose();
-            _hudMaterialFactory = null;
+            if (_onlineGateway != null) _onlineGateway.ConnectionStateChanged -= HandleOnlineConnectionState;
+            if (_hudMaterialFactory != null)
+            {
+                _hudMaterialFactory.Dispose();
+                _hudMaterialFactory = null;
+            }
         }
 
         private void Update()
@@ -160,6 +169,7 @@ namespace BiomeRivals.Demo
             CreatePanel(_canvasRoot, "CenterRiverGlow", new Vector2(0, 0), new Vector2(1540, 2), new Color(Cyan.r, Cyan.g, Cyan.b, 0.56f)).raycastTarget = false;
 
             BuildTopChrome();
+            BuildOnlineStatus();
             BuildFactionRail();
             BuildSlots();
             BuildHandArea();
@@ -238,6 +248,89 @@ namespace BiomeRivals.Demo
                 button.onClick.AddListener(() => SelectFaction(captured));
                 _factionButtons.Add(new FactionButtonView(spec.Id, button, button.targetGraphic as Image, selectionAccent));
             }
+        }
+
+        private void BuildOnlineStatus()
+        {
+            var panel = CreateBasePanel(_canvasRoot, "OnlineStatusPanel", new Vector2(410, 472), new Vector2(250, 54));
+            _onlineStatusText = CreateText(panel, "Status", new Vector2(-43, 0), new Vector2(138, 36), "本地模式", 13, Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
+            _onlineActionButton = CreateSecondaryButton(panel, "OnlineAction", new Vector2(78, 0), new Vector2(78, 38), "联机", 14);
+            _onlineActionLabel = _onlineActionButton.GetComponentInChildren<Text>();
+            _onlineActionButton.onClick.AddListener(ToggleOnlineConnection);
+        }
+
+        private async void ToggleOnlineConnection()
+        {
+            try
+            {
+                if (_onlineGateway != null && _onlineGateway.CurrentStatus.Phase != MatchConnectionPhase.Offline &&
+                    _onlineGateway.CurrentStatus.Phase != MatchConnectionPhase.Failed)
+                {
+                    await _onlineGateway.DisconnectAsync();
+                    return;
+                }
+
+                var compositionRoot = GameCompositionRoot.Instance;
+                if (compositionRoot == null)
+                {
+                    _onlineStatusText.text = "联机底座未启动";
+                    _onlineStatusText.color = Danger;
+                    return;
+                }
+                if (_onlineGateway != null) _onlineGateway.ConnectionStateChanged -= HandleOnlineConnectionState;
+                _onlineGateway = compositionRoot.RegisterDefaultOnlineTransport();
+                _onlineGateway.ConnectionStateChanged += HandleOnlineConnectionState;
+                HandleOnlineConnectionState(_onlineGateway.CurrentStatus);
+                await _onlineGateway.ConnectAsync();
+            }
+            catch (Exception exception)
+            {
+                if (_onlineStatusText != null)
+                {
+                    _onlineStatusText.text = "连接失败";
+                    _onlineStatusText.color = Danger;
+                }
+                Debug.LogWarning("Online connection failed: " + exception.Message, this);
+            }
+        }
+
+        private void HandleOnlineConnectionState(MatchConnectionStatus status)
+        {
+            if (_onlineStatusText == null || _onlineActionLabel == null) return;
+            switch (status.Phase)
+            {
+                case MatchConnectionPhase.Authenticating:
+                    _onlineStatusText.text = "身份认证中";
+                    break;
+                case MatchConnectionPhase.Connecting:
+                    _onlineStatusText.text = "连接服务器";
+                    break;
+                case MatchConnectionPhase.Matchmaking:
+                    _onlineStatusText.text = "寻找对手中";
+                    break;
+                case MatchConnectionPhase.Joining:
+                    _onlineStatusText.text = "进入权威对局";
+                    break;
+                case MatchConnectionPhase.Ready:
+                    _onlineStatusText.text = "权威对局已连接";
+                    break;
+                case MatchConnectionPhase.Reconnecting:
+                    _onlineStatusText.text = $"正在重连 · 第 {status.Attempt} 次";
+                    break;
+                case MatchConnectionPhase.Failed:
+                    _onlineStatusText.text = "连接失败";
+                    break;
+                case MatchConnectionPhase.Disconnecting:
+                    _onlineStatusText.text = "正在断开";
+                    break;
+                default:
+                    _onlineStatusText.text = "本地模式";
+                    break;
+            }
+            var ready = status.Phase == MatchConnectionPhase.Ready;
+            var idle = status.Phase == MatchConnectionPhase.Offline || status.Phase == MatchConnectionPhase.Failed;
+            _onlineActionLabel.text = ready ? "断开" : idle ? "联机" : "取消";
+            _onlineStatusText.color = status.Phase == MatchConnectionPhase.Failed ? Danger : ready ? Cyan : Muted;
         }
 
         private void BuildSlots()

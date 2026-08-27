@@ -14,12 +14,16 @@ namespace BiomeRivals.Networking
         public event Action<MatchStateDto> SnapshotReceived;
         public event Action<CommandRejectionDto> CommandRejected;
         public event Action<Exception> Faulted;
+        public event Action<MatchConnectionStatus> ConnectionStateChanged;
+
+        public MatchConnectionStatus CurrentStatus => _transport.CurrentStatus;
 
         public AuthoritativeMatchGateway(IMatchTransport transport)
         {
             _transport = transport ?? throw new ArgumentNullException(nameof(transport));
             _transport.MessageReceived += HandleMessage;
             _transport.Faulted += HandleFault;
+            _transport.ConnectionStateChanged += HandleConnectionState;
         }
 
         public Task ConnectAsync() => _transport.ConnectAsync();
@@ -89,12 +93,15 @@ namespace BiomeRivals.Networking
 
         private void HandleFault(Exception exception) => Faulted?.Invoke(exception);
 
+        private void HandleConnectionState(MatchConnectionStatus status) => ConnectionStateChanged?.Invoke(status);
+
         public void Dispose()
         {
             if (_disposed) return;
             _disposed = true;
             _transport.MessageReceived -= HandleMessage;
             _transport.Faulted -= HandleFault;
+            _transport.ConnectionStateChanged -= HandleConnectionState;
             _transport.Dispose();
         }
 
