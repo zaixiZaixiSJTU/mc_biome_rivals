@@ -20,4 +20,6 @@
 
 默认连接参数位于 `Assets/Game/Networking/Resources/Networking/nakama-connection.v1.json`，与根目录 `docker-compose.yml` 对齐。主机、端口、协议和 server key 可分别用 `BIOME_RIVALS_NAKAMA_HOST`、`BIOME_RIVALS_NAKAMA_PORT`、`BIOME_RIVALS_NAKAMA_SCHEME`、`BIOME_RIVALS_NAKAMA_SERVER_KEY` 覆盖。
 
-Demo 顶部的联机状态条用于验证认证、Socket、匹配、权威 Match 加入和重连生命周期。当前棋盘交互仍由明确标注的本地 Demo 状态驱动；在权威快照 Presenter 完成前，不把“通道已连接”误当成“线上棋盘已接管”。
+Demo 顶部的联机状态条用于认证、Socket、匹配、权威 Match 加入和重连。收到私有快照后，`DemoOnlineMatchSession` 会切换到权威棋盘视图；手牌、能量、生命、阶段、双排槽位与生物状态均来自 `MatchStateStore`。部署、施法、进入战斗、攻击和结束回合不做本地乐观结算，必须等 `acknowledgedCommandId` 对应的事件批次后才更新界面。
+
+自动化双客户端验证可用 `-autoOnline -autoOnlineAction -nakamaDeviceId <独立ID> -onlineProbe <报告路径>`。测试设备覆盖值拥有独立的会话缓存键，不会让同机两个进程误用同一玩家身份。

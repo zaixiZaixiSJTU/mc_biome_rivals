@@ -15,6 +15,8 @@ namespace BiomeRivals.Networking
 
         private readonly NakamaConnectionSettings _settings;
         private readonly SemaphoreSlim _lifecycle = new SemaphoreSlim(1, 1);
+        private readonly string _deviceId;
+        private readonly string _sessionKeySuffix;
         private Client _client;
         private ISession _session;
         private ISocket _socket;
@@ -39,6 +41,8 @@ namespace BiomeRivals.Networking
         {
             _settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _settings.Validate();
+            _deviceId = ResolveDeviceId(out var overridden);
+            _sessionKeySuffix = overridden ? "." + _deviceId : string.Empty;
         }
 
         public async Task ConnectAsync()
@@ -124,7 +128,7 @@ namespace BiomeRivals.Networking
             _session = RestoreSession();
             if (_session == null || _session.IsExpired)
             {
-                _session = await _client.AuthenticateDeviceAsync(GetOrCreateDeviceId());
+                _session = await _client.AuthenticateDeviceAsync(_deviceId);
                 SaveSession(_session);
             }
             cancellationToken.ThrowIfCancellationRequested();
@@ -297,8 +301,22 @@ namespace BiomeRivals.Networking
             _connectCancellation = null;
         }
 
-        private static string GetOrCreateDeviceId()
+        private static string ResolveDeviceId(out bool overridden)
         {
+            var overrideId = Environment.GetEnvironmentVariable("BIOME_RIVALS_NAKAMA_DEVICE_ID");
+            var arguments = Environment.GetCommandLineArgs();
+            for (var index = 0; index < arguments.Length - 1; index++)
+                if (string.Equals(arguments[index], "-nakamaDeviceId", StringComparison.Ordinal)) overrideId = arguments[index + 1];
+            if (!string.IsNullOrWhiteSpace(overrideId))
+            {
+                overrideId = overrideId.Trim();
+                if (overrideId.Length < 10 || overrideId.Length > 128)
+                    throw new FormatException("Nakama device ID override must contain 10 to 128 characters.");
+                overridden = true;
+                return overrideId;
+            }
+
+            overridden = false;
             var deviceId = PlayerPrefs.GetString(DeviceIdPreference, string.Empty);
             if (string.IsNullOrWhiteSpace(deviceId) || deviceId == SystemInfo.unsupportedIdentifier)
             {
@@ -311,26 +329,26 @@ namespace BiomeRivals.Networking
             return deviceId;
         }
 
-        private static ISession RestoreSession()
+        private ISession RestoreSession()
         {
             try
             {
                 return Session.Restore(
-                    PlayerPrefs.GetString(AuthTokenPreference, string.Empty),
-                    PlayerPrefs.GetString(RefreshTokenPreference, string.Empty));
+                    PlayerPrefs.GetString(AuthTokenPreference + _sessionKeySuffix, string.Empty),
+                    PlayerPrefs.GetString(RefreshTokenPreference + _sessionKeySuffix, string.Empty));
             }
             catch (Exception)
             {
-                PlayerPrefs.DeleteKey(AuthTokenPreference);
-                PlayerPrefs.DeleteKey(RefreshTokenPreference);
+                PlayerPrefs.DeleteKey(AuthTokenPreference + _sessionKeySuffix);
+                PlayerPrefs.DeleteKey(RefreshTokenPreference + _sessionKeySuffix);
                 return null;
             }
         }
 
-        private static void SaveSession(ISession session)
+        private void SaveSession(ISession session)
         {
-            PlayerPrefs.SetString(AuthTokenPreference, session.AuthToken ?? string.Empty);
-            PlayerPrefs.SetString(RefreshTokenPreference, session.RefreshToken ?? string.Empty);
+            PlayerPrefs.SetString(AuthTokenPreference + _sessionKeySuffix, session.AuthToken ?? string.Empty);
+            PlayerPrefs.SetString(RefreshTokenPreference + _sessionKeySuffix, session.RefreshToken ?? string.Empty);
             PlayerPrefs.Save();
         }
 

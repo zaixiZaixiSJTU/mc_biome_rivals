@@ -13,8 +13,17 @@ namespace BiomeRivals.Presentation
         private long _lastQueuedEventId;
 
         public int PendingCount => _pending.Count;
+        public bool IsPlaying => _runner != null;
         public long LastQueuedEventId => _lastQueuedEventId;
         public PresentationEventRegistry Registry => _registry;
+
+        public void Reset(long lastPresentedEventId = 0)
+        {
+            if (_runner != null) StopCoroutine(_runner);
+            _runner = null;
+            _pending.Clear();
+            _lastQueuedEventId = lastPresentedEventId;
+        }
 
         public void Enqueue(MatchEventBatchDto batch)
         {

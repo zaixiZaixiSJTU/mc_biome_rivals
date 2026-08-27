@@ -14,6 +14,7 @@ namespace BiomeRivals.Bootstrap
         public static GameCompositionRoot Instance { get; private set; }
         public MatchStateStore MatchStateStore => _matchStateStore;
         public IMatchGateway MatchGateway => _matchGateway;
+        public PresentationQueue PresentationQueue => _presentationQueue;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void EnsureCreated()
@@ -46,6 +47,8 @@ namespace BiomeRivals.Bootstrap
         public void RegisterOnlineTransport(IMatchTransport transport)
         {
             UnbindGateway();
+            _matchStateStore.Clear();
+            _presentationQueue.Reset();
             BindGateway(new AuthoritativeMatchGateway(transport));
         }
 
@@ -58,7 +61,7 @@ namespace BiomeRivals.Bootstrap
         private void BindGateway(IMatchGateway gateway)
         {
             _matchGateway = gateway;
-            _matchGateway.SnapshotReceived += _matchStateStore.Replace;
+            _matchGateway.SnapshotReceived += HandleSnapshot;
             _matchGateway.EventBatchReceived += _matchStateStore.Apply;
             _matchGateway.EventBatchReceived += _presentationQueue.Enqueue;
             _matchGateway.CommandRejected += HandleCommandRejected;
@@ -69,7 +72,7 @@ namespace BiomeRivals.Bootstrap
         private void UnbindGateway()
         {
             if (_matchGateway == null) return;
-            _matchGateway.SnapshotReceived -= _matchStateStore.Replace;
+            _matchGateway.SnapshotReceived -= HandleSnapshot;
             _matchGateway.EventBatchReceived -= _matchStateStore.Apply;
             _matchGateway.EventBatchReceived -= _presentationQueue.Enqueue;
             _matchGateway.CommandRejected -= HandleCommandRejected;
@@ -84,6 +87,12 @@ namespace BiomeRivals.Bootstrap
             Debug.LogWarning(
                 $"Command {rejection.commandId} rejected: {rejection.code} - {rejection.message}",
                 this);
+        }
+
+        private void HandleSnapshot(MatchStateDto snapshot)
+        {
+            _matchStateStore.Replace(snapshot);
+            _presentationQueue.Reset(snapshot.lastEventId);
         }
 
         private void HandleGatewayFault(System.Exception exception) => Debug.LogException(exception, this);

@@ -9,6 +9,8 @@ namespace BiomeRivals.Core.Tests
         public void Replace_UsesAuthoritativeSnapshot()
         {
             var store = new MatchStateStore();
+            MatchStateDto changed = null;
+            store.Changed += state => changed = state;
             var snapshot = new MatchStateDto
             {
                 matchId = "match-1", protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
@@ -19,6 +21,26 @@ namespace BiomeRivals.Core.Tests
 
             Assert.That(store.Current, Is.SameAs(snapshot));
             Assert.That(store.Current.revision, Is.EqualTo(3));
+            Assert.That(changed, Is.SameAs(snapshot));
+        }
+
+        [Test]
+        public void Clear_NotifiesSubscribersThatAuthoritativeStateEnded()
+        {
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "match-1", protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                players = new[] { new PlayerStateDto(), new PlayerStateDto() }
+            });
+            var notifications = 0;
+            MatchStateDto changed = store.Current;
+            store.Changed += state => { notifications++; changed = state; };
+
+            store.Clear();
+
+            Assert.That(notifications, Is.EqualTo(1));
+            Assert.That(changed, Is.Null);
         }
 
         [Test]

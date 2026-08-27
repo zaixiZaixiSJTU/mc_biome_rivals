@@ -3,9 +3,12 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using BiomeRivals.Bootstrap;
 using BiomeRivals.Content;
+using BiomeRivals.Core;
 using BiomeRivals.Networking;
+using BiomeRivals.Presentation;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -31,11 +34,13 @@ namespace BiomeRivals.Demo
         private readonly List<SlotView> _opponentUnitSlots = new List<SlotView>();
         private readonly List<SlotView> _opponentBuildingSlots = new List<SlotView>();
         private readonly List<FactionButtonView> _factionButtons = new List<FactionButtonView>();
+        private readonly List<IMatchEventPresenter> _eventPresenters = new List<IMatchEventPresenter>();
 
         private CardContentRegistry _registry;
         private DemoBattlefield3D _battlefield;
         private RectTransform _canvasRoot;
         private RectTransform _handRoot;
+        private RectTransform _opponentHandRoot;
         private CanvasGroup _handCanvasGroup;
         private RectTransform _inspectorRoot;
         private CardDetailsView _cardDetailsView;
@@ -53,6 +58,7 @@ namespace BiomeRivals.Demo
         private Text _playerNameText;
         private CanvasGroup _playerEffectFlash;
         private Text _roundText;
+        private Text _titleText;
         private Text _statusText;
         private Text _endTurnLabel;
         private Button _endTurnButton;
@@ -62,6 +68,7 @@ namespace BiomeRivals.Demo
         private Text _onlineActionLabel;
         private Button _onlineActionButton;
         private IMatchGateway _onlineGateway;
+        private DemoOnlineMatchSession _onlineSession;
         private Image _opponentTint;
         private Image _playerTint;
         private string _selectedCardId;
@@ -72,6 +79,9 @@ namespace BiomeRivals.Demo
         private bool _built;
         private Font _font;
         private DemoHudMaterialFactory _hudMaterialFactory;
+
+        private bool IsOnlineBoard => _onlineSession?.HasAuthoritativeState == true;
+        private IDemoMatchView MatchView => IsOnlineBoard ? _onlineSession.View : _match;
 
         private static readonly FactionSpec[] Factions =
         {
@@ -110,11 +120,21 @@ namespace BiomeRivals.Demo
             if (HasCommandLineFlag("-previewGroundHover")) _battlefield.SetSlotHovered(true, DemoSlotKind.Unit, 0, true);
             var capturePath = GetCommandLineValue("-captureDemo");
             if (!string.IsNullOrWhiteSpace(capturePath)) StartCoroutine(CaptureDemo(capturePath));
+            var onlineProbePath = GetCommandLineValue("-onlineProbe");
+            var captureOnlinePath = GetCommandLineValue("-captureOnline");
+            if (HasCommandLineFlag("-autoOnline") || !string.IsNullOrWhiteSpace(onlineProbePath) || !string.IsNullOrWhiteSpace(captureOnlinePath))
+            {
+                ToggleOnlineConnection();
+                if (!string.IsNullOrWhiteSpace(onlineProbePath) || !string.IsNullOrWhiteSpace(captureOnlinePath))
+                    RunOnlineProbe(onlineProbePath, captureOnlinePath, HasCommandLineFlag("-autoOnlineAction"));
+            }
         }
 
         private void OnDestroy()
         {
             if (_onlineGateway != null) _onlineGateway.ConnectionStateChanged -= HandleOnlineConnectionState;
+            DisposeOnlineSession();
+            UnregisterOnlineEventPresenters();
             if (_hudMaterialFactory != null)
             {
                 _hudMaterialFactory.Dispose();
@@ -135,6 +155,7 @@ namespace BiomeRivals.Demo
             _registry = CardContentLoader.Current;
             _match.ResetOpponent(GetOpponentDefinitions(_opponentFaction));
             BuildInterface();
+            RegisterOnlineEventPresenters();
             SelectFaction(_activeFaction);
             ShowStatus("选择手牌，再点击发光的战场格；法术和材料从右侧释放。", false);
         }
@@ -182,7 +203,7 @@ namespace BiomeRivals.Demo
         private void BuildTopChrome()
         {
             var titlePlate = CreateBasePanel(_canvasRoot, "TitlePlate", new Vector2(0, 502), new Vector2(510, 58));
-            CreateText(titlePlate, "Title", Vector2.zero, new Vector2(480, 44), "群系竞逐  ·  本地战场演示", 24, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
+            _titleText = CreateText(titlePlate, "Title", Vector2.zero, new Vector2(480, 44), "群系竞逐  ·  本地战场演示", 24, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
 
             var opponentHud = CreateBasePanel(_canvasRoot, "OpponentHUD", new Vector2(-760, 455), new Vector2(315, 104));
             _opponentAvatarImage = CreatePanel(opponentHud, "Avatar", new Vector2(-112, 0), new Vector2(70, 70), Hex("#5B2020"));
@@ -211,15 +232,27 @@ namespace BiomeRivals.Demo
             previousOpponent.onClick.AddListener(() => CycleOpponentFaction(-1));
             nextOpponent.onClick.AddListener(() => CycleOpponentFaction(1));
 
-            var cardBackRoot = CreateRect(_canvasRoot, "OpponentHand", new Vector2(0, 410), new Vector2(480, 130));
-            for (var i = 0; i < 5; i++)
+            _opponentHandRoot = CreateRect(_canvasRoot, "OpponentHand", new Vector2(0, 410), new Vector2(480, 130));
+            RefreshOpponentHand(5);
+            BuildPlayerChrome();
+        }
+
+        private void RefreshOpponentHand(int count)
+        {
+            ClearChildren(_opponentHandRoot);
+            count = Mathf.Clamp(count, 0, 7);
+            for (var i = 0; i < count; i++)
             {
-                var x = (i - 2) * 72f;
-                var back = CreateBasePanel(cardBackRoot, "CardBack", new Vector2(x, Mathf.Abs(i - 2) * -4f), new Vector2(78, 112));
-                back.localRotation = Quaternion.Euler(0, 0, (i - 2) * -2.5f);
+                var center = (count - 1) * 0.5f;
+                var x = (i - center) * 72f;
+                var back = CreateBasePanel(_opponentHandRoot, "CardBack", new Vector2(x, Mathf.Abs(i - center) * -4f), new Vector2(78, 112));
+                back.localRotation = Quaternion.Euler(0, 0, (i - center) * -2.5f);
                 CreateText(back, "Rune", Vector2.zero, new Vector2(58, 80), "◇", 32, Ember, TextAnchor.MiddleCenter, FontStyle.Bold);
             }
+        }
 
+        private void BuildPlayerChrome()
+        {
             _playerHud = CreateBasePanel(_canvasRoot, "PlayerHUD", new Vector2(-782, -454), new Vector2(270, 105));
             _playerAvatarImage = CreatePanel(_playerHud, "Avatar", new Vector2(-92, 0), new Vector2(70, 70), Hex("#274C2D"));
             _playerAvatarGlyph = CreateText(_playerHud, "AvatarGlyph", new Vector2(-92, 1), new Vector2(60, 60), "▦", 34, Hex("#D3C35B"), TextAnchor.MiddleCenter, FontStyle.Bold);
@@ -278,7 +311,12 @@ namespace BiomeRivals.Demo
                     return;
                 }
                 if (_onlineGateway != null) _onlineGateway.ConnectionStateChanged -= HandleOnlineConnectionState;
+                DisposeOnlineSession();
                 _onlineGateway = compositionRoot.RegisterDefaultOnlineTransport();
+                _onlineSession = new DemoOnlineMatchSession(_onlineGateway, compositionRoot.MatchStateStore);
+                _onlineSession.StateChanged += HandleOnlineBoardChanged;
+                _onlineSession.CommandPending += HandleOnlineCommandPending;
+                _onlineSession.CommandCompleted += HandleOnlineCommandCompleted;
                 _onlineGateway.ConnectionStateChanged += HandleOnlineConnectionState;
                 HandleOnlineConnectionState(_onlineGateway.CurrentStatus);
                 await _onlineGateway.ConnectAsync();
@@ -331,6 +369,111 @@ namespace BiomeRivals.Demo
             var idle = status.Phase == MatchConnectionPhase.Offline || status.Phase == MatchConnectionPhase.Failed;
             _onlineActionLabel.text = ready ? "断开" : idle ? "联机" : "取消";
             _onlineStatusText.color = status.Phase == MatchConnectionPhase.Failed ? Danger : ready ? Cyan : Muted;
+            RefreshAll();
+        }
+
+        private void DisposeOnlineSession()
+        {
+            if (_onlineSession == null) return;
+            _onlineSession.StateChanged -= HandleOnlineBoardChanged;
+            _onlineSession.CommandPending -= HandleOnlineCommandPending;
+            _onlineSession.CommandCompleted -= HandleOnlineCommandCompleted;
+            _onlineSession.Dispose();
+            _onlineSession = null;
+        }
+
+        private void HandleOnlineBoardChanged()
+        {
+            if (IsOnlineBoard)
+            {
+                ApplyAuthoritativeFactionVisuals();
+                if (!MatchView.Hand.Contains(_selectedCardId)) _selectedCardId = MatchView.Hand.FirstOrDefault();
+                if (FindSelectedAttacker() == null) _selectedAttackerInstanceId = null;
+            }
+            RefreshAll();
+        }
+
+        private void HandleOnlineCommandPending(string commandId)
+        {
+            ShowStatus("命令已发送，等待服务器确认…", false);
+            RefreshAll();
+        }
+
+        private void HandleOnlineCommandCompleted(MatchCommandDispatchResult result)
+        {
+            if (result.Outcome == MatchCommandOutcome.Accepted)
+            {
+                ShowStatus($"服务器已确认 · 状态 r{result.Revision}", false);
+            }
+            else
+            {
+                var detail = string.IsNullOrEmpty(result.Message) ? result.Code : $"{result.Code} · {result.Message}";
+                ShowStatus($"命令未生效：{detail}", true);
+            }
+            RefreshAll();
+        }
+
+        private void RegisterOnlineEventPresenters()
+        {
+            var queue = GameCompositionRoot.Instance?.PresentationQueue;
+            if (queue == null || _eventPresenters.Count > 0) return;
+            var eventTypes = new[]
+            {
+                MatchEventTypes.CardDeployed, MatchEventTypes.CardPlayed, MatchEventTypes.CardDrawn,
+                MatchEventTypes.CardBurned, MatchEventTypes.FatigueDamage, MatchEventTypes.HeroDamaged,
+                MatchEventTypes.HeroHealed, MatchEventTypes.ArmorGained, MatchEventTypes.ObjectStatsChanged,
+                MatchEventTypes.PhaseChanged, MatchEventTypes.AttackResolved, MatchEventTypes.ObjectDied,
+                MatchEventTypes.TurnEnded, MatchEventTypes.TurnStarted, MatchEventTypes.PlayerConceded,
+                MatchEventTypes.MatchEnded
+            };
+            foreach (var eventType in eventTypes)
+            {
+                var presenter = new DemoMatchEventPresenter(eventType, PresentOnlineEvent);
+                queue.Registry.Register(presenter);
+                _eventPresenters.Add(presenter);
+            }
+        }
+
+        private void UnregisterOnlineEventPresenters()
+        {
+            var queue = GameCompositionRoot.Instance?.PresentationQueue;
+            if (queue != null)
+                foreach (var presenter in _eventPresenters) queue.Registry.Unregister(presenter);
+            _eventPresenters.Clear();
+        }
+
+        private IEnumerator PresentOnlineEvent(MatchEventDto matchEvent)
+        {
+            if (!IsOnlineBoard || matchEvent == null) yield break;
+            switch (matchEvent.type)
+            {
+                case MatchEventTypes.PhaseChanged:
+                    yield return ShowTurnBanner("进入战斗阶段", Cyan);
+                    break;
+                case MatchEventTypes.TurnStarted:
+                    var viewerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
+                    var ownTurn = matchEvent.payload?.playerId == viewerId;
+                    yield return ShowTurnBanner(ownTurn ? "你的回合" : "对手回合", ownTurn ? Cyan : Ember);
+                    break;
+                case MatchEventTypes.MatchEnded:
+                    var winnerId = matchEvent.payload?.winnerPlayerId;
+                    var playerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
+                    yield return ShowTurnBanner(winnerId == playerId ? "胜利" : "战败", winnerId == playerId ? Cyan : Danger);
+                    break;
+                case MatchEventTypes.HeroDamaged:
+                case MatchEventTypes.FatigueDamage:
+                    if (matchEvent.payload?.playerId == GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId)
+                        yield return PulsePlayerHud(Danger);
+                    break;
+                case MatchEventTypes.HeroHealed:
+                case MatchEventTypes.ArmorGained:
+                    if (matchEvent.payload?.playerId == GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId)
+                        yield return PulsePlayerHud(Cyan);
+                    break;
+                default:
+                    yield return null;
+                    break;
+            }
         }
 
         private void BuildSlots()
@@ -410,17 +553,15 @@ namespace BiomeRivals.Demo
 
         private void SelectFaction(string factionId)
         {
+            if (IsOnlineBoard)
+            {
+                ShowStatus("在线对局的己方牌组由权威房间决定。", true);
+                return;
+            }
             _pendingTargetCardId = null;
             _activeFaction = factionId;
             var spec = Factions.First(item => item.Id == factionId);
-            if (_registry.TryGetTheme(spec.Id, out var selectedTheme))
-            {
-                _playerAvatarImage.color = Color.Lerp(selectedTheme.FrameDark, selectedTheme.Accent, 0.24f);
-                _playerAvatarGlyph.color = selectedTheme.Accent;
-            }
-            var battlefieldTheme = DemoBattlefieldThemeCatalog.Get(spec.Id);
-            _playerTint.color = new Color(battlefieldTheme.UiTint.r, battlefieldTheme.UiTint.g, battlefieldTheme.UiTint.b, 0.075f);
-            _playerNameText.text = spec.PlayerTitle;
+            ApplyPlayerFactionVisuals(spec);
             var handNumbers = spec.Prefix == "nt" ? new[] { 1, 2, 3, 4, 6 } : Enumerable.Range(1, 5).ToArray();
             var ids = handNumbers.Select(index => $"{spec.Prefix}_{index:000}").ToArray();
             var deck = Enumerable.Range(0, 25).Select(index => $"{spec.Prefix}_{(index % 8) + 1:000}").ToArray();
@@ -429,6 +570,19 @@ namespace BiomeRivals.Demo
             _battlefield.SetBattlefieldThemes(_activeFaction, _opponentFaction);
             RefreshAll();
             ShowStatus($"已切换到{spec.Label}牌组；可打出已接入规则的卡牌。", false);
+        }
+
+        private void ApplyPlayerFactionVisuals(FactionSpec spec)
+        {
+            _activeFaction = spec.Id;
+            if (_registry.TryGetTheme(spec.Id, out var selectedTheme))
+            {
+                _playerAvatarImage.color = Color.Lerp(selectedTheme.FrameDark, selectedTheme.Accent, 0.24f);
+                _playerAvatarGlyph.color = selectedTheme.Accent;
+            }
+            var battlefieldTheme = DemoBattlefieldThemeCatalog.Get(spec.Id);
+            _playerTint.color = new Color(battlefieldTheme.UiTint.r, battlefieldTheme.UiTint.g, battlefieldTheme.UiTint.b, 0.075f);
+            _playerNameText.text = spec.PlayerTitle;
         }
 
         private void CycleOpponentFaction(int offset)
@@ -440,11 +594,25 @@ namespace BiomeRivals.Demo
 
         private void SelectOpponentFaction(string factionId)
         {
+            if (IsOnlineBoard)
+            {
+                ShowStatus("在线对局的敌方阵营由权威房间决定。", true);
+                return;
+            }
             var spec = Factions.First(item => item.Id == factionId);
             _opponentFaction = factionId;
             _pendingTargetCardId = null;
             _selectedAttackerInstanceId = null;
             _match.ResetOpponent(GetOpponentDefinitions(factionId));
+            ApplyOpponentFactionVisuals(spec);
+            _battlefield.SetBattlefieldThemes(_activeFaction, _opponentFaction);
+            RefreshAll();
+            ShowStatus($"敌方阵营已切换为{spec.Label}；远端半场与生物同步更新。", false);
+        }
+
+        private void ApplyOpponentFactionVisuals(FactionSpec spec)
+        {
+            _opponentFaction = spec.Id;
             if (_registry.TryGetTheme(spec.Id, out var selectedTheme))
             {
                 _opponentAvatarImage.color = Color.Lerp(selectedTheme.FrameDark, selectedTheme.Accent, 0.24f);
@@ -454,9 +622,30 @@ namespace BiomeRivals.Demo
             _opponentTint.color = new Color(battlefieldTheme.UiTint.r, battlefieldTheme.UiTint.g, battlefieldTheme.UiTint.b, 0.085f);
             _opponentNameText.text = spec.PlayerTitle;
             _opponentFactionLabel.text = "敌方 · " + spec.Label;
+        }
+
+        private void ApplyAuthoritativeFactionVisuals()
+        {
+            var playerFaction = DetectFaction(MatchView.Hand.Concat(MatchView.PlayerBattlefield.Select(value => value.CardId)));
+            if (playerFaction == null) playerFaction = MatchView.ViewerIndex == 0 ? Factions[0] : Factions[5];
+            var opponentFaction = DetectFaction(MatchView.OpponentBattlefield.Select(value => value.CardId));
+            if (opponentFaction == null) opponentFaction = MatchView.ViewerIndex == 0 ? Factions[5] : Factions[0];
+            ApplyPlayerFactionVisuals(playerFaction);
+            ApplyOpponentFactionVisuals(opponentFaction);
             _battlefield.SetBattlefieldThemes(_activeFaction, _opponentFaction);
-            RefreshAll();
-            ShowStatus($"敌方阵营已切换为{spec.Label}；远端半场与生物同步更新。", false);
+        }
+
+        private static FactionSpec DetectFaction(IEnumerable<string> cardIds)
+        {
+            foreach (var cardId in cardIds ?? Enumerable.Empty<string>())
+            {
+                if (string.IsNullOrEmpty(cardId)) continue;
+                var separator = cardId.IndexOf('_');
+                var prefix = separator > 0 ? cardId.Substring(0, separator) : cardId;
+                var faction = Factions.FirstOrDefault(value => value.Prefix == prefix);
+                if (faction != null) return faction;
+            }
+            return null;
         }
 
         private IEnumerable<CardDefinitionEntry> GetOpponentDefinitions(string factionId)
@@ -476,21 +665,28 @@ namespace BiomeRivals.Demo
 
         private void RefreshAll()
         {
+            if (!_built || _battlefield == null) return;
+            var match = MatchView;
             RefreshFactionButtons();
             RefreshHand();
+            RefreshOpponentHand(match.OpponentHandCount);
             RefreshBattlefieldSlots();
-            _battlefield.SyncPieces(_match.UnitSlots, _match.BuildingSlots, _match.OpponentUnitSlots, _match.OpponentBuildingSlots, _registry);
+            _battlefield.SyncPieces(match.UnitSlots, match.BuildingSlots, match.OpponentUnitSlots, match.OpponentBuildingSlots, _registry);
             RefreshInspector();
-            _energyText.text = $"◆ {_match.Energy}/{_match.MaxEnergy}";
-            _roundText.text = $"第 {_match.Round} 回合 · {(_match.Phase == DemoTurnPhase.Main ? "主行动" : "战斗")}";
-            _opponentHealthText.text = $"❤ {_match.OpponentLife}";
-            _playerHealthText.text = _match.PlayerArmor > 0 ? $"❤ {_match.PlayerLife}  ◈ {_match.PlayerArmor}" : $"❤ {_match.PlayerLife}";
-            _handLabel.text = $"手牌 {_match.Hand.Count}/7 · 牌库 {_match.Deck.Count} · 弃牌 {_match.DiscardPile.Count}";
-            _handCanvasGroup.alpha = _match.Phase == DemoTurnPhase.Main ? 1f : 0.52f;
-            _handCanvasGroup.interactable = _match.Phase == DemoTurnPhase.Main;
-            _handCanvasGroup.blocksRaycasts = _match.Phase == DemoTurnPhase.Main;
-            _endTurnButton.interactable = _match.IsPlayerTurn && !_match.IsFinished;
-            _endTurnLabel.text = !_match.IsPlayerTurn ? "对手行动中" : _match.IsFinished ? "对局结束" : _match.Phase == DemoTurnPhase.Main ? "进入战斗" : "结束回合";
+            _energyText.text = $"◆ {match.Energy}/{match.MaxEnergy}";
+            _titleText.text = IsOnlineBoard ? "群系竞逐  ·  权威联机对局" : "群系竞逐  ·  本地战场演示";
+            _roundText.text = $"第 {match.Round} 回合 · {(match.Phase == DemoTurnPhase.Main ? "主行动" : "战斗")}";
+            _opponentHealthText.text = $"❤ {match.OpponentLife}";
+            _playerHealthText.text = match.PlayerArmor > 0 ? $"❤ {match.PlayerLife}  ◈ {match.PlayerArmor}" : $"❤ {match.PlayerLife}";
+            _handLabel.text = $"手牌 {match.Hand.Count}/7 · 牌库 {match.DeckCount} · 弃牌 {match.DiscardCount}";
+            var canUseHand = match.Phase == DemoTurnPhase.Main && match.IsPlayerTurn && (!IsOnlineBoard || _onlineSession.CanIssueCommand);
+            _handCanvasGroup.alpha = canUseHand ? 1f : 0.52f;
+            _handCanvasGroup.interactable = canUseHand;
+            _handCanvasGroup.blocksRaycasts = canUseHand;
+            _endTurnButton.interactable = match.IsPlayerTurn && !match.IsFinished && (!IsOnlineBoard || _onlineSession.CanIssueCommand);
+            _endTurnLabel.text = IsOnlineBoard && _onlineSession.HasPendingCommand
+                ? "等待服务器"
+                : !match.IsPlayerTurn ? "对手行动中" : match.IsFinished ? "对局结束" : match.Phase == DemoTurnPhase.Main ? "进入战斗" : "结束回合";
         }
 
         private void RefreshFactionButtons()
@@ -500,16 +696,18 @@ namespace BiomeRivals.Demo
                 var active = view.Id == _activeFaction;
                 view.Image.color = DemoUiStyleCatalog.GetRootFill(DemoUiStyleClass.SecondaryButton);
                 view.SelectionAccent.gameObject.SetActive(active);
+                view.Button.interactable = !IsOnlineBoard;
             }
         }
 
         private void RefreshHand()
         {
             ClearChildren(_handRoot);
-            var count = _match.Hand.Count;
+            var match = MatchView;
+            var count = match.Hand.Count;
             for (var i = 0; i < count; i++)
             {
-                var cardId = _match.Hand[i];
+                var cardId = match.Hand[i];
                 var selected = cardId == _selectedCardId;
                 var x = (i - (count - 1) * 0.5f) * 176f;
                 var y = selected ? 20f : -Mathf.Abs(i - (count - 1) * 0.5f) * 4f;
@@ -526,10 +724,11 @@ namespace BiomeRivals.Demo
 
         private void RefreshBattlefieldSlots()
         {
-            foreach (var view in _playerUnitSlots) RefreshSlot(true, view, _match.UnitSlots[view.Index]);
-            foreach (var view in _playerBuildingSlots) RefreshSlot(true, view, _match.BuildingSlots[view.Index]);
-            foreach (var view in _opponentUnitSlots) RefreshSlot(false, view, _match.OpponentUnitSlots[view.Index]);
-            foreach (var view in _opponentBuildingSlots) RefreshSlot(false, view, _match.OpponentBuildingSlots[view.Index]);
+            var match = MatchView;
+            foreach (var view in _playerUnitSlots) RefreshSlot(true, view, match.UnitSlots[view.Index]);
+            foreach (var view in _playerBuildingSlots) RefreshSlot(true, view, match.BuildingSlots[view.Index]);
+            foreach (var view in _opponentUnitSlots) RefreshSlot(false, view, match.OpponentUnitSlots[view.Index]);
+            foreach (var view in _opponentBuildingSlots) RefreshSlot(false, view, match.OpponentBuildingSlots[view.Index]);
         }
 
         private void RefreshSlot(bool player, SlotView view, string cardId)
@@ -537,23 +736,25 @@ namespace BiomeRivals.Demo
             ClearChildrenExcept(view.Content, view.EmptyLabel.gameObject);
             var empty = string.IsNullOrEmpty(cardId);
             view.EmptyLabel.gameObject.SetActive(empty);
-            var battlefieldObject = _match.GetObject(player, view.Kind, view.Index);
+            var match = MatchView;
+            var battlefieldObject = match.GetObject(player, view.Kind, view.Index);
             var selectingCardTarget = !string.IsNullOrEmpty(_pendingTargetCardId);
-            var valid = selectingCardTarget
+            var canInteract = !IsOnlineBoard || _onlineSession.CanIssueCommand;
+            var valid = canInteract && (selectingCardTarget
                 ? !player && view.Kind == DemoSlotKind.Unit && !empty
                 : player
-                    ? _match.Phase == DemoTurnPhase.Main
+                    ? match.Phase == DemoTurnPhase.Main
                         ? empty && IsSelectedValidFor(view.Kind)
-                        : !empty && view.Kind == DemoSlotKind.Unit && _match.CanAttackWith(battlefieldObject, out _)
-                    : _match.Phase == DemoTurnPhase.Combat && !string.IsNullOrEmpty(_selectedAttackerInstanceId) && !empty;
+                        : !empty && view.Kind == DemoSlotKind.Unit && match.CanAttackWith(battlefieldObject, out _)
+                    : match.Phase == DemoTurnPhase.Combat && !string.IsNullOrEmpty(_selectedAttackerInstanceId) && !empty);
             view.EmptyLabel.color = Color.clear;
             _battlefield.SetSlotState(player, view.Kind, view.Index, valid, !empty);
 
             if (!empty)
             {
                 var slots = player
-                    ? view.Kind == DemoSlotKind.Unit ? _match.UnitSlots : _match.BuildingSlots
-                    : view.Kind == DemoSlotKind.Unit ? _match.OpponentUnitSlots : _match.OpponentBuildingSlots;
+                    ? view.Kind == DemoSlotKind.Unit ? match.UnitSlots : match.BuildingSlots
+                    : view.Kind == DemoSlotKind.Unit ? match.OpponentUnitSlots : match.OpponentBuildingSlots;
                 if (view.Kind == DemoSlotKind.Building && view.Index > 0 && slots[view.Index - 1] == cardId)
                     CreateText(view.Content, "Occupied", Vector2.zero, view.Content.sizeDelta, "结构占用", 14, Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
                 else
@@ -563,9 +764,10 @@ namespace BiomeRivals.Demo
 
         private void RefreshInspector()
         {
+            var match = MatchView;
             ClearChildren(_inspectorRoot);
-            CreateText(_inspectorRoot, "Header", new Vector2(0, 315), new Vector2(250, 38), _match.Phase == DemoTurnPhase.Main ? "卡牌详情" : "战斗指令", 20, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
-            if (_match.Phase == DemoTurnPhase.Combat)
+            CreateText(_inspectorRoot, "Header", new Vector2(0, 315), new Vector2(250, 38), match.Phase == DemoTurnPhase.Main ? "卡牌详情" : "战斗指令", 20, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
+            if (match.Phase == DemoTurnPhase.Combat)
             {
                 _cardDetailsView.Clear();
                 var attacker = FindSelectedAttacker();
@@ -596,7 +798,8 @@ namespace BiomeRivals.Demo
                 var hasLegalTarget = !requiresTarget || HasEnemyUnitTarget();
                 var actionLabel = !implemented ? "效果尚未接入" : targeting ? "取消目标选择" : !hasLegalTarget ? "没有合法目标" : requiresTarget ? "选择敌方目标" : "释放卡牌";
                 var cast = CreateSecondaryButton(_inspectorRoot, "Cast", new Vector2(0, -118), new Vector2(235, 60), actionLabel, 17);
-                cast.interactable = implemented && (targeting || hasLegalTarget);
+                var canPlay = match.IsPlayerTurn && match.Phase == DemoTurnPhase.Main && match.Hand.Contains(definition.id) && definition.cost <= match.Energy;
+                cast.interactable = targeting || (implemented && hasLegalTarget && canPlay && (!IsOnlineBoard || _onlineSession.CanIssueCommand));
                 cast.onClick.AddListener(targeting ? (UnityEngine.Events.UnityAction)CancelTargetSelection : CastSelectedCard);
                 cast.gameObject.AddComponent<DemoHoverScale>().Configure(1.04f, 16f);
             }
@@ -607,6 +810,8 @@ namespace BiomeRivals.Demo
         private bool IsSelectedValidFor(DemoSlotKind kind)
         {
             if (string.IsNullOrEmpty(_selectedCardId) || !_registry.TryGetDefinition(_selectedCardId, out var definition)) return false;
+            var match = MatchView;
+            if (!match.IsPlayerTurn || match.Phase != DemoTurnPhase.Main || definition.cost > match.Energy || !match.Hand.Contains(definition.id)) return false;
             return kind == DemoSlotKind.Unit
                 ? definition.cardType == "UNIT"
                 : definition.cardType == "BUILDING" || definition.cardType == "STRUCTURE";
@@ -620,14 +825,14 @@ namespace BiomeRivals.Demo
             if (_registry.TryGetText(cardId, out var text)) ShowStatus($"已选择：{text.name}", false);
         }
 
-        private void OnSlotClicked(bool player, DemoSlotKind kind, int index)
+        private async void OnSlotClicked(bool player, DemoSlotKind kind, int index)
         {
             if (!string.IsNullOrEmpty(_pendingTargetCardId))
             {
                 ResolveTargetedCard(player, kind, index);
                 return;
             }
-            if (_match.Phase == DemoTurnPhase.Combat)
+            if (MatchView.Phase == DemoTurnPhase.Combat)
             {
                 HandleCombatSlotClick(player, kind, index);
                 return;
@@ -642,19 +847,32 @@ namespace BiomeRivals.Demo
                 ShowStatus("请先选择一张手牌。", true);
                 return;
             }
+            if (IsOnlineBoard)
+            {
+                var onlineResult = await SendOnline(() => _onlineSession.DeployAsync(_selectedCardId, kind, index));
+                if (onlineResult?.Outcome == MatchCommandOutcome.Accepted) _selectedCardId = MatchView.Hand.FirstOrDefault();
+                RefreshAll();
+                return;
+            }
             var command = _match.CreateDeployCommand(_selectedCardId, kind, index);
             var result = _match.ApplyDeploy(definition, command);
-            if (result.Accepted) _selectedCardId = _match.Hand.FirstOrDefault();
+            if (result.Accepted) _selectedCardId = MatchView.Hand.FirstOrDefault();
             ShowStatus(result.Accepted ? $"{result.Message} · 状态 r{result.Revision}" : result.Message, !result.Accepted);
             RefreshAll();
         }
 
         private void HandleCombatSlotClick(bool player, DemoSlotKind kind, int index)
         {
+            var match = MatchView;
+            if (IsOnlineBoard && !_onlineSession.CanIssueCommand)
+            {
+                ShowStatus("请等待服务器确认上一条命令。", true);
+                return;
+            }
             if (player)
             {
-                var attacker = _match.GetObject(true, kind, index);
-                if (!_match.CanAttackWith(attacker, out var message))
+                var attacker = match.GetObject(true, kind, index);
+                if (!match.CanAttackWith(attacker, out var message))
                 {
                     ShowStatus(message, true);
                     return;
@@ -673,29 +891,40 @@ namespace BiomeRivals.Demo
                 ShowStatus("请先选择一个发光的己方生物。", true);
                 return;
             }
-            var target = _match.GetObject(false, kind, index);
+            var target = match.GetObject(false, kind, index);
             if (target == null)
             {
                 ShowStatus("该敌方格为空。", true);
                 return;
             }
-            ResolveLocalAttack(selected, kind == DemoSlotKind.Unit ? "UNIT" : "BUILDING", target.InstanceId);
+            ResolveAttack(selected, kind == DemoSlotKind.Unit ? "UNIT" : "BUILDING", target.InstanceId);
         }
 
         private void AttackOpponentHero()
         {
-            if (_match.Phase != DemoTurnPhase.Combat) return;
+            if (MatchView.Phase != DemoTurnPhase.Combat) return;
             var selected = FindSelectedAttacker();
             if (selected == null)
             {
                 ShowStatus("请先选择一个发光的己方生物。", true);
                 return;
             }
-            ResolveLocalAttack(selected, "HERO", string.Empty);
+            ResolveAttack(selected, "HERO", string.Empty);
         }
 
-        private void ResolveLocalAttack(DemoBattlefieldObject attacker, string targetType, string targetInstanceId)
+        private async void ResolveAttack(DemoBattlefieldObject attacker, string targetType, string targetInstanceId)
         {
+            if (IsOnlineBoard)
+            {
+                var onlineResult = await SendOnline(() => _onlineSession.AttackAsync(attacker.InstanceId, targetType, targetInstanceId));
+                if (onlineResult?.Outcome == MatchCommandOutcome.Accepted)
+                {
+                    _battlefield.SetSlotPressed(true, DemoSlotKind.Unit, attacker.SlotIndex, false);
+                    _selectedAttackerInstanceId = null;
+                }
+                RefreshAll();
+                return;
+            }
             var command = _match.CreateAttackCommand(attacker.InstanceId, targetType, targetInstanceId);
             var result = _match.ApplyAttack(command);
             if (result.Accepted)
@@ -710,7 +939,7 @@ namespace BiomeRivals.Demo
         private DemoBattlefieldObject FindSelectedAttacker() =>
             string.IsNullOrEmpty(_selectedAttackerInstanceId)
                 ? null
-                : _match.PlayerBattlefield.FirstOrDefault(value => value.InstanceId == _selectedAttackerInstanceId);
+                : MatchView.PlayerBattlefield.FirstOrDefault(value => value.InstanceId == _selectedAttackerInstanceId);
 
         private void ClearSelectedAttackerHighlight()
         {
@@ -721,7 +950,7 @@ namespace BiomeRivals.Demo
         private string GetCardName(string cardId) =>
             _registry.TryGetText(cardId, out var text) ? text.name : cardId;
 
-        private void CastSelectedCard()
+        private async void CastSelectedCard()
         {
             if (string.IsNullOrEmpty(_selectedCardId) || !_registry.TryGetDefinition(_selectedCardId, out var definition)) return;
             if (RequiresEnemyUnitTarget(definition))
@@ -736,8 +965,15 @@ namespace BiomeRivals.Demo
                 RefreshAll();
                 return;
             }
-            var lifeBefore = _match.PlayerLife;
-            var armorBefore = _match.PlayerArmor;
+            if (IsOnlineBoard)
+            {
+                var onlineResult = await SendOnline(() => _onlineSession.PlayCardAsync(definition.id));
+                if (onlineResult?.Outcome == MatchCommandOutcome.Accepted) _selectedCardId = MatchView.Hand.FirstOrDefault();
+                RefreshAll();
+                return;
+            }
+            var lifeBefore = MatchView.PlayerLife;
+            var armorBefore = MatchView.PlayerArmor;
             var success = _match.TryCast(definition, out var message);
             if (success && _match.LastDrawResult != null && !string.IsNullOrEmpty(_match.LastDrawResult.CardId))
                 message = message.Replace(_match.LastDrawResult.CardId, GetCardName(_match.LastDrawResult.CardId));
@@ -746,22 +982,33 @@ namespace BiomeRivals.Demo
             RefreshAll();
             if (success)
             {
-                var color = _match.PlayerArmor > armorBefore ? Cyan : _match.PlayerLife < lifeBefore ? Danger : Hex("#B8E5A9");
+                var color = MatchView.PlayerArmor > armorBefore ? Cyan : MatchView.PlayerLife < lifeBefore ? Danger : Hex("#B8E5A9");
                 StartCoroutine(PulsePlayerHud(color));
             }
         }
 
-        private void ResolveTargetedCard(bool player, DemoSlotKind kind, int index)
+        private async void ResolveTargetedCard(bool player, DemoSlotKind kind, int index)
         {
             if (player || kind != DemoSlotKind.Unit)
             {
                 ShowStatus("该卡牌只能选择发光的敌方生物。", true);
                 return;
             }
-            var target = _match.GetObject(false, kind, index);
+            var target = MatchView.GetObject(false, kind, index);
             if (target == null || !_registry.TryGetDefinition(_pendingTargetCardId, out var definition))
             {
                 ShowStatus("目标已经离场，请重新选择。", true);
+                return;
+            }
+            if (IsOnlineBoard)
+            {
+                var onlineResult = await SendOnline(() => _onlineSession.PlayCardAsync(definition.id, "UNIT", target.InstanceId));
+                if (onlineResult?.Outcome == MatchCommandOutcome.Accepted)
+                {
+                    _pendingTargetCardId = null;
+                    _selectedCardId = MatchView.Hand.FirstOrDefault();
+                }
+                RefreshAll();
                 return;
             }
             var command = _match.CreatePlayCardCommand(definition.id, "UNIT", target.InstanceId);
@@ -788,7 +1035,92 @@ namespace BiomeRivals.Demo
             definition != null && definition.effectIds != null && definition.effectIds.Contains("effect.si_001.01");
 
         private bool HasEnemyUnitTarget() =>
-            _match.OpponentBattlefield.Any(value => value != null && value.SlotKind == DemoSlotKind.Unit && value.Health > 0);
+            MatchView.OpponentBattlefield.Any(value => value != null && value.SlotKind == DemoSlotKind.Unit && value.Health > 0);
+
+        private async Task<MatchCommandDispatchResult?> SendOnline(Func<Task<MatchCommandDispatchResult>> send)
+        {
+            try
+            {
+                if (_onlineSession == null || !_onlineSession.CanIssueCommand)
+                {
+                    ShowStatus("权威对局尚未就绪，或上一条命令仍在等待确认。", true);
+                    return null;
+                }
+                return await send();
+            }
+            catch (Exception exception)
+            {
+                ShowStatus("联机命令失败：" + exception.Message, true);
+                Debug.LogWarning("Online command failed: " + exception, this);
+                RefreshAll();
+                return null;
+            }
+        }
+
+        private async void RunOnlineProbe(string reportPath, string capturePath, bool performAction)
+        {
+            try
+            {
+                var deadline = Time.realtimeSinceStartup + 45f;
+                while ((!IsOnlineBoard || _onlineGateway.CurrentStatus.Phase != MatchConnectionPhase.Ready) && Time.realtimeSinceStartup < deadline)
+                    await Task.Yield();
+                if (!IsOnlineBoard || _onlineGateway.CurrentStatus.Phase != MatchConnectionPhase.Ready)
+                    throw new TimeoutException("Unity client did not receive an authoritative snapshot within 45 seconds.");
+
+                if (performAction && MatchView.Revision == 0 && MatchView.IsPlayerTurn && MatchView.Phase == DemoTurnPhase.Main)
+                {
+                    var combatResult = await SendOnline(() => _onlineSession.EnterCombatAsync());
+                    if (combatResult?.Outcome != MatchCommandOutcome.Accepted)
+                        throw new InvalidOperationException("The active Unity client did not receive an accepted ENTER_COMBAT acknowledgement.");
+                    var turnResult = await SendOnline(() => _onlineSession.EndTurnAsync());
+                    if (turnResult?.Outcome != MatchCommandOutcome.Accepted)
+                        throw new InvalidOperationException("The active Unity client did not receive an accepted END_TURN acknowledgement.");
+                }
+                if (performAction)
+                {
+                    while (MatchView.Revision < 2 && Time.realtimeSinceStartup < deadline) await Task.Yield();
+                    if (MatchView.Revision < 2)
+                        throw new TimeoutException("The Unity clients did not observe the authoritative action revision.");
+                    var presentationQueue = GameCompositionRoot.Instance?.PresentationQueue;
+                    while (presentationQueue != null && presentationQueue.IsPlaying && Time.realtimeSinceStartup < deadline) await Task.Yield();
+                }
+
+                if (!string.IsNullOrWhiteSpace(reportPath))
+                {
+                    var directory = Path.GetDirectoryName(reportPath);
+                    if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
+                    File.WriteAllText(reportPath, JsonUtility.ToJson(new OnlineProbeReport
+                    {
+                        ok = true,
+                        matchId = GameCompositionRoot.Instance.MatchStateStore.Current.matchId,
+                        viewerPlayerId = GameCompositionRoot.Instance.MatchStateStore.Current.viewerPlayerId,
+                        revision = MatchView.Revision,
+                        phase = MatchView.Phase == DemoTurnPhase.Main ? "MAIN" : "COMBAT",
+                        isPlayerTurn = MatchView.IsPlayerTurn,
+                        hand = MatchView.Hand.ToArray(),
+                        energy = MatchView.Energy,
+                        playerLife = MatchView.PlayerLife,
+                        opponentLife = MatchView.OpponentLife,
+                        playerFaction = _activeFaction,
+                        opponentFaction = _opponentFaction
+                    }, true));
+                }
+
+                if (!string.IsNullOrWhiteSpace(capturePath)) StartCoroutine(CaptureDemo(capturePath));
+                else if (HasCommandLineFlag("-quitAfterOnlineProbe")) Application.Quit(0);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogError("Online probe failed: " + exception, this);
+                if (!string.IsNullOrWhiteSpace(reportPath))
+                {
+                    var directory = Path.GetDirectoryName(reportPath);
+                    if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
+                    File.WriteAllText(reportPath, JsonUtility.ToJson(new OnlineProbeReport { ok = false, error = exception.Message }, true));
+                }
+                Application.Quit(1);
+            }
+        }
 
         private IEnumerator PulsePlayerHud(Color color)
         {
@@ -812,11 +1144,25 @@ namespace BiomeRivals.Demo
             _playerHud.localScale = Vector3.one;
         }
 
-        private void OnEndTurn()
+        private async void OnEndTurn()
         {
-            if (!_match.IsPlayerTurn) return;
+            var match = MatchView;
+            if (!match.IsPlayerTurn) return;
             _pendingTargetCardId = null;
-            if (_match.Phase == DemoTurnPhase.Main)
+            if (IsOnlineBoard)
+            {
+                var onlineResult = match.Phase == DemoTurnPhase.Main
+                    ? await SendOnline(() => _onlineSession.EnterCombatAsync())
+                    : await SendOnline(() => _onlineSession.EndTurnAsync());
+                if (onlineResult?.Outcome == MatchCommandOutcome.Accepted)
+                {
+                    ClearSelectedAttackerHighlight();
+                    _selectedAttackerInstanceId = null;
+                }
+                RefreshAll();
+                return;
+            }
+            if (match.Phase == DemoTurnPhase.Main)
             {
                 var result = _match.ApplyEnterCombat(_match.CreateEnterCombatCommand());
                 ClearSelectedAttackerHighlight();
@@ -1152,6 +1498,24 @@ namespace BiomeRivals.Demo
                 Prefix = prefix;
                 PlayerTitle = playerTitle;
             }
+        }
+
+        [Serializable]
+        private sealed class OnlineProbeReport
+        {
+            public bool ok;
+            public string error;
+            public string matchId;
+            public string viewerPlayerId;
+            public int revision;
+            public string phase;
+            public bool isPlayerTurn;
+            public string[] hand;
+            public int energy;
+            public int playerLife;
+            public int opponentLife;
+            public string playerFaction;
+            public string opponentFaction;
         }
     }
 }

@@ -11,7 +11,7 @@ namespace BiomeRivals.Demo
         Building
     }
 
-    public sealed class DemoLocalMatch
+    public sealed class DemoLocalMatch : IDemoMatchView
     {
         private readonly List<string> _hand = new List<string>();
         private readonly List<string> _deck = new List<string>();
@@ -31,6 +31,11 @@ namespace BiomeRivals.Demo
         public string[] OpponentBuildingSlots { get; } = new string[3];
         public IReadOnlyList<DemoBattlefieldObject> PlayerBattlefield => _playerBattlefield;
         public IReadOnlyList<DemoBattlefieldObject> OpponentBattlefield => _opponentBattlefield;
+        public bool IsAuthoritative => false;
+        public int ViewerIndex => 0;
+        public int DeckCount => _deck.Count;
+        public int DiscardCount => _discardPile.Count;
+        public int OpponentHandCount => 5;
         public int Round { get; private set; } = 1;
         public int MaxEnergy { get; private set; } = 6;
         public int Energy { get; private set; } = 6;

@@ -59,6 +59,7 @@ namespace BiomeRivals.Core
     public sealed class MatchStateStore
     {
         public MatchStateDto Current { get; private set; }
+        public event Action<MatchStateDto> Changed;
 
         public void Replace(MatchStateDto snapshot)
         {
@@ -68,11 +69,13 @@ namespace BiomeRivals.Core
             if (snapshot.players == null || snapshot.players.Length != 2)
                 throw new InvalidOperationException("Snapshot must contain exactly two players.");
             Current = snapshot;
+            Changed?.Invoke(Current);
         }
 
         public void Clear()
         {
             Current = null;
+            Changed?.Invoke(null);
         }
 
         public void Apply(MatchEventBatchDto batch)
@@ -94,6 +97,7 @@ namespace BiomeRivals.Core
             foreach (var matchEvent in batch.events ?? Array.Empty<MatchEventDto>()) Apply(matchEvent);
             if (batch.events != null && batch.events.Length > 0) Current.lastEventId = batch.events[batch.events.Length - 1].eventId;
             Current.revision = batch.revision;
+            Changed?.Invoke(Current);
         }
 
         private void Apply(MatchEventDto matchEvent)

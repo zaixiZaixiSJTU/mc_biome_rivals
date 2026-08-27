@@ -37,4 +37,17 @@ npm run smoke:integration --workspace server-nakama
 
 `IMatchTransport` 只负责连接生命周期和 opcode 消息；`AuthoritativeMatchGateway` 负责协议反序列化；`MatchCommandDispatcher` 负责 pending 命令，并等待事件批次中的 `acknowledgedCommandId` 或 opcode `3` 拒绝。超时、断线和拒绝都不能被 UI 当成成功。
 
-当前 Demo 的联机条是传输诊断入口，棋盘仍明确使用本地规则模型。下一阶段应让独立的权威对局 Presenter 订阅 `MatchStateStore`，再把线上命令接入同一套卡牌/战场 View。
+收到 opcode `4` 后，Demo 标题会切换为“权威联机对局”，并以 `DemoAuthoritativeMatchView` 将观察者固定映射到近端：己方私有手牌、能量、生命、牌库/弃牌数量、双方单位/建筑槽和阶段全部从 `MatchStateStore` 渲染。部署、施法、进入战斗、攻击和结束回合经 `DemoOnlineMatchSession` 发往服务器；pending 期间交互锁定，只有 opcode `2` 的命令回执会推进画面，opcode `3`、断线和超时都会显示失败。
+
+## Unity 双进程探针
+
+Windows Development Player 支持以下仅用于自动验证的参数：
+
+- `-autoOnline`：启动后自动进入匹配。
+- `-autoOnlineAction`：当前行动方依次发送 `ENTER_COMBAT` 与 `END_TURN`，两端等待 revision 2。
+- `-nakamaDeviceId <ID>`：为同机并行实例指定不同设备身份，长度 10–128。
+- `-onlineProbe <json>`：写出 Match ID、观察者 ID、revision、阶段、手牌、能量、生命和双方群系。
+- `-captureOnline <png>`：权威状态稳定且事件动画队列清空后截图。
+- `-quitAfterOnlineProbe`：报告写完后退出。
+
+两个报告必须具有相同 Match ID、不同观察者 ID、相同 revision；私有手牌应不同，且双方 `playerFaction/opponentFaction` 互为镜像。

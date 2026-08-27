@@ -8,6 +8,7 @@ server-nakama/build/*
 !server-nakama/build/.gitkeep
 server-nakama/.test-build/
 coverage/
+artifacts/
 *.tsbuildinfo
 npm-debug.log*
 

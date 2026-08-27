@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace BiomeRivals.Demo
 {
     public enum DemoTurnPhase
@@ -42,6 +44,34 @@ namespace BiomeRivals.Demo
         public bool HasAttacked { get; set; }
         public int TemporaryAttackModifier { get; set; }
         public int TemporaryAttackModifierExpiresOnRound { get; set; }
+    }
+
+    public interface IDemoMatchView
+    {
+        bool IsAuthoritative { get; }
+        IReadOnlyList<string> Hand { get; }
+        string[] UnitSlots { get; }
+        string[] BuildingSlots { get; }
+        string[] OpponentUnitSlots { get; }
+        string[] OpponentBuildingSlots { get; }
+        IReadOnlyList<DemoBattlefieldObject> PlayerBattlefield { get; }
+        IReadOnlyList<DemoBattlefieldObject> OpponentBattlefield { get; }
+        int ViewerIndex { get; }
+        int DeckCount { get; }
+        int DiscardCount { get; }
+        int OpponentHandCount { get; }
+        int Round { get; }
+        int MaxEnergy { get; }
+        int Energy { get; }
+        bool IsPlayerTurn { get; }
+        DemoTurnPhase Phase { get; }
+        int PlayerLife { get; }
+        int PlayerArmor { get; }
+        int OpponentLife { get; }
+        bool IsFinished { get; }
+        int Revision { get; }
+        DemoBattlefieldObject GetObject(bool player, DemoSlotKind kind, int slotIndex);
+        bool CanAttackWith(DemoBattlefieldObject attacker, out string message);
     }
 
     public enum DemoCommandRejectionCode
