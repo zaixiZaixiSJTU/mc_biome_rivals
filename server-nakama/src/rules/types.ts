@@ -1,10 +1,10 @@
 namespace BiomeRivalsRules {
-  export const PROTOCOL_VERSION = 11;
-  export const RULESET_VERSION = 'prototype-0.12';
+  export const PROTOCOL_VERSION = 12;
+  export const RULESET_VERSION = 'prototype-0.13';
 
   export type MatchStatus = 'WAITING' | 'MULLIGAN' | 'ACTIVE' | 'FINISHED';
   export type CommandType = 'MULLIGAN' | 'DEPLOY_CARD' | 'PLAY_CARD' | 'ENTER_COMBAT' | 'ATTACK' | 'END_TURN' | 'CONCEDE';
-  export type EventType = 'MULLIGAN_COMPLETED' | 'MATCH_STARTED' | 'MATERIALS_CONSUMED' | 'CARD_DEPLOYED' | 'OBJECT_SUMMONED' | 'CARD_PLAYED' | 'CARD_DRAWN' | 'CARD_BURNED' | 'CARD_GENERATED' | 'FATIGUE_DAMAGE' | 'HERO_DAMAGED' | 'HERO_HEALED' | 'ARMOR_GAINED' | 'OBJECT_STATS_CHANGED' | 'PHASE_CHANGED' | 'ATTACK_RESOLVED' | 'OBJECT_DIED' | 'TURN_ENDED' | 'TURN_STARTED' | 'PLAYER_CONCEDED' | 'MATCH_ENDED';
+  export type EventType = 'MULLIGAN_COMPLETED' | 'MATCH_STARTED' | 'MATERIALS_CONSUMED' | 'CARD_DEPLOYED' | 'OBJECT_SUMMONED' | 'CARD_PLAYED' | 'CARD_BURIED' | 'CARD_EXCAVATED' | 'CARD_DRAWN' | 'CARD_BURNED' | 'CARD_GENERATED' | 'FATIGUE_DAMAGE' | 'HERO_DAMAGED' | 'HERO_HEALED' | 'ARMOR_GAINED' | 'OBJECT_STATS_CHANGED' | 'PHASE_CHANGED' | 'ATTACK_RESOLVED' | 'OBJECT_DIED' | 'TURN_ENDED' | 'TURN_STARTED' | 'PLAYER_CONCEDED' | 'MATCH_ENDED';
   export type DeploySlotKind = 'UNIT' | 'BUILDING';
   export type PaymentMethod = 'REDSTONE' | 'CRAFTING';
   export type TurnPhase = 'MAIN' | 'COMBAT';
@@ -72,6 +72,7 @@ namespace BiomeRivalsRules {
     redstoneCapacity: number;
     hand: string[];
     deck: string[];
+    buriedCardIds: string[];
     discardPile: string[];
     fatigueCount: number;
     unitSlots: Array<string | null>;
@@ -105,6 +106,7 @@ namespace BiomeRivalsRules {
     redstoneCapacity: number;
     hand: Array<string | null>;
     deckCount: number;
+    buriedCount: number;
     discardPile: string[];
     fatigueCount: number;
     unitSlots: Array<string | null>;

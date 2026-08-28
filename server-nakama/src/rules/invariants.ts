@@ -45,6 +45,17 @@ namespace BiomeRivalsRules {
       for (let deckIndex = 0; deckIndex < player.deck.length; deckIndex += 1) {
         if (getCardDefinition(player.deck[deckIndex]!) === null) violations.push('deck contains an unknown card');
       }
+      const remainingDeckCounts: { [cardId: string]: number } = {};
+      for (let deckIndex = 0; deckIndex < player.deck.length; deckIndex += 1) {
+        const cardId = player.deck[deckIndex]!;
+        remainingDeckCounts[cardId] = (remainingDeckCounts[cardId] || 0) + 1;
+      }
+      for (let buriedIndex = 0; buriedIndex < player.buriedCardIds.length; buriedIndex += 1) {
+        const cardId = player.buriedCardIds[buriedIndex]!;
+        if (getCardDefinition(cardId) === null) violations.push('buried cards contain an unknown card');
+        if (!remainingDeckCounts[cardId]) violations.push('buried card marker is missing from the deck');
+        else remainingDeckCounts[cardId] -= 1;
+      }
       for (let discardIndex = 0; discardIndex < player.discardPile.length; discardIndex += 1) {
         if (getCardDefinition(player.discardPile[discardIndex]!) === null) violations.push('discard pile contains an unknown card');
       }

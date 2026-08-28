@@ -17,16 +17,18 @@ namespace BiomeRivals.Demo
 
     public sealed class DemoDrawResult
     {
-        public DemoDrawResult(DemoDrawOutcome outcome, string cardId, int fatigueDamage)
+        public DemoDrawResult(DemoDrawOutcome outcome, string cardId, int fatigueDamage, string[] excavatedCardIds = null)
         {
             Outcome = outcome;
             CardId = cardId ?? string.Empty;
             FatigueDamage = fatigueDamage;
+            ExcavatedCardIds = excavatedCardIds ?? System.Array.Empty<string>();
         }
 
         public DemoDrawOutcome Outcome { get; }
         public string CardId { get; }
         public int FatigueDamage { get; }
+        public string[] ExcavatedCardIds { get; }
     }
 
     public sealed class DemoBattlefieldObject
@@ -67,6 +69,7 @@ namespace BiomeRivals.Demo
         IReadOnlyList<DemoBattlefieldObject> OpponentBattlefield { get; }
         int ViewerIndex { get; }
         int DeckCount { get; }
+        int BuriedCount { get; }
         int DiscardCount { get; }
         int OpponentHandCount { get; }
         int Round { get; }

@@ -106,6 +106,36 @@ namespace BiomeRivals.Demo.Tests
         }
 
         [Test]
+        public void LocalSuspiciousSandBurialExcavatesBeforeTheNormalDraw()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(new[] { "db_002" }, new[] { "pf_001" });
+            Assert.That(registry.TryGetDefinition("db_002", out var suspiciousSand), Is.True);
+            Assert.That(suspiciousSand.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+
+            Assert.That(match.TryCast(suspiciousSand, out var message), Is.True);
+            Assert.That(message, Does.Contain("陶片"));
+            Assert.That(match.BuriedCount, Is.EqualTo(1));
+            Assert.That(match.Deck, Does.Contain("tk_006"));
+            Assert.That(match.PlayerArmor, Is.EqualTo(1));
+
+            match.EndPlayerTurn();
+            var firstDraw = match.BeginNextPlayerTurn();
+            var excavated = firstDraw.ExcavatedCardIds;
+            if (excavated.Length == 0)
+            {
+                match.EndPlayerTurn();
+                excavated = match.BeginNextPlayerTurn().ExcavatedCardIds;
+            }
+
+            Assert.That(excavated, Is.EqualTo(new[] { "tk_006" }));
+            Assert.That(match.BuriedCount, Is.Zero);
+            Assert.That(match.Hand, Does.Contain("tk_006"));
+            Assert.That(match.PlayerArmor, Is.EqualTo(2));
+        }
+
+        [Test]
         public void TargetedSnowballUsesStableInstanceAndExpiresAtEndOfTurn()
         {
             var registry = CardContentLoader.Load();
@@ -248,7 +278,7 @@ namespace BiomeRivals.Demo.Tests
         {
             var registry = CardContentLoader.Load();
             var match = new DemoLocalMatch();
-            match.ResetHand(new[] { "tk_010", "db_007", "tk_006", "tk_010" });
+            match.ResetHand(new[] { "db_002", "db_007", "tk_006", "db_002" });
             Assert.That(registry.TryGetDefinition("db_007", out var temple), Is.True);
 
             var preview = DemoDeploymentRules.Evaluate(
@@ -261,8 +291,8 @@ namespace BiomeRivals.Demo.Tests
 
             Assert.That(result.Accepted, Is.True);
             Assert.That(match.Energy, Is.EqualTo(energyBefore));
-            Assert.That(match.Hand, Is.EqualTo(new[] { "tk_010" }));
-            Assert.That(match.DiscardPile, Is.EqualTo(new[] { "tk_006", "tk_010" }));
+            Assert.That(match.Hand, Is.EqualTo(new[] { "db_002" }));
+            Assert.That(match.DiscardPile, Is.EqualTo(new[] { "db_002", "tk_006" }));
             Assert.That(match.PlayerBattlefield.Single().Health, Is.EqualTo(10));
             Assert.That(match.PlayerBattlefield.Single().MaxHealth, Is.EqualTo(10));
             Assert.That(match.BuildingSlots[1], Is.EqualTo("db_007"));
@@ -280,7 +310,7 @@ namespace BiomeRivals.Demo.Tests
             var preview = DemoDeploymentRules.Evaluate(
                 match, temple, DemoSlotKind.Building, 0, MatchPaymentMethods.Crafting);
             Assert.That(preview.IsLegal, Is.False);
-            Assert.That(preview.Message, Does.Contain("tk_010×1"));
+            Assert.That(preview.Message, Does.Contain("db_002×1"));
             var result = match.ApplyDeploy(
                 temple,
                 match.CreateDeployCommand(temple.id, DemoSlotKind.Building, 0, MatchPaymentMethods.Crafting));

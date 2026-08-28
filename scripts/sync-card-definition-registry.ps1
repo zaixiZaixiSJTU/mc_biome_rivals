@@ -76,7 +76,7 @@ foreach ($line in Get-Content -LiteralPath $sourcePath -Encoding UTF8) {
     $ingredients = [System.Collections.Generic.List[object]]::new()
     foreach ($ingredientPart in $ingredientText.Split('+')) {
         $part = $ingredientPart.Trim()
-        if ($part -notmatch '^(?<cardDesignId>TK-\d{3})\s*[×xX]\s*(?<count>\d+)$') {
+        if ($part -notmatch '^(?<cardDesignId>(?:PF|DB|SI|CD|OR|NT|ED|TK)-\d{3})\s*[×xX]\s*(?<count>\d+)$') {
             throw "Invalid crafting ingredient '$part' for $recipeDesignId"
         }
         $count = [int]$Matches['count']
@@ -164,7 +164,7 @@ foreach ($line in Get-Content -LiteralPath $sourcePath -Encoding UTF8) {
         foreach ($ingredient in $recipe.ingredients) { $craftingRecipe.Add($ingredient) }
     }
     $definitions.Add([ordered]@{
-        id=$cardId; designId=$designId; contentVersion=4; collectible=(-not $isToken)
+        id=$cardId; designId=$designId; contentVersion=5; collectible=(-not $isToken)
         nameKey="card.$cardId.name"; rulesTextKey="card.$cardId.rules"
         factionId=$factionId; themeId=$themeId; rarity=$rarity; cardType=$cardType; cost=$cost
         hasAttack=$hasAttack; attack=$attack; hasHealth=$hasHealth; health=$health
@@ -202,7 +202,7 @@ foreach ($targetDesignId in $recipesByTarget.Keys) {
 }
 
 if ($definitions.Count -ne 74) { throw "Expected 74 card definitions, found $($definitions.Count)." }
-$definitionDocument = [ordered]@{ schemaVersion=3; contentVersion=4; source=$SourceMarkdown.Replace('\','/'); entries=$definitions }
+$definitionDocument = [ordered]@{ schemaVersion=3; contentVersion=5; source=$SourceMarkdown.Replace('\','/'); entries=$definitions }
 $textDocument = [ordered]@{ schemaVersion=1; locale='zh-CN'; source=$SourceMarkdown.Replace('\','/'); entries=$texts }
 
 foreach ($output in @(

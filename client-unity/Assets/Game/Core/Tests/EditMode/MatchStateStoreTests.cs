@@ -352,7 +352,7 @@ namespace BiomeRivals.Core.Tests
                 {
                     new PlayerStateDto
                     {
-                        playerId = "alice", redstone = 0, hand = new[] { "tk_010", "db_007", "tk_006", "tk_010" },
+                        playerId = "alice", redstone = 0, hand = new[] { "db_002", "db_007", "tk_006", "db_002" },
                         discardPile = Array.Empty<string>(), unitSlots = new string[4], buildingSlots = new string[3]
                     },
                     new PlayerStateDto { playerId = "bob", hand = Array.Empty<string>(), unitSlots = new string[4], buildingSlots = new string[3] }
@@ -372,8 +372,8 @@ namespace BiomeRivals.Core.Tests
                             playerId = "alice", craftedCardId = "db_007", recipeId = "recipe.db_007.01",
                             materials = new[]
                             {
-                                new CraftingMaterialDto { cardId = "tk_006", count = 1 },
-                                new CraftingMaterialDto { cardId = "tk_010", count = 1 }
+                                new CraftingMaterialDto { cardId = "db_002", count = 1 },
+                                new CraftingMaterialDto { cardId = "tk_006", count = 1 }
                             },
                             handCount = 2, discardCount = 2
                         }
@@ -391,8 +391,8 @@ namespace BiomeRivals.Core.Tests
                 }
             });
 
-            Assert.That(store.Current.players[0].hand, Is.EqualTo(new[] { "tk_010" }));
-            Assert.That(store.Current.players[0].discardPile, Is.EqualTo(new[] { "tk_006", "tk_010" }));
+            Assert.That(store.Current.players[0].hand, Is.EqualTo(new[] { "db_002" }));
+            Assert.That(store.Current.players[0].discardPile, Is.EqualTo(new[] { "db_002", "tk_006" }));
             Assert.That(store.Current.players[0].buildingSlots[1], Is.EqualTo("object-1"));
             Assert.That(store.Current.players[0].buildingSlots[2], Is.EqualTo("object-1"));
             Assert.That(store.Current.players[0].battlefield[0].maxHealth, Is.EqualTo(10));
@@ -431,8 +431,8 @@ namespace BiomeRivals.Core.Tests
                             playerId = "bob", craftedCardId = "db_007", recipeId = "recipe.db_007.01",
                             materials = new[]
                             {
-                                new CraftingMaterialDto { cardId = "tk_006", count = 1 },
-                                new CraftingMaterialDto { cardId = "tk_010", count = 1 }
+                                new CraftingMaterialDto { cardId = "db_002", count = 1 },
+                                new CraftingMaterialDto { cardId = "tk_006", count = 1 }
                             },
                             handCount = 1, discardCount = 2
                         }
@@ -451,7 +451,7 @@ namespace BiomeRivals.Core.Tests
             });
 
             Assert.That(store.Current.players[1].hand, Is.Empty);
-            Assert.That(store.Current.players[1].discardPile, Is.EqualTo(new[] { "tk_006", "tk_010" }));
+            Assert.That(store.Current.players[1].discardPile, Is.EqualTo(new[] { "db_002", "tk_006" }));
             Assert.That(store.Current.players[1].battlefield[0].cardId, Is.EqualTo("db_007"));
         }
 
@@ -657,6 +657,61 @@ namespace BiomeRivals.Core.Tests
             Assert.That(store.Current.players[0].discardPile, Is.EqualTo(new[] { "tk_016" }));
             Assert.That(store.Current.players[1].hand, Has.Length.EqualTo(2));
             Assert.That(store.Current.players[1].hand[1], Is.Null);
+        }
+
+        [Test]
+        public void Apply_ReplaysBurialAndPublicExcavationWithoutRevealingOpponentHandSlots()
+        {
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "match-1", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice" },
+                    new PlayerStateDto { playerId = "bob", hand = new[] { string.Empty }, deckCount = 2 }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 1, type = MatchEventTypes.CardBuried,
+                        payload = new MatchEventPayloadDto { playerId = "bob", cardId = "tk_006", deckCount = 3, buriedCount = 1 }
+                    },
+                    new MatchEventDto
+                    {
+                        eventId = 2, type = MatchEventTypes.CardExcavated,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "bob", cardId = "tk_006", destination = "HAND",
+                            handCount = 2, deckCount = 2, discardCount = 0, buriedCount = 0
+                        }
+                    },
+                    new MatchEventDto
+                    {
+                        eventId = 3, type = MatchEventTypes.ArmorGained,
+                        payload = new MatchEventPayloadDto { playerId = "bob", amount = 1, armor = 1 }
+                    },
+                    new MatchEventDto
+                    {
+                        eventId = 4, type = MatchEventTypes.CardDrawn,
+                        payload = new MatchEventPayloadDto { playerId = "bob", cardId = string.Empty, handCount = 3, deckCount = 1 }
+                    }
+                }
+            });
+
+            Assert.That(store.Current.players[1].buriedCount, Is.Zero);
+            Assert.That(store.Current.players[1].deckCount, Is.EqualTo(1));
+            Assert.That(store.Current.players[1].armor, Is.EqualTo(1));
+            Assert.That(store.Current.players[1].hand, Has.Length.EqualTo(3));
+            Assert.That(store.Current.players[1].hand[1], Is.Empty);
+            Assert.That(store.Current.players[1].hand[2], Is.Empty);
         }
 
         [Test]

@@ -25,6 +25,7 @@ namespace BiomeRivals.Demo
         private static readonly Color Pale = Hex("#F1E6CB");
         private static readonly Color Muted = Hex("#B2AA96");
         private static readonly Color Cyan = Hex("#5AAE9F");
+        private static readonly Color Gold = Hex("#E4B95F");
         private static readonly Color Ember = Hex("#D98545");
         private static readonly Color Danger = Hex("#E05A47");
 
@@ -447,7 +448,8 @@ namespace BiomeRivals.Demo
             if (queue == null || _eventPresenters.Count > 0) return;
             var eventTypes = new[]
             {
-                MatchEventTypes.MaterialsConsumed, MatchEventTypes.CardDeployed, MatchEventTypes.ObjectSummoned, MatchEventTypes.CardPlayed, MatchEventTypes.CardDrawn,
+                MatchEventTypes.MaterialsConsumed, MatchEventTypes.CardDeployed, MatchEventTypes.ObjectSummoned, MatchEventTypes.CardPlayed,
+                MatchEventTypes.CardBuried, MatchEventTypes.CardExcavated, MatchEventTypes.CardDrawn,
                 MatchEventTypes.CardBurned, MatchEventTypes.CardGenerated, MatchEventTypes.FatigueDamage, MatchEventTypes.HeroDamaged,
                 MatchEventTypes.HeroHealed, MatchEventTypes.ArmorGained, MatchEventTypes.ObjectStatsChanged,
                 MatchEventTypes.PhaseChanged, MatchEventTypes.AttackResolved, MatchEventTypes.ObjectDied,
@@ -533,6 +535,25 @@ namespace BiomeRivals.Demo
                             break;
                     }
                     yield return null;
+                    break;
+                }
+                case MatchEventTypes.CardBuried: {
+                    var burialViewerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
+                    var ownBurial = matchEvent.payload?.playerId == burialViewerId;
+                    ShowStatus(ownBurial
+                        ? $"已将 {GetCardName(matchEvent.payload.cardId)} 埋入牌库；当前有 {matchEvent.payload.buriedCount} 张掩埋牌。"
+                        : $"对手埋入了 {GetCardName(matchEvent.payload.cardId)}。", false);
+                    yield return ShowTurnBanner("掩埋", Ember);
+                    break;
+                }
+                case MatchEventTypes.CardExcavated: {
+                    var excavationViewerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
+                    var ownExcavation = matchEvent.payload?.playerId == excavationViewerId;
+                    var destination = matchEvent.payload?.destination == "HAND" ? "进入手牌" : "因满手进入弃牌堆";
+                    ShowStatus(ownExcavation
+                        ? $"出土：{GetCardName(matchEvent.payload.cardId)} {destination}，随后继续正常抽牌。"
+                        : $"对手出土了 {GetCardName(matchEvent.payload.cardId)}。", false);
+                    yield return ShowTurnBanner("出土", Gold);
                     break;
                 }
                 case MatchEventTypes.CardGenerated: {
@@ -702,7 +723,7 @@ namespace BiomeRivals.Demo
             ApplyPlayerFactionVisuals(spec);
             var handNumbers = spec.Prefix == "nt" ? new[] { 1, 2, 3, 4, 6 } : Enumerable.Range(1, 5).ToArray();
             var ids = spec.Prefix == "db"
-                ? new[] { "db_001", "db_002", "db_004", "db_006", "db_007", "tk_006", "tk_010" }
+                ? new[] { "db_001", "db_002", "db_004", "db_006", "db_007", "tk_006", "db_002" }
                 : handNumbers.Select(index => $"{spec.Prefix}_{index:000}").ToArray();
             var deck = Enumerable.Range(0, 25).Select(index => $"{spec.Prefix}_{(index % 8) + 1:000}").ToArray();
             _match.ResetDeckAndHand(ids, deck);
@@ -809,7 +830,7 @@ namespace BiomeRivals.Demo
             SelectFaction("desert_badlands");
             if (!_registry.TryGetDefinition("db_007", out var templeDefinition)) return;
             _match.ResetHand(includeAllMaterials
-                ? new[] { templeDefinition.id, "tk_006", "tk_010" }
+                ? new[] { templeDefinition.id, "db_002", "tk_006" }
                 : new[] { templeDefinition.id, "tk_006" });
             _selectedCardId = templeDefinition.id;
             _selectedPaymentMethod = MatchPaymentMethods.Crafting;
@@ -917,7 +938,9 @@ namespace BiomeRivals.Demo
             _roundText.text = match.IsMulligan ? "开局 · 起手调度" : $"第 {match.Round} 回合 · {(match.Phase == DemoTurnPhase.Main ? "主行动" : "战斗")}";
             _opponentHealthText.text = $"❤ {match.OpponentLife}";
             _playerHealthText.text = match.PlayerArmor > 0 ? $"❤ {match.PlayerLife}  ◈ {match.PlayerArmor}" : $"❤ {match.PlayerLife}";
-            _handLabel.text = $"手牌 {match.Hand.Count}/7 · 牌库 {match.DeckCount} · 弃牌 {match.DiscardCount}";
+            _handLabel.text = match.BuriedCount > 0
+                ? $"手牌 {match.Hand.Count}/7 · 牌库 {match.DeckCount}（掩埋 {match.BuriedCount}）· 弃牌 {match.DiscardCount}"
+                : $"手牌 {match.Hand.Count}/7 · 牌库 {match.DeckCount} · 弃牌 {match.DiscardCount}";
             var canUseHand = !match.IsMulligan && match.Phase == DemoTurnPhase.Main && match.IsPlayerTurn && (!IsOnlineBoard || _onlineSession.CanIssueCommand);
             _handCanvasGroup.alpha = canUseHand ? 1f : 0.52f;
             _handCanvasGroup.interactable = canUseHand;

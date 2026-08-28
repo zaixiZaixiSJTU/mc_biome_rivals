@@ -30,6 +30,7 @@ namespace BiomeRivals.Demo
         public IReadOnlyList<DemoBattlefieldObject> PlayerBattlefield => MapBattlefield(Player, true);
         public IReadOnlyList<DemoBattlefieldObject> OpponentBattlefield => MapBattlefield(Opponent, false);
         public int DeckCount => Player?.deckCount ?? 0;
+        public int BuriedCount => Player?.buriedCount ?? 0;
         public int DiscardCount => Player?.discardPile?.Length ?? 0;
         public int OpponentHandCount => Opponent?.hand?.Length ?? 0;
         public int Round => Current?.turn ?? 0;

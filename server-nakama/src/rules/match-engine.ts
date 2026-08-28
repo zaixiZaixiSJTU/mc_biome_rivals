@@ -41,6 +41,7 @@ namespace BiomeRivalsRules {
       redstoneCapacity: 1,
       hand: hand,
       deck: deck,
+      buriedCardIds: [],
       discardPile: [],
       fatigueCount: 0,
       unitSlots: [null, null, null, null],
@@ -113,6 +114,7 @@ namespace BiomeRivalsRules {
             ? player.hand.slice()
             : player.hand.map(function (): null { return null; }),
           deckCount: player.deck.length,
+          buriedCount: player.buriedCardIds.length,
           discardPile: player.discardPile.slice(),
           fatigueCount: player.fatigueCount,
           unitSlots: player.unitSlots.slice(),
@@ -176,6 +178,7 @@ namespace BiomeRivalsRules {
           redstoneCapacity: player.redstoneCapacity,
           hand: player.hand.slice(),
           deck: player.deck.slice(),
+          buriedCardIds: player.buriedCardIds.slice(),
           discardPile: player.discardPile.slice(),
           fatigueCount: player.fatigueCount,
           unitSlots: player.unitSlots.slice(),
@@ -574,40 +577,83 @@ namespace BiomeRivalsRules {
       player.life = Math.max(0, player.life - (amount - armorDamage));
     }
 
+    function buryCard(player: PlayerState, cardId: string, sourceCardId: string, effectId: string): void {
+      if (getCardDefinition(cardId) === null) throw new Error('buried card is not registered: ' + cardId);
+      const insertIndex = (seedFromText(next.matchId + ':' + player.playerId + ':bury:' + next.lastEventId + ':' + cardId) >>> 0) %
+        (player.deck.length + 1);
+      player.deck.splice(insertIndex, 0, cardId);
+      player.buriedCardIds.push(cardId);
+      emit('CARD_BURIED', {
+        playerId: player.playerId,
+        sourceCardId: sourceCardId,
+        effectId: effectId,
+        cardId: cardId,
+        deckCount: player.deck.length,
+        buriedCount: player.buriedCardIds.length
+      });
+    }
+
     function drawCard(player: PlayerState): void {
-      if (player.deck.length === 0) {
-        player.fatigueCount += 1;
-        player.life = Math.max(0, player.life - player.fatigueCount);
-        emit('FATIGUE_DAMAGE', {
-          playerId: player.playerId,
-          damage: player.fatigueCount,
-          fatigueCount: player.fatigueCount,
-          life: player.life,
-          armor: player.armor,
-          handCount: player.hand.length,
-          deckCount: 0
-        });
-        return;
-      }
-      const cardId = player.deck.pop()!;
-      if (player.hand.length >= HAND_LIMIT) {
-        player.discardPile.push(cardId);
-        emit('CARD_BURNED', {
+      while (true) {
+        if (player.deck.length === 0) {
+          player.fatigueCount += 1;
+          player.life = Math.max(0, player.life - player.fatigueCount);
+          emit('FATIGUE_DAMAGE', {
+            playerId: player.playerId,
+            damage: player.fatigueCount,
+            fatigueCount: player.fatigueCount,
+            life: player.life,
+            armor: player.armor,
+            handCount: player.hand.length,
+            deckCount: 0
+          });
+          return;
+        }
+        const cardId = player.deck.pop()!;
+        const buriedIndex = player.buriedCardIds.indexOf(cardId);
+        if (buriedIndex >= 0) {
+          player.buriedCardIds.splice(buriedIndex, 1);
+          if (cardId !== 'tk_006') throw new Error('buried effect handler is not registered: ' + cardId);
+          const destination = player.hand.length >= HAND_LIMIT ? 'DISCARD' : 'HAND';
+          if (destination === 'HAND') player.hand.push(cardId);
+          else player.discardPile.push(cardId);
+          emit('CARD_EXCAVATED', {
+            playerId: player.playerId,
+            cardId: cardId,
+            effectId: 'effect.tk_006.01',
+            destination: destination,
+            handCount: player.hand.length,
+            deckCount: player.deck.length,
+            discardCount: player.discardPile.length,
+            buriedCount: player.buriedCardIds.length
+          });
+          player.armor += 1;
+          emit('ARMOR_GAINED', {
+            playerId: player.playerId, sourceCardId: cardId, effectId: 'effect.tk_006.01',
+            amount: 1, armor: player.armor
+          });
+          continue;
+        }
+        if (player.hand.length >= HAND_LIMIT) {
+          player.discardPile.push(cardId);
+          emit('CARD_BURNED', {
+            playerId: player.playerId,
+            cardId: cardId,
+            handCount: player.hand.length,
+            deckCount: player.deck.length,
+            discardCount: player.discardPile.length
+          });
+          return;
+        }
+        player.hand.push(cardId);
+        emit('CARD_DRAWN', {
           playerId: player.playerId,
           cardId: cardId,
           handCount: player.hand.length,
-          deckCount: player.deck.length,
-          discardCount: player.discardPile.length
+          deckCount: player.deck.length
         });
         return;
       }
-      player.hand.push(cardId);
-      emit('CARD_DRAWN', {
-        playerId: player.playerId,
-        cardId: cardId,
-        handCount: player.hand.length,
-        deckCount: player.deck.length
-      });
     }
 
     function finishForSelfDefeat(player: PlayerState, reason: string): boolean {
@@ -633,7 +679,7 @@ namespace BiomeRivalsRules {
         return reject(state, 'EFFECT_NOT_IMPLEMENTED', 'card effect is registered but not implemented');
       }
       const effectId = definition.effectIds[0]!;
-      if (effectId !== 'effect.db_006.01' && effectId !== 'effect.nt_006.01' &&
+      if (effectId !== 'effect.db_002.01' && effectId !== 'effect.db_006.01' && effectId !== 'effect.nt_006.01' &&
           effectId !== 'effect.si_001.01' && effectId !== 'effect.tk_005.01' &&
           effectId !== 'effect.tk_009.01' && effectId !== 'effect.tk_010.01' &&
           effectId !== 'effect.tk_016.01') {
@@ -684,6 +730,14 @@ namespace BiomeRivalsRules {
       });
 
       switch (effectId) {
+        case 'effect.db_002.01':
+          buryCard(player, 'tk_006', cardId, effectId);
+          player.armor += 1;
+          emit('ARMOR_GAINED', {
+            playerId: player.playerId, sourceCardId: cardId, effectId: effectId,
+            amount: 1, armor: player.armor
+          });
+          return null;
         case 'effect.db_006.01':
           for (let playerIndex = 0; playerIndex < next.players.length; playerIndex += 1) {
             const damagedPlayer = next.players[playerIndex]!;

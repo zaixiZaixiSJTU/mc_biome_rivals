@@ -29,6 +29,8 @@ namespace BiomeRivals.Core
         public const string CardDeployed = "CARD_DEPLOYED";
         public const string ObjectSummoned = "OBJECT_SUMMONED";
         public const string CardPlayed = "CARD_PLAYED";
+        public const string CardBuried = "CARD_BURIED";
+        public const string CardExcavated = "CARD_EXCAVATED";
         public const string CardDrawn = "CARD_DRAWN";
         public const string CardBurned = "CARD_BURNED";
         public const string CardGenerated = "CARD_GENERATED";
@@ -217,6 +219,7 @@ namespace BiomeRivals.Core
         public int handCount;
         public int replacedCount;
         public int deckCount;
+        public int buriedCount;
         public int discardCount;
         public int fatigueCount;
         public int damage;

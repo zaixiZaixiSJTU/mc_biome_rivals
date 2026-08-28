@@ -16,6 +16,7 @@ namespace BiomeRivals.Demo
     {
         private readonly List<string> _hand = new List<string>();
         private readonly List<string> _deck = new List<string>();
+        private readonly List<string> _buriedCardIds = new List<string>();
         private readonly List<string> _discardPile = new List<string>();
         private readonly List<DemoBattlefieldObject> _playerBattlefield = new List<DemoBattlefieldObject>();
         private readonly List<DemoBattlefieldObject> _opponentBattlefield = new List<DemoBattlefieldObject>();
@@ -41,6 +42,7 @@ namespace BiomeRivals.Demo
         public bool OpponentMulliganCompleted => true;
         public int ViewerIndex => 0;
         public int DeckCount => _deck.Count;
+        public int BuriedCount => _buriedCardIds.Count;
         public int DiscardCount => _discardPile.Count;
         public int OpponentHandCount => _opponentHandCount;
         public int Round { get; private set; } = 1;
@@ -84,6 +86,7 @@ namespace BiomeRivals.Demo
             if (_hand.Count > 7) throw new ArgumentException("Hand cannot exceed seven cards.", nameof(handCardIds));
             _deck.Clear();
             _deck.AddRange(deckCardIds);
+            _buriedCardIds.Clear();
             _discardPile.Clear();
             FatigueCount = 0;
             LastDrawResult = null;
@@ -202,7 +205,7 @@ namespace BiomeRivals.Demo
                 return Reject(DemoCommandRejectionCode.EffectNotImplemented, "该卡牌效果已注册，但尚未接入规则执行器。");
 
             var effectId = definition.effectIds[0];
-            if (effectId != "effect.db_006.01" && effectId != "effect.nt_006.01" &&
+            if (effectId != "effect.db_002.01" && effectId != "effect.db_006.01" && effectId != "effect.nt_006.01" &&
                 effectId != "effect.si_001.01" && effectId != "effect.tk_005.01" &&
                 effectId != "effect.tk_009.01" && effectId != "effect.tk_010.01" &&
                 effectId != "effect.tk_016.01")
@@ -222,6 +225,11 @@ namespace BiomeRivals.Demo
             _discardPile.Add(definition.id);
             switch (effectId)
             {
+                case "effect.db_002.01":
+                    BuryCard("tk_006");
+                    PlayerArmor += 1;
+                    message = "可疑的沙子：将 1 张陶片洗入牌库，并获得 1 点护甲。";
+                    break;
                 case "effect.db_006.01":
                     var damaged = 0;
                     var destroyed = 0;
@@ -445,25 +453,50 @@ namespace BiomeRivals.Demo
 
         private DemoDrawResult DrawCard()
         {
-            if (_deck.Count == 0)
+            var excavated = new List<string>();
+            while (true)
             {
-                FatigueCount++;
-                PlayerLife = Math.Max(0, PlayerLife - FatigueCount);
-                if (PlayerLife == 0) IsFinished = true;
-                return RememberDraw(new DemoDrawResult(DemoDrawOutcome.Fatigue, string.Empty, FatigueCount));
-            }
+                if (_deck.Count == 0)
+                {
+                    FatigueCount++;
+                    PlayerLife = Math.Max(0, PlayerLife - FatigueCount);
+                    if (PlayerLife == 0) IsFinished = true;
+                    return RememberDraw(new DemoDrawResult(DemoDrawOutcome.Fatigue, string.Empty, FatigueCount, excavated.ToArray()));
+                }
 
-            var cardIndex = _deck.Count - 1;
-            var cardId = _deck[cardIndex];
-            _deck.RemoveAt(cardIndex);
-            if (_hand.Count >= 7)
-            {
-                _discardPile.Add(cardId);
-                return RememberDraw(new DemoDrawResult(DemoDrawOutcome.Burned, cardId, 0));
-            }
+                var cardIndex = _deck.Count - 1;
+                var cardId = _deck[cardIndex];
+                _deck.RemoveAt(cardIndex);
+                var buriedIndex = _buriedCardIds.IndexOf(cardId);
+                if (buriedIndex >= 0)
+                {
+                    _buriedCardIds.RemoveAt(buriedIndex);
+                    if (cardId != "tk_006") throw new InvalidOperationException($"Buried effect handler is not registered: {cardId}");
+                    if (_hand.Count >= 7) _discardPile.Add(cardId);
+                    else _hand.Add(cardId);
+                    PlayerArmor += 1;
+                    excavated.Add(cardId);
+                    continue;
+                }
+                if (_hand.Count >= 7)
+                {
+                    _discardPile.Add(cardId);
+                    return RememberDraw(new DemoDrawResult(DemoDrawOutcome.Burned, cardId, 0, excavated.ToArray()));
+                }
 
-            _hand.Add(cardId);
-            return RememberDraw(new DemoDrawResult(DemoDrawOutcome.Drawn, cardId, 0));
+                _hand.Add(cardId);
+                return RememberDraw(new DemoDrawResult(DemoDrawOutcome.Drawn, cardId, 0, excavated.ToArray()));
+            }
+        }
+
+        private void BuryCard(string cardId)
+        {
+            var hash = 17;
+            foreach (var value in cardId) hash = unchecked(hash * 31 + value);
+            hash = unchecked(hash * 31 + Revision);
+            var insertionIndex = (int)((uint)hash % (uint)(_deck.Count + 1));
+            _deck.Insert(insertionIndex, cardId);
+            _buriedCardIds.Add(cardId);
         }
 
         private DemoDrawResult RememberDraw(DemoDrawResult result)

@@ -296,7 +296,7 @@ TestHarness.test('deploys a structure only across consecutive free building slot
 
 TestHarness.test('crafts a structure from deterministic hand materials without spending redstone', function (): void {
   const state = activeState('match-1', ['alice', 'bob']);
-  state.players[0]!.hand = ['tk_010', 'db_007', 'tk_006', 'tk_010'];
+  state.players[0]!.hand = ['db_002', 'db_007', 'tk_006', 'db_002'];
   state.players[0]!.redstone = 0;
   state.players[0]!.redstoneCapacity = 1;
 
@@ -309,8 +309,8 @@ TestHarness.test('crafts a structure from deterministic hand materials without s
   TestHarness.equal(result.accepted, true);
   if (!result.accepted) return;
   TestHarness.equal(result.state.players[0]!.redstone, 0);
-  TestHarness.equal(JSON.stringify(result.state.players[0]!.hand), JSON.stringify(['tk_010']));
-  TestHarness.equal(JSON.stringify(result.state.players[0]!.discardPile), JSON.stringify(['tk_006', 'tk_010']));
+  TestHarness.equal(JSON.stringify(result.state.players[0]!.hand), JSON.stringify(['db_002']));
+  TestHarness.equal(JSON.stringify(result.state.players[0]!.discardPile), JSON.stringify(['db_002', 'tk_006']));
   TestHarness.equal(result.state.players[0]!.battlefield[0]!.health, 10);
   TestHarness.equal(result.state.players[0]!.battlefield[0]!.maxHealth, 10);
   TestHarness.equal(result.batch.events.length, 2);
@@ -321,9 +321,9 @@ TestHarness.test('crafts a structure from deterministic hand materials without s
   TestHarness.equal(result.batch.events[1]!.payload.paymentMethod, 'CRAFTING');
   TestHarness.equal(result.batch.events[1]!.payload.health, 10);
   const opponentBatch = BiomeRivalsRules.createClientEventBatch(result.batch, 'bob');
-  TestHarness.equal((opponentBatch.events[0]!.payload.materials as Array<{ cardId: string }>)[0]!.cardId, 'tk_006');
-  TestHarness.equal((opponentBatch.events[0]!.payload.materials as Array<{ cardId: string }>)[1]!.cardId, 'tk_010');
-  TestHarness.equal(JSON.stringify(state.players[0]!.hand), JSON.stringify(['tk_010', 'db_007', 'tk_006', 'tk_010']), 'accepted commands must not mutate input');
+  TestHarness.equal((opponentBatch.events[0]!.payload.materials as Array<{ cardId: string }>)[0]!.cardId, 'db_002');
+  TestHarness.equal((opponentBatch.events[0]!.payload.materials as Array<{ cardId: string }>)[1]!.cardId, 'tk_006');
+  TestHarness.equal(JSON.stringify(state.players[0]!.hand), JSON.stringify(['db_002', 'db_007', 'tk_006', 'db_002']), 'accepted commands must not mutate input');
 });
 
 TestHarness.test('rejects incomplete or illegal crafting atomically', function (): void {
@@ -341,7 +341,7 @@ TestHarness.test('rejects incomplete or illegal crafting atomically', function (
   TestHarness.equal(missingState.players[0]!.discardPile.length, 0);
 
   const illegalState = activeState('match-1', ['alice', 'bob']);
-  illegalState.players[0]!.hand = ['db_007', 'tk_006', 'tk_010'];
+  illegalState.players[0]!.hand = ['db_007', 'db_002', 'tk_006'];
   illegalState.players[0]!.redstone = 0;
   const illegal = BiomeRivalsRules.applyCommand(
     illegalState,
@@ -350,7 +350,7 @@ TestHarness.test('rejects incomplete or illegal crafting atomically', function (
   );
   TestHarness.equal(illegal.accepted, false);
   if (!illegal.accepted) TestHarness.equal(illegal.code, 'INVALID_TARGET');
-  TestHarness.equal(JSON.stringify(illegalState.players[0]!.hand), JSON.stringify(['db_007', 'tk_006', 'tk_010']));
+  TestHarness.equal(JSON.stringify(illegalState.players[0]!.hand), JSON.stringify(['db_007', 'db_002', 'tk_006']));
   TestHarness.equal(illegalState.players[0]!.discardPile.length, 0);
 });
 
@@ -426,6 +426,71 @@ TestHarness.test('plays implemented armor material through its stable effect id'
   TestHarness.equal(result.batch.events[0]!.payload.effectId, 'effect.tk_016.01');
   TestHarness.equal(result.batch.events[1]!.type, 'ARMOR_GAINED');
   TestHarness.equal(state.players[0]!.armor, 0);
+});
+
+TestHarness.test('suspicious sand buries a pottery sherd and grants immediate armor', function (): void {
+  const state = activeState('match-1', ['alice', 'bob'], ['desert_badlands', 'nether']);
+  state.players[0]!.hand = ['db_002'];
+  state.players[0]!.redstone = 1;
+  const deckCount = state.players[0]!.deck.length;
+
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', playCommand('bury-sherd', 0, 'db_002'));
+
+  TestHarness.ok(result.accepted);
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[0]!.armor, 1);
+  TestHarness.equal(result.state.players[0]!.deck.length, deckCount + 1);
+  TestHarness.equal(JSON.stringify(result.state.players[0]!.buriedCardIds), JSON.stringify(['tk_006']));
+  TestHarness.equal(result.state.players[0]!.deck.filter(function (cardId): boolean { return cardId === 'tk_006'; }).length, 1);
+  TestHarness.equal(result.batch.events[0]!.type, 'CARD_PLAYED');
+  TestHarness.equal(result.batch.events[1]!.type, 'CARD_BURIED');
+  TestHarness.equal(result.batch.events[1]!.payload.deckCount, deckCount + 1);
+  TestHarness.equal(result.batch.events[1]!.payload.buriedCount, 1);
+  TestHarness.equal(result.batch.events[2]!.type, 'ARMOR_GAINED');
+  TestHarness.equal(BiomeRivalsRules.createClientSnapshot(result.state, 'bob').players[0]!.buriedCount, 1);
+  TestHarness.equal(state.players[0]!.buriedCardIds.length, 0, 'accepted commands must not mutate input');
+});
+
+TestHarness.test('excavates a public pottery sherd before the normal turn draw', function (): void {
+  const state = activeState('match-1', ['alice', 'bob']);
+  state.players[1]!.deck = ['nt_001', 'tk_006'];
+  state.players[1]!.buriedCardIds = ['tk_006'];
+  const handCount = state.players[1]!.hand.length;
+
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', command('turn-excavate', 0, 'END_TURN'));
+
+  TestHarness.ok(result.accepted);
+  if (!result.accepted) return;
+  TestHarness.equal(JSON.stringify(result.state.players[1]!.hand.slice(-2)), JSON.stringify(['tk_006', 'nt_001']));
+  TestHarness.equal(result.state.players[1]!.hand.length, handCount + 2);
+  TestHarness.equal(result.state.players[1]!.deck.length, 0);
+  TestHarness.equal(result.state.players[1]!.buriedCardIds.length, 0);
+  TestHarness.equal(result.state.players[1]!.armor, 1);
+  TestHarness.equal(result.batch.events[2]!.type, 'CARD_EXCAVATED');
+  TestHarness.equal(result.batch.events[2]!.payload.destination, 'HAND');
+  TestHarness.equal(result.batch.events[3]!.type, 'ARMOR_GAINED');
+  TestHarness.equal(result.batch.events[4]!.type, 'CARD_DRAWN');
+  const opponentProjection = BiomeRivalsRules.createClientEventBatch(result.batch, 'alice');
+  TestHarness.equal(opponentProjection.events[2]!.payload.cardId, 'tk_006', 'excavated cards are public');
+  TestHarness.equal(opponentProjection.events[4]!.payload.cardId, null, 'the following normal draw remains private');
+});
+
+TestHarness.test('excavation and its following draw both enter discard when the hand is full', function (): void {
+  const state = activeState('match-1', ['alice', 'bob']);
+  state.players[1]!.hand = ['nt_001', 'nt_002', 'nt_003', 'nt_004', 'nt_005', 'nt_006', 'nt_007'];
+  state.players[1]!.deck = ['nt_008', 'tk_006'];
+  state.players[1]!.buriedCardIds = ['tk_006'];
+
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', command('turn-excavate-full', 0, 'END_TURN'));
+
+  TestHarness.ok(result.accepted);
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[1]!.hand.length, 7);
+  TestHarness.equal(JSON.stringify(result.state.players[1]!.discardPile), JSON.stringify(['tk_006', 'nt_008']));
+  TestHarness.equal(result.batch.events[2]!.type, 'CARD_EXCAVATED');
+  TestHarness.equal(result.batch.events[2]!.payload.destination, 'DISCARD');
+  TestHarness.equal(result.batch.events[4]!.type, 'CARD_BURNED');
+  TestHarness.equal(result.state.players[1]!.armor, 1);
 });
 
 TestHarness.test('resolves healing before rotten flesh true damage', function (): void {

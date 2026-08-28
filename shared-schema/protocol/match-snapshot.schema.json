@@ -8,7 +8,7 @@
   "properties": {
     "matchId": { "type": "string", "minLength": 1 },
     "viewerPlayerId": { "type": "string", "minLength": 1 },
-    "protocolVersion": { "const": 11 },
+    "protocolVersion": { "const": 12 },
     "rulesetVersion": { "type": "string", "minLength": 1 },
     "revision": { "type": "integer", "minimum": 0 },
     "lastEventId": { "type": "integer", "minimum": 0 },
@@ -24,7 +24,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["playerId", "factionId", "mulliganCompleted", "life", "armor", "redstone", "redstoneCapacity", "hand", "deckCount", "discardPile", "fatigueCount", "unitSlots", "buildingSlots", "battlefield"],
+        "required": ["playerId", "factionId", "mulliganCompleted", "life", "armor", "redstone", "redstoneCapacity", "hand", "deckCount", "buriedCount", "discardPile", "fatigueCount", "unitSlots", "buildingSlots", "battlefield"],
         "properties": {
           "playerId": { "type": "string", "minLength": 1 },
           "factionId": { "enum": ["plains_forest", "desert_badlands", "snow_ice", "cave_dark_forest", "ocean_river", "nether", "end"] },
@@ -35,6 +35,7 @@
           "redstoneCapacity": { "type": "integer", "minimum": 0, "maximum": 10 },
           "hand": { "type": "array", "items": { "type": ["string", "null"], "pattern": "^[a-z0-9_]+$" } },
           "deckCount": { "type": "integer", "minimum": 0 },
+          "buriedCount": { "type": "integer", "minimum": 0 },
           "discardPile": { "type": "array", "items": { "type": "string", "pattern": "^[a-z0-9_]+$" } },
           "fatigueCount": { "type": "integer", "minimum": 0 },
           "unitSlots": {

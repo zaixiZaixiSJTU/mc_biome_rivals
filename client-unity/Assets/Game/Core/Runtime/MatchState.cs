@@ -34,6 +34,7 @@ namespace BiomeRivals.Core
         public int redstoneCapacity;
         public string[] hand = Array.Empty<string>();
         public int deckCount;
+        public int buriedCount;
         public string[] discardPile = Array.Empty<string>();
         public int fatigueCount;
         public string[] unitSlots = Array.Empty<string>();
@@ -74,6 +75,8 @@ namespace BiomeRivals.Core
             foreach (var player in snapshot.players)
                 if (player == null || !FactionIds.IsSupported(player.factionId))
                     throw new InvalidOperationException("Snapshot contains an unsupported player faction.");
+                else if (player.buriedCount < 0 || player.buriedCount > player.deckCount)
+                    throw new InvalidOperationException("Snapshot contains an invalid buried card count.");
             Current = snapshot;
             Changed?.Invoke(Current);
         }
@@ -167,6 +170,30 @@ namespace BiomeRivals.Core
                     var playedDiscard = new List<string>(playingPlayer.discardPile ?? Array.Empty<string>()) { payload.cardId };
                     if (playedDiscard.Count != payload.discardCount) throw new InvalidOperationException("Play event discard count does not match projected discard pile.");
                     playingPlayer.discardPile = playedDiscard.ToArray();
+                    break;
+                case MatchEventTypes.CardBuried:
+                    var buryingPlayer = FindPlayer(payload.playerId);
+                    if (payload.deckCount != buryingPlayer.deckCount + 1 || payload.buriedCount != buryingPlayer.buriedCount + 1)
+                        throw new InvalidOperationException("Burial event counts do not match the projected deck.");
+                    buryingPlayer.deckCount = payload.deckCount;
+                    buryingPlayer.buriedCount = payload.buriedCount;
+                    break;
+                case MatchEventTypes.CardExcavated:
+                    var excavatingPlayer = FindPlayer(payload.playerId);
+                    if (payload.deckCount != excavatingPlayer.deckCount - 1 || payload.buriedCount != excavatingPlayer.buriedCount - 1)
+                        throw new InvalidOperationException("Excavation event counts do not match the projected deck.");
+                    var excavatedHand = new List<string>(excavatingPlayer.hand ?? Array.Empty<string>());
+                    var excavatedDiscard = new List<string>(excavatingPlayer.discardPile ?? Array.Empty<string>());
+                    if (payload.destination == "HAND")
+                        excavatedHand.Add(payload.playerId == Current.viewerPlayerId ? payload.cardId : string.Empty);
+                    else if (payload.destination == "DISCARD") excavatedDiscard.Add(payload.cardId);
+                    else throw new InvalidOperationException("Excavation event destination is invalid.");
+                    if (excavatedHand.Count != payload.handCount || excavatedDiscard.Count != payload.discardCount)
+                        throw new InvalidOperationException("Excavation event zone counts do not match their projections.");
+                    excavatingPlayer.hand = excavatedHand.ToArray();
+                    excavatingPlayer.discardPile = excavatedDiscard.ToArray();
+                    excavatingPlayer.deckCount = payload.deckCount;
+                    excavatingPlayer.buriedCount = payload.buriedCount;
                     break;
                 case MatchEventTypes.CardDrawn:
                     var drawingPlayer = FindPlayer(payload.playerId);
