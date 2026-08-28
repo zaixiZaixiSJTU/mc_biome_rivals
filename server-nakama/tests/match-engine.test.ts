@@ -552,6 +552,79 @@ TestHarness.test('publishes registered battlefield keywords on deployment', func
   TestHarness.equal((result.batch.events[0]!.payload.keywords as string[])[0], 'TAUNT');
 });
 
+TestHarness.test('resolves the Shulker deathrattle into its owners private hand', function (): void {
+  const state = activeState('match-1', ['alice', 'bob']);
+  state.turn = 2;
+  state.phase = 'COMBAT';
+  state.nextInstanceId = 3;
+  state.players[1]!.hand = [];
+  placeUnit(state, 0, 'pf_003', 0, 'object-1', 1);
+  placeUnit(state, 1, 'ed_004', 0, 'object-2', 1);
+  state.players[1]!.battlefield[0]!.health = 2;
+
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', attackCommand('shulker-death', 0, 'object-1', 'UNIT', 'object-2'));
+  TestHarness.equal(result.accepted, true);
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[1]!.hand[0], 'tk_016');
+  TestHarness.equal(result.state.players[1]!.discardPile[0], 'ed_004');
+  const generatedIndex = result.batch.events.findIndex(function (event): boolean { return event.type === 'CARD_GENERATED'; });
+  TestHarness.ok(generatedIndex > 0);
+  TestHarness.equal(result.batch.events[generatedIndex - 1]!.type, 'OBJECT_DIED');
+  TestHarness.equal(result.batch.events[generatedIndex]!.payload.destination, 'HAND');
+  TestHarness.equal(result.batch.events[generatedIndex]!.payload.cardId, 'tk_016');
+
+  const attackerProjection = BiomeRivalsRules.createClientEventBatch(result.batch, 'alice');
+  const ownerProjection = BiomeRivalsRules.createClientEventBatch(result.batch, 'bob');
+  TestHarness.equal(attackerProjection.events[generatedIndex]!.payload.cardId, null);
+  TestHarness.equal(ownerProjection.events[generatedIndex]!.payload.cardId, 'tk_016');
+});
+
+TestHarness.test('sends a generated deathrattle card to discard when the hand is full', function (): void {
+  const state = activeState('match-1', ['alice', 'bob']);
+  state.turn = 2;
+  state.phase = 'COMBAT';
+  state.nextInstanceId = 3;
+  state.players[1]!.hand = ['ed_001', 'ed_001', 'ed_001', 'ed_001', 'ed_001', 'ed_001', 'ed_001'];
+  placeUnit(state, 0, 'pf_003', 0, 'object-1', 1);
+  placeUnit(state, 1, 'ed_004', 0, 'object-2', 1);
+  state.players[1]!.battlefield[0]!.health = 2;
+
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', attackCommand('shulker-full-hand', 0, 'object-1', 'UNIT', 'object-2'));
+  TestHarness.equal(result.accepted, true);
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[1]!.hand.length, 7);
+  TestHarness.equal(result.state.players[1]!.discardPile[1], 'tk_016');
+  const generatedIndex = result.batch.events.findIndex(function (event): boolean { return event.type === 'CARD_GENERATED'; });
+  TestHarness.ok(generatedIndex > 0);
+  TestHarness.equal(result.batch.events[generatedIndex]!.payload.destination, 'DISCARD');
+  TestHarness.equal(result.batch.events[generatedIndex]!.payload.cardId, 'tk_016');
+  const opponentProjection = BiomeRivalsRules.createClientEventBatch(result.batch, 'alice');
+  TestHarness.equal(opponentProjection.events[generatedIndex]!.payload.cardId, 'tk_016');
+});
+
+TestHarness.test('resolves simultaneous Shulker deathrattles for the active player first', function (): void {
+  const state = activeState('match-1', ['alice', 'bob']);
+  state.players[0]!.hand = ['db_006'];
+  state.players[0]!.redstone = 3;
+  state.players[0]!.redstoneCapacity = 3;
+  state.players[1]!.hand = [];
+  state.nextInstanceId = 3;
+  placeUnit(state, 0, 'ed_004', 0, 'object-1', 1);
+  placeUnit(state, 1, 'ed_004', 0, 'object-2', 1);
+  state.players[0]!.battlefield[0]!.health = 2;
+  state.players[1]!.battlefield[0]!.health = 2;
+
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', playCommand('double-shulker', 0, 'db_006'));
+  TestHarness.equal(result.accepted, true);
+  if (!result.accepted) return;
+  const generated = result.batch.events.filter(function (event): boolean { return event.type === 'CARD_GENERATED'; });
+  TestHarness.equal(generated.length, 2);
+  TestHarness.equal(generated[0]!.payload.playerId, 'alice');
+  TestHarness.equal(generated[1]!.payload.playerId, 'bob');
+  TestHarness.equal(result.state.players[0]!.hand[0], 'tk_016');
+  TestHarness.equal(result.state.players[1]!.hand[0], 'tk_016');
+});
+
 TestHarness.test('applies armor before life and ends the match on lethal hero damage', function (): void {
   const state = activeState('match-1', ['alice', 'bob']);
   state.turn = 2;

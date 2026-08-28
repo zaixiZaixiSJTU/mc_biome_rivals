@@ -1,12 +1,12 @@
 {
     "schemaVersion":  2,
-    "contentVersion":  1,
+    "contentVersion":  2,
     "source":  "docs/design/Minecraft_Biome_Rivals_Prototype_Cards_v0.1.md",
     "entries":  [
                     {
                         "id":  "pf_001",
                         "designId":  "PF-001",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.pf_001.name",
                         "rulesTextKey":  "card.pf_001.rules",
@@ -38,7 +38,7 @@
                     {
                         "id":  "pf_002",
                         "designId":  "PF-002",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.pf_002.name",
                         "rulesTextKey":  "card.pf_002.rules",
@@ -69,7 +69,7 @@
                     {
                         "id":  "pf_003",
                         "designId":  "PF-003",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.pf_003.name",
                         "rulesTextKey":  "card.pf_003.rules",
@@ -100,7 +100,7 @@
                     {
                         "id":  "pf_004",
                         "designId":  "PF-004",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.pf_004.name",
                         "rulesTextKey":  "card.pf_004.rules",
@@ -132,7 +132,7 @@
                     {
                         "id":  "pf_005",
                         "designId":  "PF-005",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.pf_005.name",
                         "rulesTextKey":  "card.pf_005.rules",
@@ -164,7 +164,7 @@
                     {
                         "id":  "pf_006",
                         "designId":  "PF-006",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.pf_006.name",
                         "rulesTextKey":  "card.pf_006.rules",
@@ -196,7 +196,7 @@
                     {
                         "id":  "pf_007",
                         "designId":  "PF-007",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.pf_007.name",
                         "rulesTextKey":  "card.pf_007.rules",
@@ -227,7 +227,7 @@
                     {
                         "id":  "pf_008",
                         "designId":  "PF-008",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.pf_008.name",
                         "rulesTextKey":  "card.pf_008.rules",
@@ -258,7 +258,7 @@
                     {
                         "id":  "db_001",
                         "designId":  "DB-001",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.db_001.name",
                         "rulesTextKey":  "card.db_001.rules",
@@ -290,7 +290,7 @@
                     {
                         "id":  "db_002",
                         "designId":  "DB-002",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.db_002.name",
                         "rulesTextKey":  "card.db_002.rules",
@@ -322,7 +322,7 @@
                     {
                         "id":  "db_003",
                         "designId":  "DB-003",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.db_003.name",
                         "rulesTextKey":  "card.db_003.rules",
@@ -354,7 +354,7 @@
                     {
                         "id":  "db_004",
                         "designId":  "DB-004",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.db_004.name",
                         "rulesTextKey":  "card.db_004.rules",
@@ -386,7 +386,7 @@
                     {
                         "id":  "db_005",
                         "designId":  "DB-005",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.db_005.name",
                         "rulesTextKey":  "card.db_005.rules",
@@ -417,7 +417,7 @@
                     {
                         "id":  "db_006",
                         "designId":  "DB-006",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.db_006.name",
                         "rulesTextKey":  "card.db_006.rules",
@@ -448,7 +448,7 @@
                     {
                         "id":  "db_007",
                         "designId":  "DB-007",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.db_007.name",
                         "rulesTextKey":  "card.db_007.rules",
@@ -480,7 +480,7 @@
                     {
                         "id":  "db_008",
                         "designId":  "DB-008",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.db_008.name",
                         "rulesTextKey":  "card.db_008.rules",
@@ -512,7 +512,7 @@
                     {
                         "id":  "si_001",
                         "designId":  "SI-001",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.si_001.name",
                         "rulesTextKey":  "card.si_001.rules",
@@ -544,7 +544,7 @@
                     {
                         "id":  "si_002",
                         "designId":  "SI-002",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.si_002.name",
                         "rulesTextKey":  "card.si_002.rules",
@@ -575,7 +575,7 @@
                     {
                         "id":  "si_003",
                         "designId":  "SI-003",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.si_003.name",
                         "rulesTextKey":  "card.si_003.rules",
@@ -608,7 +608,7 @@
                     {
                         "id":  "si_004",
                         "designId":  "SI-004",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.si_004.name",
                         "rulesTextKey":  "card.si_004.rules",
@@ -639,7 +639,7 @@
                     {
                         "id":  "si_005",
                         "designId":  "SI-005",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.si_005.name",
                         "rulesTextKey":  "card.si_005.rules",
@@ -670,7 +670,7 @@
                     {
                         "id":  "si_006",
                         "designId":  "SI-006",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.si_006.name",
                         "rulesTextKey":  "card.si_006.rules",
@@ -701,7 +701,7 @@
                     {
                         "id":  "si_007",
                         "designId":  "SI-007",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.si_007.name",
                         "rulesTextKey":  "card.si_007.rules",
@@ -732,7 +732,7 @@
                     {
                         "id":  "si_008",
                         "designId":  "SI-008",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.si_008.name",
                         "rulesTextKey":  "card.si_008.rules",
@@ -764,7 +764,7 @@
                     {
                         "id":  "cd_001",
                         "designId":  "CD-001",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.cd_001.name",
                         "rulesTextKey":  "card.cd_001.rules",
@@ -795,7 +795,7 @@
                     {
                         "id":  "cd_002",
                         "designId":  "CD-002",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.cd_002.name",
                         "rulesTextKey":  "card.cd_002.rules",
@@ -826,7 +826,7 @@
                     {
                         "id":  "cd_003",
                         "designId":  "CD-003",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.cd_003.name",
                         "rulesTextKey":  "card.cd_003.rules",
@@ -858,7 +858,7 @@
                     {
                         "id":  "cd_004",
                         "designId":  "CD-004",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.cd_004.name",
                         "rulesTextKey":  "card.cd_004.rules",
@@ -890,7 +890,7 @@
                     {
                         "id":  "cd_005",
                         "designId":  "CD-005",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.cd_005.name",
                         "rulesTextKey":  "card.cd_005.rules",
@@ -921,7 +921,7 @@
                     {
                         "id":  "cd_006",
                         "designId":  "CD-006",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.cd_006.name",
                         "rulesTextKey":  "card.cd_006.rules",
@@ -952,7 +952,7 @@
                     {
                         "id":  "cd_007",
                         "designId":  "CD-007",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.cd_007.name",
                         "rulesTextKey":  "card.cd_007.rules",
@@ -984,7 +984,7 @@
                     {
                         "id":  "cd_008",
                         "designId":  "CD-008",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.cd_008.name",
                         "rulesTextKey":  "card.cd_008.rules",
@@ -1016,7 +1016,7 @@
                     {
                         "id":  "or_001",
                         "designId":  "OR-001",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.or_001.name",
                         "rulesTextKey":  "card.or_001.rules",
@@ -1048,7 +1048,7 @@
                     {
                         "id":  "or_002",
                         "designId":  "OR-002",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.or_002.name",
                         "rulesTextKey":  "card.or_002.rules",
@@ -1080,7 +1080,7 @@
                     {
                         "id":  "or_003",
                         "designId":  "OR-003",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.or_003.name",
                         "rulesTextKey":  "card.or_003.rules",
@@ -1112,7 +1112,7 @@
                     {
                         "id":  "or_004",
                         "designId":  "OR-004",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.or_004.name",
                         "rulesTextKey":  "card.or_004.rules",
@@ -1144,7 +1144,7 @@
                     {
                         "id":  "or_005",
                         "designId":  "OR-005",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.or_005.name",
                         "rulesTextKey":  "card.or_005.rules",
@@ -1176,7 +1176,7 @@
                     {
                         "id":  "or_006",
                         "designId":  "OR-006",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.or_006.name",
                         "rulesTextKey":  "card.or_006.rules",
@@ -1208,7 +1208,7 @@
                     {
                         "id":  "or_007",
                         "designId":  "OR-007",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.or_007.name",
                         "rulesTextKey":  "card.or_007.rules",
@@ -1240,7 +1240,7 @@
                     {
                         "id":  "or_008",
                         "designId":  "OR-008",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.or_008.name",
                         "rulesTextKey":  "card.or_008.rules",
@@ -1272,7 +1272,7 @@
                     {
                         "id":  "nt_001",
                         "designId":  "NT-001",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.nt_001.name",
                         "rulesTextKey":  "card.nt_001.rules",
@@ -1303,7 +1303,7 @@
                     {
                         "id":  "nt_002",
                         "designId":  "NT-002",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.nt_002.name",
                         "rulesTextKey":  "card.nt_002.rules",
@@ -1336,7 +1336,7 @@
                     {
                         "id":  "nt_003",
                         "designId":  "NT-003",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.nt_003.name",
                         "rulesTextKey":  "card.nt_003.rules",
@@ -1367,7 +1367,7 @@
                     {
                         "id":  "nt_004",
                         "designId":  "NT-004",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.nt_004.name",
                         "rulesTextKey":  "card.nt_004.rules",
@@ -1398,7 +1398,7 @@
                     {
                         "id":  "nt_005",
                         "designId":  "NT-005",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.nt_005.name",
                         "rulesTextKey":  "card.nt_005.rules",
@@ -1431,7 +1431,7 @@
                     {
                         "id":  "nt_006",
                         "designId":  "NT-006",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.nt_006.name",
                         "rulesTextKey":  "card.nt_006.rules",
@@ -1462,7 +1462,7 @@
                     {
                         "id":  "nt_007",
                         "designId":  "NT-007",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.nt_007.name",
                         "rulesTextKey":  "card.nt_007.rules",
@@ -1494,7 +1494,7 @@
                     {
                         "id":  "nt_008",
                         "designId":  "NT-008",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.nt_008.name",
                         "rulesTextKey":  "card.nt_008.rules",
@@ -1526,7 +1526,7 @@
                     {
                         "id":  "ed_001",
                         "designId":  "ED-001",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.ed_001.name",
                         "rulesTextKey":  "card.ed_001.rules",
@@ -1558,7 +1558,7 @@
                     {
                         "id":  "ed_002",
                         "designId":  "ED-002",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.ed_002.name",
                         "rulesTextKey":  "card.ed_002.rules",
@@ -1590,7 +1590,7 @@
                     {
                         "id":  "ed_003",
                         "designId":  "ED-003",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.ed_003.name",
                         "rulesTextKey":  "card.ed_003.rules",
@@ -1621,7 +1621,7 @@
                     {
                         "id":  "ed_004",
                         "designId":  "ED-004",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.ed_004.name",
                         "rulesTextKey":  "card.ed_004.rules",
@@ -1644,7 +1644,7 @@
                         "keywords":  [
                                          "TAUNT"
                                      ],
-                        "effectImplementationStatus":  "PENDING",
+                        "effectImplementationStatus":  "IMPLEMENTED",
                         "effectIds":  [
                                           "effect.ed_004.01"
                                       ]
@@ -1652,7 +1652,7 @@
                     {
                         "id":  "ed_005",
                         "designId":  "ED-005",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.ed_005.name",
                         "rulesTextKey":  "card.ed_005.rules",
@@ -1683,7 +1683,7 @@
                     {
                         "id":  "ed_006",
                         "designId":  "ED-006",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.ed_006.name",
                         "rulesTextKey":  "card.ed_006.rules",
@@ -1715,7 +1715,7 @@
                     {
                         "id":  "ed_007",
                         "designId":  "ED-007",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.ed_007.name",
                         "rulesTextKey":  "card.ed_007.rules",
@@ -1747,7 +1747,7 @@
                     {
                         "id":  "ed_008",
                         "designId":  "ED-008",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  true,
                         "nameKey":  "card.ed_008.name",
                         "rulesTextKey":  "card.ed_008.rules",
@@ -1779,7 +1779,7 @@
                     {
                         "id":  "tk_001",
                         "designId":  "TK-001",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  false,
                         "nameKey":  "card.tk_001.name",
                         "rulesTextKey":  "card.tk_001.rules",
@@ -1811,7 +1811,7 @@
                     {
                         "id":  "tk_002",
                         "designId":  "TK-002",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  false,
                         "nameKey":  "card.tk_002.name",
                         "rulesTextKey":  "card.tk_002.rules",
@@ -1843,7 +1843,7 @@
                     {
                         "id":  "tk_003",
                         "designId":  "TK-003",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  false,
                         "nameKey":  "card.tk_003.name",
                         "rulesTextKey":  "card.tk_003.rules",
@@ -1875,7 +1875,7 @@
                     {
                         "id":  "tk_004",
                         "designId":  "TK-004",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  false,
                         "nameKey":  "card.tk_004.name",
                         "rulesTextKey":  "card.tk_004.rules",
@@ -1906,7 +1906,7 @@
                     {
                         "id":  "tk_005",
                         "designId":  "TK-005",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  false,
                         "nameKey":  "card.tk_005.name",
                         "rulesTextKey":  "card.tk_005.rules",
@@ -1938,7 +1938,7 @@
                     {
                         "id":  "tk_006",
                         "designId":  "TK-006",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  false,
                         "nameKey":  "card.tk_006.name",
                         "rulesTextKey":  "card.tk_006.rules",
@@ -1970,7 +1970,7 @@
                     {
                         "id":  "tk_007",
                         "designId":  "TK-007",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  false,
                         "nameKey":  "card.tk_007.name",
                         "rulesTextKey":  "card.tk_007.rules",
@@ -2001,7 +2001,7 @@
                     {
                         "id":  "tk_008",
                         "designId":  "TK-008",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  false,
                         "nameKey":  "card.tk_008.name",
                         "rulesTextKey":  "card.tk_008.rules",
@@ -2033,7 +2033,7 @@
                     {
                         "id":  "tk_009",
                         "designId":  "TK-009",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  false,
                         "nameKey":  "card.tk_009.name",
                         "rulesTextKey":  "card.tk_009.rules",
@@ -2064,7 +2064,7 @@
                     {
                         "id":  "tk_010",
                         "designId":  "TK-010",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  false,
                         "nameKey":  "card.tk_010.name",
                         "rulesTextKey":  "card.tk_010.rules",
@@ -2096,7 +2096,7 @@
                     {
                         "id":  "tk_011",
                         "designId":  "TK-011",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  false,
                         "nameKey":  "card.tk_011.name",
                         "rulesTextKey":  "card.tk_011.rules",
@@ -2127,7 +2127,7 @@
                     {
                         "id":  "tk_012",
                         "designId":  "TK-012",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  false,
                         "nameKey":  "card.tk_012.name",
                         "rulesTextKey":  "card.tk_012.rules",
@@ -2159,7 +2159,7 @@
                     {
                         "id":  "tk_013",
                         "designId":  "TK-013",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  false,
                         "nameKey":  "card.tk_013.name",
                         "rulesTextKey":  "card.tk_013.rules",
@@ -2191,7 +2191,7 @@
                     {
                         "id":  "tk_014",
                         "designId":  "TK-014",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  false,
                         "nameKey":  "card.tk_014.name",
                         "rulesTextKey":  "card.tk_014.rules",
@@ -2222,7 +2222,7 @@
                     {
                         "id":  "tk_015",
                         "designId":  "TK-015",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  false,
                         "nameKey":  "card.tk_015.name",
                         "rulesTextKey":  "card.tk_015.rules",
@@ -2255,7 +2255,7 @@
                     {
                         "id":  "tk_016",
                         "designId":  "TK-016",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  false,
                         "nameKey":  "card.tk_016.name",
                         "rulesTextKey":  "card.tk_016.rules",
@@ -2287,7 +2287,7 @@
                     {
                         "id":  "tk_017",
                         "designId":  "TK-017",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  false,
                         "nameKey":  "card.tk_017.name",
                         "rulesTextKey":  "card.tk_017.rules",
@@ -2319,7 +2319,7 @@
                     {
                         "id":  "tk_018",
                         "designId":  "TK-018",
-                        "contentVersion":  1,
+                        "contentVersion":  2,
                         "collectible":  false,
                         "nameKey":  "card.tk_018.name",
                         "rulesTextKey":  "card.tk_018.rules",

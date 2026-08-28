@@ -133,7 +133,8 @@ namespace BiomeRivals.Demo
                 SelectCard("si_001");
                 CastSelectedCard();
             }
-            if (HasCommandLineFlag("-previewTaunt")) SetupTauntPreview();
+            if (HasCommandLineFlag("-previewDeathrattle")) SetupDeathrattlePreview();
+            else if (HasCommandLineFlag("-previewTaunt")) SetupTauntPreview();
             else if (HasCommandLineFlag("-previewCombat")) OnEndTurn();
             if (HasCommandLineFlag("-previewGroundHover")) _battlefield.SetSlotHovered(true, DemoSlotKind.Unit, 0, true);
             var capturePath = GetCommandLineValue("-captureDemo");
@@ -440,7 +441,7 @@ namespace BiomeRivals.Demo
             var eventTypes = new[]
             {
                 MatchEventTypes.CardDeployed, MatchEventTypes.CardPlayed, MatchEventTypes.CardDrawn,
-                MatchEventTypes.CardBurned, MatchEventTypes.FatigueDamage, MatchEventTypes.HeroDamaged,
+                MatchEventTypes.CardBurned, MatchEventTypes.CardGenerated, MatchEventTypes.FatigueDamage, MatchEventTypes.HeroDamaged,
                 MatchEventTypes.HeroHealed, MatchEventTypes.ArmorGained, MatchEventTypes.ObjectStatsChanged,
                 MatchEventTypes.PhaseChanged, MatchEventTypes.AttackResolved, MatchEventTypes.ObjectDied,
                 MatchEventTypes.TurnEnded, MatchEventTypes.TurnStarted, MatchEventTypes.PlayerConceded,
@@ -496,6 +497,33 @@ namespace BiomeRivals.Demo
                             break;
                     }
                     yield return null;
+                    break;
+                }
+                case MatchEventTypes.CardGenerated: {
+                    var generatedViewerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
+                    var ownGeneration = matchEvent.payload?.playerId == generatedViewerId;
+                    var generatedToHand = matchEvent.payload?.destination == "HAND";
+                    var sourceName = string.IsNullOrEmpty(matchEvent.payload?.sourceCardId)
+                        ? "卡牌"
+                        : GetCardName(matchEvent.payload.sourceCardId);
+                    var generatedName = string.IsNullOrEmpty(matchEvent.payload?.cardId)
+                        ? "一张牌"
+                        : GetCardName(matchEvent.payload.cardId);
+                    var triggerName = matchEvent.payload?.effectId == "effect.ed_004.01" ? "亡语" : "效果";
+                    if (generatedToHand)
+                    {
+                        ShowStatus(ownGeneration
+                            ? $"{sourceName}{triggerName}：{generatedName}已置入你的手牌。"
+                            : $"敌方{sourceName}{triggerName}：对手获得一张牌。", false);
+                    }
+                    else
+                    {
+                        ShowStatus(ownGeneration
+                            ? $"{sourceName}{triggerName}：手牌已满，{generatedName}进入弃牌堆。"
+                            : $"敌方{sourceName}{triggerName}：对手手牌已满，{generatedName}进入弃牌堆。", false);
+                    }
+                    if (ownGeneration) yield return PulsePlayerHud(generatedToHand ? Cyan : Ember);
+                    else yield return null;
                     break;
                 }
                 case MatchEventTypes.PhaseChanged:
@@ -664,6 +692,30 @@ namespace BiomeRivals.Demo
             if (attacker != null) _battlefield.SetSlotPressed(true, DemoSlotKind.Unit, attacker.SlotIndex, true);
             RefreshAll();
             ShowStatus("嘲讽生效：只能攻击带金色地表高亮的铁傀儡。", false);
+        }
+
+        private void SetupDeathrattlePreview()
+        {
+            SelectFaction("end");
+            SelectOpponentFaction("plains_forest");
+            if (!_registry.TryGetDefinition("ed_004", out var shulkerDefinition) ||
+                !_registry.TryGetDefinition("pf_008", out var ironGolemDefinition)) return;
+            _match.ResetDeckAndHand(new[] { shulkerDefinition.id }, Array.Empty<string>());
+            _match.ResetOpponent(new[] { ironGolemDefinition });
+            if (!_match.TryDeploy(shulkerDefinition, DemoSlotKind.Unit, 0, out _)) return;
+            _match.EndPlayerTurn();
+            _match.BeginNextPlayerTurn();
+            _match.ApplyEnterCombat(_match.CreateEnterCombatCommand());
+            var attacker = _match.GetObject(true, DemoSlotKind.Unit, 0);
+            var target = _match.GetObject(false, DemoSlotKind.Unit, 0);
+            if (attacker == null || target == null) return;
+            var result = _match.ApplyAttack(_match.CreateAttackCommand(attacker.InstanceId, "UNIT", target.InstanceId));
+            _match.EndPlayerTurn();
+            _match.BeginNextPlayerTurn();
+            _selectedAttackerInstanceId = null;
+            _selectedCardId = "tk_016";
+            RefreshAll();
+            ShowStatus(result.Message, !result.Accepted);
         }
 
         private void ApplyPlayerFactionVisuals(FactionSpec spec)

@@ -29,6 +29,7 @@ namespace BiomeRivals.Core
         public const string CardPlayed = "CARD_PLAYED";
         public const string CardDrawn = "CARD_DRAWN";
         public const string CardBurned = "CARD_BURNED";
+        public const string CardGenerated = "CARD_GENERATED";
         public const string FatigueDamage = "FATIGUE_DAMAGE";
         public const string HeroDamaged = "HERO_DAMAGED";
         public const string HeroHealed = "HERO_HEALED";
@@ -199,6 +200,8 @@ namespace BiomeRivals.Core
         public int armor;
         public string effectId = string.Empty;
         public string sourceCardId = string.Empty;
+        public string sourceInstanceId = string.Empty;
+        public string destination = string.Empty;
         public string damageType = string.Empty;
         public int healing;
         public int amount;

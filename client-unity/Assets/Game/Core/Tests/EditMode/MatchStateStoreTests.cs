@@ -365,6 +365,50 @@ namespace BiomeRivals.Core.Tests
         }
 
         [Test]
+        public void Apply_ReplaysPrivateGeneratedHandCardsAndPublicGeneratedDiscards()
+        {
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "match-1", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice", hand = new[] { "pf_001" }, discardPile = Array.Empty<string>() },
+                    new PlayerStateDto { playerId = "bob", hand = new[] { string.Empty }, discardPile = Array.Empty<string>() }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 1, type = MatchEventTypes.CardGenerated,
+                        payload = new MatchEventPayloadDto { playerId = "alice", cardId = "tk_016", destination = "HAND", handCount = 2, discardCount = 0 }
+                    },
+                    new MatchEventDto
+                    {
+                        eventId = 2, type = MatchEventTypes.CardGenerated,
+                        payload = new MatchEventPayloadDto { playerId = "bob", cardId = null, destination = "HAND", handCount = 2, discardCount = 0 }
+                    },
+                    new MatchEventDto
+                    {
+                        eventId = 3, type = MatchEventTypes.CardGenerated,
+                        payload = new MatchEventPayloadDto { playerId = "alice", cardId = "tk_016", destination = "DISCARD", handCount = 2, discardCount = 1 }
+                    }
+                }
+            });
+
+            Assert.That(store.Current.players[0].hand, Is.EqualTo(new[] { "pf_001", "tk_016" }));
+            Assert.That(store.Current.players[0].discardPile, Is.EqualTo(new[] { "tk_016" }));
+            Assert.That(store.Current.players[1].hand, Has.Length.EqualTo(2));
+            Assert.That(store.Current.players[1].hand[1], Is.Null);
+        }
+
+        [Test]
         public void Apply_ReplaysFatigueAsTrueHeroDamage()
         {
             var store = new MatchStateStore();

@@ -22,6 +22,7 @@ namespace BiomeRivals.Demo
         private readonly HashSet<string> _processedCommandIds = new HashSet<string>(StringComparer.Ordinal);
         private int _nextLocalCommandId = 1;
         private int _nextBattlefieldInstanceId = 1;
+        private int _opponentHandCount = 5;
 
         public IReadOnlyList<string> Hand => _hand;
         public IReadOnlyList<string> Deck => _deck;
@@ -41,7 +42,7 @@ namespace BiomeRivals.Demo
         public int ViewerIndex => 0;
         public int DeckCount => _deck.Count;
         public int DiscardCount => _discardPile.Count;
-        public int OpponentHandCount => 5;
+        public int OpponentHandCount => _opponentHandCount;
         public int Round { get; private set; } = 1;
         public int MaxEnergy { get; private set; } = 6;
         public int Energy { get; private set; } = 6;
@@ -208,6 +209,7 @@ namespace BiomeRivals.Demo
                 case "effect.db_006.01":
                     var damaged = 0;
                     var destroyed = 0;
+                    var deathrattleMessages = new List<string>();
                     foreach (var value in _playerBattlefield.ToArray())
                     {
                         if (value.SlotKind != DemoSlotKind.Unit) continue;
@@ -215,7 +217,8 @@ namespace BiomeRivals.Demo
                         damaged++;
                         if (value.Health == 0)
                         {
-                            RemoveObject(value, _playerBattlefield, UnitSlots, BuildingSlots);
+                            var triggerMessage = RemoveObject(value, _playerBattlefield, UnitSlots, BuildingSlots);
+                            if (!string.IsNullOrEmpty(triggerMessage)) deathrattleMessages.Add(triggerMessage);
                             destroyed++;
                         }
                     }
@@ -226,11 +229,13 @@ namespace BiomeRivals.Demo
                         damaged++;
                         if (value.Health == 0)
                         {
-                            RemoveObject(value, _opponentBattlefield, OpponentUnitSlots, OpponentBuildingSlots);
+                            var triggerMessage = RemoveObject(value, _opponentBattlefield, OpponentUnitSlots, OpponentBuildingSlots);
+                            if (!string.IsNullOrEmpty(triggerMessage)) deathrattleMessages.Add(triggerMessage);
                             destroyed++;
                         }
                     }
                     message = $"沙尘暴：对 {damaged} 个生物造成 2 点伤害，消灭 {destroyed} 个。";
+                    if (deathrattleMessages.Count > 0) message += " " + string.Join(" ", deathrattleMessages);
                     break;
                 case "effect.nt_006.01":
                     PlayerLife = Math.Max(0, PlayerLife - 2);
@@ -293,6 +298,7 @@ namespace BiomeRivals.Demo
             Array.Clear(OpponentBuildingSlots, 0, OpponentBuildingSlots.Length);
             _opponentBattlefield.Clear();
             OpponentLife = 30;
+            _opponentHandCount = 5;
             var unitIndex = 0;
             var buildingIndex = 0;
             foreach (var definition in definitions)
@@ -396,11 +402,21 @@ namespace BiomeRivals.Demo
             attacker.Health = Math.Max(0, attacker.Health - retaliation);
             var targetDied = target.Health == 0;
             var attackerDied = attacker.Health == 0;
-            if (targetDied) RemoveObject(target, _opponentBattlefield, OpponentUnitSlots, OpponentBuildingSlots);
-            if (attackerDied) RemoveObject(attacker, _playerBattlefield, UnitSlots, BuildingSlots);
+            var deathrattleMessages = new List<string>();
+            if (attackerDied)
+            {
+                var triggerMessage = RemoveObject(attacker, _playerBattlefield, UnitSlots, BuildingSlots);
+                if (!string.IsNullOrEmpty(triggerMessage)) deathrattleMessages.Add(triggerMessage);
+            }
+            if (targetDied)
+            {
+                var triggerMessage = RemoveObject(target, _opponentBattlefield, OpponentUnitSlots, OpponentBuildingSlots);
+                if (!string.IsNullOrEmpty(triggerMessage)) deathrattleMessages.Add(triggerMessage);
+            }
             AcceptCommand(command);
             return DemoCommandResult.Accept(
-                $"造成 {attacker.Attack} 点伤害，受到 {retaliation} 点反击" + (targetDied ? "；目标死亡。" : "。"),
+                $"造成 {attacker.Attack} 点伤害，受到 {retaliation} 点反击" + (targetDied ? "；目标死亡。" : "。") +
+                (deathrattleMessages.Count > 0 ? " " + string.Join(" ", deathrattleMessages) : string.Empty),
                 Revision);
         }
 
@@ -540,7 +556,7 @@ namespace BiomeRivals.Demo
         private bool HasLivingOpponentTaunt() =>
             _opponentBattlefield.Any(value => value.Health > 0 && value.HasKeyword("TAUNT"));
 
-        private void RemoveObject(
+        private string RemoveObject(
             DemoBattlefieldObject value,
             List<DemoBattlefieldObject> battlefield,
             string[] unitSlots,
@@ -550,6 +566,28 @@ namespace BiomeRivals.Demo
             if (value.Player) _discardPile.Add(value.CardId);
             var slots = value.SlotKind == DemoSlotKind.Unit ? unitSlots : buildingSlots;
             for (var index = value.SlotIndex; index < value.SlotIndex + value.OccupiedSlots; index++) slots[index] = string.Empty;
+            return ResolveLocalDeathrattle(value);
+        }
+
+        private string ResolveLocalDeathrattle(DemoBattlefieldObject value)
+        {
+            if (value.CardId != "ed_004") return string.Empty;
+            if (value.Player)
+            {
+                if (_hand.Count < 7)
+                {
+                    _hand.Add("tk_016");
+                    return "潜影贝亡语：潜影壳已置入你的手牌。";
+                }
+                _discardPile.Add("tk_016");
+                return "潜影贝亡语：手牌已满，潜影壳进入弃牌堆。";
+            }
+            if (_opponentHandCount < 7)
+            {
+                _opponentHandCount++;
+                return "敌方潜影贝亡语：对手获得一张牌。";
+            }
+            return "敌方潜影贝亡语：对手手牌已满，潜影壳进入弃牌堆。";
         }
 
         private void AcceptCommand(MatchCommandDto command)

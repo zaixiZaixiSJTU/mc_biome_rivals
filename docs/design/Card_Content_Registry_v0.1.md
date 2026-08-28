@@ -21,7 +21,7 @@
 
 - 56 张可收集牌。
 - 18 张不可收集衍生物。
-- 69 张有规则文本的牌预留 `effect.<cardId>.01`；其中 8 张为 `IMPLEMENTED`，其余 61 张为 `PENDING`。
+- 69 张有规则文本的牌预留 `effect.<cardId>.01`；其中 9 张为 `IMPLEMENTED`，其余 60 张为 `PENDING`。
 - 5 张无规则文本衍生物状态为 `NONE`。
 - 卡牌定义 Schema v2 从规范化规则文本提取独立 `keywords`；当前注册 4 张 `TAUNT`，并预留 `CHARGE`。
 

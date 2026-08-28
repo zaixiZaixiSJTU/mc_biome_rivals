@@ -186,6 +186,27 @@ namespace BiomeRivals.Core
                     burningPlayer.discardPile = discard.ToArray();
                     burningPlayer.deckCount = payload.deckCount;
                     break;
+                case MatchEventTypes.CardGenerated:
+                    var generatedPlayer = FindPlayer(payload.playerId);
+                    if (payload.destination == "HAND")
+                    {
+                        var generatedHand = new List<string>(generatedPlayer.hand ?? Array.Empty<string>()) { payload.cardId };
+                        if (generatedHand.Count != payload.handCount) throw new InvalidOperationException("Generated event hand count does not match projected hand.");
+                        generatedPlayer.hand = generatedHand.ToArray();
+                        if ((generatedPlayer.discardPile?.Length ?? 0) != payload.discardCount)
+                            throw new InvalidOperationException("Generated event discard count does not match projected discard pile.");
+                    }
+                    else if (payload.destination == "DISCARD")
+                    {
+                        if ((generatedPlayer.hand?.Length ?? 0) != payload.handCount)
+                            throw new InvalidOperationException("Generated discard event hand count does not match projected hand.");
+                        var generatedDiscard = new List<string>(generatedPlayer.discardPile ?? Array.Empty<string>()) { payload.cardId };
+                        if (generatedDiscard.Count != payload.discardCount)
+                            throw new InvalidOperationException("Generated discard event discard count does not match projected discard pile.");
+                        generatedPlayer.discardPile = generatedDiscard.ToArray();
+                    }
+                    else throw new InvalidOperationException("Generated event destination is invalid.");
+                    break;
                 case MatchEventTypes.FatigueDamage:
                     var fatiguedPlayer = FindPlayer(payload.playerId);
                     if ((fatiguedPlayer.hand?.Length ?? 0) != payload.handCount) throw new InvalidOperationException("Fatigue event hand count does not match projected hand.");

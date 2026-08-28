@@ -340,6 +340,57 @@ namespace BiomeRivals.Demo.Tests
         }
 
         [Test]
+        public void LocalShulkerDeathrattleGeneratesShulkerShell()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            Assert.That(registry.TryGetDefinition("ed_004", out var shulker), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_008", out var ironGolem), Is.True);
+            match.ResetHand(new[] { shulker.id });
+            match.ResetOpponent(new[] { ironGolem });
+            Assert.That(match.TryDeploy(shulker, DemoSlotKind.Unit, 0, out _), Is.True);
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            Assert.That(match.ApplyEnterCombat(match.CreateEnterCombatCommand()).Accepted, Is.True);
+
+            var attacker = match.GetObject(true, DemoSlotKind.Unit, 0);
+            var target = match.GetObject(false, DemoSlotKind.Unit, 0);
+            var result = match.ApplyAttack(match.CreateAttackCommand(attacker.InstanceId, "UNIT", target.InstanceId));
+
+            Assert.That(result.Accepted, Is.True);
+            Assert.That(result.Message, Does.Contain("潜影贝亡语"));
+            Assert.That(match.Hand, Is.EqualTo(new[] { "tk_016" }));
+            Assert.That(match.DiscardPile, Is.EqualTo(new[] { "ed_004" }));
+        }
+
+        [Test]
+        public void LocalShulkerDeathrattleDiscardsShellAtFullHand()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            Assert.That(registry.TryGetDefinition("ed_004", out var shulker), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_008", out var ironGolem), Is.True);
+            match.ResetDeckAndHand(
+                new[] { "ed_004", "ed_001", "ed_001", "ed_001", "ed_001", "ed_001", "ed_001" },
+                new[] { "ed_003" });
+            match.ResetOpponent(new[] { ironGolem });
+            Assert.That(match.TryDeploy(shulker, DemoSlotKind.Unit, 0, out _), Is.True);
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            Assert.That(match.Hand.Count, Is.EqualTo(7));
+            Assert.That(match.ApplyEnterCombat(match.CreateEnterCombatCommand()).Accepted, Is.True);
+
+            var attacker = match.GetObject(true, DemoSlotKind.Unit, 0);
+            var target = match.GetObject(false, DemoSlotKind.Unit, 0);
+            var result = match.ApplyAttack(match.CreateAttackCommand(attacker.InstanceId, "UNIT", target.InstanceId));
+
+            Assert.That(result.Accepted, Is.True);
+            Assert.That(result.Message, Does.Contain("手牌已满"));
+            Assert.That(match.Hand.Count, Is.EqualTo(7));
+            Assert.That(match.DiscardPile, Is.EqualTo(new[] { "ed_004", "tk_016" }));
+        }
+
+        [Test]
         public void LocalCombatCanDefeatOpponentHero()
         {
             var registry = CardContentLoader.Load();

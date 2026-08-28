@@ -144,6 +144,7 @@ namespace BiomeRivalsRules {
         const payload: { [key: string]: unknown } = {};
         Object.keys(event.payload).forEach(function (key): void { payload[key] = event.payload[key]; });
         if (event.type === 'CARD_DRAWN' && payload.playerId !== viewerPlayerId) payload.cardId = null;
+        if (event.type === 'CARD_GENERATED' && payload.playerId !== viewerPlayerId && payload.destination === 'HAND') payload.cardId = null;
         if (event.type === 'MULLIGAN_COMPLETED' && payload.playerId !== viewerPlayerId && Array.isArray(payload.hand)) {
           payload.hand = (payload.hand as string[]).map(function (): null { return null; });
         }
@@ -415,7 +416,39 @@ namespace BiomeRivalsRules {
           occupiedSlots: object.occupiedSlots,
           discardCount: player.discardPile.length
         });
+        resolveDeathrattles(player, object);
       }
+    }
+
+    function resolveDeathrattles(player: PlayerState, object: BattlefieldObjectState): void {
+      const definition = getCardDefinition(object.cardId);
+      if (definition === null || definition.effectImplementationStatus !== 'IMPLEMENTED') return;
+      if (definition.effectIds.indexOf('effect.ed_004.01') >= 0) {
+        generateCard(player, 'tk_016', object.cardId, object.instanceId, 'effect.ed_004.01');
+      }
+    }
+
+    function generateCard(
+      player: PlayerState,
+      cardId: string,
+      sourceCardId: string,
+      sourceInstanceId: string,
+      effectId: string
+    ): void {
+      if (getCardDefinition(cardId) === null) throw new Error('generated card is not registered: ' + cardId);
+      const destination = player.hand.length >= HAND_LIMIT ? 'DISCARD' : 'HAND';
+      if (destination === 'HAND') player.hand.push(cardId);
+      else player.discardPile.push(cardId);
+      emit('CARD_GENERATED', {
+        playerId: player.playerId,
+        sourceCardId: sourceCardId,
+        sourceInstanceId: sourceInstanceId,
+        effectId: effectId,
+        cardId: cardId,
+        destination: destination,
+        handCount: player.hand.length,
+        discardCount: player.discardPile.length
+      });
     }
 
     function damageHero(player: PlayerState, amount: number): void {
