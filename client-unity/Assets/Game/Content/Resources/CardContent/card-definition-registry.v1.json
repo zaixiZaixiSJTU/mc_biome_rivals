@@ -1,5 +1,5 @@
 {
-    "schemaVersion":  1,
+    "schemaVersion":  2,
     "contentVersion":  1,
     "source":  "docs/design/Minecraft_Biome_Rivals_Prototype_Cards_v0.1.md",
     "entries":  [
@@ -27,6 +27,9 @@
                                      "arthropod",
                                      "animal"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "IMPLEMENTED",
                         "effectIds":  [
                                           "effect.pf_001.01"
@@ -55,6 +58,9 @@
                         "tags":  [
                                      "animal"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.pf_002.01"
@@ -83,6 +89,9 @@
                         "tags":  [
                                      "animal"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.pf_003.01"
@@ -112,6 +121,9 @@
                                      "villager",
                                      "trade"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.pf_004.01"
@@ -141,6 +153,9 @@
                                      "plant",
                                      "production"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.pf_005.01"
@@ -170,6 +185,9 @@
                                      "breeding",
                                      "nature"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.pf_006.01"
@@ -198,6 +216,9 @@
                         "tags":  [
                                      "nature"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.pf_007.01"
@@ -226,6 +247,9 @@
                         "tags":  [
                                      "golem"
                                  ],
+                        "keywords":  [
+                                         "TAUNT"
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.pf_008.01"
@@ -255,6 +279,9 @@
                                      "undead",
                                      "zombie"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.db_001.01"
@@ -284,6 +311,9 @@
                                      "archaeology",
                                      "material"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.db_002.01"
@@ -313,6 +343,9 @@
                                      "villager",
                                      "archaeology"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.db_003.01"
@@ -342,6 +375,9 @@
                                      "plant",
                                      "defense"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.db_004.01"
@@ -370,6 +406,9 @@
                         "tags":  [
                                      "illager"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.db_005.01"
@@ -398,6 +437,9 @@
                         "tags":  [
                                      "nature"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "IMPLEMENTED",
                         "effectIds":  [
                                           "effect.db_006.01"
@@ -427,6 +469,9 @@
                                      "structure",
                                      "archaeology"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.db_007.01"
@@ -456,6 +501,9 @@
                                      "animal",
                                      "trade"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.db_008.01"
@@ -485,6 +533,9 @@
                                      "material",
                                      "frostbite"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "IMPLEMENTED",
                         "effectIds":  [
                                           "effect.si_001.01"
@@ -513,6 +564,9 @@
                         "tags":  [
                                      "golem"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.si_002.01"
@@ -543,6 +597,9 @@
                                      "skeleton",
                                      "frostbite"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.si_003.01"
@@ -571,6 +628,9 @@
                         "tags":  [
                                      "animal"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.si_004.01"
@@ -599,6 +659,9 @@
                         "tags":  [
                                      "animal"
                                  ],
+                        "keywords":  [
+                                         "TAUNT"
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.si_005.01"
@@ -627,6 +690,9 @@
                         "tags":  [
                                      "frostbite"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.si_006.01"
@@ -655,6 +721,9 @@
                         "tags":  [
                                      "healing"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.si_007.01"
@@ -684,6 +753,9 @@
                                      "structure",
                                      "frostbite"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.si_008.01"
@@ -712,6 +784,9 @@
                         "tags":  [
                                      "animal"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.cd_001.01"
@@ -740,6 +815,9 @@
                         "tags":  [
                                      "arthropod"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.cd_002.01"
@@ -769,6 +847,9 @@
                                      "undead",
                                      "skeleton"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.cd_003.01"
@@ -798,6 +879,9 @@
                                      "sculk",
                                      "deep_dark"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.cd_004.01"
@@ -826,6 +910,9 @@
                         "tags":  [
                                      "illager"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.cd_005.01"
@@ -854,6 +941,9 @@
                         "tags":  [
                                      "deep_dark"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.cd_006.01"
@@ -883,6 +973,9 @@
                                      "structure",
                                      "production"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.cd_007.01"
@@ -912,6 +1005,9 @@
                                      "structure",
                                      "illager"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.cd_008.01"
@@ -941,6 +1037,9 @@
                                      "aquatic",
                                      "animal"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.or_001.01"
@@ -970,6 +1069,9 @@
                                      "aquatic",
                                      "animal"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.or_002.01"
@@ -999,6 +1101,9 @@
                                      "undead",
                                      "aquatic"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.or_003.01"
@@ -1028,6 +1133,9 @@
                                      "aquatic",
                                      "guardian"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.or_004.01"
@@ -1057,6 +1165,9 @@
                                      "aquatic",
                                      "animal"
                                  ],
+                        "keywords":  [
+                                         "TAUNT"
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.or_005.01"
@@ -1086,6 +1197,9 @@
                                      "weapon",
                                      "current"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.or_006.01"
@@ -1115,6 +1229,9 @@
                                      "aquatic",
                                      "production"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.or_007.01"
@@ -1144,6 +1261,9 @@
                                      "structure",
                                      "guardian"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.or_008.01"
@@ -1172,6 +1292,9 @@
                         "tags":  [
                                      "magma"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.nt_001.01"
@@ -1202,6 +1325,9 @@
                                      "piglin",
                                      "magma"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.nt_002.01"
@@ -1230,6 +1356,9 @@
                         "tags":  [
                                      "fire"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.nt_003.01"
@@ -1258,6 +1387,9 @@
                         "tags":  [
                                      "animal"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.nt_004.01"
@@ -1288,6 +1420,9 @@
                                      "skeleton",
                                      "wither"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.nt_005.01"
@@ -1316,6 +1451,9 @@
                         "tags":  [
                                      "fire"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "IMPLEMENTED",
                         "effectIds":  [
                                           "effect.nt_006.01"
@@ -1345,6 +1483,9 @@
                                      "nether",
                                      "redstone"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.nt_007.01"
@@ -1374,6 +1515,9 @@
                                      "structure",
                                      "magma"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.nt_008.01"
@@ -1403,6 +1547,9 @@
                                      "ender",
                                      "arthropod"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.ed_001.01"
@@ -1432,6 +1579,9 @@
                                      "plant",
                                      "material"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.ed_002.01"
@@ -1460,6 +1610,9 @@
                         "tags":  [
                                      "ender"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.ed_003.01"
@@ -1488,6 +1641,9 @@
                         "tags":  [
                                      "ender"
                                  ],
+                        "keywords":  [
+                                         "TAUNT"
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.ed_004.01"
@@ -1516,6 +1672,9 @@
                         "tags":  [
                                      "ender"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.ed_005.01"
@@ -1545,6 +1704,9 @@
                                      "void",
                                      "suspend"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.ed_006.01"
@@ -1574,6 +1736,9 @@
                                      "ender",
                                      "ritual"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.ed_007.01"
@@ -1603,6 +1768,9 @@
                                      "structure",
                                      "ritual"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.ed_008.01"
@@ -1632,6 +1800,9 @@
                                      "material",
                                      "fiber"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.tk_001.01"
@@ -1661,6 +1832,9 @@
                                      "material",
                                      "food"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.tk_002.01"
@@ -1690,6 +1864,9 @@
                                      "animal",
                                      "juvenile"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "NONE",
                         "effectIds":  [
 
@@ -1718,6 +1895,9 @@
                         "tags":  [
                                      "animal"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "NONE",
                         "effectIds":  [
 
@@ -1747,6 +1927,9 @@
                                      "material",
                                      "food"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "IMPLEMENTED",
                         "effectIds":  [
                                           "effect.tk_005.01"
@@ -1776,6 +1959,9 @@
                                      "material",
                                      "archaeology"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.tk_006.01"
@@ -1804,6 +1990,9 @@
                         "tags":  [
                                      "archaeology"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.tk_007.01"
@@ -1833,6 +2022,9 @@
                                      "archaeology",
                                      "explosive"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.tk_008.01"
@@ -1861,6 +2053,9 @@
                         "tags":  [
                                      "material"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "IMPLEMENTED",
                         "effectIds":  [
                                           "effect.tk_009.01"
@@ -1890,6 +2085,9 @@
                                      "material",
                                      "stone"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "IMPLEMENTED",
                         "effectIds":  [
                                           "effect.tk_010.01"
@@ -1918,6 +2116,9 @@
                         "tags":  [
                                      "illager"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "NONE",
                         "effectIds":  [
 
@@ -1947,6 +2148,9 @@
                                      "material",
                                      "prismarine"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.tk_012.01"
@@ -1976,6 +2180,9 @@
                                      "material",
                                      "fire"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.tk_013.01"
@@ -2004,6 +2211,9 @@
                         "tags":  [
                                      "magma"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "NONE",
                         "effectIds":  [
 
@@ -2034,6 +2244,9 @@
                                      "skeleton",
                                      "wither"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "NONE",
                         "effectIds":  [
 
@@ -2063,6 +2276,9 @@
                                      "material",
                                      "ender"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "IMPLEMENTED",
                         "effectIds":  [
                                           "effect.tk_016.01"
@@ -2092,6 +2308,9 @@
                                      "ender",
                                      "dragon"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.tk_017.01"
@@ -2121,6 +2340,9 @@
                                      "gem",
                                      "trade"
                                  ],
+                        "keywords":  [
+
+                                     ],
                         "effectImplementationStatus":  "PENDING",
                         "effectIds":  [
                                           "effect.tk_018.01"

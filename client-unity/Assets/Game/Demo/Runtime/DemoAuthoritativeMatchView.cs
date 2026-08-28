@@ -79,8 +79,23 @@ namespace BiomeRivals.Demo
             if (!IsPlayerTurn || Phase != DemoTurnPhase.Combat) return Fail("请先进入战斗阶段。", out message);
             if (attacker == null || !attacker.Player || attacker.SlotKind != DemoSlotKind.Unit || attacker.Health <= 0 || attacker.Attack <= 0)
                 return Fail("请选择一个存活且具有攻击力的己方生物。", out message);
-            if (attacker.SummonedRound >= Round) return Fail("该生物本回合刚部署，暂时不能攻击。", out message);
+            if (attacker.SummonedRound >= Round && !attacker.HasKeyword("CHARGE")) return Fail("该生物本回合刚被召唤，且不具有冲锋。", out message);
             if (attacker.HasAttacked) return Fail("该生物本回合已经攻击过。", out message);
+            message = string.Empty;
+            return true;
+        }
+
+        public bool CanAttackTarget(DemoBattlefieldObject target, string targetType, out string message)
+        {
+            if (targetType != "HERO" && targetType != "UNIT" && targetType != "BUILDING")
+                return Fail("攻击目标类型无效。", out message);
+            if (targetType != "HERO" && (target == null || target.Player ||
+                (targetType == "UNIT" && target.SlotKind != DemoSlotKind.Unit) ||
+                (targetType == "BUILDING" && target.SlotKind != DemoSlotKind.Building)))
+                return Fail("攻击目标无效或已经离场。", out message);
+            var taunts = OpponentBattlefield.Where(value => value.Health > 0 && value.HasKeyword("TAUNT")).ToArray();
+            if (taunts.Length > 0 && (targetType == "HERO" || target == null || !target.HasKeyword("TAUNT")))
+                return Fail("敌方存在嘲讽单位，必须先攻击一个发出金光的嘲讽目标。", out message);
             message = string.Empty;
             return true;
         }
@@ -127,6 +142,7 @@ namespace BiomeRivals.Demo
                 MaxHealth = value.maxHealth,
                 SummonedRound = value.summonedTurn,
                 HasAttacked = value.hasAttacked,
+                Keywords = value.keywords ?? Array.Empty<string>(),
                 TemporaryAttackModifier = value.temporaryAttackModifier,
                 TemporaryAttackModifierExpiresOnRound = value.temporaryAttackModifierExpiresOnTurn
             };

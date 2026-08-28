@@ -149,7 +149,8 @@ namespace BiomeRivals.Demo
                 Attack = definition.attack,
                 Health = definition.health,
                 MaxHealth = definition.health,
-                SummonedRound = Round
+                SummonedRound = Round,
+                Keywords = (definition.keywords ?? Array.Empty<string>()).ToArray()
             };
             _playerBattlefield.Add(deployedObject);
             var deployMessage = $"已部署：{definition.designId}";
@@ -324,8 +325,22 @@ namespace BiomeRivals.Demo
             if (!IsPlayerTurn || Phase != DemoTurnPhase.Combat) return Fail("请先进入战斗阶段。", out message);
             if (attacker == null || !attacker.Player || attacker.SlotKind != DemoSlotKind.Unit || attacker.Attack <= 0)
                 return Fail("请选择一个可攻击的己方生物。", out message);
-            if (attacker.SummonedRound == Round) return Fail("该生物本回合刚被召唤，暂时不能攻击。", out message);
+            if (attacker.SummonedRound == Round && !attacker.HasKeyword("CHARGE")) return Fail("该生物本回合刚被召唤，且不具有冲锋。", out message);
             if (attacker.HasAttacked) return Fail("该生物本回合已经攻击过。", out message);
+            message = string.Empty;
+            return true;
+        }
+
+        public bool CanAttackTarget(DemoBattlefieldObject target, string targetType, out string message)
+        {
+            if (targetType != "HERO" && targetType != "UNIT" && targetType != "BUILDING")
+                return Fail("攻击目标类型无效。", out message);
+            if (targetType != "HERO" && (target == null || target.Player ||
+                (targetType == "UNIT" && target.SlotKind != DemoSlotKind.Unit) ||
+                (targetType == "BUILDING" && target.SlotKind != DemoSlotKind.Building)))
+                return Fail("攻击目标无效或已经离场。", out message);
+            if (HasLivingOpponentTaunt() && (targetType == "HERO" || target == null || !target.HasKeyword("TAUNT")))
+                return Fail("敌方存在嘲讽单位，必须先攻击一个发出金光的嘲讽目标。", out message);
             message = string.Empty;
             return true;
         }
@@ -355,6 +370,12 @@ namespace BiomeRivals.Demo
             var attacker = _playerBattlefield.Find(value => value.InstanceId == command.payload.attackerInstanceId);
             if (!CanAttackWith(attacker, out var message)) return Reject(DemoCommandRejectionCode.AttackerNotReady, message);
 
+            var target = command.payload.targetType == "HERO"
+                ? null
+                : _opponentBattlefield.Find(value => value.InstanceId == command.payload.targetInstanceId);
+            if (!CanAttackTarget(target, command.payload.targetType, out message))
+                return Reject(HasLivingOpponentTaunt() ? DemoCommandRejectionCode.TauntTargetRequired : DemoCommandRejectionCode.InvalidTarget, message);
+
             attacker.HasAttacked = true;
             if (command.payload.targetType == "HERO")
             {
@@ -364,7 +385,6 @@ namespace BiomeRivals.Demo
                 return DemoCommandResult.Accept(IsFinished ? "敌方英雄生命归零，你获得胜利！" : $"对敌方英雄造成 {attacker.Attack} 点伤害。", Revision);
             }
 
-            var target = _opponentBattlefield.Find(value => value.InstanceId == command.payload.targetInstanceId);
             var expectedKind = command.payload.targetType == "UNIT" ? DemoSlotKind.Unit : DemoSlotKind.Building;
             if (target == null || target.SlotKind != expectedKind)
             {
@@ -499,7 +519,8 @@ namespace BiomeRivals.Demo
             {
                 InstanceId = $"object-{_nextBattlefieldInstanceId++}", CardId = definition.id, Player = false,
                 SlotKind = kind, SlotIndex = slotIndex, OccupiedSlots = occupiedSlots,
-                Attack = definition.attack, Health = definition.health, MaxHealth = definition.health, SummonedRound = 0
+                Attack = definition.attack, Health = definition.health, MaxHealth = definition.health, SummonedRound = 0,
+                Keywords = (definition.keywords ?? Array.Empty<string>()).ToArray()
             };
             _opponentBattlefield.Add(instance);
             for (var index = slotIndex; index < slotIndex + occupiedSlots; index++) slots[index] = definition.id;
@@ -515,6 +536,9 @@ namespace BiomeRivals.Demo
                 value.TemporaryAttackModifierExpiresOnRound = 0;
             }
         }
+
+        private bool HasLivingOpponentTaunt() =>
+            _opponentBattlefield.Any(value => value.Health > 0 && value.HasKeyword("TAUNT"));
 
         private void RemoveObject(
             DemoBattlefieldObject value,

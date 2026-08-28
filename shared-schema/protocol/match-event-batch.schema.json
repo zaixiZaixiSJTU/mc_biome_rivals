@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["protocolVersion", "rulesetVersion", "revision", "acknowledgedCommandId", "events"],
   "properties": {
-    "protocolVersion": { "const": 7 },
+    "protocolVersion": { "const": 8 },
     "rulesetVersion": { "type": "string" },
     "revision": { "type": "integer", "minimum": 0 },
     "acknowledgedCommandId": { "type": "string" },
@@ -64,7 +64,7 @@
                 "payload": {
                   "type": "object",
                   "additionalProperties": false,
-                  "required": ["playerId", "instanceId", "cardId", "cardType", "slotKind", "slotIndex", "occupiedSlots", "redstone", "attack", "health", "maxHealth", "summonedTurn", "nextInstanceId"],
+                  "required": ["playerId", "instanceId", "cardId", "cardType", "slotKind", "slotIndex", "occupiedSlots", "redstone", "attack", "health", "maxHealth", "summonedTurn", "keywords", "nextInstanceId"],
                   "properties": {
                     "playerId": { "type": "string", "minLength": 1 },
                     "instanceId": { "type": "string", "pattern": "^object-[0-9]+$" },
@@ -78,6 +78,7 @@
                     "health": { "type": "integer", "minimum": 1 },
                     "maxHealth": { "type": "integer", "minimum": 1 },
                     "summonedTurn": { "type": "integer", "minimum": 1 },
+                    "keywords": { "type": "array", "items": { "enum": ["TAUNT", "CHARGE"] }, "uniqueItems": true },
                     "nextInstanceId": { "type": "integer", "minimum": 1 }
                   }
                 }

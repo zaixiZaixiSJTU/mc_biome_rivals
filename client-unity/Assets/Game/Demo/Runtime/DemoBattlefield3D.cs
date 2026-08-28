@@ -129,12 +129,13 @@ namespace BiomeRivals.Demo
             return target != null;
         }
 
-        public void SetSlotState(bool player, DemoSlotKind kind, int index, bool validTarget, bool occupied)
+        public void SetSlotState(bool player, DemoSlotKind kind, int index, bool validTarget, bool occupied, bool priorityTarget = false)
         {
             BuildNow();
             if (!_slotMarkers.TryGetValue(SlotKey(player, kind, index), out var marker)) return;
             marker.ValidTarget = validTarget;
             marker.Occupied = occupied;
+            marker.PriorityTarget = priorityTarget;
             UpdateSlotMarker(marker, Time.unscaledTime, 0f);
         }
 
@@ -197,7 +198,9 @@ namespace BiomeRivals.Demo
             var highlightColor = actionablePress || actionableHover
                 ? Hex("#F1C96A")
                 : marker.ValidTarget
-                    ? Color.Lerp(Hex("#3D9E8F"), Hex("#79E0CB"), pulse)
+                    ? marker.PriorityTarget
+                        ? Color.Lerp(Hex("#A97727"), Hex("#FFE08A"), pulse)
+                        : Color.Lerp(Hex("#3D9E8F"), Hex("#79E0CB"), pulse)
                     : Hex("#777263");
             var highlightStrength = actionablePress
                     ? 0.92f
@@ -793,6 +796,7 @@ namespace BiomeRivals.Demo
             public readonly float Phase;
             public bool ValidTarget;
             public bool Occupied;
+            public bool PriorityTarget;
             public bool Hovered;
             public bool Pressed;
 

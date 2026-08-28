@@ -61,6 +61,7 @@ if ($art.entries.Count -ne 74) { throw "Expected 74 art entries, found $($art.en
 if ($themes.themes.Count -ne 7) { throw "Expected 7 themes, found $($themes.themes.Count)." }
 if ($definitions.entries.Count -ne 74) { throw "Expected 74 definitions, found $($definitions.entries.Count)." }
 if ($texts.entries.Count -ne 74) { throw "Expected 74 localized texts, found $($texts.entries.Count)." }
+if ($definitions.schemaVersion -ne 2) { throw "Unsupported card definition schema version: $($definitions.schemaVersion)" }
 
 $nameIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
 $nameKeys = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
@@ -96,6 +97,12 @@ foreach ($entry in $definitions.entries) {
     if ($entry.artKey -ne "card_art.$id") { throw "Definition art key mismatch: $id" }
     if ($entry.nameKey -ne "card.$id.name") { throw "Definition name key mismatch: $id" }
     if ($entry.rulesTextKey -ne "card.$id.rules") { throw "Definition rules key mismatch: $id" }
+    if ($null -eq $entry.keywords) { throw "Definition keywords must be an array, not null: $id" }
+    $seenKeywords = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    foreach ($keyword in $entry.keywords) {
+        if ([string]$keyword -notin @('TAUNT', 'CHARGE')) { throw "Unsupported keyword '$keyword' on $id" }
+        if (-not $seenKeywords.Add([string]$keyword)) { throw "Duplicate keyword '$keyword' on $id" }
+    }
     if ($null -eq $entry.effectIds) { throw "Definition effectIds must be an array, not null: $id" }
     if ($entry.effectImplementationStatus -eq 'PENDING') {
         if ($entry.effectIds.Count -ne 1 -or $entry.effectIds[0] -ne "effect.$id.01") {
@@ -197,4 +204,6 @@ foreach ($pair in $unityCopies) {
 
 $pendingCount = @($definitions.entries | Where-Object effectImplementationStatus -eq 'PENDING').Count
 $implementedCount = @($definitions.entries | Where-Object effectImplementationStatus -eq 'IMPLEMENTED').Count
-Write-Output "Card content validation passed: 74 definitions/texts/art mappings, 7 accessible themes, $implementedCount implemented and $pendingCount reserved effects."
+$tauntCount = @($definitions.entries | Where-Object { $_.keywords -contains 'TAUNT' }).Count
+$chargeCount = @($definitions.entries | Where-Object { $_.keywords -contains 'CHARGE' }).Count
+Write-Output "Card content validation passed: 74 definitions/texts/art mappings, 7 accessible themes, $implementedCount implemented and $pendingCount reserved effects, $tauntCount TAUNT and $chargeCount CHARGE cards."

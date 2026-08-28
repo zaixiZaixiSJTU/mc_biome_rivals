@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "contentVersion", "source", "entries"],
   "properties": {
-    "schemaVersion": { "const": 1 },
+    "schemaVersion": { "const": 2 },
     "contentVersion": { "type": "integer", "minimum": 1 },
     "source": { "type": "string", "minLength": 1 },
     "entries": {

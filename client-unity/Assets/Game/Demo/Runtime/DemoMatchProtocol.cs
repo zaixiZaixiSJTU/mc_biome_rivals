@@ -42,8 +42,12 @@ namespace BiomeRivals.Demo
         public int MaxHealth { get; set; }
         public int SummonedRound { get; set; }
         public bool HasAttacked { get; set; }
+        public string[] Keywords { get; set; } = System.Array.Empty<string>();
         public int TemporaryAttackModifier { get; set; }
         public int TemporaryAttackModifierExpiresOnRound { get; set; }
+
+        public bool HasKeyword(string keyword) =>
+            !string.IsNullOrEmpty(keyword) && System.Array.IndexOf(Keywords ?? System.Array.Empty<string>(), keyword) >= 0;
     }
 
     public interface IDemoMatchView
@@ -77,6 +81,7 @@ namespace BiomeRivals.Demo
         int Revision { get; }
         DemoBattlefieldObject GetObject(bool player, DemoSlotKind kind, int slotIndex);
         bool CanAttackWith(DemoBattlefieldObject attacker, out string message);
+        bool CanAttackTarget(DemoBattlefieldObject target, string targetType, out string message);
     }
 
     public enum DemoCommandRejectionCode
@@ -93,6 +98,7 @@ namespace BiomeRivals.Demo
         SlotOccupied,
         WrongPhase,
         AttackerNotReady,
+        TauntTargetRequired,
         EffectNotImplemented
     }
 

@@ -47,6 +47,7 @@ Windows Development Player 支持以下仅用于自动验证的参数：
 - `-previewPlayerFaction <ID>`：在进入匹配前选择本机群系；双进程验证应为两端传入不同 ID。
 - `-previewOpponentFaction <ID>`：只用于离线预览远端半场；权威联机后会被服务器快照覆盖。
 - `-previewMulligan`：离线显示真实卡面与材质化起手调度层，用于视觉回归，不提交规则命令。
+- `-previewTaunt`：离线建立已选攻击者、一个嘲讽目标与一个普通目标，用于检查金色地表强制目标和英雄禁用反馈。
 - `-autoOnlineAction`：双方先自动保留全部起手牌；当前行动方随后发送 `ENTER_COMBAT` 与 `END_TURN`，两端等待相同的最终 revision。
 - `-nakamaDeviceId <ID>`：为同机并行实例指定不同设备身份，长度 10–128。
 - `-onlineProbe <json>`：写出 Match ID、观察者 ID、revision、阶段、手牌、能量、生命和双方群系。

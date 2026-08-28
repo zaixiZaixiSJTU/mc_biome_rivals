@@ -17,6 +17,7 @@ namespace BiomeRivals.Core
         public int occupiedSlots;
         public int summonedTurn;
         public bool hasAttacked;
+        public string[] keywords = Array.Empty<string>();
         public int temporaryAttackModifier;
         public int temporaryAttackModifierExpiresOnTurn;
     }
@@ -153,6 +154,7 @@ namespace BiomeRivals.Core
                         occupiedSlots = occupiedSlots,
                         summonedTurn = payload.summonedTurn,
                         hasAttacked = false,
+                        keywords = payload.keywords ?? Array.Empty<string>(),
                         temporaryAttackModifier = 0,
                         temporaryAttackModifierExpiresOnTurn = 0
                     });

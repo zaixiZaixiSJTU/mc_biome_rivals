@@ -288,6 +288,58 @@ namespace BiomeRivals.Demo.Tests
         }
 
         [Test]
+        public void LocalCombatAllowsChargeOnTheSummonedRound()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { "pf_001" });
+            Assert.That(registry.TryGetDefinition("pf_001", out var definition), Is.True);
+            Assert.That(match.TryDeploy(definition, DemoSlotKind.Unit, 0, out _), Is.True);
+            var attacker = match.GetObject(true, DemoSlotKind.Unit, 0);
+            attacker.Keywords = new[] { "CHARGE" };
+            Assert.That(match.ApplyEnterCombat(match.CreateEnterCombatCommand()).Accepted, Is.True);
+            Assert.That(match.CanAttackWith(attacker, out _), Is.True);
+
+            var result = match.ApplyAttack(match.CreateAttackCommand(attacker.InstanceId, "HERO"));
+
+            Assert.That(result.Accepted, Is.True);
+            Assert.That(match.OpponentLife, Is.EqualTo(29));
+        }
+
+        [Test]
+        public void LocalCombatHighlightsAndEnforcesTauntTargets()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { "pf_003" });
+            Assert.That(registry.TryGetDefinition("pf_003", out var attackerDefinition), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_008", out var tauntDefinition), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_001", out var normalDefinition), Is.True);
+            match.ResetOpponent(new[] { tauntDefinition, normalDefinition });
+            Assert.That(match.TryDeploy(attackerDefinition, DemoSlotKind.Unit, 0, out _), Is.True);
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            Assert.That(match.ApplyEnterCombat(match.CreateEnterCombatCommand()).Accepted, Is.True);
+
+            var attacker = match.GetObject(true, DemoSlotKind.Unit, 0);
+            var taunt = match.GetObject(false, DemoSlotKind.Unit, 0);
+            var normal = match.GetObject(false, DemoSlotKind.Unit, 2);
+            Assert.That(taunt.HasKeyword("TAUNT"), Is.True);
+            Assert.That(match.CanAttackTarget(null, "HERO", out var heroMessage), Is.False);
+            Assert.That(heroMessage, Does.Contain("嘲讽"));
+            Assert.That(match.CanAttackTarget(normal, "UNIT", out _), Is.False);
+            Assert.That(match.CanAttackTarget(taunt, "UNIT", out _), Is.True);
+
+            var bypass = match.ApplyAttack(match.CreateAttackCommand(attacker.InstanceId, "HERO"));
+            Assert.That(bypass.Accepted, Is.False);
+            Assert.That(bypass.Code, Is.EqualTo(DemoCommandRejectionCode.TauntTargetRequired));
+            Assert.That(attacker.HasAttacked, Is.False);
+
+            var legal = match.ApplyAttack(match.CreateAttackCommand(attacker.InstanceId, "UNIT", taunt.InstanceId));
+            Assert.That(legal.Accepted, Is.True);
+        }
+
+        [Test]
         public void LocalCombatCanDefeatOpponentHero()
         {
             var registry = CardContentLoader.Load();

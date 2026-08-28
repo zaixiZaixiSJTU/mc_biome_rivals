@@ -187,7 +187,8 @@ namespace BiomeRivals.Core.Tests
                         payload = new MatchEventPayloadDto
                         {
                             playerId = "alice", instanceId = "object-1", cardId = "pf_001", cardType = "UNIT", slotKind = "UNIT", slotIndex = 2,
-                            occupiedSlots = 1, redstone = 5, attack = 1, health = 2, maxHealth = 2, summonedTurn = 1, nextInstanceId = 2
+                            occupiedSlots = 1, redstone = 5, attack = 1, health = 2, maxHealth = 2, summonedTurn = 1,
+                            keywords = new[] { "CHARGE" }, nextInstanceId = 2
                         }
                     }
                 }
@@ -197,6 +198,7 @@ namespace BiomeRivals.Core.Tests
             Assert.That(store.Current.players[0].hand, Is.Empty);
             Assert.That(store.Current.players[0].unitSlots[2], Is.EqualTo("object-1"));
             Assert.That(store.Current.players[0].battlefield[0].cardId, Is.EqualTo("pf_001"));
+            Assert.That(store.Current.players[0].battlefield[0].keywords, Is.EqualTo(new[] { "CHARGE" }));
             Assert.That(store.Current.players[0].redstone, Is.EqualTo(5));
             Assert.That(store.Current.nextInstanceId, Is.EqualTo(2));
 

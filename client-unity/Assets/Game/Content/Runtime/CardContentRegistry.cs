@@ -75,6 +75,7 @@ namespace BiomeRivals.Content
         public int buildingSlots;
         public string artKey = string.Empty;
         public string[] tags = Array.Empty<string>();
+        public string[] keywords = Array.Empty<string>();
         public string effectImplementationStatus = string.Empty;
         public string[] effectIds = Array.Empty<string>();
     }
@@ -164,6 +165,7 @@ namespace BiomeRivals.Content
             if (themes?.themes == null) throw new FormatException("Card theme registry has no themes.");
             if (definitions?.entries == null) throw new FormatException("Card definition registry has no entries.");
             if (texts?.entries == null) throw new FormatException("Card text registry has no entries.");
+            if (definitions.schemaVersion != 2) throw new FormatException($"Unsupported card definition schema version: {definitions.schemaVersion}.");
 
             foreach (var entry in names.entries)
             {
@@ -185,6 +187,15 @@ namespace BiomeRivals.Content
                 if (definition == null || string.IsNullOrWhiteSpace(definition.id) ||
                     string.IsNullOrWhiteSpace(definition.nameKey) || string.IsNullOrWhiteSpace(definition.themeId))
                     throw new FormatException("Card definition entry is incomplete.");
+                definition.keywords ??= Array.Empty<string>();
+                var registeredKeywords = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var keyword in definition.keywords)
+                {
+                    if (keyword != "TAUNT" && keyword != "CHARGE")
+                        throw new FormatException($"Card '{definition.id}' has unsupported keyword '{keyword}'.");
+                    if (!registeredKeywords.Add(keyword))
+                        throw new FormatException($"Card '{definition.id}' repeats keyword '{keyword}'.");
+                }
                 if (!_definitions.TryAdd(definition.id, definition))
                     throw new FormatException($"Duplicate card definition id: {definition.id}");
             }

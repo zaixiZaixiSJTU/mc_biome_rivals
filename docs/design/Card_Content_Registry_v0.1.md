@@ -6,7 +6,7 @@
 
 | 注册表 | 内容 |
 |---|---|
-| `card-definition-registry.v1.json` | 稳定 ID、阵营、主题、稀有度、类型、费用、属性、标签、卡图键和效果槽 |
+| `card-definition-registry.v1.json` | 稳定 ID、阵营、主题、稀有度、类型、费用、属性、标签、通用关键词、卡图键和效果槽 |
 | `card-name-registry.zh-CN.v1.json` | 卡名与本地化键 |
 | `card-text-registry.zh-CN.v1.json` | 中文描述、类型、稀有度、标签和设计备注 |
 | `card-art-registry.v1.json` | 卡牌到 Minecraft 本地原型纹理的映射 |
@@ -23,10 +23,13 @@
 - 18 张不可收集衍生物。
 - 69 张有规则文本的牌预留 `effect.<cardId>.01`；其中 8 张为 `IMPLEMENTED`，其余 61 张为 `PENDING`。
 - 5 张无规则文本衍生物状态为 `NONE`。
+- 卡牌定义 Schema v2 从规范化规则文本提取独立 `keywords`；当前注册 4 张 `TAUNT`，并预留 `CHARGE`。
 
 ## 效果实现约束
 
 `PENDING` 表示卡牌身份、数值和展示文本已注册，但服务端权威规则尚未接入。实现效果时保留现有 `cardId` 和 `effectId`，将其加入 `implemented-effect-registry.v1.json`，同步脚本会生成 `IMPLEMENTED` 状态；同时必须补充服务端规则测试、协议事件与客户端表现映射。禁止客户端卡面组件直接改变对局状态。
+
+`keywords` 与卡牌专属 `effectId` 分开执行。例如铁傀儡的 `TAUNT` 已按通用规则生效，但其“控制建筑时获得 +1/+1”仍可保持 `PENDING`；不得为了启用一个通用关键词而把尚未实现的整段专属效果标记为 `IMPLEMENTED`。
 
 新增或修改卡牌后依次执行：
 

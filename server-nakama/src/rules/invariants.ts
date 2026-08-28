@@ -65,6 +65,16 @@ namespace BiomeRivalsRules {
             violations.push('building battlefield placement is invalid');
           }
         }
+        if (!Array.isArray(object.keywords)) violations.push('battlefield keywords must be an array');
+        else {
+          const seenKeywords: { [keyword: string]: boolean } = {};
+          for (let keywordIndex = 0; keywordIndex < object.keywords.length; keywordIndex += 1) {
+            const keyword = object.keywords[keywordIndex]!;
+            if (keyword !== 'TAUNT' && keyword !== 'CHARGE') violations.push('battlefield keyword is unsupported');
+            if (seenKeywords[keyword]) violations.push('battlefield keywords must be unique');
+            seenKeywords[keyword] = true;
+          }
+        }
         if (object.health <= 0 || object.health > object.maxHealth || object.maxHealth <= 0) violations.push('battlefield health is out of range');
         if (object.attack < 0 || object.summonedTurn < 1 || object.summonedTurn > state.turn) violations.push('battlefield combat values are invalid');
         if (object.temporaryAttackModifierExpiresOnTurn < 0) {

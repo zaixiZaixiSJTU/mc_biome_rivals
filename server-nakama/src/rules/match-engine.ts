@@ -123,6 +123,7 @@ namespace BiomeRivalsRules {
               attack: object.attack, health: object.health, maxHealth: object.maxHealth,
               slotKind: object.slotKind, slotIndex: object.slotIndex, occupiedSlots: object.occupiedSlots,
               summonedTurn: object.summonedTurn, hasAttacked: object.hasAttacked,
+              keywords: object.keywords.slice(),
               temporaryAttackModifier: object.temporaryAttackModifier,
               temporaryAttackModifierExpiresOnTurn: object.temporaryAttackModifierExpiresOnTurn
             };
@@ -191,6 +192,7 @@ namespace BiomeRivalsRules {
               occupiedSlots: object.occupiedSlots,
               summonedTurn: object.summonedTurn,
               hasAttacked: object.hasAttacked,
+              keywords: object.keywords.slice(),
               temporaryAttackModifier: object.temporaryAttackModifier,
               temporaryAttackModifierExpiresOnTurn: object.temporaryAttackModifierExpiresOnTurn
             };
@@ -336,6 +338,7 @@ namespace BiomeRivalsRules {
         occupiedSlots: occupiedSlots,
         summonedTurn: state.turn,
         hasAttacked: false,
+        keywords: definition.keywords.slice(),
         temporaryAttackModifier: 0,
         temporaryAttackModifierExpiresOnTurn: 0
       };
@@ -357,6 +360,7 @@ namespace BiomeRivalsRules {
         health: battlefieldObject.health,
         maxHealth: battlefieldObject.maxHealth,
         summonedTurn: battlefieldObject.summonedTurn,
+        keywords: battlefieldObject.keywords.slice(),
         nextInstanceId: next.nextInstanceId
       });
       if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
@@ -669,7 +673,18 @@ namespace BiomeRivalsRules {
         return reject(state, 'INVALID_ATTACKER', 'attacker must be a living friendly unit with attack');
       }
       if (attacker.hasAttacked) return reject(state, 'ATTACK_ALREADY_USED', 'unit has already attacked this turn');
-      if (attacker.summonedTurn === state.turn) return reject(state, 'ATTACKER_NOT_READY', 'unit cannot attack on its summoned turn');
+      if (attacker.summonedTurn === state.turn && attacker.keywords.indexOf('CHARGE') < 0) {
+        return reject(state, 'ATTACKER_NOT_READY', 'unit cannot attack on its summoned turn without CHARGE');
+      }
+
+      const tauntTargets = defenderPlayer.battlefield.filter(function (object): boolean {
+        return object.health > 0 && object.keywords.indexOf('TAUNT') >= 0;
+      });
+      if (tauntTargets.length > 0) {
+        const targetsTaunt = targetType !== 'HERO' && typeof targetInstanceId === 'string' &&
+          tauntTargets.some(function (object): boolean { return object.instanceId === targetInstanceId; });
+        if (!targetsTaunt) return reject(state, 'TAUNT_TARGET_REQUIRED', 'a legal enemy TAUNT object must be attacked first');
+      }
 
       attacker.hasAttacked = true;
       if (targetType === 'HERO') {

@@ -49,6 +49,7 @@ namespace BiomeRivals.Demo
         private Text _energyText;
         private Text _handLabel;
         private Text _opponentHealthText;
+        private Button _opponentHeroTargetButton;
         private Image _opponentAvatarImage;
         private Text _opponentAvatarGlyph;
         private Text _opponentNameText;
@@ -132,7 +133,8 @@ namespace BiomeRivals.Demo
                 SelectCard("si_001");
                 CastSelectedCard();
             }
-            if (HasCommandLineFlag("-previewCombat")) OnEndTurn();
+            if (HasCommandLineFlag("-previewTaunt")) SetupTauntPreview();
+            else if (HasCommandLineFlag("-previewCombat")) OnEndTurn();
             if (HasCommandLineFlag("-previewGroundHover")) _battlefield.SetSlotHovered(true, DemoSlotKind.Unit, 0, true);
             var capturePath = GetCommandLineValue("-captureDemo");
             if (!string.IsNullOrWhiteSpace(capturePath)) StartCoroutine(CaptureDemo(capturePath));
@@ -228,6 +230,7 @@ namespace BiomeRivals.Demo
             _opponentNameText = CreateText(opponentHud, "Name", new Vector2(34, 22), new Vector2(190, 32), "熔岩统御者", 20, Pale, TextAnchor.MiddleLeft, FontStyle.Bold);
             _opponentHealthText = CreateText(opponentHud, "Health", new Vector2(34, -19), new Vector2(190, 30), "❤ 30", 17, Hex("#F4C18A"), TextAnchor.MiddleLeft, FontStyle.Bold);
             var opponentHeroTarget = opponentHud.gameObject.AddComponent<Button>();
+            _opponentHeroTargetButton = opponentHeroTarget;
             opponentHeroTarget.targetGraphic = opponentHud.GetComponent<Image>();
             opponentHeroTarget.transition = Selectable.Transition.ColorTint;
             opponentHeroTarget.colors = new ColorBlock
@@ -643,6 +646,26 @@ namespace BiomeRivals.Demo
             ShowStatus($"已切换到{spec.Label}牌组；可打出已接入规则的卡牌。", false);
         }
 
+        private void SetupTauntPreview()
+        {
+            SelectFaction("plains_forest");
+            SelectOpponentFaction("plains_forest");
+            if (!_registry.TryGetDefinition("pf_003", out var attackerDefinition) ||
+                !_registry.TryGetDefinition("pf_008", out var tauntDefinition) ||
+                !_registry.TryGetDefinition("pf_001", out var normalDefinition)) return;
+            _match.ResetHand(new[] { attackerDefinition.id });
+            _match.TryDeploy(attackerDefinition, DemoSlotKind.Unit, 0, out _);
+            _match.ResetOpponent(new[] { tauntDefinition, normalDefinition });
+            _match.EndPlayerTurn();
+            _match.BeginNextPlayerTurn();
+            _match.ApplyEnterCombat(_match.CreateEnterCombatCommand());
+            var attacker = _match.GetObject(true, DemoSlotKind.Unit, 0);
+            _selectedAttackerInstanceId = attacker?.InstanceId;
+            if (attacker != null) _battlefield.SetSlotPressed(true, DemoSlotKind.Unit, attacker.SlotIndex, true);
+            RefreshAll();
+            ShowStatus("嘲讽生效：只能攻击带金色地表高亮的铁傀儡。", false);
+        }
+
         private void ApplyPlayerFactionVisuals(FactionSpec spec)
         {
             _activeFaction = spec.Id;
@@ -729,6 +752,7 @@ namespace BiomeRivals.Demo
             RefreshHand();
             RefreshOpponentHand(match.OpponentHandCount);
             RefreshBattlefieldSlots();
+            RefreshOpponentHeroTarget();
             _battlefield.SyncPieces(match.UnitSlots, match.BuildingSlots, match.OpponentUnitSlots, match.OpponentBuildingSlots, _registry);
             RefreshInspector();
             _energyText.text = $"◆ {match.Energy}/{match.MaxEnergy}";
@@ -863,6 +887,15 @@ namespace BiomeRivals.Demo
             foreach (var view in _opponentBuildingSlots) RefreshSlot(false, view, match.OpponentBuildingSlots[view.Index]);
         }
 
+        private void RefreshOpponentHeroTarget()
+        {
+            if (_opponentHeroTargetButton == null) return;
+            var match = MatchView;
+            var attacker = FindSelectedAttacker();
+            _opponentHeroTargetButton.interactable = match.Phase != DemoTurnPhase.Combat || attacker == null ||
+                match.CanAttackTarget(null, "HERO", out _);
+        }
+
         private void RefreshSlot(bool player, SlotView view, string cardId)
         {
             ClearChildrenExcept(view.Content, view.EmptyLabel.gameObject);
@@ -872,15 +905,18 @@ namespace BiomeRivals.Demo
             var battlefieldObject = match.GetObject(player, view.Kind, view.Index);
             var selectingCardTarget = !string.IsNullOrEmpty(_pendingTargetCardId);
             var canInteract = !IsOnlineBoard || _onlineSession.CanIssueCommand;
-            var valid = canInteract && (selectingCardTarget
-                ? IsValidPendingCardTarget(player, view.Kind, battlefieldObject)
-                : player
-                    ? match.Phase == DemoTurnPhase.Main
-                        ? empty && IsSelectedValidFor(view.Kind)
-                        : !empty && view.Kind == DemoSlotKind.Unit && match.CanAttackWith(battlefieldObject, out _)
-                    : match.Phase == DemoTurnPhase.Combat && !string.IsNullOrEmpty(_selectedAttackerInstanceId) && !empty);
+            var valid = false;
+            if (canInteract && selectingCardTarget)
+                valid = IsValidPendingCardTarget(player, view.Kind, battlefieldObject);
+            else if (canInteract && player)
+                valid = match.Phase == DemoTurnPhase.Main
+                    ? empty && IsSelectedValidFor(view.Kind)
+                    : !empty && view.Kind == DemoSlotKind.Unit && match.CanAttackWith(battlefieldObject, out _);
+            else if (canInteract && match.Phase == DemoTurnPhase.Combat && !string.IsNullOrEmpty(_selectedAttackerInstanceId) && !empty)
+                valid = match.CanAttackTarget(battlefieldObject, view.Kind == DemoSlotKind.Unit ? "UNIT" : "BUILDING", out _);
             view.EmptyLabel.color = Color.clear;
-            _battlefield.SetSlotState(player, view.Kind, view.Index, valid, !empty);
+            var priorityTarget = valid && !player && battlefieldObject?.HasKeyword("TAUNT") == true;
+            _battlefield.SetSlotState(player, view.Kind, view.Index, valid, !empty, priorityTarget);
 
             if (!empty)
             {
@@ -905,7 +941,10 @@ namespace BiomeRivals.Demo
                 var attacker = FindSelectedAttacker();
                 var title = attacker == null ? "选择一个发光的己方生物" : $"攻击者：{GetCardName(attacker.CardId)}\n{attacker.Attack}/{attacker.Health}";
                 CreateText(_inspectorRoot, "CombatTitle", new Vector2(0, 100), new Vector2(245, 130), title, 19, Cyan, TextAnchor.MiddleCenter, FontStyle.Bold);
-                CreateText(_inspectorRoot, "CombatHint", new Vector2(0, -25), new Vector2(245, 120), "再点击敌方生物、建筑，\n或左上角敌方英雄面板。\n单位会同步反击，建筑不会反击。", 15, Pale, TextAnchor.MiddleCenter, FontStyle.Normal);
+                var combatHint = "再点击敌方生物、建筑，\n或左上角敌方英雄面板。\n单位会同步反击，建筑不会反击。";
+                if (attacker != null && !match.CanAttackTarget(null, "HERO", out var tauntMessage))
+                    combatHint = tauntMessage + "\n只有金色地表目标可被攻击。";
+                CreateText(_inspectorRoot, "CombatHint", new Vector2(0, -25), new Vector2(245, 120), combatHint, 15, Pale, TextAnchor.MiddleCenter, FontStyle.Normal);
                 return;
             }
             if (string.IsNullOrEmpty(_selectedCardId) || !_registry.TryGetDefinition(_selectedCardId, out var definition))
@@ -1029,7 +1068,13 @@ namespace BiomeRivals.Demo
                 ShowStatus("该敌方格为空。", true);
                 return;
             }
-            ResolveAttack(selected, kind == DemoSlotKind.Unit ? "UNIT" : "BUILDING", target.InstanceId);
+            var targetType = kind == DemoSlotKind.Unit ? "UNIT" : "BUILDING";
+            if (!match.CanAttackTarget(target, targetType, out var targetMessage))
+            {
+                ShowStatus(targetMessage, true);
+                return;
+            }
+            ResolveAttack(selected, targetType, target.InstanceId);
         }
 
         private void AttackOpponentHero()
@@ -1039,6 +1084,11 @@ namespace BiomeRivals.Demo
             if (selected == null)
             {
                 ShowStatus("请先选择一个发光的己方生物。", true);
+                return;
+            }
+            if (!MatchView.CanAttackTarget(null, "HERO", out var targetMessage))
+            {
+                ShowStatus(targetMessage, true);
                 return;
             }
             ResolveAttack(selected, "HERO", string.Empty);
@@ -1438,6 +1488,8 @@ namespace BiomeRivals.Demo
                 : definition.hasHealth
                     ? $"{text.name}   ❤ {health}"
                     : text.name;
+            if (battlefieldObject?.HasKeyword("TAUNT") == true) stats = $"◆ 嘲讽   {stats}";
+            else if (battlefieldObject?.HasKeyword("CHARGE") == true) stats = $"➤ 冲锋   {stats}";
             var labelY = -size.y * 0.34f;
             var plate = CreatePanel(parent, "WorldLabel", new Vector2(0, labelY), new Vector2(size.x - 8, 30), new Color(Ink.r, Ink.g, Ink.b, 0.84f));
             plate.raycastTarget = false;

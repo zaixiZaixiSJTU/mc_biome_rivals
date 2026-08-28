@@ -4,7 +4,7 @@
   "title": "CardDefinition",
   "type": "object",
   "additionalProperties": false,
-  "required": ["id", "designId", "contentVersion", "collectible", "nameKey", "rulesTextKey", "factionId", "themeId", "rarity", "cardType", "cost", "hasAttack", "attack", "hasHealth", "health", "hasDurability", "durability", "buildingSlots", "artKey", "tags", "effectImplementationStatus", "effectIds"],
+  "required": ["id", "designId", "contentVersion", "collectible", "nameKey", "rulesTextKey", "factionId", "themeId", "rarity", "cardType", "cost", "hasAttack", "attack", "hasHealth", "health", "hasDurability", "durability", "buildingSlots", "artKey", "tags", "keywords", "effectImplementationStatus", "effectIds"],
   "properties": {
     "id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
     "designId": { "type": "string", "pattern": "^(PF|DB|SI|CD|OR|NT|ED|TK)-[0-9]{3}$" },
@@ -41,6 +41,7 @@
     "buildingSlots": { "type": "integer", "minimum": 0, "maximum": 7 },
     "artKey": { "type": "string", "pattern": "^card_art\\.[a-z0-9_]+$" },
     "tags": { "type": "array", "items": { "type": "string", "pattern": "^[a-z0-9_]+$" }, "uniqueItems": true },
+    "keywords": { "type": "array", "items": { "enum": ["TAUNT", "CHARGE"] }, "uniqueItems": true },
     "effectImplementationStatus": { "enum": ["NONE", "PENDING", "IMPLEMENTED"] },
     "effectIds": { "type": "array", "items": { "type": "string", "pattern": "^effect\\.[a-z0-9_]+\\.[0-9]{2}$" }, "uniqueItems": true }
   }

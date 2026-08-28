@@ -57,7 +57,8 @@ namespace BiomeRivals.Demo.Tests
                             {
                                 playerId = "alice", instanceId = "object-1", cardId = "pf_001", cardType = "UNIT",
                                 slotKind = "UNIT", slotIndex = 2, occupiedSlots = 1, redstone = 0,
-                                attack = 1, health = 2, maxHealth = 2, summonedTurn = 1, nextInstanceId = 2
+                                attack = 1, health = 2, maxHealth = 2, summonedTurn = 1,
+                                keywords = Array.Empty<string>(), nextInstanceId = 2
                             }
                         }
                     }
@@ -103,6 +104,40 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(session.CanIssueCommand, Is.False);
                 Assert.ThrowsAsync<InvalidOperationException>(async () => await session.EndTurnAsync());
             }
+        }
+
+        [Test]
+        public void AuthoritativeViewUsesSnapshotKeywordsForChargeAndTauntLegality()
+        {
+            var store = CreateStore(viewerIndex: 0);
+            store.Current.turn = 2;
+            store.Current.phase = "COMBAT";
+            store.Current.players[0].unitSlots[0] = "object-1";
+            store.Current.players[0].battlefield = new[]
+            {
+                new BattlefieldObjectStateDto
+                {
+                    instanceId = "object-1", cardId = "pf_001", cardType = "UNIT", slotKind = "UNIT", slotIndex = 0,
+                    occupiedSlots = 1, attack = 1, health = 2, maxHealth = 2, summonedTurn = 2, keywords = new[] { "CHARGE" }
+                }
+            };
+            store.Current.players[1].unitSlots[0] = "object-2";
+            store.Current.players[1].battlefield = new[]
+            {
+                new BattlefieldObjectStateDto
+                {
+                    instanceId = "object-2", cardId = "pf_008", cardType = "UNIT", slotKind = "UNIT", slotIndex = 0,
+                    occupiedSlots = 1, attack = 5, health = 7, maxHealth = 7, summonedTurn = 1, keywords = new[] { "TAUNT" }
+                }
+            };
+            var view = new DemoAuthoritativeMatchView(store);
+            var attacker = view.GetObject(true, DemoSlotKind.Unit, 0);
+            var taunt = view.GetObject(false, DemoSlotKind.Unit, 0);
+
+            Assert.That(view.CanAttackWith(attacker, out _), Is.True);
+            Assert.That(view.CanAttackTarget(null, "HERO", out var message), Is.False);
+            Assert.That(message, Does.Contain("嘲讽"));
+            Assert.That(view.CanAttackTarget(taunt, "UNIT", out _), Is.True);
         }
 
         [Test]

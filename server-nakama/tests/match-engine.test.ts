@@ -91,6 +91,7 @@ function placeUnit(
     occupiedSlots: 1,
     summonedTurn: summonedTurn,
     hasAttacked: false,
+    keywords: definition.keywords.slice(),
     temporaryAttackModifier: 0,
     temporaryAttackModifierExpiresOnTurn: 0
   });
@@ -120,6 +121,7 @@ function placeBuilding(
     occupiedSlots: occupiedSlots,
     summonedTurn: state.turn,
     hasAttacked: false,
+    keywords: definition.keywords.slice(),
     temporaryAttackModifier: 0,
     temporaryAttackModifierExpiresOnTurn: 0
   });
@@ -495,6 +497,59 @@ TestHarness.test('rejects summoning sickness and duplicate attacks', function ()
   const used = BiomeRivalsRules.applyCommand(state, 'alice', attackCommand('attack-2', 0, 'object-1', 'HERO'));
   TestHarness.equal(used.accepted, false);
   if (!used.accepted) TestHarness.equal(used.code, 'ATTACK_ALREADY_USED');
+});
+
+TestHarness.test('allows a unit with CHARGE to attack on its summoned turn', function (): void {
+  const state = activeState('match-1', ['alice', 'bob']);
+  state.turn = 2;
+  state.phase = 'COMBAT';
+  state.nextInstanceId = 2;
+  placeUnit(state, 0, 'pf_001', 0, 'object-1', 2);
+  state.players[0]!.battlefield[0]!.keywords.push('CHARGE');
+
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', attackCommand('charge-attack', 0, 'object-1', 'HERO'));
+  TestHarness.equal(result.accepted, true);
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[0]!.battlefield[0]!.hasAttacked, true);
+  TestHarness.equal(result.state.players[1]!.life, 29);
+});
+
+TestHarness.test('requires attacking one of multiple living TAUNT targets first', function (): void {
+  const state = activeState('match-1', ['alice', 'bob']);
+  state.turn = 2;
+  state.phase = 'COMBAT';
+  state.nextInstanceId = 5;
+  placeUnit(state, 0, 'pf_003', 0, 'object-1', 1);
+  placeUnit(state, 1, 'pf_008', 0, 'object-2', 1);
+  placeUnit(state, 1, 'pf_001', 1, 'object-3', 1);
+  placeUnit(state, 1, 'or_005', 2, 'object-4', 1);
+
+  const hero = BiomeRivalsRules.applyCommand(state, 'alice', attackCommand('taunt-hero', 0, 'object-1', 'HERO'));
+  TestHarness.equal(hero.accepted, false);
+  if (!hero.accepted) TestHarness.equal(hero.code, 'TAUNT_TARGET_REQUIRED');
+
+  const nonTaunt = BiomeRivalsRules.applyCommand(state, 'alice', attackCommand('taunt-bypass', 0, 'object-1', 'UNIT', 'object-3'));
+  TestHarness.equal(nonTaunt.accepted, false);
+  if (!nonTaunt.accepted) TestHarness.equal(nonTaunt.code, 'TAUNT_TARGET_REQUIRED');
+  TestHarness.equal(state.players[0]!.battlefield[0]!.hasAttacked, false);
+
+  const taunt = BiomeRivalsRules.applyCommand(state, 'alice', attackCommand('taunt-legal', 0, 'object-1', 'UNIT', 'object-4'));
+  TestHarness.equal(taunt.accepted, true);
+  if (!taunt.accepted) return;
+  TestHarness.equal(taunt.batch.events[0]!.type, 'ATTACK_RESOLVED');
+  TestHarness.equal(taunt.state.players[1]!.battlefield.some(function (object): boolean { return object.instanceId === 'object-3'; }), true);
+});
+
+TestHarness.test('publishes registered battlefield keywords on deployment', function (): void {
+  const state = activeState('match-1', ['alice', 'bob']);
+  state.players[0]!.hand = ['pf_008'];
+  state.players[0]!.redstone = 6;
+  state.players[0]!.redstoneCapacity = 6;
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', deployCommand('deploy-taunt', 0, 'pf_008', 'UNIT', 0));
+  TestHarness.equal(result.accepted, true);
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[0]!.battlefield[0]!.keywords[0], 'TAUNT');
+  TestHarness.equal((result.batch.events[0]!.payload.keywords as string[])[0], 'TAUNT');
 });
 
 TestHarness.test('applies armor before life and ends the match on lethal hero damage', function (): void {

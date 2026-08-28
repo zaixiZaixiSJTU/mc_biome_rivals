@@ -45,6 +45,13 @@ function Normalize-RulesText([string]$Value) {
     return $Value.Replace('**', '').Trim()
 }
 
+function Resolve-Keywords([string]$RulesText) {
+    $keywords = [System.Collections.Generic.List[string]]::new()
+    if ($RulesText -match '(^|[。；;])\s*嘲讽(?=[。：；;]|$)') { $keywords.Add('TAUNT') }
+    if ($RulesText -match '(^|[。；;])\s*冲锋(?=[。：；;]|$)') { $keywords.Add('CHARGE') }
+    return ,([string[]]$keywords.ToArray())
+}
+
 function Resolve-CardType([string]$TypeLabel) {
     if ($TypeLabel -match '生物') { return 'UNIT' }
     if ($TypeLabel -match '建筑') { return 'BUILDING' }
@@ -115,6 +122,7 @@ foreach ($line in Get-Content -LiteralPath $sourcePath -Encoding UTF8) {
     }
 
     $normalizedRules = Normalize-RulesText $rulesText
+    $keywords = Resolve-Keywords $normalizedRules
     $hasEffect = $normalizedRules -and $normalizedRules -ne '无卡牌文本。'
     $effectId = "effect.$cardId.01"
     $effectIds = [System.Collections.Generic.List[string]]::new()
@@ -125,7 +133,7 @@ foreach ($line in Get-Content -LiteralPath $sourcePath -Encoding UTF8) {
         factionId=$factionId; themeId=$themeId; rarity=$rarity; cardType=$cardType; cost=$cost
         hasAttack=$hasAttack; attack=$attack; hasHealth=$hasHealth; health=$health
         hasDurability=$hasDurability; durability=$durability; buildingSlots=$buildingSlots
-        artKey="card_art.$cardId"; tags=([string[]]$tags)
+        artKey="card_art.$cardId"; tags=([string[]]$tags); keywords=$keywords
         effectImplementationStatus=$(if (-not $hasEffect) { 'NONE' } elseif ($implementedEffectIds.Contains($effectId)) { 'IMPLEMENTED' } else { 'PENDING' })
         effectIds=$effectIds
     })
@@ -141,7 +149,7 @@ foreach ($effectId in $implementedEffectIds) {
 }
 
 if ($definitions.Count -ne 74) { throw "Expected 74 card definitions, found $($definitions.Count)." }
-$definitionDocument = [ordered]@{ schemaVersion=1; contentVersion=1; source=$SourceMarkdown.Replace('\','/'); entries=$definitions }
+$definitionDocument = [ordered]@{ schemaVersion=2; contentVersion=1; source=$SourceMarkdown.Replace('\','/'); entries=$definitions }
 $textDocument = [ordered]@{ schemaVersion=1; locale='zh-CN'; source=$SourceMarkdown.Replace('\','/'); entries=$texts }
 
 foreach ($output in @(

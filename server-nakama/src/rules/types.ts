@@ -1,6 +1,6 @@
 namespace BiomeRivalsRules {
-  export const PROTOCOL_VERSION = 7;
-  export const RULESET_VERSION = 'prototype-0.8';
+  export const PROTOCOL_VERSION = 8;
+  export const RULESET_VERSION = 'prototype-0.9';
 
   export type MatchStatus = 'WAITING' | 'MULLIGAN' | 'ACTIVE' | 'FINISHED';
   export type CommandType = 'MULLIGAN' | 'DEPLOY_CARD' | 'PLAY_CARD' | 'ENTER_COMBAT' | 'ATTACK' | 'END_TURN' | 'CONCEDE';
@@ -9,6 +9,7 @@ namespace BiomeRivalsRules {
   export type TurnPhase = 'MAIN' | 'COMBAT';
   export type AttackTargetType = 'HERO' | 'UNIT' | 'BUILDING';
   export type CardType = 'UNIT' | 'SPELL' | 'BUILDING' | 'STRUCTURE' | 'EQUIPMENT' | 'MATERIAL';
+  export type CardKeyword = 'TAUNT' | 'CHARGE';
   export type FactionId = 'plains_forest' | 'desert_badlands' | 'snow_ice' | 'cave_dark_forest' | 'ocean_river' | 'nether' | 'end';
 
   export const FACTION_CARD_PREFIXES: { [factionId: string]: string } = {
@@ -32,6 +33,7 @@ namespace BiomeRivalsRules {
     buildingSlots: number;
     attack: number;
     health: number;
+    keywords: CardKeyword[];
     effectImplementationStatus: 'NONE' | 'PENDING' | 'IMPLEMENTED';
     effectIds: string[];
   }
@@ -48,6 +50,7 @@ namespace BiomeRivalsRules {
     occupiedSlots: number;
     summonedTurn: number;
     hasAttacked: boolean;
+    keywords: CardKeyword[];
     temporaryAttackModifier: number;
     temporaryAttackModifierExpiresOnTurn: number;
   }
@@ -151,6 +154,7 @@ namespace BiomeRivalsRules {
     | 'NOT_A_PLAYER'
     | 'MULLIGAN_REQUIRED'
     | 'MULLIGAN_ALREADY_COMPLETED'
+    | 'TAUNT_TARGET_REQUIRED'
     | 'NOT_ACTIVE_PLAYER'
     | 'MATCH_FINISHED'
     | 'UNKNOWN_CARD'

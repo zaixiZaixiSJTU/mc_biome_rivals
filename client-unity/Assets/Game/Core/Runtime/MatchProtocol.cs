@@ -164,6 +164,7 @@ namespace BiomeRivals.Core
         public string reason = string.Empty;
         public string cardId = string.Empty;
         public string[] hand = Array.Empty<string>();
+        public string[] keywords = Array.Empty<string>();
         public string slotKind = string.Empty;
         public int slotIndex;
         public int occupiedSlots;
