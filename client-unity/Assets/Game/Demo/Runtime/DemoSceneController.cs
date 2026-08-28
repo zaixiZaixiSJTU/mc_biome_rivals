@@ -136,6 +136,9 @@ namespace BiomeRivals.Demo
             if (HasCommandLineFlag("-previewSummon")) SetupSummonPreview();
             else if (HasCommandLineFlag("-previewDeathrattle")) SetupDeathrattlePreview();
             else if (HasCommandLineFlag("-previewTaunt")) SetupTauntPreview();
+            else if (HasCommandLineFlag("-previewStructurePlacementInvalid")) SetupStructurePlacementPreview(2);
+            else if (HasCommandLineFlag("-previewStructurePlacement")) SetupStructurePlacementPreview(0);
+            else if (HasCommandLineFlag("-previewStructureDeployed")) SetupStructureDeployedPreview();
             else if (HasCommandLineFlag("-previewCombat")) OnEndTurn();
             if (HasCommandLineFlag("-previewGroundHover")) _battlefield.SetSlotHovered(true, DemoSlotKind.Unit, 0, true);
             var capturePath = GetCommandLineValue("-captureDemo");
@@ -188,7 +191,7 @@ namespace BiomeRivals.Demo
             _battlefield.BuildNow();
             var battlefieldPointer = GetComponent<DemoBattlefieldPointerController>();
             if (battlefieldPointer == null) battlefieldPointer = gameObject.AddComponent<DemoBattlefieldPointerController>();
-            battlefieldPointer.Configure(_battlefield, OnSlotClicked);
+            battlefieldPointer.Configure(_battlefield, OnSlotClicked, OnSlotHovered, OnSlotPressed);
 
             var canvasObject = new GameObject("DemoCanvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
             canvasObject.transform.SetParent(transform, false);
@@ -759,6 +762,29 @@ namespace BiomeRivals.Demo
             if (summoned?.CardId == "tk_014") StartCoroutine(PulseBattlefieldObject(summoned.InstanceId));
         }
 
+        private void SetupStructurePlacementPreview(int startIndex)
+        {
+            SelectFaction("desert_badlands");
+            if (!_registry.TryGetDefinition("db_007", out var templeDefinition)) return;
+            _match.ResetHand(new[] { templeDefinition.id });
+            _selectedCardId = templeDefinition.id;
+            RefreshAll();
+            var preview = DemoDeploymentRules.Evaluate(_match, templeDefinition, DemoSlotKind.Building, startIndex);
+            _battlefield.SetSlotRangeHovered(true, DemoSlotKind.Building, startIndex, preview.OccupiedSlots, true, !preview.IsLegal);
+            ShowStatus(preview.Message, !preview.IsLegal);
+        }
+
+        private void SetupStructureDeployedPreview()
+        {
+            SelectFaction("desert_badlands");
+            if (!_registry.TryGetDefinition("db_007", out var templeDefinition)) return;
+            _match.ResetHand(new[] { templeDefinition.id });
+            var deployed = _match.TryDeploy(templeDefinition, DemoSlotKind.Building, 0, out var message);
+            _selectedCardId = null;
+            RefreshAll();
+            ShowStatus(deployed ? "沙漠神殿作为一个对象横跨建筑格 1—2；任意格受击都会共享同一生命值。" : message, !deployed);
+        }
+
         private void ApplyPlayerFactionVisuals(FactionSpec spec)
         {
             _activeFaction = spec.Id;
@@ -846,7 +872,7 @@ namespace BiomeRivals.Demo
             RefreshOpponentHand(match.OpponentHandCount);
             RefreshBattlefieldSlots();
             RefreshOpponentHeroTarget();
-            _battlefield.SyncPieces(match.UnitSlots, match.BuildingSlots, match.OpponentUnitSlots, match.OpponentBuildingSlots, _registry);
+            _battlefield.SyncPieces(match.PlayerBattlefield, match.OpponentBattlefield, _registry);
             RefreshInspector();
             _energyText.text = $"◆ {match.Energy}/{match.MaxEnergy}";
             _titleText.text = IsOnlineBoard ? "群系竞逐  ·  权威联机对局" : "群系竞逐  ·  本地战场演示";
@@ -1003,7 +1029,7 @@ namespace BiomeRivals.Demo
                 valid = IsValidPendingCardTarget(player, view.Kind, battlefieldObject);
             else if (canInteract && player)
                 valid = match.Phase == DemoTurnPhase.Main
-                    ? empty && IsSelectedValidFor(view.Kind)
+                    ? EvaluateSelectedDeployment(view.Kind, view.Index).IsLegal
                     : !empty && view.Kind == DemoSlotKind.Unit && match.CanAttackWith(battlefieldObject, out _);
             else if (canInteract && match.Phase == DemoTurnPhase.Combat && !string.IsNullOrEmpty(_selectedAttackerInstanceId) && !empty)
                 valid = match.CanAttackTarget(battlefieldObject, view.Kind == DemoSlotKind.Unit ? "UNIT" : "BUILDING", out _);
@@ -1013,10 +1039,7 @@ namespace BiomeRivals.Demo
 
             if (!empty)
             {
-                var slots = player
-                    ? view.Kind == DemoSlotKind.Unit ? match.UnitSlots : match.BuildingSlots
-                    : view.Kind == DemoSlotKind.Unit ? match.OpponentUnitSlots : match.OpponentBuildingSlots;
-                if (view.Kind == DemoSlotKind.Building && view.Index > 0 && slots[view.Index - 1] == cardId)
+                if (view.Kind == DemoSlotKind.Building && battlefieldObject != null && battlefieldObject.SlotIndex != view.Index)
                     CreateText(view.Content, "Occupied", Vector2.zero, view.Content.sizeDelta, "结构占用", 14, Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
                 else
                     CreateWorldPieceLabel(view.Content, cardId, view.Content.sizeDelta, !player, battlefieldObject);
@@ -1071,14 +1094,37 @@ namespace BiomeRivals.Demo
             CreateText(_inspectorRoot, "Implementation", new Vector2(0, -190), new Vector2(250, 62), $"规则状态：{implementationLabel}\n稳定效果槽：{string.Join(", ", definition.effectIds ?? Array.Empty<string>())}", 12, Muted, TextAnchor.MiddleCenter, FontStyle.Normal);
         }
 
-        private bool IsSelectedValidFor(DemoSlotKind kind)
+        private DemoDeploymentPreview EvaluateSelectedDeployment(DemoSlotKind kind, int index)
         {
-            if (string.IsNullOrEmpty(_selectedCardId) || !_registry.TryGetDefinition(_selectedCardId, out var definition)) return false;
-            var match = MatchView;
-            if (!match.IsPlayerTurn || match.Phase != DemoTurnPhase.Main || definition.cost > match.Energy || !match.Hand.Contains(definition.id)) return false;
-            return kind == DemoSlotKind.Unit
-                ? definition.cardType == "UNIT"
-                : definition.cardType == "BUILDING" || definition.cardType == "STRUCTURE";
+            if (string.IsNullOrEmpty(_selectedCardId) || !_registry.TryGetDefinition(_selectedCardId, out var definition))
+                return new DemoDeploymentPreview(false, 1, "请先选择一张战场部署牌。");
+            return DemoDeploymentRules.Evaluate(MatchView, definition, kind, index);
+        }
+
+        private bool IsPreviewingDeployment(bool player, out int occupiedSlots)
+        {
+            occupiedSlots = 1;
+            if (!player || !string.IsNullOrEmpty(_pendingTargetCardId) || MatchView.Phase != DemoTurnPhase.Main ||
+                string.IsNullOrEmpty(_selectedCardId) || !_registry.TryGetDefinition(_selectedCardId, out var definition)) return false;
+            if (definition.cardType != "UNIT" && definition.cardType != "BUILDING" && definition.cardType != "STRUCTURE") return false;
+            occupiedSlots = definition.cardType == "UNIT" ? 1 : Mathf.Max(1, definition.buildingSlots);
+            return true;
+        }
+
+        private void OnSlotHovered(bool player, DemoSlotKind kind, int index, bool hovered)
+        {
+            var preview = EvaluateSelectedDeployment(kind, index);
+            var isDeployment = IsPreviewingDeployment(player, out var occupiedSlots);
+            var rejected = isDeployment && !preview.IsLegal;
+            _battlefield.SetSlotRangeHovered(player, kind, index, isDeployment ? occupiedSlots : 1, hovered, rejected);
+            if (hovered && isDeployment) ShowStatus(preview.Message, rejected);
+        }
+
+        private void OnSlotPressed(bool player, DemoSlotKind kind, int index, bool pressed)
+        {
+            var preview = EvaluateSelectedDeployment(kind, index);
+            var isDeployment = IsPreviewingDeployment(player, out var occupiedSlots);
+            _battlefield.SetSlotRangePressed(player, kind, index, isDeployment ? occupiedSlots : 1, pressed, isDeployment && !preview.IsLegal);
         }
 
         private void SelectCard(string cardId)
@@ -1109,6 +1155,13 @@ namespace BiomeRivals.Demo
             if (string.IsNullOrEmpty(_selectedCardId) || !_registry.TryGetDefinition(_selectedCardId, out var definition))
             {
                 ShowStatus("请先选择一张手牌。", true);
+                return;
+            }
+            var deploymentPreview = DemoDeploymentRules.Evaluate(MatchView, definition, kind, index);
+            if (!deploymentPreview.IsLegal)
+            {
+                ShowStatus(deploymentPreview.Message, true);
+                RefreshAll();
                 return;
             }
             if (IsOnlineBoard)

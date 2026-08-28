@@ -32,4 +32,6 @@ Demo 顶部的联机状态条用于认证、Socket、匹配、权威 Match 加�
 
 `-previewSummon` 会让岩浆怪攻击铁傀儡并死亡，在原单位格召唤缩小版 Minecraft 岩浆怪模型，用于检查战场召唤回放、格位复用与出生高亮。
 
+多格结构的部署预览由 `DemoDeploymentRules` 从当前规则视图计算完整占格范围。只有连续空闲且未越界的起点保持可用；悬停合法起点会同时点亮全部待占地砖，非法范围使用红色地表反馈，并在本地预检阶段阻止无意义的联机命令。`-previewStructurePlacement`、`-previewStructurePlacementInvalid` 与 `-previewStructureDeployed` 分别用于合法范围、越界范围及完成部署后的视觉回归。战场模型按稳定实例而不是相邻 `cardId` 去重，因此两个相邻同名建筑仍会显示为两个对象，结构则只生成一个居中横跨全部占格的 3D 模型。
+
 自动化双客户端验证可用 `-autoOnline -autoOnlineAction -nakamaDeviceId <独立ID> -onlineProbe <报告路径>`。测试设备覆盖值拥有独立的会话缓存键，不会让同机两个进程误用同一玩家身份。

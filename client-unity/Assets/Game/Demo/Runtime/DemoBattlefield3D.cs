@@ -155,23 +155,64 @@ namespace BiomeRivals.Demo
             UpdateSlotMarker(marker, Time.unscaledTime, 0f);
         }
 
+        public void SetSlotRangeHovered(bool player, DemoSlotKind kind, int startIndex, int occupiedSlots, bool hovered, bool rejected)
+        {
+            SetSlotRangeInteraction(player, kind, startIndex, occupiedSlots, hovered, false, rejected);
+        }
+
+        public void SetSlotRangePressed(bool player, DemoSlotKind kind, int startIndex, int occupiedSlots, bool pressed, bool rejected)
+        {
+            SetSlotRangeInteraction(player, kind, startIndex, occupiedSlots, pressed, true, rejected);
+        }
+
+        private void SetSlotRangeInteraction(
+            bool player,
+            DemoSlotKind kind,
+            int startIndex,
+            int occupiedSlots,
+            bool active,
+            bool pressed,
+            bool rejected)
+        {
+            BuildNow();
+            var slotCount = kind == DemoSlotKind.Unit ? 4 : 3;
+            var rangeEnd = Mathf.Min(slotCount, startIndex + Mathf.Max(1, occupiedSlots));
+            for (var index = Mathf.Max(0, startIndex); index < rangeEnd; index++)
+            {
+                if (!_slotMarkers.TryGetValue(SlotKey(player, kind, index), out var marker)) continue;
+                if (pressed)
+                {
+                    marker.Pressed = active;
+                    marker.PressRejected = active && rejected;
+                }
+                else
+                {
+                    marker.Hovered = active;
+                    marker.HoverRejected = active && rejected;
+                }
+                UpdateSlotMarker(marker, Time.unscaledTime, 0f);
+            }
+        }
+
         public void SyncPieces(
-            IReadOnlyList<string> playerUnits,
-            IReadOnlyList<string> playerBuildings,
-            IReadOnlyList<string> opponentUnits,
-            IReadOnlyList<string> opponentBuildings,
+            IReadOnlyList<DemoBattlefieldObject> playerObjects,
+            IReadOnlyList<DemoBattlefieldObject> opponentObjects,
             CardContentRegistry registry)
         {
             BuildNow();
-            var signature = string.Join("|", playerUnits.Concat(playerBuildings).Concat(opponentUnits).Concat(opponentBuildings));
+            var signature = string.Join("|", (playerObjects ?? Array.Empty<DemoBattlefieldObject>())
+                .Concat(opponentObjects ?? Array.Empty<DemoBattlefieldObject>())
+                .Where(value => value != null)
+                .OrderBy(value => value.Player ? 0 : 1)
+                .ThenBy(value => value.SlotKind)
+                .ThenBy(value => value.SlotIndex)
+                .Select(value => $"{value.InstanceId}:{value.CardId}:{value.SlotKind}:{value.SlotIndex}:{value.OccupiedSlots}"));
             if (signature == _pieceSignature) return;
             _pieceSignature = signature;
             ClearChildren(_piecesRoot);
             _floaters.Clear();
-            CreateSidePieces(true, DemoSlotKind.Unit, playerUnits, registry);
-            CreateSidePieces(true, DemoSlotKind.Building, playerBuildings, registry);
-            CreateSidePieces(false, DemoSlotKind.Unit, opponentUnits, registry);
-            CreateSidePieces(false, DemoSlotKind.Building, opponentBuildings, registry);
+            CreateSidePieces(true, playerObjects, registry);
+            CreateSidePieces(false, opponentObjects, registry);
         }
 
         private void Update()
@@ -193,16 +234,21 @@ namespace BiomeRivals.Demo
         {
             if (marker.Root == null || marker.SurfaceMaterial == null) return;
             var pulse = 0.5f + Mathf.Sin(time * 4.6f + marker.Phase) * 0.5f;
+            var rejectedPreview = marker.Hovered && marker.HoverRejected || marker.Pressed && marker.PressRejected;
             var actionableHover = marker.Hovered && marker.ValidTarget;
             var actionablePress = marker.Pressed && marker.ValidTarget;
-            var highlightColor = actionablePress || actionableHover
+            var highlightColor = rejectedPreview
+                ? Color.Lerp(Hex("#B41635"), Hex("#FF3157"), pulse)
+                : actionablePress || actionableHover
                 ? Hex("#F1C96A")
                 : marker.ValidTarget
                     ? marker.PriorityTarget
                         ? Color.Lerp(Hex("#A97727"), Hex("#FFE08A"), pulse)
                         : Color.Lerp(Hex("#3D9E8F"), Hex("#79E0CB"), pulse)
                     : Hex("#777263");
-            var highlightStrength = actionablePress
+            var highlightStrength = rejectedPreview
+                    ? marker.Pressed ? 0.98f : 0.84f + pulse * 0.12f
+                    : actionablePress
                     ? 0.92f
                     : actionableHover
                     ? 0.78f
@@ -210,12 +256,15 @@ namespace BiomeRivals.Demo
                         ? (marker.Occupied ? 0.48f + pulse * 0.18f : 0.18f + pulse * 0.12f)
                         : marker.Hovered && !marker.Occupied ? 0.12f : 0f;
             SetGroundHighlight(marker.SurfaceMaterial, highlightColor, highlightStrength);
-            if (marker.RiserRenderer != null) marker.RiserRenderer.enabled = actionableHover && !actionablePress && !marker.Occupied;
+            if (marker.RiserRenderer != null)
+                marker.RiserRenderer.enabled = (actionableHover && !actionablePress || rejectedPreview) && !marker.Occupied;
             if (marker.RiserMaterial != null)
-                SetMaterialColor(marker.RiserMaterial, actionableHover ? Hex("#8F642B") : Hex("#332A20"), actionableHover ? Hex("#6B4318") : Color.black);
+                SetMaterialColor(marker.RiserMaterial,
+                    rejectedPreview ? Hex("#7D142E") : actionableHover ? Hex("#8F642B") : Hex("#332A20"),
+                    rejectedPreview ? Hex("#E9274C") : actionableHover ? Hex("#6B4318") : Color.black);
             var targetPosition = marker.BasePosition;
-            targetPosition.y += actionablePress && !marker.Occupied ? 0.025f : actionableHover && !marker.Occupied ? 0.085f : marker.ValidTarget && !marker.Occupied ? pulse * 0.012f : marker.Hovered && !marker.Occupied ? 0.018f : 0f;
-            var targetScale = actionablePress && !marker.Occupied ? new Vector3(0.985f, 1f, 0.985f) : actionableHover && !marker.Occupied ? new Vector3(1.018f, 1f, 1.018f) : Vector3.one;
+            targetPosition.y += rejectedPreview && !marker.Occupied ? 0.045f : actionablePress && !marker.Occupied ? 0.025f : actionableHover && !marker.Occupied ? 0.085f : marker.ValidTarget && !marker.Occupied ? pulse * 0.012f : marker.Hovered && !marker.Occupied ? 0.018f : 0f;
+            var targetScale = rejectedPreview && !marker.Occupied ? new Vector3(0.992f, 1f, 0.992f) : actionablePress && !marker.Occupied ? new Vector3(0.985f, 1f, 0.985f) : actionableHover && !marker.Occupied ? new Vector3(1.018f, 1f, 1.018f) : Vector3.one;
             var blend = deltaTime <= 0f ? 0f : 1f - Mathf.Exp(-16f * deltaTime);
             marker.Root.localPosition = Vector3.Lerp(marker.Root.localPosition, targetPosition, blend);
             marker.Root.localScale = Vector3.Lerp(marker.Root.localScale, targetScale, blend);
@@ -618,24 +667,44 @@ namespace BiomeRivals.Demo
             CreateBlock(_terrainRoot, "OakCrown", position + new Vector3(0, 1.65f * scale, 0), new Vector3(1.55f, 1.05f, 1.55f) * scale, _materials["leaf"]);
         }
 
-        private void CreateSidePieces(bool player, DemoSlotKind kind, IReadOnlyList<string> slots, CardContentRegistry registry)
+        private void CreateSidePieces(bool player, IReadOnlyList<DemoBattlefieldObject> objects, CardContentRegistry registry)
         {
-            for (var i = 0; i < slots.Count; i++)
+            foreach (var battlefieldObject in objects ?? Array.Empty<DemoBattlefieldObject>())
             {
-                var cardId = slots[i];
-                if (string.IsNullOrEmpty(cardId)) continue;
-                if (kind == DemoSlotKind.Building && i > 0 && slots[i - 1] == cardId) continue;
-                CreatePiece(cardId, GetSlotWorldPosition(player, kind, i), player, kind, registry, i);
+                if (battlefieldObject == null || string.IsNullOrEmpty(battlefieldObject.CardId)) continue;
+                var position = GetOccupiedWorldPosition(
+                    player,
+                    battlefieldObject.SlotKind,
+                    battlefieldObject.SlotIndex,
+                    battlefieldObject.OccupiedSlots);
+                CreatePiece(battlefieldObject, position, player, registry);
             }
         }
 
-        private void CreatePiece(string cardId, Vector3 position, bool player, DemoSlotKind kind, CardContentRegistry registry, int index)
+        private Vector3 GetOccupiedWorldPosition(bool player, DemoSlotKind kind, int startIndex, int occupiedSlots)
         {
+            var first = GetSlotWorldPosition(player, kind, startIndex);
+            var endIndex = startIndex + Mathf.Max(1, occupiedSlots) - 1;
+            var last = GetSlotWorldPosition(player, kind, endIndex);
+            return (first + last) * 0.5f;
+        }
+
+        private float GetOccupiedWorldWidth(bool player, DemoSlotKind kind, int startIndex, int occupiedSlots)
+        {
+            if (occupiedSlots <= 1) return kind == DemoSlotKind.Building ? 2.45f : 2.05f;
+            var first = GetSlotWorldPosition(player, kind, startIndex);
+            var last = GetSlotWorldPosition(player, kind, startIndex + occupiedSlots - 1);
+            return Mathf.Abs(last.x - first.x) + (kind == DemoSlotKind.Building ? 2.45f : 2.05f);
+        }
+
+        private void CreatePiece(DemoBattlefieldObject battlefieldObject, Vector3 position, bool player, CardContentRegistry registry)
+        {
+            var cardId = battlefieldObject.CardId;
             var prefab = DemoWorldAssetProvider.LoadCardPrefab(cardId);
             if (prefab != null)
             {
                 var instance = Instantiate(prefab, _piecesRoot);
-                instance.name = "Piece_" + cardId;
+                instance.name = "Piece_" + battlefieldObject.InstanceId + "_" + cardId;
                 instance.transform.localPosition = position;
                 instance.transform.localRotation = Quaternion.Euler(0, player ? 0 : 180, 0);
                 return;
@@ -650,9 +719,17 @@ namespace BiomeRivals.Demo
                 _materials[materialKey] = material;
             }
 
-            var root = NewChildRoot(_piecesRoot, "Piece_" + cardId, position);
-            if (kind == DemoSlotKind.Building) BuildBlockStructure(root, material, theme.Accent, definition.buildingSlots);
-            else BuildBlockCreature(root, material, theme.Accent, cardId, player, index);
+            var root = NewChildRoot(_piecesRoot, "Piece_" + battlefieldObject.InstanceId + "_" + cardId, position);
+            if (battlefieldObject.SlotKind == DemoSlotKind.Building)
+            {
+                var footprintWidth = GetOccupiedWorldWidth(
+                    player,
+                    battlefieldObject.SlotKind,
+                    battlefieldObject.SlotIndex,
+                    battlefieldObject.OccupiedSlots);
+                BuildBlockStructure(root, material, theme.Accent, footprintWidth);
+            }
+            else BuildBlockCreature(root, material, theme.Accent, cardId, player, battlefieldObject.SlotIndex);
         }
 
         private void BuildBlockCreature(Transform root, Material material, Color accent, string cardId, bool player, int index)
@@ -685,13 +762,14 @@ namespace BiomeRivals.Demo
             return material;
         }
 
-        private void BuildBlockStructure(Transform root, Material material, Color accent, int occupiedSlots)
+        private void BuildBlockStructure(Transform root, Material material, Color accent, float footprintWidth)
         {
             var accentMaterial = GetAccentMaterial("structure_" + accent, accent);
-            var width = Mathf.Max(1, occupiedSlots) * 0.92f;
-            CreateBlock(root, "Foundation", new Vector3(0, 0.28f, 0), new Vector3(1.55f * width, 0.45f, 0.82f), material);
-            CreateBlock(root, "TowerL", new Vector3(-0.48f * width, 0.9f, 0), new Vector3(0.48f, 1.25f, 0.55f), material);
-            CreateBlock(root, "TowerR", new Vector3(0.48f * width, 0.9f, 0), new Vector3(0.48f, 1.25f, 0.55f), material);
+            var width = Mathf.Max(2.05f, footprintWidth);
+            var towerOffset = Mathf.Max(0.55f, width * 0.5f - 0.46f);
+            CreateBlock(root, "Foundation", new Vector3(0, 0.28f, 0), new Vector3(width, 0.45f, 0.82f), material);
+            CreateBlock(root, "TowerL", new Vector3(-towerOffset, 0.9f, 0), new Vector3(0.48f, 1.25f, 0.55f), material);
+            CreateBlock(root, "TowerR", new Vector3(towerOffset, 0.9f, 0), new Vector3(0.48f, 1.25f, 0.55f), material);
             CreateBlock(root, "Core", new Vector3(0, 0.82f, 0), new Vector3(0.50f, 0.50f, 0.60f), accentMaterial);
         }
 
@@ -799,6 +877,8 @@ namespace BiomeRivals.Demo
             public bool PriorityTarget;
             public bool Hovered;
             public bool Pressed;
+            public bool HoverRejected;
+            public bool PressRejected;
 
             public SlotMarker(
                 bool player,

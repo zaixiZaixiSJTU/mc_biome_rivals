@@ -221,6 +221,57 @@ namespace BiomeRivals.Demo.Tests
         }
 
         [Test]
+        public void StructureDeploymentPreviewValidatesTheWholeProspectiveRange()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { "db_007" });
+            Assert.That(registry.TryGetDefinition("db_007", out var temple), Is.True);
+
+            var legal = DemoDeploymentRules.Evaluate(match, temple, DemoSlotKind.Building, 0);
+            var outside = DemoDeploymentRules.Evaluate(match, temple, DemoSlotKind.Building, 2);
+
+            Assert.That(legal.IsLegal, Is.True);
+            Assert.That(legal.OccupiedSlots, Is.EqualTo(2));
+            Assert.That(legal.Message, Does.Contain("1—2"));
+            Assert.That(outside.IsLegal, Is.False);
+            Assert.That(outside.Message, Does.Contain("连续 2"));
+
+            match.BuildingSlots[1] = "occupied-instance";
+            var overlap = DemoDeploymentRules.Evaluate(match, temple, DemoSlotKind.Building, 0);
+            Assert.That(overlap.IsLegal, Is.False);
+            Assert.That(overlap.Message, Does.Contain("并非全部空闲"));
+        }
+
+        [Test]
+        public void LocalCombatReleasesEverySlotOfAThreeSlotStructure()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            Assert.That(registry.TryGetDefinition("pf_008", out var ironGolem), Is.True);
+            Assert.That(registry.TryGetDefinition("ed_008", out var portalFrame), Is.True);
+            match.ResetHand(new[] { ironGolem.id });
+            match.ResetOpponent(new[] { portalFrame });
+            Assert.That(match.OpponentBuildingSlots.All(value => value == portalFrame.id), Is.True);
+            Assert.That(match.TryDeploy(ironGolem, DemoSlotKind.Unit, 0, out _), Is.True);
+
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            Assert.That(match.ApplyEnterCombat(match.CreateEnterCombatCommand()).Accepted, Is.True);
+            var attacker = match.GetObject(true, DemoSlotKind.Unit, 0);
+            var structure = match.GetObject(false, DemoSlotKind.Building, 2);
+            Assert.That(structure.OccupiedSlots, Is.EqualTo(3));
+            structure.Health = 1;
+
+            var result = match.ApplyAttack(match.CreateAttackCommand(attacker.InstanceId, "BUILDING", structure.InstanceId));
+
+            Assert.That(result.Accepted, Is.True);
+            Assert.That(attacker.Health, Is.EqualTo(7), "structures do not retaliate");
+            Assert.That(match.GetObject(false, DemoSlotKind.Building, 0), Is.Null);
+            Assert.That(match.OpponentBuildingSlots.All(string.IsNullOrEmpty), Is.True);
+        }
+
+        [Test]
         public void DeployCommandUsesSharedFieldsAndRevisionGuard()
         {
             var registry = CardContentLoader.Load();
@@ -696,6 +747,52 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(blazeTexture, Is.EqualTo("entity_blaze"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("tk_014", out var smallMagmaTexture), Is.True);
                 Assert.That(smallMagmaTexture, Is.EqualTo("entity_magma_cube"));
+
+                var piecesRoot = root.transform.Find("BattlefieldPieces");
+                battlefield.SyncPieces(new[]
+                {
+                    new DemoBattlefieldObject
+                    {
+                        InstanceId = "object-render-1", CardId = "pf_005", Player = true,
+                        SlotKind = DemoSlotKind.Building, SlotIndex = 0, OccupiedSlots = 1, Health = 4, MaxHealth = 4
+                    },
+                    new DemoBattlefieldObject
+                    {
+                        InstanceId = "object-render-2", CardId = "pf_005", Player = true,
+                        SlotKind = DemoSlotKind.Building, SlotIndex = 1, OccupiedSlots = 1, Health = 4, MaxHealth = 4
+                    }
+                }, System.Array.Empty<DemoBattlefieldObject>(), registry);
+                Assert.That(piecesRoot.childCount, Is.EqualTo(2), "adjacent copies of one building card remain separate stable objects");
+                Assert.That(piecesRoot.Find("Piece_object-render-1_pf_005"), Is.Not.Null);
+                Assert.That(piecesRoot.Find("Piece_object-render-2_pf_005"), Is.Not.Null);
+
+                battlefield.SyncPieces(new[]
+                {
+                    new DemoBattlefieldObject
+                    {
+                        InstanceId = "object-render-3", CardId = "db_007", Player = true,
+                        SlotKind = DemoSlotKind.Building, SlotIndex = 0, OccupiedSlots = 2, Health = 8, MaxHealth = 8
+                    }
+                }, System.Array.Empty<DemoBattlefieldObject>(), registry);
+                Assert.That(piecesRoot.childCount, Is.EqualTo(1), "one multi-slot structure produces one world object");
+                var structurePiece = piecesRoot.Find("Piece_object-render-3_db_007");
+                var expectedStructureCenter = (battlefield.GetSlotWorldPosition(true, DemoSlotKind.Building, 0) +
+                                               battlefield.GetSlotWorldPosition(true, DemoSlotKind.Building, 1)) * 0.5f;
+                Assert.That(structurePiece, Is.Not.Null);
+                Assert.That(structurePiece.localPosition.x, Is.EqualTo(expectedStructureCenter.x).Within(0.001f));
+
+                var buildingMarker1 = root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Building_1/InteractiveGround");
+                var buildingMarker2 = root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Building_2/InteractiveGround");
+                battlefield.SetSlotState(true, DemoSlotKind.Building, 0, true, false);
+                battlefield.SetSlotState(true, DemoSlotKind.Building, 1, true, false);
+                battlefield.SetSlotRangeHovered(true, DemoSlotKind.Building, 0, 2, true, false);
+                Assert.That(buildingMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.EqualTo(0.78f).Within(0.001f));
+                Assert.That(buildingMarker1.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.EqualTo(0.78f).Within(0.001f));
+                battlefield.SetSlotRangeHovered(true, DemoSlotKind.Building, 0, 2, false, false);
+                battlefield.SetSlotRangeHovered(true, DemoSlotKind.Building, 2, 2, true, true);
+                Assert.That(buildingMarker2.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.GreaterThanOrEqualTo(0.84f));
+                battlefield.SetSlotRangeHovered(true, DemoSlotKind.Building, 2, 2, false, true);
+
                 battlefield.SetSlotState(true, DemoSlotKind.Unit, 0, true, false);
                 battlefield.SetSlotHovered(true, DemoSlotKind.Unit, 0, true);
                 Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.EqualTo(0.78f).Within(0.001f));

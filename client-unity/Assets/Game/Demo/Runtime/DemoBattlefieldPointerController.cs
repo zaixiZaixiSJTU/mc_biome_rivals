@@ -8,13 +8,21 @@ namespace BiomeRivals.Demo
     {
         private DemoBattlefield3D _battlefield;
         private Action<bool, DemoSlotKind, int> _onSlotClicked;
+        private Action<bool, DemoSlotKind, int, bool> _onSlotHovered;
+        private Action<bool, DemoSlotKind, int, bool> _onSlotPressed;
         private DemoBattlefieldSlotTarget _hovered;
         private DemoBattlefieldSlotTarget _pressed;
 
-        public void Configure(DemoBattlefield3D battlefield, Action<bool, DemoSlotKind, int> onSlotClicked)
+        public void Configure(
+            DemoBattlefield3D battlefield,
+            Action<bool, DemoSlotKind, int> onSlotClicked,
+            Action<bool, DemoSlotKind, int, bool> onSlotHovered = null,
+            Action<bool, DemoSlotKind, int, bool> onSlotPressed = null)
         {
             _battlefield = battlefield;
             _onSlotClicked = onSlotClicked;
+            _onSlotHovered = onSlotHovered;
+            _onSlotPressed = onSlotPressed;
         }
 
         private void Update()
@@ -36,17 +44,29 @@ namespace BiomeRivals.Demo
         private void SetHovered(DemoBattlefieldSlotTarget target)
         {
             if (_hovered == target) return;
-            if (_hovered != null) _battlefield.SetSlotHovered(_hovered.Player, _hovered.Kind, _hovered.Index, false);
+            if (_hovered != null) SetHoveredState(_hovered, false);
             _hovered = target;
-            if (_hovered != null) _battlefield.SetSlotHovered(_hovered.Player, _hovered.Kind, _hovered.Index, true);
+            if (_hovered != null) SetHoveredState(_hovered, true);
         }
 
         private void SetPressed(DemoBattlefieldSlotTarget target)
         {
             if (_pressed == target) return;
-            if (_pressed != null) _battlefield.SetSlotPressed(_pressed.Player, _pressed.Kind, _pressed.Index, false);
+            if (_pressed != null) SetPressedState(_pressed, false);
             _pressed = target;
-            if (_pressed != null) _battlefield.SetSlotPressed(_pressed.Player, _pressed.Kind, _pressed.Index, true);
+            if (_pressed != null) SetPressedState(_pressed, true);
+        }
+
+        private void SetHoveredState(DemoBattlefieldSlotTarget target, bool hovered)
+        {
+            if (_onSlotHovered != null) _onSlotHovered(target.Player, target.Kind, target.Index, hovered);
+            else _battlefield.SetSlotHovered(target.Player, target.Kind, target.Index, hovered);
+        }
+
+        private void SetPressedState(DemoBattlefieldSlotTarget target, bool pressed)
+        {
+            if (_onSlotPressed != null) _onSlotPressed(target.Player, target.Kind, target.Index, pressed);
+            else _battlefield.SetSlotPressed(target.Player, target.Kind, target.Index, pressed);
         }
 
         private void OnDisable()

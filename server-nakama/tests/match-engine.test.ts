@@ -293,6 +293,51 @@ TestHarness.test('deploys a structure only across consecutive free building slot
   TestHarness.equal(accepted.batch.events[0]!.payload.occupiedSlots, 2);
 });
 
+TestHarness.test('rejects a structure whose declared range overlaps an occupied building slot', function (): void {
+  const state = activeState('match-1', ['alice', 'bob']);
+  state.players[0]!.hand = ['db_007'];
+  state.players[0]!.redstone = 6;
+  state.players[0]!.redstoneCapacity = 6;
+  placeBuilding(state, 0, 'db_004', 1, 'object-1');
+  state.nextInstanceId = 2;
+
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', deployCommand('deploy-overlap', 0, 'db_007', 'BUILDING', 0));
+
+  TestHarness.equal(result.accepted, false);
+  if (!result.accepted) TestHarness.equal(result.code, 'SLOT_OCCUPIED');
+  TestHarness.equal(state.players[0]!.hand[0], 'db_007');
+  TestHarness.equal(state.players[0]!.redstone, 6);
+  TestHarness.equal(state.players[0]!.buildingSlots[0], null);
+  TestHarness.equal(state.players[0]!.buildingSlots[1], 'object-1');
+});
+
+TestHarness.test('damages a three-slot structure once and releases its complete range on death', function (): void {
+  const state = activeState('match-1', ['alice', 'bob']);
+  state.turn = 2;
+  state.phase = 'COMBAT';
+  placeUnit(state, 0, 'pf_003', 0, 'object-1', 1);
+  placeBuilding(state, 1, 'ed_008', 0, 'object-2', 3);
+  state.players[0]!.battlefield[0]!.attack = 4;
+  state.nextInstanceId = 3;
+
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', attackCommand('attack-structure', 0, 'object-1', 'BUILDING', 'object-2'));
+
+  TestHarness.equal(result.accepted, true);
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[0]!.battlefield[0]!.health, 2, 'structures do not retaliate');
+  TestHarness.equal(result.state.players[1]!.battlefield.length, 0);
+  TestHarness.equal(result.state.players[1]!.buildingSlots[0], null);
+  TestHarness.equal(result.state.players[1]!.buildingSlots[1], null);
+  TestHarness.equal(result.state.players[1]!.buildingSlots[2], null);
+  TestHarness.equal(result.state.players[1]!.discardPile.filter(function (cardId): boolean { return cardId === 'ed_008'; }).length, 1);
+  TestHarness.equal(result.batch.events[0]!.type, 'ATTACK_RESOLVED');
+  TestHarness.equal(result.batch.events[0]!.payload.damageToAttacker, 0);
+  TestHarness.equal(result.batch.events[1]!.type, 'OBJECT_DIED');
+  TestHarness.equal(result.batch.events[1]!.payload.instanceId, 'object-2');
+  TestHarness.equal(result.batch.events[1]!.payload.occupiedSlots, 3);
+  TestHarness.equal(BiomeRivalsRules.validateState(result.state).length, 0);
+});
+
 TestHarness.test('plays implemented armor material through its stable effect id', function (): void {
   const state = activeState('match-1', ['alice', 'bob']);
   state.players[0]!.hand = ['tk_016'];

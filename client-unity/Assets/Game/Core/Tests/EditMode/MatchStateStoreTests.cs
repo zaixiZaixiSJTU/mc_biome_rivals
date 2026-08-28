@@ -226,6 +226,81 @@ namespace BiomeRivals.Core.Tests
         }
 
         [Test]
+        public void Apply_ReplaysThreeSlotStructureDamageAndReleasesItsWholeRange()
+        {
+            var attacker = new BattlefieldObjectStateDto
+            {
+                instanceId = "object-1", cardId = "pf_003", cardType = "UNIT", attack = 4,
+                health = 2, maxHealth = 2, slotKind = "UNIT", slotIndex = 0, occupiedSlots = 1, summonedTurn = 1
+            };
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "match-structure", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                revision = 0, lastEventId = 0, turn = 2, phase = "COMBAT", activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto
+                    {
+                        playerId = "alice", hand = Array.Empty<string>(), unitSlots = new[] { "object-1", null, null, null },
+                        buildingSlots = new string[3], battlefield = new[] { attacker }
+                    },
+                    new PlayerStateDto
+                    {
+                        playerId = "bob", hand = new[] { "ed_008" }, unitSlots = new string[4],
+                        buildingSlots = new string[3], battlefield = Array.Empty<BattlefieldObjectStateDto>(), discardPile = Array.Empty<string>()
+                    }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol,
+                rulesetVersion = GameVersions.Ruleset,
+                revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 1, type = MatchEventTypes.CardDeployed,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "bob", instanceId = "object-2", cardId = "ed_008", cardType = "STRUCTURE",
+                            slotKind = "BUILDING", slotIndex = 0, occupiedSlots = 3, redstone = 0,
+                            health = 12, maxHealth = 12, summonedTurn = 2, nextInstanceId = 3
+                        }
+                    },
+                    new MatchEventDto
+                    {
+                        eventId = 2, type = MatchEventTypes.AttackResolved,
+                        payload = new MatchEventPayloadDto
+                        {
+                            attackerPlayerId = "alice", attackerInstanceId = "object-1", attackerHealth = 2,
+                            targetPlayerId = "bob", targetType = "BUILDING", targetInstanceId = "object-2", targetHealth = 0
+                        }
+                    },
+                    new MatchEventDto
+                    {
+                        eventId = 3, type = MatchEventTypes.ObjectDied,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "bob", instanceId = "object-2", cardId = "ed_008",
+                            slotKind = "BUILDING", slotIndex = 0, occupiedSlots = 3, discardCount = 1
+                        }
+                    }
+                }
+            });
+
+            Assert.That(store.Current.players[0].battlefield[0].hasAttacked, Is.True);
+            Assert.That(store.Current.players[0].battlefield[0].health, Is.EqualTo(2));
+            Assert.That(store.Current.players[1].battlefield, Is.Empty);
+            Assert.That(store.Current.players[1].buildingSlots, Is.EqualTo(new string[3]));
+            Assert.That(store.Current.players[1].discardPile, Is.EqualTo(new[] { "ed_008" }));
+            Assert.That(store.Current.lastEventId, Is.EqualTo(3));
+        }
+
+        [Test]
         public void Apply_RemovesOneHiddenOpponentHandSlotOnDeployment()
         {
             var store = new MatchStateStore();

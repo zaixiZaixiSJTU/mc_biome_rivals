@@ -59,6 +59,8 @@ UGUI 样式由 `DemoUiStyleCatalog` 集中提供材质、底色、描边和交�
 
 部署、攻击与卡牌目标槽位不再使用屏幕空间矩形、透明 `Graphic` 或 UGUI `Button` 命中。每个槽位由一个合并的地砖顶面 Mesh、同 Mesh 的 `MeshCollider`、`DemoBattlefieldSlotTarget` 语义组件，以及一个仅在抬升时显示的合并侧壁 Mesh 组成，不为单块地砖创建 Renderer 或 Collider。`DemoBattlefieldPointerController` 使用主相机 `ScreenPointToRay` 在 3D 世界中寻找最近的双方语义槽位；UI 面板遮挡指针时停止世界命中。战斗阶段先持续高亮合法己方攻击者，选择后保持攻击者地砖的按下亮度，并点亮敌方生物/建筑目标；敌方英雄使用其实体 HUD 面板作为明确的点击目标。有目标卡牌进入独立选择态，已占用的合法地表直接发光而不抬升生物模型，右键或 Esc 可取消。
 
+结构部署不再把每个空建筑格误当成合法起点。`DemoDeploymentRules` 会同时校验回合、阶段、手牌、费用、行类型、边界与整段连续空位；空闲完整范围以青色脉冲提示，悬停后全部待占地砖同步变金，越界或与已有对象相交时实际可见范围同步变红，点击非法范围只显示本地原因而不发送网络命令。结构落地后由一个稳定实例驱动一个居中的 3D 模型，模型宽度由首尾地块的世界坐标计算；任意占用格都映射到同一对象、共享生命，死亡事件一次释放完整范围。相邻同名建筑通过实例 ID 区分，不能再用相邻 `cardId` 猜测它们是否属于同一结构。
+
 地砖顶点经过真实 Model/View/Projection 变换，透视摄像机使远端地砖自然收窄；`DemoGroundSurface` Shader 的屏幕投影只用于采样精绘背景纹理，几何形变和深度遮挡仍完全由世界 Mesh 与相机矩阵决定。未激活地砖因此保留背景原位置的草、石路或木板纹理，高亮则直接修改地砖表面及方块边缘亮度。交互顺序为“合法目标脉冲—悬停变金并抬升—按下压低并收缩—松开后回弹或部署单位”，规则状态仍只存在于 `DemoLocalMatch`。
 
 默认场景采用“精绘背景 + 真实 3D 槽位/单位”的 2.5D 合成方式，不再用低精度程序化地形覆盖原有美术。程序化方块地形仅作为背景资源缺失时的可运行后备。进入性能阶段后，槽位之外的静态装饰应合并为少量 Mesh，单位和建筑继续保持独立对象。
@@ -89,6 +91,8 @@ UGUI 样式由 `DemoUiStyleCatalog` 集中提供材质、底色、描边和交�
 潜影贝亡语预览：[`assets/demo-shulker-deathrattle-preview-v1.png`](assets/demo-shulker-deathrattle-preview-v1.png)。潜影贝死亡后离开真实战场格，衍生的潜影壳进入己方手牌并复用同一卡面/详情组件；在线事件只向拥有者公开手牌中的卡牌身份，满手转弃牌时则公开。
 
 岩浆怪召唤预览：[`assets/demo-magma-summon-preview-v1.png`](assets/demo-magma-summon-preview-v1.png)。同批死亡对象先全部离场，随后小型岩浆怪以新的稳定实例 ID 出现在来源释放格；模型复用 Minecraft 岩浆怪纹理与分层方块结构，并缩放为成体的 `62%`，出生位置通过真实地表材质短促发光。
+
+多格结构部署预览：[`assets/demo-structure-placement-preview-v1.png`](assets/demo-structure-placement-preview-v1.png)。选中两格“沙漠神殿”后，建筑格 1—2 的真实地表作为一个候选范围同步变金；右侧提示同时给出占格数和确切格号。[`非法起点预览`](assets/demo-structure-placement-invalid-preview-v1.png) 使用高饱和深红地表和红色原因文字反馈越界，[`落地结构预览`](assets/demo-structure-deployed-preview-v1.png) 则证明一个实例模型居中横跨建筑格 1—2。重叠与三格结构释放另由规则/回放测试覆盖。
 
 权威效果表现预览：[`assets/demo-card-effect-preview-v1.png`](assets/demo-card-effect-preview-v1.png)。已实现的法术/材料使用明确的“释放卡牌”动作，结算后同步刷新生命、护甲、手牌与区域计数，并在英雄实体 HUD 上播放与效果类型对应的短促颜色脉冲；待实现效果的按钮显示“效果尚未接入”并禁用。
 
