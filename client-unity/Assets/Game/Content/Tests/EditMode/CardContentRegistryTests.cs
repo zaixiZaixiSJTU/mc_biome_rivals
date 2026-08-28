@@ -21,6 +21,12 @@ namespace BiomeRivals.Content.Tests
             Assert.That(temple.cardType, Is.EqualTo("STRUCTURE"));
             Assert.That(temple.health, Is.EqualTo(8));
             Assert.That(temple.buildingSlots, Is.EqualTo(2));
+            Assert.That(temple.hasCraftingRecipe, Is.True);
+            Assert.That(temple.recipeId, Is.EqualTo("recipe.db_007.01"));
+            Assert.That(temple.craftingRecipe.Length, Is.EqualTo(2));
+            Assert.That(temple.craftingRecipe[0].cardId, Is.EqualTo("tk_006"));
+            Assert.That(temple.craftingRecipe[1].cardId, Is.EqualTo("tk_010"));
+            Assert.That(temple.craftedHealthBonus, Is.EqualTo(2));
             Assert.That(temple.effectImplementationStatus, Is.EqualTo("PENDING"));
             Assert.That(registry.TryGetDefinition("nt_006", out var sacrifice), Is.True);
             Assert.That(sacrifice.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));

@@ -61,7 +61,7 @@ if ($art.entries.Count -ne 74) { throw "Expected 74 art entries, found $($art.en
 if ($themes.themes.Count -ne 7) { throw "Expected 7 themes, found $($themes.themes.Count)." }
 if ($definitions.entries.Count -ne 74) { throw "Expected 74 definitions, found $($definitions.entries.Count)." }
 if ($texts.entries.Count -ne 74) { throw "Expected 74 localized texts, found $($texts.entries.Count)." }
-if ($definitions.schemaVersion -ne 2) { throw "Unsupported card definition schema version: $($definitions.schemaVersion)" }
+if ($definitions.schemaVersion -ne 3) { throw "Unsupported card definition schema version: $($definitions.schemaVersion)" }
 
 $nameIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
 $nameKeys = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
@@ -104,6 +104,18 @@ foreach ($entry in $definitions.entries) {
         if (-not $seenKeywords.Add([string]$keyword)) { throw "Duplicate keyword '$keyword' on $id" }
     }
     if ($null -eq $entry.effectIds) { throw "Definition effectIds must be an array, not null: $id" }
+    if ($null -eq $entry.craftingRecipe) { throw "Definition craftingRecipe must be an array, not null: $id" }
+    if ($entry.hasCraftingRecipe) {
+        if ($entry.recipeId -ne "recipe.$id.01") { throw "Crafting recipe id mismatch: $id" }
+        if ($entry.craftingRecipe.Count -lt 1) { throw "Crafting recipe has no ingredients: $id" }
+        foreach ($ingredient in $entry.craftingRecipe) {
+            if ([int]$ingredient.count -lt 1) { throw "Crafting ingredient count must be positive: $id" }
+        }
+    }
+    elseif ($entry.recipeId -ne '' -or $entry.craftingRecipe.Count -ne 0 -or
+            $entry.craftedAttackBonus -ne 0 -or $entry.craftedHealthBonus -ne 0 -or $entry.craftedDurabilityBonus -ne 0) {
+        throw "Card without recipe contains crafting data: $id"
+    }
     if ($entry.effectImplementationStatus -eq 'PENDING') {
         if ($entry.effectIds.Count -ne 1 -or $entry.effectIds[0] -ne "effect.$id.01") {
             throw "Pending card must reserve exactly effect.$id.01"
@@ -132,6 +144,12 @@ foreach ($entry in $definitions.entries) {
 if ($definitionIds.Count -ne $nameIds.Count) { throw 'Card definition and name registry counts differ.' }
 foreach ($id in $nameIds) {
     if (-not $definitionIds.Contains($id)) { throw "Card definition registry is missing: $id" }
+}
+foreach ($entry in $definitions.entries) {
+    foreach ($ingredient in $entry.craftingRecipe) {
+        if (-not $definitionById.ContainsKey([string]$ingredient.cardId)) { throw "Crafting ingredient is not registered: $($ingredient.cardId)" }
+        if ($definitionById[[string]$ingredient.cardId].cardType -ne 'MATERIAL') { throw "Crafting ingredient is not a material: $($ingredient.cardId)" }
+    }
 }
 foreach ($effectId in $implementedEffectIds) {
     $implementedCard = $definitions.entries | Where-Object { $_.effectIds -contains $effectId -and $_.effectImplementationStatus -eq 'IMPLEMENTED' } | Select-Object -First 1

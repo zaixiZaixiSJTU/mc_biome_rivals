@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["protocolVersion", "rulesetVersion", "revision", "acknowledgedCommandId", "events"],
   "properties": {
-    "protocolVersion": { "const": 10 },
+    "protocolVersion": { "const": 11 },
     "rulesetVersion": { "type": "string" },
     "revision": { "type": "integer", "minimum": 0 },
     "acknowledgedCommandId": { "type": "string" },
@@ -18,7 +18,7 @@
         "required": ["eventId", "type", "payload"],
         "properties": {
           "eventId": { "type": "integer", "minimum": 1 },
-          "type": { "enum": ["MULLIGAN_COMPLETED", "MATCH_STARTED", "CARD_DEPLOYED", "OBJECT_SUMMONED", "CARD_PLAYED", "CARD_DRAWN", "CARD_BURNED", "CARD_GENERATED", "FATIGUE_DAMAGE", "HERO_DAMAGED", "HERO_HEALED", "ARMOR_GAINED", "OBJECT_STATS_CHANGED", "PHASE_CHANGED", "ATTACK_RESOLVED", "OBJECT_DIED", "TURN_ENDED", "TURN_STARTED", "PLAYER_CONCEDED", "MATCH_ENDED"] },
+          "type": { "enum": ["MULLIGAN_COMPLETED", "MATCH_STARTED", "MATERIALS_CONSUMED", "CARD_DEPLOYED", "OBJECT_SUMMONED", "CARD_PLAYED", "CARD_DRAWN", "CARD_BURNED", "CARD_GENERATED", "FATIGUE_DAMAGE", "HERO_DAMAGED", "HERO_HEALED", "ARMOR_GAINED", "OBJECT_STATS_CHANGED", "PHASE_CHANGED", "ATTACK_RESOLVED", "OBJECT_DIED", "TURN_ENDED", "TURN_STARTED", "PLAYER_CONCEDED", "MATCH_ENDED"] },
           "payload": { "type": "object" }
         },
         "allOf": [
@@ -58,13 +58,42 @@
             }
           },
           {
+            "if": { "properties": { "type": { "const": "MATERIALS_CONSUMED" } } },
+            "then": {
+              "properties": {
+                "payload": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["playerId", "craftedCardId", "recipeId", "materials", "handCount", "discardCount"],
+                  "properties": {
+                    "playerId": { "type": "string", "minLength": 1 },
+                    "craftedCardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+                    "recipeId": { "type": "string", "pattern": "^recipe\\.[a-z0-9_]+\\.[0-9]{2}$" },
+                    "materials": {
+                      "type": "array", "minItems": 1,
+                      "items": {
+                        "type": "object", "additionalProperties": false,
+                        "required": ["cardId", "count"],
+                        "properties": {
+                          "cardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+                          "count": { "type": "integer", "minimum": 1 }
+                        }
+                      }
+                    },
+                    "handCount": { "type": "integer", "minimum": 1, "maximum": 7 },
+                    "discardCount": { "type": "integer", "minimum": 1 }
+                  }
+                }
+              }
+            }
+          },
+          {
             "if": { "properties": { "type": { "const": "CARD_DEPLOYED" } } },
             "then": {
               "properties": {
                 "payload": {
                   "type": "object",
                   "additionalProperties": false,
-                  "required": ["playerId", "instanceId", "cardId", "cardType", "slotKind", "slotIndex", "occupiedSlots", "redstone", "attack", "health", "maxHealth", "summonedTurn", "keywords", "nextInstanceId"],
+                  "required": ["playerId", "instanceId", "cardId", "cardType", "slotKind", "slotIndex", "occupiedSlots", "paymentMethod", "redstone", "attack", "health", "maxHealth", "summonedTurn", "keywords", "nextInstanceId"],
                   "properties": {
                     "playerId": { "type": "string", "minLength": 1 },
                     "instanceId": { "type": "string", "pattern": "^object-[0-9]+$" },
@@ -73,6 +102,7 @@
                     "slotKind": { "enum": ["UNIT", "BUILDING"] },
                     "slotIndex": { "type": "integer", "minimum": 0 },
                     "occupiedSlots": { "type": "integer", "minimum": 1, "maximum": 3 },
+                    "paymentMethod": { "enum": ["REDSTONE", "CRAFTING"] },
                     "redstone": { "type": "integer", "minimum": 0, "maximum": 10 },
                     "attack": { "type": "integer", "minimum": 0 },
                     "health": { "type": "integer", "minimum": 1 },

@@ -291,16 +291,17 @@ namespace BiomeRivalsRules {
       const cardId = command.payload.cardId;
       const slotKind = command.payload.slotKind;
       const slotIndex = command.payload.slotIndex;
+      const paymentMethod = command.payload.paymentMethod;
       if (typeof cardId !== 'string' || (slotKind !== 'UNIT' && slotKind !== 'BUILDING') ||
-          typeof slotIndex !== 'number' || slotIndex % 1 !== 0) {
-        return reject(state, 'INVALID_COMMAND', 'DEPLOY_CARD requires cardId, slotKind and integer slotIndex');
+          typeof slotIndex !== 'number' || slotIndex % 1 !== 0 ||
+          (paymentMethod !== 'REDSTONE' && paymentMethod !== 'CRAFTING')) {
+        return reject(state, 'INVALID_COMMAND', 'DEPLOY_CARD requires cardId, slotKind, integer slotIndex and paymentMethod');
       }
       const definition = getCardDefinition(cardId);
       if (definition === null) return reject(state, 'UNKNOWN_CARD', 'card definition is not registered');
       const player = next.players[actorIndex]!;
       const handIndex = player.hand.indexOf(cardId);
       if (handIndex < 0) return reject(state, 'CARD_NOT_IN_HAND', 'card is not in the actor hand');
-      if (definition.cost > player.redstone) return reject(state, 'INSUFFICIENT_REDSTONE', 'not enough redstone');
 
       let occupiedSlots = 1;
       let objectCardType: 'UNIT' | 'BUILDING' | 'STRUCTURE';
@@ -325,15 +326,40 @@ namespace BiomeRivalsRules {
         return reject(state, 'INVALID_TARGET', 'card type cannot be deployed to the battlefield');
       }
 
+      const materialIndices: number[] = [];
+      const consumedMaterials: string[] = [];
+      if (paymentMethod === 'REDSTONE') {
+        if (definition.cost > player.redstone) return reject(state, 'INSUFFICIENT_REDSTONE', 'not enough redstone');
+      } else {
+        if (!definition.hasCraftingRecipe || !definition.recipeId || definition.craftingRecipe.length === 0) {
+          return reject(state, 'INVALID_PAYMENT_METHOD', 'card does not have a crafting recipe');
+        }
+        for (let recipeIndex = 0; recipeIndex < definition.craftingRecipe.length; recipeIndex += 1) {
+          const ingredient = definition.craftingRecipe[recipeIndex]!;
+          for (let count = 0; count < ingredient.count; count += 1) {
+            let foundIndex = -1;
+            for (let candidate = 0; candidate < player.hand.length; candidate += 1) {
+              if (candidate !== handIndex && materialIndices.indexOf(candidate) < 0 && player.hand[candidate] === ingredient.cardId) {
+                foundIndex = candidate;
+                break;
+              }
+            }
+            if (foundIndex < 0) return reject(state, 'MISSING_MATERIALS', 'crafting recipe materials are missing from hand');
+            materialIndices.push(foundIndex);
+            consumedMaterials.push(ingredient.cardId);
+          }
+        }
+      }
+
       const instanceId = 'object-' + String(next.nextInstanceId);
       next.nextInstanceId += 1;
       const battlefieldObject: BattlefieldObjectState = {
         instanceId: instanceId,
         cardId: cardId,
         cardType: objectCardType,
-        attack: definition.attack,
-        health: definition.health,
-        maxHealth: definition.health,
+        attack: definition.attack + (paymentMethod === 'CRAFTING' ? definition.craftedAttackBonus : 0),
+        health: definition.health + (paymentMethod === 'CRAFTING' ? definition.craftedHealthBonus : 0),
+        maxHealth: definition.health + (paymentMethod === 'CRAFTING' ? definition.craftedHealthBonus : 0),
         slotKind: slotKind,
         slotIndex: slotIndex,
         occupiedSlots: occupiedSlots,
@@ -346,8 +372,25 @@ namespace BiomeRivalsRules {
       player.battlefield.push(battlefieldObject);
       const occupiedRow = slotKind === 'UNIT' ? player.unitSlots : player.buildingSlots;
       for (let index = slotIndex; index < slotIndex + occupiedSlots; index += 1) occupiedRow[index] = instanceId;
-      player.hand.splice(handIndex, 1);
-      player.redstone -= definition.cost;
+      if (paymentMethod === 'CRAFTING') {
+        materialIndices.sort(function (left, right): number { return right - left; });
+        for (let index = 0; index < materialIndices.length; index += 1) player.hand.splice(materialIndices[index]!, 1);
+        for (let index = 0; index < consumedMaterials.length; index += 1) player.discardPile.push(consumedMaterials[index]!);
+        emit('MATERIALS_CONSUMED', {
+          playerId: actorPlayerId,
+          craftedCardId: cardId,
+          recipeId: definition.recipeId,
+          materials: definition.craftingRecipe.map(function (ingredient): { cardId: string; count: number } {
+            return { cardId: ingredient.cardId, count: ingredient.count };
+          }),
+          handCount: player.hand.length,
+          discardCount: player.discardPile.length
+        });
+      }
+      const productHandIndex = player.hand.indexOf(cardId);
+      if (productHandIndex < 0) return reject(state, 'INVALID_STATE', 'crafted product was removed while consuming materials');
+      player.hand.splice(productHandIndex, 1);
+      if (paymentMethod === 'REDSTONE') player.redstone -= definition.cost;
       emit('CARD_DEPLOYED', {
         playerId: actorPlayerId,
         instanceId: instanceId,
@@ -356,6 +399,7 @@ namespace BiomeRivalsRules {
         slotKind: slotKind,
         slotIndex: slotIndex,
         occupiedSlots: occupiedSlots,
+        paymentMethod: paymentMethod,
         redstone: player.redstone,
         attack: battlefieldObject.attack,
         health: battlefieldObject.health,

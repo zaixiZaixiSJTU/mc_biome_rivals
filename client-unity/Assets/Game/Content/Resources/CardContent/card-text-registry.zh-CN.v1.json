@@ -198,14 +198,14 @@
                         "nameKey":  "card.db_007.name",
                         "name":  "沙漠神殿",
                         "rulesTextKey":  "card.db_007.rules",
-                        "rulesText":  "战吼：掩埋 1 张“藏宝图”和 1 张“炸药机关”。每当己方抽到掩埋牌，为本结构恢复 2 点生命。",
+                        "rulesText":  "战吼：掩埋 1 张“藏宝图”和 1 张“炸药机关”。每当己方抽到掩埋牌，为本结构恢复 2 点生命。合成：本结构额外获得 +2 最大生命。",
                         "typeLabel":  "结构",
                         "rarityLabel":  "史诗",
                         "tagLabels":  [
                                           "结构",
                                           "考古"
                                       ],
-                        "designNotes":  "用建筑空间换取两次延迟爆发。"
+                        "designNotes":  "用建筑空间换取两次延迟爆发；作为首个二元支付纵向切片。"
                     },
                     {
                         "id":  "db_008",

@@ -38,8 +38,13 @@ namespace BiomeRivals.Demo
             _dispatcher.CommandCompleted += HandleCommandCompleted;
         }
 
-        public Task<MatchCommandDispatchResult> DeployAsync(string cardId, DemoSlotKind kind, int slotIndex) =>
-            Send(MatchCommandFactory.DeployCard(NewCommandId(), Revision, cardId, kind == DemoSlotKind.Unit ? "UNIT" : "BUILDING", slotIndex));
+        public Task<MatchCommandDispatchResult> DeployAsync(
+            string cardId,
+            DemoSlotKind kind,
+            int slotIndex,
+            string paymentMethod = MatchPaymentMethods.Redstone) =>
+            Send(MatchCommandFactory.DeployCard(
+                NewCommandId(), Revision, cardId, kind == DemoSlotKind.Unit ? "UNIT" : "BUILDING", slotIndex, paymentMethod));
 
         public Task<MatchCommandDispatchResult> MulliganAsync(int[] cardIndices) =>
             Send(MatchCommandFactory.Mulligan(NewCommandId(), Revision, cardIndices));

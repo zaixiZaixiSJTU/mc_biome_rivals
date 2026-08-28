@@ -94,6 +94,8 @@ namespace BiomeRivals.Demo
         UnknownCard,
         CardNotInHand,
         InsufficientRedstone,
+        InvalidPaymentMethod,
+        MissingMaterials,
         InvalidTarget,
         SlotOccupied,
         WrongPhase,

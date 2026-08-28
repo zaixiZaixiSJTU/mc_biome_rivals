@@ -64,6 +64,36 @@ function Resolve-CardType([string]$TypeLabel) {
 $definitions = [System.Collections.Generic.List[object]]::new()
 $texts = [System.Collections.Generic.List[object]]::new()
 $seenIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+$recipesByTarget = @{}
+
+foreach ($line in Get-Content -LiteralPath $sourcePath -Encoding UTF8) {
+    if ($line -notmatch '^\|\s*(?<recipeDesignId>CR-\d{3})\s*\|') { continue }
+    $cells = @($line.Trim().Trim('|').Split('|') | ForEach-Object { $_.Trim() })
+    if ($cells.Count -lt 7) { throw "Incomplete crafting recipe row: $($Matches['recipeDesignId'])" }
+    $recipeDesignId, $targetDesignId, $ingredientText, $attackBonusText, $healthBonusText, $durabilityBonusText = $cells[0..5]
+    if ($targetDesignId -notmatch '^(?:PF|DB|SI|CD|OR|NT|ED|TK)-\d{3}$') { throw "Invalid crafting target id: $targetDesignId" }
+    if ($recipesByTarget.ContainsKey($targetDesignId)) { throw "Duplicate crafting recipe target: $targetDesignId" }
+    $ingredients = [System.Collections.Generic.List[object]]::new()
+    foreach ($ingredientPart in $ingredientText.Split('+')) {
+        $part = $ingredientPart.Trim()
+        if ($part -notmatch '^(?<cardDesignId>TK-\d{3})\s*[×xX]\s*(?<count>\d+)$') {
+            throw "Invalid crafting ingredient '$part' for $recipeDesignId"
+        }
+        $count = [int]$Matches['count']
+        if ($count -lt 1) { throw "Crafting ingredient count must be positive for $recipeDesignId" }
+        $ingredients.Add([ordered]@{
+            cardId=$Matches['cardDesignId'].ToLowerInvariant().Replace('-', '_')
+            count=$count
+        })
+    }
+    $recipesByTarget[$targetDesignId] = [ordered]@{
+        recipeId="recipe.$($targetDesignId.ToLowerInvariant().Replace('-', '_')).01"
+        ingredients=$ingredients
+        attackBonus=[int]$attackBonusText
+        healthBonus=[int]$healthBonusText
+        durabilityBonus=[int]$durabilityBonusText
+    }
+}
 
 foreach ($line in Get-Content -LiteralPath $sourcePath -Encoding UTF8) {
     if ($line -notmatch '^\|\s*(?<designId>(?:PF|DB|SI|CD|OR|NT|ED|TK)-\d{3})\s*\|') { continue }
@@ -127,13 +157,25 @@ foreach ($line in Get-Content -LiteralPath $sourcePath -Encoding UTF8) {
     $effectId = "effect.$cardId.01"
     $effectIds = [System.Collections.Generic.List[string]]::new()
     if ($hasEffect) { $effectIds.Add($effectId) }
+    $recipe = $recipesByTarget[$designId]
+    $hasCraftingRecipe = $null -ne $recipe
+    $craftingRecipe = [System.Collections.Generic.List[object]]::new()
+    if ($hasCraftingRecipe) {
+        foreach ($ingredient in $recipe.ingredients) { $craftingRecipe.Add($ingredient) }
+    }
     $definitions.Add([ordered]@{
-        id=$cardId; designId=$designId; contentVersion=3; collectible=(-not $isToken)
+        id=$cardId; designId=$designId; contentVersion=4; collectible=(-not $isToken)
         nameKey="card.$cardId.name"; rulesTextKey="card.$cardId.rules"
         factionId=$factionId; themeId=$themeId; rarity=$rarity; cardType=$cardType; cost=$cost
         hasAttack=$hasAttack; attack=$attack; hasHealth=$hasHealth; health=$health
         hasDurability=$hasDurability; durability=$durability; buildingSlots=$buildingSlots
         artKey="card_art.$cardId"; tags=([string[]]$tags); keywords=$keywords
+        hasCraftingRecipe=$hasCraftingRecipe
+        recipeId=$(if ($hasCraftingRecipe) { $recipe.recipeId } else { '' })
+        craftingRecipe=$craftingRecipe
+        craftedAttackBonus=$(if ($hasCraftingRecipe) { $recipe.attackBonus } else { 0 })
+        craftedHealthBonus=$(if ($hasCraftingRecipe) { $recipe.healthBonus } else { 0 })
+        craftedDurabilityBonus=$(if ($hasCraftingRecipe) { $recipe.durabilityBonus } else { 0 })
         effectImplementationStatus=$(if (-not $hasEffect) { 'NONE' } elseif ($implementedEffectIds.Contains($effectId)) { 'IMPLEMENTED' } else { 'PENDING' })
         effectIds=$effectIds
     })
@@ -148,8 +190,19 @@ foreach ($effectId in $implementedEffectIds) {
     if (-not ($definitions | Where-Object { $_.effectIds -contains $effectId })) { throw "Implemented effect id is not registered by a card: $effectId" }
 }
 
+foreach ($targetDesignId in $recipesByTarget.Keys) {
+    $targetId = $targetDesignId.ToLowerInvariant().Replace('-', '_')
+    $target = $definitions | Where-Object { $_.id -eq $targetId } | Select-Object -First 1
+    if ($null -eq $target) { throw "Crafting target is not registered: $targetDesignId" }
+    foreach ($ingredient in $target.craftingRecipe) {
+        $material = $definitions | Where-Object { $_.id -eq $ingredient.cardId } | Select-Object -First 1
+        if ($null -eq $material) { throw "Crafting ingredient is not registered: $($ingredient.cardId)" }
+        if ($material.cardType -ne 'MATERIAL') { throw "Crafting ingredient must be MATERIAL: $($ingredient.cardId)" }
+    }
+}
+
 if ($definitions.Count -ne 74) { throw "Expected 74 card definitions, found $($definitions.Count)." }
-$definitionDocument = [ordered]@{ schemaVersion=2; contentVersion=3; source=$SourceMarkdown.Replace('\','/'); entries=$definitions }
+$definitionDocument = [ordered]@{ schemaVersion=3; contentVersion=4; source=$SourceMarkdown.Replace('\','/'); entries=$definitions }
 $textDocument = [ordered]@{ schemaVersion=1; locale='zh-CN'; source=$SourceMarkdown.Replace('\','/'); entries=$texts }
 
 foreach ($output in @(

@@ -53,6 +53,13 @@ namespace BiomeRivals.Content
     }
 
     [Serializable]
+    public sealed class CraftingIngredientEntry
+    {
+        public string cardId = string.Empty;
+        public int count;
+    }
+
+    [Serializable]
     public sealed class CardDefinitionEntry
     {
         public string id = string.Empty;
@@ -76,6 +83,12 @@ namespace BiomeRivals.Content
         public string artKey = string.Empty;
         public string[] tags = Array.Empty<string>();
         public string[] keywords = Array.Empty<string>();
+        public bool hasCraftingRecipe;
+        public string recipeId = string.Empty;
+        public CraftingIngredientEntry[] craftingRecipe = Array.Empty<CraftingIngredientEntry>();
+        public int craftedAttackBonus;
+        public int craftedHealthBonus;
+        public int craftedDurabilityBonus;
         public string effectImplementationStatus = string.Empty;
         public string[] effectIds = Array.Empty<string>();
     }
@@ -165,7 +178,7 @@ namespace BiomeRivals.Content
             if (themes?.themes == null) throw new FormatException("Card theme registry has no themes.");
             if (definitions?.entries == null) throw new FormatException("Card definition registry has no entries.");
             if (texts?.entries == null) throw new FormatException("Card text registry has no entries.");
-            if (definitions.schemaVersion != 2) throw new FormatException($"Unsupported card definition schema version: {definitions.schemaVersion}.");
+            if (definitions.schemaVersion != 3) throw new FormatException($"Unsupported card definition schema version: {definitions.schemaVersion}.");
 
             foreach (var entry in names.entries)
             {

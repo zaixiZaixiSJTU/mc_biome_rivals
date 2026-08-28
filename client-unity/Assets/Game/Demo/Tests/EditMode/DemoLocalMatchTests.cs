@@ -244,6 +244,55 @@ namespace BiomeRivals.Demo.Tests
         }
 
         [Test]
+        public void CraftingPreviewAndLocalDeploymentConsumeMaterialsInsteadOfRedstone()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { "tk_010", "db_007", "tk_006", "tk_010" });
+            Assert.That(registry.TryGetDefinition("db_007", out var temple), Is.True);
+
+            var preview = DemoDeploymentRules.Evaluate(
+                match, temple, DemoSlotKind.Building, 1, MatchPaymentMethods.Crafting);
+            Assert.That(preview.IsLegal, Is.True);
+            var energyBefore = match.Energy;
+            var command = match.CreateDeployCommand(
+                temple.id, DemoSlotKind.Building, 1, MatchPaymentMethods.Crafting);
+            var result = match.ApplyDeploy(temple, command);
+
+            Assert.That(result.Accepted, Is.True);
+            Assert.That(match.Energy, Is.EqualTo(energyBefore));
+            Assert.That(match.Hand, Is.EqualTo(new[] { "tk_010" }));
+            Assert.That(match.DiscardPile, Is.EqualTo(new[] { "tk_006", "tk_010" }));
+            Assert.That(match.PlayerBattlefield.Single().Health, Is.EqualTo(10));
+            Assert.That(match.PlayerBattlefield.Single().MaxHealth, Is.EqualTo(10));
+            Assert.That(match.BuildingSlots[1], Is.EqualTo("db_007"));
+            Assert.That(match.BuildingSlots[2], Is.EqualTo("db_007"));
+        }
+
+        [Test]
+        public void LocalCraftingFailureDoesNotConsumeCardsOrOccupySlots()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { "db_007", "tk_006" });
+            Assert.That(registry.TryGetDefinition("db_007", out var temple), Is.True);
+
+            var preview = DemoDeploymentRules.Evaluate(
+                match, temple, DemoSlotKind.Building, 0, MatchPaymentMethods.Crafting);
+            Assert.That(preview.IsLegal, Is.False);
+            Assert.That(preview.Message, Does.Contain("tk_010×1"));
+            var result = match.ApplyDeploy(
+                temple,
+                match.CreateDeployCommand(temple.id, DemoSlotKind.Building, 0, MatchPaymentMethods.Crafting));
+
+            Assert.That(result.Accepted, Is.False);
+            Assert.That(result.Code, Is.EqualTo(DemoCommandRejectionCode.MissingMaterials));
+            Assert.That(match.Hand, Is.EqualTo(new[] { "db_007", "tk_006" }));
+            Assert.That(match.DiscardPile, Is.Empty);
+            Assert.That(match.BuildingSlots.All(string.IsNullOrEmpty), Is.True);
+        }
+
+        [Test]
         public void LocalCombatReleasesEverySlotOfAThreeSlotStructure()
         {
             var registry = CardContentLoader.Load();

@@ -79,6 +79,7 @@ namespace BiomeRivals.Demo
         private Image _opponentTint;
         private Image _playerTint;
         private string _selectedCardId;
+        private string _selectedPaymentMethod = MatchPaymentMethods.Redstone;
         private string _selectedAttackerInstanceId;
         private string _pendingTargetCardId;
         private string _activeFaction = "plains_forest";
@@ -139,6 +140,8 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewStructurePlacementInvalid")) SetupStructurePlacementPreview(2);
             else if (HasCommandLineFlag("-previewStructurePlacement")) SetupStructurePlacementPreview(0);
             else if (HasCommandLineFlag("-previewStructureDeployed")) SetupStructureDeployedPreview();
+            else if (HasCommandLineFlag("-previewCraftingMissing")) SetupCraftingPreview(false);
+            else if (HasCommandLineFlag("-previewCrafting")) SetupCraftingPreview(true);
             else if (HasCommandLineFlag("-previewCombat")) OnEndTurn();
             if (HasCommandLineFlag("-previewGroundHover")) _battlefield.SetSlotHovered(true, DemoSlotKind.Unit, 0, true);
             var capturePath = GetCommandLineValue("-captureDemo");
@@ -444,7 +447,7 @@ namespace BiomeRivals.Demo
             if (queue == null || _eventPresenters.Count > 0) return;
             var eventTypes = new[]
             {
-                MatchEventTypes.CardDeployed, MatchEventTypes.ObjectSummoned, MatchEventTypes.CardPlayed, MatchEventTypes.CardDrawn,
+                MatchEventTypes.MaterialsConsumed, MatchEventTypes.CardDeployed, MatchEventTypes.ObjectSummoned, MatchEventTypes.CardPlayed, MatchEventTypes.CardDrawn,
                 MatchEventTypes.CardBurned, MatchEventTypes.CardGenerated, MatchEventTypes.FatigueDamage, MatchEventTypes.HeroDamaged,
                 MatchEventTypes.HeroHealed, MatchEventTypes.ArmorGained, MatchEventTypes.ObjectStatsChanged,
                 MatchEventTypes.PhaseChanged, MatchEventTypes.AttackResolved, MatchEventTypes.ObjectDied,
@@ -472,6 +475,17 @@ namespace BiomeRivals.Demo
             if (!IsOnlineBoard || matchEvent == null) yield break;
             switch (matchEvent.type)
             {
+                case MatchEventTypes.MaterialsConsumed: {
+                    var materialNames = (matchEvent.payload?.materials ?? Array.Empty<CraftingMaterialDto>())
+                        .Select(material => $"{GetCardName(material.cardId)}×{material.count}");
+                    var craftingViewerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
+                    var ownCrafting = matchEvent.payload?.playerId == craftingViewerId;
+                    ShowStatus(ownCrafting
+                        ? $"合成台消耗：{string.Join(" + ", materialNames)}。"
+                        : $"对手完成合成：{string.Join(" + ", materialNames)}。", false);
+                    yield return ShowTurnBanner("合成", Cyan);
+                    break;
+                }
                 case MatchEventTypes.CardDeployed: {
                     if (matchEvent.payload?.cardId == "pf_001")
                     {
@@ -481,7 +495,9 @@ namespace BiomeRivals.Demo
                             ? $"蜜蜂落地：战吼为你恢复 {healing} 点生命。"
                             : $"敌方蜜蜂落地：战吼为对手恢复 {healing} 点生命。", false);
                     }
-                    yield return null;
+                    if (matchEvent.payload?.paymentMethod == MatchPaymentMethods.Crafting)
+                        yield return PulseBattlefieldObject(matchEvent.payload.instanceId);
+                    else yield return null;
                     break;
                 }
                 case MatchEventTypes.ObjectSummoned: {
@@ -685,10 +701,13 @@ namespace BiomeRivals.Demo
             var spec = Factions.First(item => item.Id == factionId);
             ApplyPlayerFactionVisuals(spec);
             var handNumbers = spec.Prefix == "nt" ? new[] { 1, 2, 3, 4, 6 } : Enumerable.Range(1, 5).ToArray();
-            var ids = handNumbers.Select(index => $"{spec.Prefix}_{index:000}").ToArray();
+            var ids = spec.Prefix == "db"
+                ? new[] { "db_001", "db_002", "db_004", "db_006", "db_007", "tk_006", "tk_010" }
+                : handNumbers.Select(index => $"{spec.Prefix}_{index:000}").ToArray();
             var deck = Enumerable.Range(0, 25).Select(index => $"{spec.Prefix}_{(index % 8) + 1:000}").ToArray();
             _match.ResetDeckAndHand(ids, deck);
             _selectedCardId = _match.Hand.FirstOrDefault();
+            _selectedPaymentMethod = MatchPaymentMethods.Redstone;
             _battlefield.SetBattlefieldThemes(_activeFaction, _opponentFaction);
             RefreshAll();
             ShowStatus($"已切换到{spec.Label}牌组；可打出已接入规则的卡牌。", false);
@@ -783,6 +802,25 @@ namespace BiomeRivals.Demo
             _selectedCardId = null;
             RefreshAll();
             ShowStatus(deployed ? "沙漠神殿作为一个对象横跨建筑格 1—2；任意格受击都会共享同一生命值。" : message, !deployed);
+        }
+
+        private void SetupCraftingPreview(bool includeAllMaterials)
+        {
+            SelectFaction("desert_badlands");
+            if (!_registry.TryGetDefinition("db_007", out var templeDefinition)) return;
+            _match.ResetHand(includeAllMaterials
+                ? new[] { templeDefinition.id, "tk_006", "tk_010" }
+                : new[] { templeDefinition.id, "tk_006" });
+            _selectedCardId = templeDefinition.id;
+            _selectedPaymentMethod = MatchPaymentMethods.Crafting;
+            RefreshAll();
+            var preview = DemoDeploymentRules.Evaluate(
+                _match, templeDefinition, DemoSlotKind.Building, 0, _selectedPaymentMethod);
+            _battlefield.SetSlotRangeHovered(true, DemoSlotKind.Building, 0, preview.OccupiedSlots, true, !preview.IsLegal);
+            if (includeAllMaterials)
+                ShowStatus("合成支付已就绪：选择连续建筑格 1—2，材料会公开进入弃牌堆。", false);
+            else
+                ShowStatus(ReplaceCardIdsWithNames(preview.Message, templeDefinition), true);
         }
 
         private void ApplyPlayerFactionVisuals(FactionSpec spec)
@@ -1075,7 +1113,34 @@ namespace BiomeRivals.Demo
             if (deployType)
             {
                 var target = definition.cardType == "UNIT" ? "单位格" : $"建筑格（占 {Mathf.Max(1, definition.buildingSlots)} 格）";
-                CreateText(_inspectorRoot, "DeployHint", new Vector2(0, -118), new Vector2(246, 64), $"选择发光的{target}完成部署", 15, Cyan, TextAnchor.MiddleCenter, FontStyle.Bold);
+                if (definition.hasCraftingRecipe)
+                {
+                    var canInteract = match.IsPlayerTurn && match.Phase == DemoTurnPhase.Main && match.Hand.Contains(definition.id) &&
+                                      (!IsOnlineBoard || _onlineSession.CanIssueCommand);
+                    var redstoneSelected = _selectedPaymentMethod == MatchPaymentMethods.Redstone;
+                    var craftingSelected = _selectedPaymentMethod == MatchPaymentMethods.Crafting;
+                    var redstoneLabel = $"{(redstoneSelected ? "◆ " : string.Empty)}红石 {definition.cost}";
+                    var redstoneButton = CreateSecondaryButton(_inspectorRoot, "PayRedstone", new Vector2(-61, -112), new Vector2(116, 52), redstoneLabel, 14);
+                    redstoneButton.interactable = canInteract;
+                    redstoneButton.onClick.AddListener(() => SelectPaymentMethod(MatchPaymentMethods.Redstone));
+                    ConfigureButtonColors(redstoneButton, redstoneSelected ? Color.Lerp(Panel, Ember, 0.45f) : Panel, Ember);
+
+                    var recipeLabel = string.Join(" + ", definition.craftingRecipe.Select(value => $"{GetCardName(value.cardId)}×{value.count}"));
+                    var hasMaterials = DemoDeploymentRules.CanPayWithCrafting(match, definition, out var materialMessage);
+                    var craftingLabel = $"{(craftingSelected ? "◆ " : string.Empty)}合成\n{recipeLabel}";
+                    var craftingButton = CreateSecondaryButton(_inspectorRoot, "PayCrafting", new Vector2(61, -112), new Vector2(116, 52), craftingLabel, 11);
+                    craftingButton.interactable = canInteract;
+                    craftingButton.onClick.AddListener(() => SelectPaymentMethod(MatchPaymentMethods.Crafting));
+                    ConfigureButtonColors(craftingButton, craftingSelected ? Color.Lerp(Panel, Cyan, 0.48f) : Panel, Cyan);
+
+                    var paymentHint = craftingSelected && !hasMaterials
+                        ? ReplaceCardIdsWithNames(materialMessage, definition)
+                        : $"{(craftingSelected ? "合成 " + GetCraftingBonusLabel(definition) : $"消耗 {definition.cost} 红石")} · 选择发光的{target}";
+                    CreateText(_inspectorRoot, "DeployHint", new Vector2(0, -174), new Vector2(246, 48), paymentHint, 13,
+                        craftingSelected && !hasMaterials ? Danger : Cyan, TextAnchor.MiddleCenter, FontStyle.Bold);
+                }
+                else
+                    CreateText(_inspectorRoot, "DeployHint", new Vector2(0, -118), new Vector2(246, 64), $"选择发光的{target}完成部署", 15, Cyan, TextAnchor.MiddleCenter, FontStyle.Bold);
             }
             else
             {
@@ -1091,14 +1156,19 @@ namespace BiomeRivals.Demo
                 cast.gameObject.AddComponent<DemoHoverScale>().Configure(1.04f, 16f);
             }
             var implementationLabel = definition.effectImplementationStatus == "IMPLEMENTED" ? "已接入" : definition.effectImplementationStatus == "NONE" ? "无额外效果" : "待接入";
-            CreateText(_inspectorRoot, "Implementation", new Vector2(0, -190), new Vector2(250, 62), $"规则状态：{implementationLabel}\n稳定效果槽：{string.Join(", ", definition.effectIds ?? Array.Empty<string>())}", 12, Muted, TextAnchor.MiddleCenter, FontStyle.Normal);
+            var implementationY = deployType && definition.hasCraftingRecipe ? -236 : -190;
+            var implementationText = definition.hasCraftingRecipe
+                ? $"配方：已接入 · {definition.recipeId}\n卡牌效果：{implementationLabel}\n{string.Join(", ", definition.effectIds ?? Array.Empty<string>())}"
+                : $"规则状态：{implementationLabel}\n稳定效果槽：{string.Join(", ", definition.effectIds ?? Array.Empty<string>())}";
+            CreateText(_inspectorRoot, "Implementation", new Vector2(0, implementationY), new Vector2(250, 68), implementationText,
+                definition.hasCraftingRecipe ? 11 : 12, Muted, TextAnchor.MiddleCenter, FontStyle.Normal);
         }
 
         private DemoDeploymentPreview EvaluateSelectedDeployment(DemoSlotKind kind, int index)
         {
             if (string.IsNullOrEmpty(_selectedCardId) || !_registry.TryGetDefinition(_selectedCardId, out var definition))
                 return new DemoDeploymentPreview(false, 1, "请先选择一张战场部署牌。");
-            return DemoDeploymentRules.Evaluate(MatchView, definition, kind, index);
+            return DemoDeploymentRules.Evaluate(MatchView, definition, kind, index, _selectedPaymentMethod);
         }
 
         private bool IsPreviewingDeployment(bool player, out int occupiedSlots)
@@ -1131,6 +1201,7 @@ namespace BiomeRivals.Demo
         {
             _pendingTargetCardId = null;
             _selectedCardId = cardId;
+            _selectedPaymentMethod = MatchPaymentMethods.Redstone;
             RefreshAll();
             if (_registry.TryGetText(cardId, out var text)) ShowStatus($"已选择：{text.name}", false);
         }
@@ -1157,7 +1228,7 @@ namespace BiomeRivals.Demo
                 ShowStatus("请先选择一张手牌。", true);
                 return;
             }
-            var deploymentPreview = DemoDeploymentRules.Evaluate(MatchView, definition, kind, index);
+            var deploymentPreview = DemoDeploymentRules.Evaluate(MatchView, definition, kind, index, _selectedPaymentMethod);
             if (!deploymentPreview.IsLegal)
             {
                 ShowStatus(deploymentPreview.Message, true);
@@ -1166,14 +1237,24 @@ namespace BiomeRivals.Demo
             }
             if (IsOnlineBoard)
             {
-                var onlineResult = await SendOnline(() => _onlineSession.DeployAsync(_selectedCardId, kind, index));
-                if (onlineResult?.Outcome == MatchCommandOutcome.Accepted) _selectedCardId = MatchView.Hand.FirstOrDefault();
+                var onlineResult = await SendOnline(() => _onlineSession.DeployAsync(_selectedCardId, kind, index, _selectedPaymentMethod));
+                if (onlineResult?.Outcome == MatchCommandOutcome.Accepted)
+                {
+                    _selectedCardId = MatchView.Hand.FirstOrDefault();
+                    _selectedPaymentMethod = MatchPaymentMethods.Redstone;
+                }
                 RefreshAll();
                 return;
             }
-            var command = _match.CreateDeployCommand(_selectedCardId, kind, index);
+            var crafted = _selectedPaymentMethod == MatchPaymentMethods.Crafting;
+            var command = _match.CreateDeployCommand(_selectedCardId, kind, index, _selectedPaymentMethod);
             var result = _match.ApplyDeploy(definition, command);
-            if (result.Accepted) _selectedCardId = MatchView.Hand.FirstOrDefault();
+            if (result.Accepted)
+            {
+                _selectedCardId = MatchView.Hand.FirstOrDefault();
+                _selectedPaymentMethod = MatchPaymentMethods.Redstone;
+                if (crafted) StartCoroutine(ShowTurnBanner("合成完成", Cyan));
+            }
             ShowStatus(result.Accepted ? $"{result.Message} · 状态 r{result.Revision}" : result.Message, !result.Accepted);
             RefreshAll();
         }
@@ -1286,6 +1367,35 @@ namespace BiomeRivals.Demo
 
         private string GetCardName(string cardId) =>
             _registry.TryGetText(cardId, out var text) ? text.name : cardId;
+
+        private string ReplaceCardIdsWithNames(string message, CardDefinitionEntry definition)
+        {
+            var result = message ?? string.Empty;
+            foreach (var ingredient in definition?.craftingRecipe ?? Array.Empty<CraftingIngredientEntry>())
+                result = result.Replace(ingredient.cardId, GetCardName(ingredient.cardId));
+            return result;
+        }
+
+        private static string GetCraftingBonusLabel(CardDefinitionEntry definition)
+        {
+            var bonuses = new List<string>();
+            if (definition.craftedAttackBonus > 0) bonuses.Add($"+{definition.craftedAttackBonus} 攻击");
+            if (definition.craftedHealthBonus > 0) bonuses.Add($"+{definition.craftedHealthBonus} 最大生命");
+            if (definition.craftedDurabilityBonus > 0) bonuses.Add($"+{definition.craftedDurabilityBonus} 耐久");
+            return bonuses.Count > 0 ? string.Join(" / ", bonuses) : "无额外属性";
+        }
+
+        private void SelectPaymentMethod(string paymentMethod)
+        {
+            _selectedPaymentMethod = paymentMethod;
+            if (_registry.TryGetDefinition(_selectedCardId, out var definition) && paymentMethod == MatchPaymentMethods.Crafting)
+            {
+                var ready = DemoDeploymentRules.CanPayWithCrafting(MatchView, definition, out var message);
+                ShowStatus(ready ? "合成支付已选择：材料充足。" : ReplaceCardIdsWithNames(message, definition), !ready);
+            }
+            else ShowStatus("红石支付已选择。", false);
+            RefreshAll();
+        }
 
         private async void CastSelectedCard()
         {

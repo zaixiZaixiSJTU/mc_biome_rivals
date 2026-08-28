@@ -25,6 +25,7 @@ namespace BiomeRivals.Core
     {
         public const string MulliganCompleted = "MULLIGAN_COMPLETED";
         public const string MatchStarted = "MATCH_STARTED";
+        public const string MaterialsConsumed = "MATERIALS_CONSUMED";
         public const string CardDeployed = "CARD_DEPLOYED";
         public const string ObjectSummoned = "OBJECT_SUMMONED";
         public const string CardPlayed = "CARD_PLAYED";
@@ -45,6 +46,12 @@ namespace BiomeRivals.Core
         public const string MatchEnded = "MATCH_ENDED";
     }
 
+    public static class MatchPaymentMethods
+    {
+        public const string Redstone = "REDSTONE";
+        public const string Crafting = "CRAFTING";
+    }
+
     [Serializable]
     public sealed class MatchCommandPayloadDto
     {
@@ -52,6 +59,7 @@ namespace BiomeRivals.Core
         public string cardId = string.Empty;
         public string slotKind = string.Empty;
         public int slotIndex;
+        public string paymentMethod = string.Empty;
         public string attackerInstanceId = string.Empty;
         public string targetType = string.Empty;
         public string targetInstanceId = string.Empty;
@@ -81,7 +89,13 @@ namespace BiomeRivals.Core
                 payload = new MatchCommandPayloadDto { cardIndices = cardIndices ?? Array.Empty<int>() }
             };
 
-        public static MatchCommandDto DeployCard(string commandId, int revision, string cardId, string slotKind, int slotIndex) =>
+        public static MatchCommandDto DeployCard(
+            string commandId,
+            int revision,
+            string cardId,
+            string slotKind,
+            int slotIndex,
+            string paymentMethod = MatchPaymentMethods.Redstone) =>
             new MatchCommandDto
             {
                 protocolVersion = GameVersions.Protocol,
@@ -93,7 +107,8 @@ namespace BiomeRivals.Core
                 {
                     cardId = cardId,
                     slotKind = slotKind,
-                    slotIndex = slotIndex
+                    slotIndex = slotIndex,
+                    paymentMethod = paymentMethod
                 }
             };
 
@@ -158,6 +173,13 @@ namespace BiomeRivals.Core
     }
 
     [Serializable]
+    public sealed class CraftingMaterialDto
+    {
+        public string cardId = string.Empty;
+        public int count;
+    }
+
+    [Serializable]
     public sealed class MatchEventPayloadDto
     {
         public string playerId = string.Empty;
@@ -170,6 +192,7 @@ namespace BiomeRivals.Core
         public string slotKind = string.Empty;
         public int slotIndex;
         public int occupiedSlots;
+        public string paymentMethod = string.Empty;
         public int redstone;
         public int redstoneCapacity;
         public int activePlayerIndex;
@@ -208,6 +231,9 @@ namespace BiomeRivals.Core
         public int amount;
         public int temporaryAttackModifier;
         public int temporaryAttackModifierExpiresOnTurn;
+        public string craftedCardId = string.Empty;
+        public string recipeId = string.Empty;
+        public CraftingMaterialDto[] materials = Array.Empty<CraftingMaterialDto>();
     }
 
     [Serializable]

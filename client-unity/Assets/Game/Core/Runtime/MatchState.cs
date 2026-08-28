@@ -135,6 +135,27 @@ namespace BiomeRivals.Core
                     player.redstone = payload.redstone;
                     AddBattlefieldObject(player, payload, "Deployment");
                     break;
+                case MatchEventTypes.MaterialsConsumed:
+                    var craftingPlayer = FindPlayer(payload.playerId);
+                    var craftingHand = craftingPlayer.hand ?? Array.Empty<string>();
+                    var craftingDiscard = new List<string>(craftingPlayer.discardPile ?? Array.Empty<string>());
+                    foreach (var material in payload.materials ?? Array.Empty<CraftingMaterialDto>())
+                    {
+                        if (material == null || string.IsNullOrWhiteSpace(material.cardId) || material.count < 1)
+                            throw new InvalidOperationException("Material consumption event contains an invalid ingredient.");
+                        for (var count = 0; count < material.count; count++)
+                        {
+                            craftingHand = RemoveFirst(craftingHand, material.cardId);
+                            craftingDiscard.Add(material.cardId);
+                        }
+                    }
+                    if (craftingHand.Length != payload.handCount)
+                        throw new InvalidOperationException("Material consumption event hand count does not match projected hand.");
+                    if (craftingDiscard.Count != payload.discardCount)
+                        throw new InvalidOperationException("Material consumption event discard count does not match projected discard pile.");
+                    craftingPlayer.hand = craftingHand;
+                    craftingPlayer.discardPile = craftingDiscard.ToArray();
+                    break;
                 case MatchEventTypes.ObjectSummoned:
                     AddBattlefieldObject(FindPlayer(payload.playerId), payload, "Summon");
                     break;

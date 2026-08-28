@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using BiomeRivals.Content;
+using BiomeRivals.Core;
 
 namespace BiomeRivals.Demo
 {
@@ -24,7 +26,8 @@ namespace BiomeRivals.Demo
             IDemoMatchView match,
             CardDefinitionEntry definition,
             DemoSlotKind slotKind,
-            int slotIndex)
+            int slotIndex,
+            string paymentMethod = MatchPaymentMethods.Redstone)
         {
             if (match == null) throw new ArgumentNullException(nameof(match));
             if (definition == null) return Reject(1, "卡牌定义不存在。");
@@ -39,7 +42,6 @@ namespace BiomeRivals.Demo
             if (!match.IsPlayerTurn) return Reject(occupiedSlots, "当前是对手回合。");
             if (match.Phase != DemoTurnPhase.Main) return Reject(occupiedSlots, "进入战斗阶段后不能继续部署卡牌。");
             if (!match.Hand.Contains(definition.id)) return Reject(occupiedSlots, "该牌不在手牌中。");
-            if (definition.cost > match.Energy) return Reject(occupiedSlots, "红石能量不足。");
 
             if (deploysToUnits && slotKind != DemoSlotKind.Unit)
                 return Reject(occupiedSlots, "生物只能部署到单位格。");
@@ -58,6 +60,17 @@ namespace BiomeRivals.Demo
                         ? $"从建筑格 {slotIndex + 1} 开始的 {occupiedSlots} 格范围并非全部空闲。"
                         : "这个战场格已经被占用。");
 
+            if (paymentMethod == MatchPaymentMethods.Redstone)
+            {
+                if (definition.cost > match.Energy) return Reject(occupiedSlots, "红石能量不足。");
+            }
+            else if (paymentMethod == MatchPaymentMethods.Crafting)
+            {
+                if (!CanPayWithCrafting(match, definition, out var missingMaterials))
+                    return Reject(occupiedSlots, missingMaterials);
+            }
+            else return Reject(occupiedSlots, "部署支付方式无效。");
+
             return new DemoDeploymentPreview(true, occupiedSlots, occupiedSlots > 1
                 ? $"可部署：将连续占用建筑格 {slotIndex + 1}—{slotIndex + occupiedSlots}。"
                 : "可部署到这个战场格。");
@@ -65,5 +78,48 @@ namespace BiomeRivals.Demo
 
         private static DemoDeploymentPreview Reject(int occupiedSlots, string message) =>
             new DemoDeploymentPreview(false, occupiedSlots, message);
+
+        public static bool CanPayWithCrafting(
+            IDemoMatchView match,
+            CardDefinitionEntry definition,
+            out string message)
+        {
+            if (match == null) throw new ArgumentNullException(nameof(match));
+            if (definition == null || !definition.hasCraftingRecipe ||
+                definition.craftingRecipe == null || definition.craftingRecipe.Length == 0)
+            {
+                message = "这张牌没有已注册的合成配方。";
+                return false;
+            }
+
+            var available = new List<string>(match.Hand ?? Array.Empty<string>());
+            var productIndex = available.IndexOf(definition.id);
+            if (productIndex < 0)
+            {
+                message = "成品卡不在手牌中。";
+                return false;
+            }
+            available.RemoveAt(productIndex);
+            var missing = new List<string>();
+            foreach (var ingredient in definition.craftingRecipe)
+            {
+                if (ingredient == null || string.IsNullOrWhiteSpace(ingredient.cardId) || ingredient.count < 1)
+                {
+                    message = "合成配方数据无效。";
+                    return false;
+                }
+                var missingCount = 0;
+                for (var count = 0; count < ingredient.count; count++)
+                {
+                    var index = available.IndexOf(ingredient.cardId);
+                    if (index < 0) missingCount++;
+                    else available.RemoveAt(index);
+                }
+                if (missingCount > 0) missing.Add($"{ingredient.cardId}×{missingCount}");
+            }
+
+            message = missing.Count == 0 ? string.Empty : "缺少材料：" + string.Join(" + ", missing);
+            return missing.Count == 0;
+        }
     }
 }

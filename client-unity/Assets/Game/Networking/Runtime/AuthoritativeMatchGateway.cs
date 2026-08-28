@@ -122,6 +122,7 @@ namespace BiomeRivals.Networking
             public string cardId;
             public string slotKind;
             public int slotIndex;
+            public string paymentMethod;
         }
 
         [Serializable]
@@ -201,7 +202,8 @@ namespace BiomeRivals.Networking
                 {
                     cardId = command.payload.cardId,
                     slotKind = command.payload.slotKind,
-                    slotIndex = command.payload.slotIndex
+                    slotIndex = command.payload.slotIndex,
+                    paymentMethod = command.payload.paymentMethod
                 };
             }
         }

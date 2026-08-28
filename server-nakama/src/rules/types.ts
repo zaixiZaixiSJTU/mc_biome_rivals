@@ -1,11 +1,12 @@
 namespace BiomeRivalsRules {
-  export const PROTOCOL_VERSION = 10;
-  export const RULESET_VERSION = 'prototype-0.11';
+  export const PROTOCOL_VERSION = 11;
+  export const RULESET_VERSION = 'prototype-0.12';
 
   export type MatchStatus = 'WAITING' | 'MULLIGAN' | 'ACTIVE' | 'FINISHED';
   export type CommandType = 'MULLIGAN' | 'DEPLOY_CARD' | 'PLAY_CARD' | 'ENTER_COMBAT' | 'ATTACK' | 'END_TURN' | 'CONCEDE';
-  export type EventType = 'MULLIGAN_COMPLETED' | 'MATCH_STARTED' | 'CARD_DEPLOYED' | 'OBJECT_SUMMONED' | 'CARD_PLAYED' | 'CARD_DRAWN' | 'CARD_BURNED' | 'CARD_GENERATED' | 'FATIGUE_DAMAGE' | 'HERO_DAMAGED' | 'HERO_HEALED' | 'ARMOR_GAINED' | 'OBJECT_STATS_CHANGED' | 'PHASE_CHANGED' | 'ATTACK_RESOLVED' | 'OBJECT_DIED' | 'TURN_ENDED' | 'TURN_STARTED' | 'PLAYER_CONCEDED' | 'MATCH_ENDED';
+  export type EventType = 'MULLIGAN_COMPLETED' | 'MATCH_STARTED' | 'MATERIALS_CONSUMED' | 'CARD_DEPLOYED' | 'OBJECT_SUMMONED' | 'CARD_PLAYED' | 'CARD_DRAWN' | 'CARD_BURNED' | 'CARD_GENERATED' | 'FATIGUE_DAMAGE' | 'HERO_DAMAGED' | 'HERO_HEALED' | 'ARMOR_GAINED' | 'OBJECT_STATS_CHANGED' | 'PHASE_CHANGED' | 'ATTACK_RESOLVED' | 'OBJECT_DIED' | 'TURN_ENDED' | 'TURN_STARTED' | 'PLAYER_CONCEDED' | 'MATCH_ENDED';
   export type DeploySlotKind = 'UNIT' | 'BUILDING';
+  export type PaymentMethod = 'REDSTONE' | 'CRAFTING';
   export type TurnPhase = 'MAIN' | 'COMBAT';
   export type AttackTargetType = 'HERO' | 'UNIT' | 'BUILDING';
   export type CardType = 'UNIT' | 'SPELL' | 'BUILDING' | 'STRUCTURE' | 'EQUIPMENT' | 'MATERIAL';
@@ -34,6 +35,12 @@ namespace BiomeRivalsRules {
     attack: number;
     health: number;
     keywords: CardKeyword[];
+    hasCraftingRecipe: boolean;
+    recipeId: string;
+    craftingRecipe: Array<{ cardId: string; count: number }>;
+    craftedAttackBonus: number;
+    craftedHealthBonus: number;
+    craftedDurabilityBonus: number;
     effectImplementationStatus: 'NONE' | 'PENDING' | 'IMPLEMENTED';
     effectIds: string[];
   }
@@ -160,6 +167,8 @@ namespace BiomeRivalsRules {
     | 'UNKNOWN_CARD'
     | 'CARD_NOT_IN_HAND'
     | 'INSUFFICIENT_REDSTONE'
+    | 'INVALID_PAYMENT_METHOD'
+    | 'MISSING_MATERIALS'
     | 'INVALID_TARGET'
     | 'SLOT_OCCUPIED'
     | 'WRONG_PHASE'

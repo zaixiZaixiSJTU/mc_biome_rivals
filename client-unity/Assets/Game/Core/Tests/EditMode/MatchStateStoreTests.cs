@@ -340,6 +340,122 @@ namespace BiomeRivals.Core.Tests
         }
 
         [Test]
+        public void Apply_ReplaysMaterialConsumptionBeforeCraftedDeployment()
+        {
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "match-crafting", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                revision = 0, lastEventId = 0, turn = 1, phase = "MAIN", activePlayerIndex = 0, nextInstanceId = 1,
+                players = new[]
+                {
+                    new PlayerStateDto
+                    {
+                        playerId = "alice", redstone = 0, hand = new[] { "tk_010", "db_007", "tk_006", "tk_010" },
+                        discardPile = Array.Empty<string>(), unitSlots = new string[4], buildingSlots = new string[3]
+                    },
+                    new PlayerStateDto { playerId = "bob", hand = Array.Empty<string>(), unitSlots = new string[4], buildingSlots = new string[3] }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 1, type = MatchEventTypes.MaterialsConsumed,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", craftedCardId = "db_007", recipeId = "recipe.db_007.01",
+                            materials = new[]
+                            {
+                                new CraftingMaterialDto { cardId = "tk_006", count = 1 },
+                                new CraftingMaterialDto { cardId = "tk_010", count = 1 }
+                            },
+                            handCount = 2, discardCount = 2
+                        }
+                    },
+                    new MatchEventDto
+                    {
+                        eventId = 2, type = MatchEventTypes.CardDeployed,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", instanceId = "object-1", cardId = "db_007", cardType = "STRUCTURE",
+                            slotKind = "BUILDING", slotIndex = 1, occupiedSlots = 2, paymentMethod = MatchPaymentMethods.Crafting,
+                            redstone = 0, health = 10, maxHealth = 10, summonedTurn = 1, nextInstanceId = 2
+                        }
+                    }
+                }
+            });
+
+            Assert.That(store.Current.players[0].hand, Is.EqualTo(new[] { "tk_010" }));
+            Assert.That(store.Current.players[0].discardPile, Is.EqualTo(new[] { "tk_006", "tk_010" }));
+            Assert.That(store.Current.players[0].buildingSlots[1], Is.EqualTo("object-1"));
+            Assert.That(store.Current.players[0].buildingSlots[2], Is.EqualTo("object-1"));
+            Assert.That(store.Current.players[0].battlefield[0].maxHealth, Is.EqualTo(10));
+            Assert.That(store.Current.lastEventId, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void Apply_ReplaysPublicCraftingAgainstHiddenOpponentHandSlots()
+        {
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "match-hidden-crafting", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice", hand = Array.Empty<string>(), unitSlots = new string[4], buildingSlots = new string[3] },
+                    new PlayerStateDto
+                    {
+                        playerId = "bob", hand = new string[3], discardPile = Array.Empty<string>(),
+                        unitSlots = new string[4], buildingSlots = new string[3]
+                    }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 1, type = MatchEventTypes.MaterialsConsumed,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "bob", craftedCardId = "db_007", recipeId = "recipe.db_007.01",
+                            materials = new[]
+                            {
+                                new CraftingMaterialDto { cardId = "tk_006", count = 1 },
+                                new CraftingMaterialDto { cardId = "tk_010", count = 1 }
+                            },
+                            handCount = 1, discardCount = 2
+                        }
+                    },
+                    new MatchEventDto
+                    {
+                        eventId = 2, type = MatchEventTypes.CardDeployed,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "bob", instanceId = "object-1", cardId = "db_007", cardType = "STRUCTURE",
+                            slotKind = "BUILDING", slotIndex = 0, occupiedSlots = 2, paymentMethod = MatchPaymentMethods.Crafting,
+                            health = 10, maxHealth = 10, nextInstanceId = 2
+                        }
+                    }
+                }
+            });
+
+            Assert.That(store.Current.players[1].hand, Is.Empty);
+            Assert.That(store.Current.players[1].discardPile, Is.EqualTo(new[] { "tk_006", "tk_010" }));
+            Assert.That(store.Current.players[1].battlefield[0].cardId, Is.EqualTo("db_007"));
+        }
+
+        [Test]
         public void Apply_ReplaysCombatDamageAndDeathInOrder()
         {
             var attacker = new BattlefieldObjectStateDto

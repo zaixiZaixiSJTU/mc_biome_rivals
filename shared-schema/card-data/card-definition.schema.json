@@ -4,7 +4,7 @@
   "title": "CardDefinition",
   "type": "object",
   "additionalProperties": false,
-  "required": ["id", "designId", "contentVersion", "collectible", "nameKey", "rulesTextKey", "factionId", "themeId", "rarity", "cardType", "cost", "hasAttack", "attack", "hasHealth", "health", "hasDurability", "durability", "buildingSlots", "artKey", "tags", "keywords", "effectImplementationStatus", "effectIds"],
+  "required": ["id", "designId", "contentVersion", "collectible", "nameKey", "rulesTextKey", "factionId", "themeId", "rarity", "cardType", "cost", "hasAttack", "attack", "hasHealth", "health", "hasDurability", "durability", "buildingSlots", "artKey", "tags", "keywords", "hasCraftingRecipe", "recipeId", "craftingRecipe", "craftedAttackBonus", "craftedHealthBonus", "craftedDurabilityBonus", "effectImplementationStatus", "effectIds"],
   "properties": {
     "id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
     "designId": { "type": "string", "pattern": "^(PF|DB|SI|CD|OR|NT|ED|TK)-[0-9]{3}$" },
@@ -42,7 +42,44 @@
     "artKey": { "type": "string", "pattern": "^card_art\\.[a-z0-9_]+$" },
     "tags": { "type": "array", "items": { "type": "string", "pattern": "^[a-z0-9_]+$" }, "uniqueItems": true },
     "keywords": { "type": "array", "items": { "enum": ["TAUNT", "CHARGE"] }, "uniqueItems": true },
+    "hasCraftingRecipe": { "type": "boolean" },
+    "recipeId": { "type": "string", "pattern": "^(|recipe\\.[a-z0-9_]+\\.[0-9]{2})$" },
+    "craftingRecipe": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["cardId", "count"],
+        "properties": {
+          "cardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+          "count": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "craftedAttackBonus": { "type": "integer", "minimum": 0 },
+    "craftedHealthBonus": { "type": "integer", "minimum": 0 },
+    "craftedDurabilityBonus": { "type": "integer", "minimum": 0 },
     "effectImplementationStatus": { "enum": ["NONE", "PENDING", "IMPLEMENTED"] },
     "effectIds": { "type": "array", "items": { "type": "string", "pattern": "^effect\\.[a-z0-9_]+\\.[0-9]{2}$" }, "uniqueItems": true }
-  }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "hasCraftingRecipe": { "const": true } } },
+      "then": {
+        "properties": {
+          "recipeId": { "minLength": 1 },
+          "craftingRecipe": { "minItems": 1 }
+        }
+      },
+      "else": {
+        "properties": {
+          "recipeId": { "const": "" },
+          "craftingRecipe": { "maxItems": 0 },
+          "craftedAttackBonus": { "const": 0 },
+          "craftedHealthBonus": { "const": 0 },
+          "craftedDurabilityBonus": { "const": 0 }
+        }
+      }
+    }
+  ]
 }

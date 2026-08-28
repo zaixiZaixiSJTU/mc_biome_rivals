@@ -93,33 +93,39 @@ namespace BiomeRivals.Demo
             CardDefinitionEntry definition,
             DemoSlotKind slotKind,
             int slotIndex,
-            out string message)
+            out string message,
+            string paymentMethod = MatchPaymentMethods.Redstone)
         {
             var cardId = definition == null ? string.Empty : definition.id;
-            var command = CreateDeployCommand(cardId, slotKind, slotIndex);
+            var command = CreateDeployCommand(cardId, slotKind, slotIndex, paymentMethod);
             var result = ApplyDeploy(definition, command);
             message = result.Message;
             return result.Accepted;
         }
 
-        public MatchCommandDto CreateDeployCommand(string cardId, DemoSlotKind slotKind, int slotIndex) =>
-            MatchCommandFactory.DeployCard(NextCommandId(), Revision, cardId, slotKind == DemoSlotKind.Unit ? "UNIT" : "BUILDING", slotIndex);
+        public MatchCommandDto CreateDeployCommand(
+            string cardId,
+            DemoSlotKind slotKind,
+            int slotIndex,
+            string paymentMethod = MatchPaymentMethods.Redstone) =>
+            MatchCommandFactory.DeployCard(
+                NextCommandId(), Revision, cardId, slotKind == DemoSlotKind.Unit ? "UNIT" : "BUILDING", slotIndex, paymentMethod);
 
         public DemoCommandResult ApplyDeploy(CardDefinitionEntry definition, MatchCommandDto command)
         {
             if (!ValidateCommand(command, MatchCommandTypes.DeployCard, out var rejection)) return rejection;
-            if (!CanPlay(definition, out var message)) return RejectFromMessage(message, definition);
+            if (definition == null) return Reject(DemoCommandRejectionCode.UnknownCard, "卡牌定义不存在。");
             if (command.payload == null || !string.Equals(command.payload.cardId, definition.id, StringComparison.Ordinal))
                 return Reject(DemoCommandRejectionCode.UnknownCard, "命令中的卡牌与注册定义不一致。");
             if (Phase != DemoTurnPhase.Main)
                 return Reject(DemoCommandRejectionCode.WrongPhase, "进入战斗阶段后不能继续部署卡牌。");
+            if (!CanDeploy(definition, command.payload.paymentMethod, out var message)) return RejectFromMessage(message, definition);
             if (definition.cardType == "UNIT")
             {
                 if (!string.Equals(command.payload.slotKind, "UNIT", StringComparison.Ordinal) || command.payload.slotIndex < 0 || command.payload.slotIndex >= UnitSlots.Length)
                     return Reject(DemoCommandRejectionCode.InvalidTarget, "生物只能部署到有效的单位格。");
                 if (!IsIndexFree(UnitSlots, command.payload.slotIndex))
                     return Reject(DemoCommandRejectionCode.SlotOccupied, "这个单位格已经被占用。");
-                UnitSlots[command.payload.slotIndex] = definition.id;
             }
             else if (definition.cardType == "BUILDING" || definition.cardType == "STRUCTURE")
             {
@@ -131,14 +137,18 @@ namespace BiomeRivals.Demo
                 for (var i = command.payload.slotIndex; i < command.payload.slotIndex + requiredSlots; i++)
                     if (!string.IsNullOrEmpty(BuildingSlots[i]))
                         return Reject(DemoCommandRejectionCode.SlotOccupied, "所需建筑格并非全部空闲。");
-                for (var i = command.payload.slotIndex; i < command.payload.slotIndex + requiredSlots; i++) BuildingSlots[i] = definition.id;
             }
             else
             {
                 return Reject(DemoCommandRejectionCode.InvalidTarget, "这张牌不是部署牌，请使用右侧的“释放”按钮。");
             }
 
-            Consume(definition);
+            ConsumeDeployment(definition, command.payload.paymentMethod);
+            var crafted = command.payload.paymentMethod == MatchPaymentMethods.Crafting;
+            var deploymentSlots = command.payload.slotKind == "UNIT" ? UnitSlots : BuildingSlots;
+            var occupiedSlots = definition.cardType == "UNIT" ? 1 : Math.Max(1, definition.buildingSlots);
+            for (var index = command.payload.slotIndex; index < command.payload.slotIndex + occupiedSlots; index++)
+                deploymentSlots[index] = definition.id;
             var deployedObject = new DemoBattlefieldObject
             {
                 InstanceId = $"object-{_nextBattlefieldInstanceId++}",
@@ -146,15 +156,21 @@ namespace BiomeRivals.Demo
                 Player = true,
                 SlotKind = command.payload.slotKind == "UNIT" ? DemoSlotKind.Unit : DemoSlotKind.Building,
                 SlotIndex = command.payload.slotIndex,
-                OccupiedSlots = definition.cardType == "UNIT" ? 1 : Math.Max(1, definition.buildingSlots),
-                Attack = definition.attack,
-                Health = definition.health,
-                MaxHealth = definition.health,
+                OccupiedSlots = occupiedSlots,
+                Attack = definition.attack + (crafted ? definition.craftedAttackBonus : 0),
+                Health = definition.health + (crafted ? definition.craftedHealthBonus : 0),
+                MaxHealth = definition.health + (crafted ? definition.craftedHealthBonus : 0),
                 SummonedRound = Round,
                 Keywords = (definition.keywords ?? Array.Empty<string>()).ToArray()
             };
             _playerBattlefield.Add(deployedObject);
-            var deployMessage = $"已部署：{definition.designId}";
+            var craftingBonuses = new List<string>();
+            if (definition.craftedAttackBonus > 0) craftingBonuses.Add($"+{definition.craftedAttackBonus} 攻击");
+            if (definition.craftedHealthBonus > 0) craftingBonuses.Add($"+{definition.craftedHealthBonus} 最大生命");
+            if (definition.craftedDurabilityBonus > 0) craftingBonuses.Add($"+{definition.craftedDurabilityBonus} 耐久");
+            var deployMessage = crafted
+                ? $"已合成并部署：{definition.designId}（{string.Join("，", craftingBonuses)}）"
+                : $"已部署：{definition.designId}";
             if (definition.effectImplementationStatus == "IMPLEMENTED" &&
                 definition.effectIds != null && definition.effectIds.Contains("effect.pf_001.01"))
             {
@@ -467,10 +483,62 @@ namespace BiomeRivals.Demo
             return true;
         }
 
+        private bool CanDeploy(CardDefinitionEntry definition, string paymentMethod, out string message)
+        {
+            if (definition == null) return Fail("卡牌定义不存在。", out message);
+            if (!IsPlayerTurn) return Fail("当前是对手回合。", out message);
+            if (Phase != DemoTurnPhase.Main) return Fail("进入战斗阶段后不能继续部署卡牌。", out message);
+            if (!_hand.Contains(definition.id)) return Fail("该牌不在手牌中。", out message);
+            if (paymentMethod == MatchPaymentMethods.Redstone)
+            {
+                if (definition.cost > Energy) return Fail("红石能量不足。", out message);
+                message = string.Empty;
+                return true;
+            }
+            if (paymentMethod == MatchPaymentMethods.Crafting)
+                return DemoDeploymentRules.CanPayWithCrafting(this, definition, out message);
+            return Fail("部署支付方式无效。", out message);
+        }
+
         private void Consume(CardDefinitionEntry definition)
         {
             Energy -= definition.cost;
             _hand.Remove(definition.id);
+        }
+
+        private void ConsumeDeployment(CardDefinitionEntry definition, string paymentMethod)
+        {
+            if (paymentMethod == MatchPaymentMethods.Redstone)
+            {
+                Consume(definition);
+                return;
+            }
+
+            var productIndex = _hand.IndexOf(definition.id);
+            var materialIndices = new List<int>();
+            var consumedMaterials = new List<string>();
+            foreach (var ingredient in definition.craftingRecipe ?? Array.Empty<CraftingIngredientEntry>())
+            {
+                for (var count = 0; count < ingredient.count; count++)
+                {
+                    var index = -1;
+                    for (var candidate = 0; candidate < _hand.Count; candidate++)
+                    {
+                        if (candidate != productIndex && !materialIndices.Contains(candidate) && _hand[candidate] == ingredient.cardId)
+                        {
+                            index = candidate;
+                            break;
+                        }
+                    }
+                    if (index < 0) throw new InvalidOperationException("Crafting materials changed after validation.");
+                    materialIndices.Add(index);
+                    consumedMaterials.Add(ingredient.cardId);
+                }
+            }
+            materialIndices.Sort((left, right) => right.CompareTo(left));
+            foreach (var index in materialIndices) _hand.RemoveAt(index);
+            _discardPile.AddRange(consumedMaterials);
+            if (!_hand.Remove(definition.id)) throw new InvalidOperationException("Crafted product changed after validation.");
         }
 
         private bool ValidateCommand(MatchCommandDto command, string expectedType, out DemoCommandResult rejection)
@@ -501,6 +569,8 @@ namespace BiomeRivals.Demo
             if (definition == null) return Reject(DemoCommandRejectionCode.UnknownCard, message);
             if (!IsPlayerTurn) return Reject(DemoCommandRejectionCode.NotActivePlayer, message);
             if (!_hand.Contains(definition.id)) return Reject(DemoCommandRejectionCode.CardNotInHand, message);
+            if (message.StartsWith("缺少材料", StringComparison.Ordinal)) return Reject(DemoCommandRejectionCode.MissingMaterials, message);
+            if (message.Contains("支付方式") || message.Contains("合成配方")) return Reject(DemoCommandRejectionCode.InvalidPaymentMethod, message);
             if (definition.cost > Energy) return Reject(DemoCommandRejectionCode.InsufficientRedstone, message);
             return Reject(DemoCommandRejectionCode.InvalidCommand, message);
         }

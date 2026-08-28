@@ -16,7 +16,7 @@ namespace BiomeRivals.Networking.Tests
                 MatchStateDto received = null;
                 gateway.SnapshotReceived += snapshot => received = snapshot;
                 transport.Emit(MatchOpcodes.Snapshot,
-                    "{\"matchId\":\"match-1\",\"viewerPlayerId\":\"alice\",\"protocolVersion\":10,\"rulesetVersion\":\"prototype-0.11\",\"revision\":0," +
+                    "{\"matchId\":\"match-1\",\"viewerPlayerId\":\"alice\",\"protocolVersion\":11,\"rulesetVersion\":\"prototype-0.12\",\"revision\":0," +
                     "\"lastEventId\":0,\"status\":\"ACTIVE\",\"turn\":1,\"phase\":\"MAIN\",\"activePlayerIndex\":0,\"nextInstanceId\":1," +
                     "\"players\":[{\"playerId\":\"alice\",\"factionId\":\"ocean_river\",\"mulliganCompleted\":true,\"life\":30,\"armor\":0,\"redstone\":6," +
                     "\"redstoneCapacity\":6,\"hand\":[\"pf_001\"],\"deckCount\":26,\"discardPile\":[],\"fatigueCount\":0,\"unitSlots\":[null,null,null,null]," +
@@ -48,7 +48,7 @@ namespace BiomeRivals.Networking.Tests
                 MatchEventBatchDto received = null;
                 gateway.EventBatchReceived += batch => received = batch;
                 transport.Emit(MatchOpcodes.EventBatch,
-                    "{\"protocolVersion\":10,\"rulesetVersion\":\"prototype-0.11\",\"revision\":1," +
+                    "{\"protocolVersion\":11,\"rulesetVersion\":\"prototype-0.12\",\"revision\":1," +
                     "\"acknowledgedCommandId\":\"turn-1\",\"events\":[{\"eventId\":1,\"type\":\"CARD_DRAWN\"," +
                     "\"payload\":{\"playerId\":\"bob\",\"cardId\":null,\"handCount\":5,\"deckCount\":25}}]}");
 
@@ -71,6 +71,7 @@ namespace BiomeRivals.Networking.Tests
 
                 Assert.That(transport.LastOpcode, Is.EqualTo(MatchOpcodes.Command));
                 Assert.That(transport.LastJson, Does.Contain("\"type\":\"DEPLOY_CARD\""));
+                Assert.That(transport.LastJson, Does.Contain("\"paymentMethod\":\"REDSTONE\""));
                 Assert.That(transport.LastJson, Does.Contain("\"payload\":{"));
                 Assert.That(transport.LastJson, Does.Contain("\"slotKind\":\"UNIT\""));
                 Assert.That(transport.LastJson, Does.Not.Contain("attackerInstanceId"));
@@ -172,7 +173,7 @@ namespace BiomeRivals.Networking.Tests
                     TimeSpan.FromSeconds(1));
                 Assert.That(dispatcher.PendingCount, Is.EqualTo(1));
                 transport.Emit(MatchOpcodes.EventBatch,
-                    "{\"protocolVersion\":10,\"rulesetVersion\":\"prototype-0.11\",\"revision\":5," +
+                    "{\"protocolVersion\":11,\"rulesetVersion\":\"prototype-0.12\",\"revision\":5," +
                     "\"acknowledgedCommandId\":\"ack-1\",\"events\":[]}");
 
                 var result = await pending;

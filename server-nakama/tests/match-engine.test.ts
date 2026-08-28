@@ -14,10 +14,11 @@ function deployCommand(
   revision: number,
   cardId: string,
   slotKind: BiomeRivalsRules.DeploySlotKind,
-  slotIndex: number
+  slotIndex: number,
+  paymentMethod: BiomeRivalsRules.PaymentMethod = 'REDSTONE'
 ): BiomeRivalsRules.MatchCommand {
   const result = command(id, revision, 'DEPLOY_CARD');
-  result.payload = { cardId: cardId, slotKind: slotKind, slotIndex: slotIndex };
+  result.payload = { cardId: cardId, slotKind: slotKind, slotIndex: slotIndex, paymentMethod: paymentMethod };
   return result;
 }
 
@@ -291,6 +292,78 @@ TestHarness.test('deploys a structure only across consecutive free building slot
   TestHarness.equal(accepted.state.players[0]!.buildingSlots[2], 'object-1');
   TestHarness.equal(accepted.state.players[0]!.battlefield[0]!.occupiedSlots, 2);
   TestHarness.equal(accepted.batch.events[0]!.payload.occupiedSlots, 2);
+});
+
+TestHarness.test('crafts a structure from deterministic hand materials without spending redstone', function (): void {
+  const state = activeState('match-1', ['alice', 'bob']);
+  state.players[0]!.hand = ['tk_010', 'db_007', 'tk_006', 'tk_010'];
+  state.players[0]!.redstone = 0;
+  state.players[0]!.redstoneCapacity = 1;
+
+  const result = BiomeRivalsRules.applyCommand(
+    state,
+    'alice',
+    deployCommand('craft-temple', 0, 'db_007', 'BUILDING', 1, 'CRAFTING')
+  );
+
+  TestHarness.equal(result.accepted, true);
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[0]!.redstone, 0);
+  TestHarness.equal(JSON.stringify(result.state.players[0]!.hand), JSON.stringify(['tk_010']));
+  TestHarness.equal(JSON.stringify(result.state.players[0]!.discardPile), JSON.stringify(['tk_006', 'tk_010']));
+  TestHarness.equal(result.state.players[0]!.battlefield[0]!.health, 10);
+  TestHarness.equal(result.state.players[0]!.battlefield[0]!.maxHealth, 10);
+  TestHarness.equal(result.batch.events.length, 2);
+  TestHarness.equal(result.batch.events[0]!.type, 'MATERIALS_CONSUMED');
+  TestHarness.equal(result.batch.events[0]!.payload.handCount, 2, 'the product remains in hand during material consumption');
+  TestHarness.equal(result.batch.events[0]!.payload.discardCount, 2);
+  TestHarness.equal(result.batch.events[1]!.type, 'CARD_DEPLOYED');
+  TestHarness.equal(result.batch.events[1]!.payload.paymentMethod, 'CRAFTING');
+  TestHarness.equal(result.batch.events[1]!.payload.health, 10);
+  const opponentBatch = BiomeRivalsRules.createClientEventBatch(result.batch, 'bob');
+  TestHarness.equal((opponentBatch.events[0]!.payload.materials as Array<{ cardId: string }>)[0]!.cardId, 'tk_006');
+  TestHarness.equal((opponentBatch.events[0]!.payload.materials as Array<{ cardId: string }>)[1]!.cardId, 'tk_010');
+  TestHarness.equal(JSON.stringify(state.players[0]!.hand), JSON.stringify(['tk_010', 'db_007', 'tk_006', 'tk_010']), 'accepted commands must not mutate input');
+});
+
+TestHarness.test('rejects incomplete or illegal crafting atomically', function (): void {
+  const missingState = activeState('match-1', ['alice', 'bob']);
+  missingState.players[0]!.hand = ['db_007', 'tk_006'];
+  missingState.players[0]!.redstone = 0;
+  const missing = BiomeRivalsRules.applyCommand(
+    missingState,
+    'alice',
+    deployCommand('craft-missing', 0, 'db_007', 'BUILDING', 0, 'CRAFTING')
+  );
+  TestHarness.equal(missing.accepted, false);
+  if (!missing.accepted) TestHarness.equal(missing.code, 'MISSING_MATERIALS');
+  TestHarness.equal(JSON.stringify(missingState.players[0]!.hand), JSON.stringify(['db_007', 'tk_006']));
+  TestHarness.equal(missingState.players[0]!.discardPile.length, 0);
+
+  const illegalState = activeState('match-1', ['alice', 'bob']);
+  illegalState.players[0]!.hand = ['db_007', 'tk_006', 'tk_010'];
+  illegalState.players[0]!.redstone = 0;
+  const illegal = BiomeRivalsRules.applyCommand(
+    illegalState,
+    'alice',
+    deployCommand('craft-illegal-slot', 0, 'db_007', 'BUILDING', 2, 'CRAFTING')
+  );
+  TestHarness.equal(illegal.accepted, false);
+  if (!illegal.accepted) TestHarness.equal(illegal.code, 'INVALID_TARGET');
+  TestHarness.equal(JSON.stringify(illegalState.players[0]!.hand), JSON.stringify(['db_007', 'tk_006', 'tk_010']));
+  TestHarness.equal(illegalState.players[0]!.discardPile.length, 0);
+});
+
+TestHarness.test('rejects crafting payment for a card without a recipe', function (): void {
+  const state = activeState('match-1', ['alice', 'bob']);
+  state.players[0]!.hand = ['pf_001'];
+  const result = BiomeRivalsRules.applyCommand(
+    state,
+    'alice',
+    deployCommand('craft-bee', 0, 'pf_001', 'UNIT', 0, 'CRAFTING')
+  );
+  TestHarness.equal(result.accepted, false);
+  if (!result.accepted) TestHarness.equal(result.code, 'INVALID_PAYMENT_METHOD');
 });
 
 TestHarness.test('rejects a structure whose declared range overlaps an occupied building slot', function (): void {

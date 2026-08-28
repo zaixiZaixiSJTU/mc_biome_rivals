@@ -10,7 +10,7 @@
 
 协议 opcode：`1` 命令、`2` 事件批次、`3` 命令拒绝、`4` 权威快照。协议结构以 `shared-schema/protocol` 为准。
 
-当前基础对局纵向切片使用 `protocolVersion: 10` 与 `rulesetVersion: prototype-0.11`。v2 将战场格内容从卡牌 ID 改为稳定实例 ID；v3 加入私有牌库、抽牌、爆牌与疲劳状态；v4 加入权威 `PLAY_CARD` 与英雄效果事件；v5 加入目标实例与临时属性变更/恢复事件；v6 在双方公开状态中加入服务器确认的 `factionId`；v7 加入私有 `MULLIGAN` 命令、公开准备状态与正式开局事件；v8 将 `TAUNT`、`CHARGE` 关键词随部署事件和快照公开同步；v9 加入带私有投影的 `CARD_GENERATED`；v10 加入公开且可回放的 `OBJECT_SUMMONED`。`prototype-0.11` 增加批量死亡队列、重复死亡检查与岩浆怪召唤亡语。旧规则集客户端不能静默兼容。
+当前基础对局纵向切片使用 `protocolVersion: 11` 与 `rulesetVersion: prototype-0.12`。v10 加入公开且可回放的 `OBJECT_SUMMONED`；v11 要求部署命令明确 `REDSTONE` 或 `CRAFTING` 支付，并在合成部署前公开发送 `MATERIALS_CONSUMED`。`prototype-0.12` 首次实现“沙漠神殿 = 陶片×1 + 圆石×1”，材料稳定进入弃牌堆，结构获得 +2 最大生命，所有目标与材料失败路径均不消耗资源。旧规则集客户端不能静默兼容。
 
 运行：
 
