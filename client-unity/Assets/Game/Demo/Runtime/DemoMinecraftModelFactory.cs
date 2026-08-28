@@ -12,6 +12,7 @@ namespace BiomeRivals.Demo
             { "pf_003", "entity_wolf" },
             { "pf_004", "entity_villager" },
             { "nt_001", "entity_magma_cube" },
+            { "tk_014", "entity_magma_cube" },
             { "nt_003", "entity_blaze" }
         };
 
@@ -30,6 +31,10 @@ namespace BiomeRivals.Demo
                 case "pf_003": BuildWolf(root, material); break;
                 case "pf_004": BuildVillager(root, material); break;
                 case "nt_001": BuildMagmaCube(root, material); break;
+                case "tk_014":
+                    root.localScale = Vector3.one * 0.62f;
+                    BuildMagmaCube(root, material);
+                    break;
                 case "nt_003": BuildBlaze(root, material); break;
                 default: return false;
             }

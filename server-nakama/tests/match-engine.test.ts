@@ -625,6 +625,62 @@ TestHarness.test('resolves simultaneous Shulker deathrattles for the active play
   TestHarness.equal(result.state.players[1]!.hand[0], 'tk_016');
 });
 
+TestHarness.test('summons a Small Magma Cube into the Magma Cubes released slot', function (): void {
+  const state = activeState('match-1', ['alice', 'bob']);
+  state.turn = 2;
+  state.phase = 'COMBAT';
+  placeUnit(state, 0, 'pf_008', 0, 'object-1', 1);
+  placeUnit(state, 0, 'pf_008', 1, 'object-2', 1);
+  placeUnit(state, 0, 'nt_001', 2, 'object-3', 1);
+  placeUnit(state, 0, 'pf_008', 3, 'object-4', 1);
+  placeUnit(state, 1, 'pf_008', 0, 'object-5', 1);
+  state.nextInstanceId = 6;
+
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', attackCommand('magma-death', 0, 'object-3', 'UNIT', 'object-5'));
+  TestHarness.equal(result.accepted, true);
+  if (!result.accepted) return;
+  const summoned = result.state.players[0]!.battlefield.filter(function (object): boolean { return object.cardId === 'tk_014'; })[0]!;
+  TestHarness.equal(result.state.players[0]!.discardPile[0], 'nt_001');
+  TestHarness.equal(result.state.players[0]!.unitSlots[2], 'object-6');
+  TestHarness.equal(summoned.instanceId, 'object-6');
+  TestHarness.equal(summoned.slotIndex, 2);
+  TestHarness.equal(summoned.attack, 1);
+  TestHarness.equal(summoned.health, 1);
+  TestHarness.equal(summoned.summonedTurn, 2);
+  TestHarness.equal(result.state.nextInstanceId, 7);
+  TestHarness.equal(result.batch.events[1]!.type, 'OBJECT_DIED');
+  TestHarness.equal(result.batch.events[2]!.type, 'OBJECT_SUMMONED');
+  TestHarness.equal(result.batch.events[2]!.payload.sourceInstanceId, 'object-3');
+  TestHarness.equal(result.batch.events[2]!.payload.instanceId, 'object-6');
+  TestHarness.equal(result.batch.events[2]!.payload.slotIndex, 2);
+
+  const immediateAttack = BiomeRivalsRules.applyCommand(result.state, 'alice', attackCommand('small-magma-attack', 1, 'object-6', 'HERO'));
+  TestHarness.equal(immediateAttack.accepted, false);
+  if (!immediateAttack.accepted) TestHarness.equal(immediateAttack.code, 'ATTACKER_NOT_READY');
+});
+
+TestHarness.test('removes every simultaneous death before active-player summon deathrattles resolve', function (): void {
+  const state = activeState('match-1', ['alice', 'bob']);
+  state.players[0]!.hand = ['db_006'];
+  state.players[0]!.redstone = 3;
+  state.players[0]!.redstoneCapacity = 3;
+  placeUnit(state, 0, 'nt_001', 1, 'object-1', 1);
+  placeUnit(state, 1, 'nt_001', 3, 'object-2', 1);
+  state.nextInstanceId = 3;
+
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', playCommand('double-magma', 0, 'db_006'));
+  TestHarness.equal(result.accepted, true);
+  if (!result.accepted) return;
+  const orderedTypes = result.batch.events.map(function (event): string { return event.type; });
+  TestHarness.equal(orderedTypes.join(','), 'CARD_PLAYED,OBJECT_STATS_CHANGED,OBJECT_STATS_CHANGED,OBJECT_DIED,OBJECT_DIED,OBJECT_SUMMONED,OBJECT_SUMMONED');
+  TestHarness.equal(result.batch.events[3]!.payload.playerId, 'alice');
+  TestHarness.equal(result.batch.events[4]!.payload.playerId, 'bob');
+  TestHarness.equal(result.batch.events[5]!.payload.playerId, 'alice');
+  TestHarness.equal(result.batch.events[6]!.payload.playerId, 'bob');
+  TestHarness.equal(result.state.players[0]!.unitSlots[1], 'object-3');
+  TestHarness.equal(result.state.players[1]!.unitSlots[3], 'object-4');
+});
+
 TestHarness.test('applies armor before life and ends the match on lethal hero damage', function (): void {
   const state = activeState('match-1', ['alice', 'bob']);
   state.turn = 2;

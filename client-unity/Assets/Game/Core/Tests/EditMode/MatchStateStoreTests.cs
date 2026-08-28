@@ -326,6 +326,66 @@ namespace BiomeRivals.Core.Tests
         }
 
         [Test]
+        public void Apply_ReplaysDeathThenSummonIntoTheReleasedUnitSlot()
+        {
+            var magmaCube = new BattlefieldObjectStateDto
+            {
+                instanceId = "object-1", cardId = "nt_001", cardType = "UNIT", attack = 2,
+                health = 0, maxHealth = 1, slotKind = "UNIT", slotIndex = 2, occupiedSlots = 1, summonedTurn = 1
+            };
+            var unitSlots = new string[4];
+            unitSlots[2] = magmaCube.instanceId;
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "match-1", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                revision = 2, lastEventId = 2, turn = 2, phase = "COMBAT", activePlayerIndex = 0, nextInstanceId = 2,
+                players = new[]
+                {
+                    new PlayerStateDto
+                    {
+                        playerId = "alice", unitSlots = unitSlots, buildingSlots = new string[3],
+                        battlefield = new[] { magmaCube }, discardPile = Array.Empty<string>()
+                    },
+                    new PlayerStateDto { playerId = "bob", unitSlots = new string[4], buildingSlots = new string[3] }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 3,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 3, type = MatchEventTypes.ObjectDied,
+                        payload = new MatchEventPayloadDto { playerId = "alice", instanceId = "object-1", discardCount = 1 }
+                    },
+                    new MatchEventDto
+                    {
+                        eventId = 4, type = MatchEventTypes.ObjectSummoned,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", sourceCardId = "nt_001", sourceInstanceId = "object-1",
+                            effectId = "effect.nt_001.01", cardId = "tk_014", instanceId = "object-2",
+                            cardType = "UNIT", slotKind = "UNIT", slotIndex = 2, occupiedSlots = 1,
+                            attack = 1, health = 1, maxHealth = 1, summonedTurn = 2,
+                            keywords = Array.Empty<string>(), nextInstanceId = 3
+                        }
+                    }
+                }
+            });
+
+            Assert.That(store.Current.players[0].discardPile, Is.EqualTo(new[] { "nt_001" }));
+            Assert.That(store.Current.players[0].unitSlots[2], Is.EqualTo("object-2"));
+            Assert.That(store.Current.players[0].battlefield, Has.Length.EqualTo(1));
+            Assert.That(store.Current.players[0].battlefield[0].cardId, Is.EqualTo("tk_014"));
+            Assert.That(store.Current.players[0].battlefield[0].summonedTurn, Is.EqualTo(2));
+            Assert.That(store.Current.nextInstanceId, Is.EqualTo(3));
+        }
+
+        [Test]
         public void Apply_ReplaysPrivateDrawAndPublicBurnWithoutLeakingOpponentCard()
         {
             var store = new MatchStateStore();

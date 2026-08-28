@@ -397,15 +397,21 @@ namespace BiomeRivalsRules {
       return null;
     }
 
-    function removeDeadObjects(player: PlayerState): void {
-      for (let index = player.battlefield.length - 1; index >= 0; index -= 1) {
-        const object = player.battlefield[index]!;
-        if (object.health > 0) continue;
+    function removeDeadObjects(player: PlayerState): BattlefieldObjectState[] {
+      const deadObjects = player.battlefield.filter(function (object): boolean { return object.health <= 0; });
+      deadObjects.sort(function (left, right): number {
+        if (left.slotIndex !== right.slotIndex) return left.slotIndex - right.slotIndex;
+        return left.instanceId < right.instanceId ? -1 : left.instanceId > right.instanceId ? 1 : 0;
+      });
+      for (let index = 0; index < deadObjects.length; index += 1) {
+        const object = deadObjects[index]!;
         const slots = object.slotKind === 'UNIT' ? player.unitSlots : player.buildingSlots;
         for (let slot = 0; slot < slots.length; slot += 1) {
           if (slots[slot] === object.instanceId) slots[slot] = null;
         }
-        player.battlefield.splice(index, 1);
+        const battlefieldIndex = player.battlefield.indexOf(object);
+        if (battlefieldIndex < 0) throw new Error('dead object disappeared before settlement: ' + object.instanceId);
+        player.battlefield.splice(battlefieldIndex, 1);
         player.discardPile.push(object.cardId);
         emit('OBJECT_DIED', {
           playerId: player.playerId,
@@ -416,7 +422,17 @@ namespace BiomeRivalsRules {
           occupiedSlots: object.occupiedSlots,
           discardCount: player.discardPile.length
         });
-        resolveDeathrattles(player, object);
+      }
+      return deadObjects;
+    }
+
+    function settleDeaths(currentPlayer: PlayerState, nonCurrentPlayer: PlayerState): void {
+      while (true) {
+        const currentDeaths = removeDeadObjects(currentPlayer);
+        const nonCurrentDeaths = removeDeadObjects(nonCurrentPlayer);
+        if (currentDeaths.length === 0 && nonCurrentDeaths.length === 0) return;
+        for (let index = 0; index < currentDeaths.length; index += 1) resolveDeathrattles(currentPlayer, currentDeaths[index]!);
+        for (let index = 0; index < nonCurrentDeaths.length; index += 1) resolveDeathrattles(nonCurrentPlayer, nonCurrentDeaths[index]!);
       }
     }
 
@@ -426,6 +442,63 @@ namespace BiomeRivalsRules {
       if (definition.effectIds.indexOf('effect.ed_004.01') >= 0) {
         generateCard(player, 'tk_016', object.cardId, object.instanceId, 'effect.ed_004.01');
       }
+      if (definition.effectIds.indexOf('effect.nt_001.01') >= 0) {
+        summonUnit(player, 'tk_014', object.cardId, object.instanceId, 'effect.nt_001.01', object.slotIndex);
+      }
+    }
+
+    function summonUnit(
+      player: PlayerState,
+      cardId: string,
+      sourceCardId: string,
+      sourceInstanceId: string,
+      effectId: string,
+      preferredSlotIndex: number
+    ): boolean {
+      const definition = getCardDefinition(cardId);
+      if (definition === null || definition.cardType !== 'UNIT') throw new Error('summoned unit is not registered: ' + cardId);
+      const slotIndex = preferredSlotIndex >= 0 && preferredSlotIndex < player.unitSlots.length && player.unitSlots[preferredSlotIndex] === null
+        ? preferredSlotIndex
+        : player.unitSlots.indexOf(null);
+      if (slotIndex < 0) return false;
+      const object: BattlefieldObjectState = {
+        instanceId: 'object-' + next.nextInstanceId,
+        cardId: cardId,
+        cardType: 'UNIT',
+        attack: definition.attack,
+        health: definition.health,
+        maxHealth: definition.health,
+        slotKind: 'UNIT',
+        slotIndex: slotIndex,
+        occupiedSlots: 1,
+        summonedTurn: next.turn,
+        hasAttacked: false,
+        keywords: definition.keywords.slice(),
+        temporaryAttackModifier: 0,
+        temporaryAttackModifierExpiresOnTurn: 0
+      };
+      next.nextInstanceId += 1;
+      player.unitSlots[slotIndex] = object.instanceId;
+      player.battlefield.push(object);
+      emit('OBJECT_SUMMONED', {
+        playerId: player.playerId,
+        sourceCardId: sourceCardId,
+        sourceInstanceId: sourceInstanceId,
+        effectId: effectId,
+        cardId: object.cardId,
+        instanceId: object.instanceId,
+        cardType: object.cardType,
+        slotKind: object.slotKind,
+        slotIndex: object.slotIndex,
+        occupiedSlots: object.occupiedSlots,
+        attack: object.attack,
+        health: object.health,
+        maxHealth: object.maxHealth,
+        summonedTurn: object.summonedTurn,
+        keywords: object.keywords.slice(),
+        nextInstanceId: next.nextInstanceId
+      });
+      return true;
     }
 
     function generateCard(
@@ -587,8 +660,7 @@ namespace BiomeRivalsRules {
               });
             }
           }
-          removeDeadObjects(player);
-          removeDeadObjects(opponent);
+          settleDeaths(player, opponent);
           return null;
         case 'effect.nt_006.01':
           player.life = Math.max(0, player.life - 2);
@@ -755,8 +827,7 @@ namespace BiomeRivalsRules {
           targetHealth: target.health,
           targetArmor: 0
         });
-        removeDeadObjects(attackerPlayer);
-        removeDeadObjects(defenderPlayer);
+        settleDeaths(attackerPlayer, defenderPlayer);
       }
 
       if (defenderPlayer.life <= 0) {

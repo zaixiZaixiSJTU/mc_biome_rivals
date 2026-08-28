@@ -7,4 +7,4 @@
 
 修改流程：先修改 Schema 和版本，再更新 TypeScript/C# 类型，最后增加双端兼容性测试。原型期使用 JSON Schema 2020-12。
 
-当前 `protocolVersion: 9`。快照只发送观察者自己的卡牌 ID 和双方区域计数；对手手牌使用 `null` 占位，完整牌库顺序与内部命令幂等记录不属于客户端 Schema。双方已确认的 `factionId` 和 `mulliganCompleted` 属于公开状态；具体调度结果只投影给牌的拥有者。`CARD_DRAWN` 同样按观察者投影，只有抽牌者收到 `cardId`；`CARD_BURNED` 因规则要求公开，双方都收到卡牌 ID。v4 增加权威 `PLAY_CARD` 与英雄效果事件；v5 增加稳定目标实例与临时属性恢复；v6 加入群系 ID；v7 加入 `MULLIGAN_COMPLETED`、`MATCH_STARTED` 与起手选择命令；v8 为公开战场对象增加可回放的 `keywords` 数组；v9 增加 `CARD_GENERATED`：生成到手牌时仅拥有者收到 `cardId`，对手接收 `null` 占位，满手进入弃牌时卡牌身份公开。
+当前 `protocolVersion: 10`。快照只发送观察者自己的卡牌 ID 和双方区域计数；对手手牌使用 `null` 占位，完整牌库顺序与内部命令幂等记录不属于客户端 Schema。双方已确认的 `factionId` 和 `mulliganCompleted` 属于公开状态；具体调度结果只投影给牌的拥有者。`CARD_DRAWN` 同样按观察者投影，只有抽牌者收到 `cardId`；`CARD_BURNED` 因规则要求公开，双方都收到卡牌 ID。v4 增加权威 `PLAY_CARD` 与英雄效果事件；v5 增加稳定目标实例与临时属性恢复；v6 加入群系 ID；v7 加入 `MULLIGAN_COMPLETED`、`MATCH_STARTED` 与起手选择命令；v8 为公开战场对象增加可回放的 `keywords` 数组；v9 增加带私有手牌投影的 `CARD_GENERATED`；v10 增加公开 `OBJECT_SUMMONED`，携带来源、稳定实例、格位、属性、关键词和下一实例计数，使客户端可以仅靠事件重建召唤结果。

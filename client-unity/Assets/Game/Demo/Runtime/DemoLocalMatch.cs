@@ -209,31 +209,21 @@ namespace BiomeRivals.Demo
                 case "effect.db_006.01":
                     var damaged = 0;
                     var destroyed = 0;
-                    var deathrattleMessages = new List<string>();
                     foreach (var value in _playerBattlefield.ToArray())
                     {
                         if (value.SlotKind != DemoSlotKind.Unit) continue;
                         value.Health = Math.Max(0, value.Health - 2);
                         damaged++;
-                        if (value.Health == 0)
-                        {
-                            var triggerMessage = RemoveObject(value, _playerBattlefield, UnitSlots, BuildingSlots);
-                            if (!string.IsNullOrEmpty(triggerMessage)) deathrattleMessages.Add(triggerMessage);
-                            destroyed++;
-                        }
+                        if (value.Health == 0) destroyed++;
                     }
                     foreach (var value in _opponentBattlefield.ToArray())
                     {
                         if (value.SlotKind != DemoSlotKind.Unit) continue;
                         value.Health = Math.Max(0, value.Health - 2);
                         damaged++;
-                        if (value.Health == 0)
-                        {
-                            var triggerMessage = RemoveObject(value, _opponentBattlefield, OpponentUnitSlots, OpponentBuildingSlots);
-                            if (!string.IsNullOrEmpty(triggerMessage)) deathrattleMessages.Add(triggerMessage);
-                            destroyed++;
-                        }
+                        if (value.Health == 0) destroyed++;
                     }
+                    var deathrattleMessages = SettleDeaths();
                     message = $"沙尘暴：对 {damaged} 个生物造成 2 点伤害，消灭 {destroyed} 个。";
                     if (deathrattleMessages.Count > 0) message += " " + string.Join(" ", deathrattleMessages);
                     break;
@@ -401,18 +391,7 @@ namespace BiomeRivals.Demo
             target.Health = Math.Max(0, target.Health - attacker.Attack);
             attacker.Health = Math.Max(0, attacker.Health - retaliation);
             var targetDied = target.Health == 0;
-            var attackerDied = attacker.Health == 0;
-            var deathrattleMessages = new List<string>();
-            if (attackerDied)
-            {
-                var triggerMessage = RemoveObject(attacker, _playerBattlefield, UnitSlots, BuildingSlots);
-                if (!string.IsNullOrEmpty(triggerMessage)) deathrattleMessages.Add(triggerMessage);
-            }
-            if (targetDied)
-            {
-                var triggerMessage = RemoveObject(target, _opponentBattlefield, OpponentUnitSlots, OpponentBuildingSlots);
-                if (!string.IsNullOrEmpty(triggerMessage)) deathrattleMessages.Add(triggerMessage);
-            }
+            var deathrattleMessages = SettleDeaths();
             AcceptCommand(command);
             return DemoCommandResult.Accept(
                 $"造成 {attacker.Attack} 点伤害，受到 {retaliation} 点反击" + (targetDied ? "；目标死亡。" : "。") +
@@ -556,38 +535,98 @@ namespace BiomeRivals.Demo
         private bool HasLivingOpponentTaunt() =>
             _opponentBattlefield.Any(value => value.Health > 0 && value.HasKeyword("TAUNT"));
 
-        private string RemoveObject(
-            DemoBattlefieldObject value,
+        private List<DemoBattlefieldObject> RemoveDeadObjects(
             List<DemoBattlefieldObject> battlefield,
             string[] unitSlots,
             string[] buildingSlots)
         {
-            battlefield.Remove(value);
-            if (value.Player) _discardPile.Add(value.CardId);
-            var slots = value.SlotKind == DemoSlotKind.Unit ? unitSlots : buildingSlots;
-            for (var index = value.SlotIndex; index < value.SlotIndex + value.OccupiedSlots; index++) slots[index] = string.Empty;
-            return ResolveLocalDeathrattle(value);
+            var deadObjects = battlefield.Where(value => value.Health <= 0)
+                .OrderBy(value => value.SlotIndex)
+                .ThenBy(value => value.InstanceId, StringComparer.Ordinal)
+                .ToList();
+            foreach (var value in deadObjects)
+            {
+                battlefield.Remove(value);
+                if (value.Player) _discardPile.Add(value.CardId);
+                var slots = value.SlotKind == DemoSlotKind.Unit ? unitSlots : buildingSlots;
+                for (var index = value.SlotIndex; index < value.SlotIndex + value.OccupiedSlots; index++) slots[index] = string.Empty;
+            }
+            return deadObjects;
+        }
+
+        private List<string> SettleDeaths()
+        {
+            var messages = new List<string>();
+            while (true)
+            {
+                var playerDeaths = RemoveDeadObjects(_playerBattlefield, UnitSlots, BuildingSlots);
+                var opponentDeaths = RemoveDeadObjects(_opponentBattlefield, OpponentUnitSlots, OpponentBuildingSlots);
+                if (playerDeaths.Count == 0 && opponentDeaths.Count == 0) return messages;
+                foreach (var value in playerDeaths)
+                {
+                    var message = ResolveLocalDeathrattle(value);
+                    if (!string.IsNullOrEmpty(message)) messages.Add(message);
+                }
+                foreach (var value in opponentDeaths)
+                {
+                    var message = ResolveLocalDeathrattle(value);
+                    if (!string.IsNullOrEmpty(message)) messages.Add(message);
+                }
+            }
         }
 
         private string ResolveLocalDeathrattle(DemoBattlefieldObject value)
         {
-            if (value.CardId != "ed_004") return string.Empty;
-            if (value.Player)
+            if (value.CardId == "ed_004")
             {
-                if (_hand.Count < 7)
+                if (value.Player)
                 {
-                    _hand.Add("tk_016");
-                    return "潜影贝亡语：潜影壳已置入你的手牌。";
+                    if (_hand.Count < 7)
+                    {
+                        _hand.Add("tk_016");
+                        return "潜影贝亡语：潜影壳已置入你的手牌。";
+                    }
+                    _discardPile.Add("tk_016");
+                    return "潜影贝亡语：手牌已满，潜影壳进入弃牌堆。";
                 }
-                _discardPile.Add("tk_016");
-                return "潜影贝亡语：手牌已满，潜影壳进入弃牌堆。";
+                if (_opponentHandCount < 7)
+                {
+                    _opponentHandCount++;
+                    return "敌方潜影贝亡语：对手获得一张牌。";
+                }
+                return "敌方潜影贝亡语：对手手牌已满，潜影壳进入弃牌堆。";
             }
-            if (_opponentHandCount < 7)
+            if (value.CardId == "nt_001")
             {
-                _opponentHandCount++;
-                return "敌方潜影贝亡语：对手获得一张牌。";
+                var slots = value.Player ? UnitSlots : OpponentUnitSlots;
+                var battlefield = value.Player ? _playerBattlefield : _opponentBattlefield;
+                var slotIndex = value.SlotIndex >= 0 && value.SlotIndex < slots.Length && string.IsNullOrEmpty(slots[value.SlotIndex])
+                    ? value.SlotIndex
+                    : Array.FindIndex(slots, string.IsNullOrEmpty);
+                if (slotIndex < 0) return value.Player
+                    ? "岩浆怪亡语：没有空单位格，未能召唤小型岩浆怪。"
+                    : "敌方岩浆怪亡语：没有空单位格，未能召唤小型岩浆怪。";
+                var summoned = new DemoBattlefieldObject
+                {
+                    InstanceId = $"object-{_nextBattlefieldInstanceId++}",
+                    CardId = "tk_014",
+                    Player = value.Player,
+                    SlotKind = DemoSlotKind.Unit,
+                    SlotIndex = slotIndex,
+                    OccupiedSlots = 1,
+                    Attack = 1,
+                    Health = 1,
+                    MaxHealth = 1,
+                    SummonedRound = Round,
+                    Keywords = Array.Empty<string>()
+                };
+                battlefield.Add(summoned);
+                slots[slotIndex] = summoned.CardId;
+                return value.Player
+                    ? $"岩浆怪亡语：小型岩浆怪已在单位格 {slotIndex + 1} 召唤。"
+                    : $"敌方岩浆怪亡语：小型岩浆怪已在单位格 {slotIndex + 1} 召唤。";
             }
-            return "敌方潜影贝亡语：对手手牌已满，潜影壳进入弃牌堆。";
+            return string.Empty;
         }
 
         private void AcceptCommand(MatchCommandDto command)

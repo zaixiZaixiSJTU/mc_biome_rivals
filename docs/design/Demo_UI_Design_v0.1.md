@@ -88,6 +88,8 @@ UGUI 样式由 `DemoUiStyleCatalog` 集中提供材质、底色、描边和交�
 
 潜影贝亡语预览：[`assets/demo-shulker-deathrattle-preview-v1.png`](assets/demo-shulker-deathrattle-preview-v1.png)。潜影贝死亡后离开真实战场格，衍生的潜影壳进入己方手牌并复用同一卡面/详情组件；在线事件只向拥有者公开手牌中的卡牌身份，满手转弃牌时则公开。
 
+岩浆怪召唤预览：[`assets/demo-magma-summon-preview-v1.png`](assets/demo-magma-summon-preview-v1.png)。同批死亡对象先全部离场，随后小型岩浆怪以新的稳定实例 ID 出现在来源释放格；模型复用 Minecraft 岩浆怪纹理与分层方块结构，并缩放为成体的 `62%`，出生位置通过真实地表材质短促发光。
+
 权威效果表现预览：[`assets/demo-card-effect-preview-v1.png`](assets/demo-card-effect-preview-v1.png)。已实现的法术/材料使用明确的“释放卡牌”动作，结算后同步刷新生命、护甲、手牌与区域计数，并在英雄实体 HUD 上播放与效果类型对应的短促颜色脉冲；待实现效果的按钮显示“效果尚未接入”并禁用。
 
 权威起手调度预览：[`assets/demo-mulligan-preview-v1.png`](assets/demo-mulligan-preview-v1.png)。调度层复用主题卡面、暗色石砖底板和主行动按钮，不引入独立 Web 弹窗风格；选中卡牌通过整块材质色调变化、轻微抬升和“将替换”状态文字共同反馈。

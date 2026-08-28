@@ -133,7 +133,8 @@ namespace BiomeRivals.Demo
                 SelectCard("si_001");
                 CastSelectedCard();
             }
-            if (HasCommandLineFlag("-previewDeathrattle")) SetupDeathrattlePreview();
+            if (HasCommandLineFlag("-previewSummon")) SetupSummonPreview();
+            else if (HasCommandLineFlag("-previewDeathrattle")) SetupDeathrattlePreview();
             else if (HasCommandLineFlag("-previewTaunt")) SetupTauntPreview();
             else if (HasCommandLineFlag("-previewCombat")) OnEndTurn();
             if (HasCommandLineFlag("-previewGroundHover")) _battlefield.SetSlotHovered(true, DemoSlotKind.Unit, 0, true);
@@ -440,7 +441,7 @@ namespace BiomeRivals.Demo
             if (queue == null || _eventPresenters.Count > 0) return;
             var eventTypes = new[]
             {
-                MatchEventTypes.CardDeployed, MatchEventTypes.CardPlayed, MatchEventTypes.CardDrawn,
+                MatchEventTypes.CardDeployed, MatchEventTypes.ObjectSummoned, MatchEventTypes.CardPlayed, MatchEventTypes.CardDrawn,
                 MatchEventTypes.CardBurned, MatchEventTypes.CardGenerated, MatchEventTypes.FatigueDamage, MatchEventTypes.HeroDamaged,
                 MatchEventTypes.HeroHealed, MatchEventTypes.ArmorGained, MatchEventTypes.ObjectStatsChanged,
                 MatchEventTypes.PhaseChanged, MatchEventTypes.AttackResolved, MatchEventTypes.ObjectDied,
@@ -478,6 +479,22 @@ namespace BiomeRivals.Demo
                             : $"敌方蜜蜂落地：战吼为对手恢复 {healing} 点生命。", false);
                     }
                     yield return null;
+                    break;
+                }
+                case MatchEventTypes.ObjectSummoned: {
+                    var summonViewerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
+                    var ownSummon = matchEvent.payload?.playerId == summonViewerId;
+                    var summonSourceName = string.IsNullOrEmpty(matchEvent.payload?.sourceCardId)
+                        ? "卡牌"
+                        : GetCardName(matchEvent.payload.sourceCardId);
+                    var summonedName = string.IsNullOrEmpty(matchEvent.payload?.cardId)
+                        ? "一个单位"
+                        : GetCardName(matchEvent.payload.cardId);
+                    var summonTriggerName = matchEvent.payload?.effectId == "effect.nt_001.01" ? "亡语" : "效果";
+                    ShowStatus(ownSummon
+                        ? $"{summonSourceName}{summonTriggerName}：{summonedName}已在单位格 {matchEvent.payload.slotIndex + 1} 召唤。"
+                        : $"敌方{summonSourceName}{summonTriggerName}：{summonedName}已在单位格 {matchEvent.payload.slotIndex + 1} 召唤。", false);
+                    yield return PulseBattlefieldObject(matchEvent.payload?.instanceId);
                     break;
                 }
                 case MatchEventTypes.CardPlayed: {
@@ -716,6 +733,30 @@ namespace BiomeRivals.Demo
             _selectedCardId = "tk_016";
             RefreshAll();
             ShowStatus(result.Message, !result.Accepted);
+        }
+
+        private void SetupSummonPreview()
+        {
+            SelectFaction("nether");
+            SelectOpponentFaction("plains_forest");
+            if (!_registry.TryGetDefinition("nt_001", out var magmaCubeDefinition) ||
+                !_registry.TryGetDefinition("pf_008", out var ironGolemDefinition)) return;
+            _match.ResetDeckAndHand(new[] { magmaCubeDefinition.id }, Array.Empty<string>());
+            _match.ResetOpponent(new[] { ironGolemDefinition });
+            if (!_match.TryDeploy(magmaCubeDefinition, DemoSlotKind.Unit, 1, out _)) return;
+            _match.EndPlayerTurn();
+            _match.BeginNextPlayerTurn();
+            _match.ApplyEnterCombat(_match.CreateEnterCombatCommand());
+            var attacker = _match.GetObject(true, DemoSlotKind.Unit, 1);
+            var target = _match.GetObject(false, DemoSlotKind.Unit, 0);
+            if (attacker == null || target == null) return;
+            var result = _match.ApplyAttack(_match.CreateAttackCommand(attacker.InstanceId, "UNIT", target.InstanceId));
+            _selectedAttackerInstanceId = null;
+            _selectedCardId = null;
+            RefreshAll();
+            ShowStatus(result.Message, !result.Accepted);
+            var summoned = _match.GetObject(true, DemoSlotKind.Unit, 1);
+            if (summoned?.CardId == "tk_014") StartCoroutine(PulseBattlefieldObject(summoned.InstanceId));
         }
 
         private void ApplyPlayerFactionVisuals(FactionSpec spec)
@@ -1159,6 +1200,9 @@ namespace BiomeRivals.Demo
                 RefreshAll();
                 return;
             }
+            var knownInstanceIds = new HashSet<string>(_match.PlayerBattlefield.Concat(_match.OpponentBattlefield)
+                .Where(value => value != null)
+                .Select(value => value.InstanceId));
             var command = _match.CreateAttackCommand(attacker.InstanceId, targetType, targetInstanceId);
             var result = _match.ApplyAttack(command);
             if (result.Accepted)
@@ -1168,6 +1212,12 @@ namespace BiomeRivals.Demo
             }
             ShowStatus(result.Accepted ? $"{result.Message} · 状态 r{result.Revision}" : result.Message, !result.Accepted);
             RefreshAll();
+            if (result.Accepted)
+            {
+                var summoned = _match.PlayerBattlefield.Concat(_match.OpponentBattlefield)
+                    .FirstOrDefault(value => value != null && !knownInstanceIds.Contains(value.InstanceId));
+                if (summoned != null) StartCoroutine(PulseBattlefieldObject(summoned.InstanceId));
+            }
         }
 
         private DemoBattlefieldObject FindSelectedAttacker() =>

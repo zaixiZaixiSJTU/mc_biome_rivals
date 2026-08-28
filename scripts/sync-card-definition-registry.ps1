@@ -128,7 +128,7 @@ foreach ($line in Get-Content -LiteralPath $sourcePath -Encoding UTF8) {
     $effectIds = [System.Collections.Generic.List[string]]::new()
     if ($hasEffect) { $effectIds.Add($effectId) }
     $definitions.Add([ordered]@{
-        id=$cardId; designId=$designId; contentVersion=2; collectible=(-not $isToken)
+        id=$cardId; designId=$designId; contentVersion=3; collectible=(-not $isToken)
         nameKey="card.$cardId.name"; rulesTextKey="card.$cardId.rules"
         factionId=$factionId; themeId=$themeId; rarity=$rarity; cardType=$cardType; cost=$cost
         hasAttack=$hasAttack; attack=$attack; hasHealth=$hasHealth; health=$health
@@ -149,7 +149,7 @@ foreach ($effectId in $implementedEffectIds) {
 }
 
 if ($definitions.Count -ne 74) { throw "Expected 74 card definitions, found $($definitions.Count)." }
-$definitionDocument = [ordered]@{ schemaVersion=2; contentVersion=2; source=$SourceMarkdown.Replace('\','/'); entries=$definitions }
+$definitionDocument = [ordered]@{ schemaVersion=2; contentVersion=3; source=$SourceMarkdown.Replace('\','/'); entries=$definitions }
 $textDocument = [ordered]@{ schemaVersion=1; locale='zh-CN'; source=$SourceMarkdown.Replace('\','/'); entries=$texts }
 
 foreach ($output in @(

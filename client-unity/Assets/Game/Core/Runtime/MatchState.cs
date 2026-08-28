@@ -131,36 +131,12 @@ namespace BiomeRivals.Core
                     break;
                 case MatchEventTypes.CardDeployed:
                     var player = FindPlayer(payload.playerId);
-                    if (payload.slotKind != "UNIT" && payload.slotKind != "BUILDING")
-                        throw new InvalidOperationException("Deployment event contains an invalid slot kind.");
-                    var slots = payload.slotKind == "UNIT" ? player.unitSlots : player.buildingSlots;
-                    var occupiedSlots = Math.Max(1, payload.occupiedSlots);
-                    if (payload.slotIndex < 0 || payload.slotIndex + occupiedSlots > slots.Length)
-                        throw new InvalidOperationException("Deployment event contains an invalid slot range.");
-                    var nextHand = RemoveFirst(player.hand, payload.cardId);
-                    player.hand = nextHand;
+                    player.hand = RemoveFirst(player.hand, payload.cardId);
                     player.redstone = payload.redstone;
-                    var battlefield = new List<BattlefieldObjectStateDto>(player.battlefield ?? Array.Empty<BattlefieldObjectStateDto>());
-                    battlefield.Add(new BattlefieldObjectStateDto
-                    {
-                        instanceId = payload.instanceId,
-                        cardId = payload.cardId,
-                        cardType = payload.cardType,
-                        attack = payload.attack,
-                        health = payload.health,
-                        maxHealth = payload.maxHealth,
-                        slotKind = payload.slotKind,
-                        slotIndex = payload.slotIndex,
-                        occupiedSlots = occupiedSlots,
-                        summonedTurn = payload.summonedTurn,
-                        hasAttacked = false,
-                        keywords = payload.keywords ?? Array.Empty<string>(),
-                        temporaryAttackModifier = 0,
-                        temporaryAttackModifierExpiresOnTurn = 0
-                    });
-                    player.battlefield = battlefield.ToArray();
-                    Current.nextInstanceId = payload.nextInstanceId;
-                    for (var index = payload.slotIndex; index < payload.slotIndex + occupiedSlots; index++) slots[index] = payload.instanceId;
+                    AddBattlefieldObject(player, payload, "Deployment");
+                    break;
+                case MatchEventTypes.ObjectSummoned:
+                    AddBattlefieldObject(FindPlayer(payload.playerId), payload, "Summon");
                     break;
                 case MatchEventTypes.CardPlayed:
                     var playingPlayer = FindPlayer(payload.playerId);
@@ -291,6 +267,49 @@ namespace BiomeRivals.Core
             foreach (var battlefieldObject in player.battlefield ?? Array.Empty<BattlefieldObjectStateDto>())
                 if (battlefieldObject != null && string.Equals(battlefieldObject.instanceId, instanceId, StringComparison.Ordinal)) return battlefieldObject;
             throw new InvalidOperationException($"Event references unknown battlefield object '{instanceId}'.");
+        }
+
+        private void AddBattlefieldObject(PlayerStateDto player, MatchEventPayloadDto payload, string eventName)
+        {
+            if (payload.slotKind != "UNIT" && payload.slotKind != "BUILDING")
+                throw new InvalidOperationException($"{eventName} event contains an invalid slot kind.");
+            if ((payload.slotKind == "UNIT" && payload.cardType != "UNIT") ||
+                (payload.slotKind == "BUILDING" && payload.cardType != "BUILDING" && payload.cardType != "STRUCTURE"))
+                throw new InvalidOperationException($"{eventName} event card type does not match its slot kind.");
+            var slots = payload.slotKind == "UNIT" ? player.unitSlots : player.buildingSlots;
+            var occupiedSlots = Math.Max(1, payload.occupiedSlots);
+            if (payload.slotIndex < 0 || payload.slotIndex + occupiedSlots > slots.Length)
+                throw new InvalidOperationException($"{eventName} event contains an invalid slot range.");
+            for (var index = payload.slotIndex; index < payload.slotIndex + occupiedSlots; index++)
+                if (!string.IsNullOrEmpty(slots[index]))
+                    throw new InvalidOperationException($"{eventName} event overlaps an occupied slot.");
+            foreach (var existing in player.battlefield ?? Array.Empty<BattlefieldObjectStateDto>())
+                if (existing != null && existing.instanceId == payload.instanceId)
+                    throw new InvalidOperationException($"{eventName} event repeats an existing instance id.");
+
+            var battlefield = new List<BattlefieldObjectStateDto>(player.battlefield ?? Array.Empty<BattlefieldObjectStateDto>())
+            {
+                new BattlefieldObjectStateDto
+                {
+                    instanceId = payload.instanceId,
+                    cardId = payload.cardId,
+                    cardType = payload.cardType,
+                    attack = payload.attack,
+                    health = payload.health,
+                    maxHealth = payload.maxHealth,
+                    slotKind = payload.slotKind,
+                    slotIndex = payload.slotIndex,
+                    occupiedSlots = occupiedSlots,
+                    summonedTurn = payload.summonedTurn,
+                    hasAttacked = false,
+                    keywords = payload.keywords ?? Array.Empty<string>(),
+                    temporaryAttackModifier = 0,
+                    temporaryAttackModifierExpiresOnTurn = 0
+                }
+            };
+            player.battlefield = battlefield.ToArray();
+            Current.nextInstanceId = payload.nextInstanceId;
+            for (var index = payload.slotIndex; index < payload.slotIndex + occupiedSlots; index++) slots[index] = payload.instanceId;
         }
 
         private static string RemoveObject(PlayerStateDto player, string instanceId)

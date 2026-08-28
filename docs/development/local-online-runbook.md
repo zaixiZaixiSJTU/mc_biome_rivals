@@ -49,6 +49,7 @@ Windows Development Player 支持以下仅用于自动验证的参数：
 - `-previewMulligan`：离线显示真实卡面与材质化起手调度层，用于视觉回归，不提交规则命令。
 - `-previewTaunt`：离线建立已选攻击者、一个嘲讽目标与一个普通目标，用于检查金色地表强制目标和英雄禁用反馈。
 - `-previewDeathrattle`：离线结算潜影贝死亡并选中生成的潜影壳，用于检查亡语提示、私有手牌卡面和区域计数。
+- `-previewSummon`：离线结算岩浆怪死亡，并在来源释放格生成小型岩浆怪，用于检查公开召唤事件、Minecraft 模型和出生地表脉冲。
 - `-autoOnlineAction`：双方先自动保留全部起手牌；当前行动方随后发送 `ENTER_COMBAT` 与 `END_TURN`，两端等待相同的最终 revision。
 - `-nakamaDeviceId <ID>`：为同机并行实例指定不同设备身份，长度 10–128。
 - `-onlineProbe <json>`：写出 Match ID、观察者 ID、revision、阶段、手牌、能量、生命和双方群系。

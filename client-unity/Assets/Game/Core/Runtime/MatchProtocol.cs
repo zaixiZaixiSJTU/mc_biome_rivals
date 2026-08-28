@@ -26,6 +26,7 @@ namespace BiomeRivals.Core
         public const string MulliganCompleted = "MULLIGAN_COMPLETED";
         public const string MatchStarted = "MATCH_STARTED";
         public const string CardDeployed = "CARD_DEPLOYED";
+        public const string ObjectSummoned = "OBJECT_SUMMONED";
         public const string CardPlayed = "CARD_PLAYED";
         public const string CardDrawn = "CARD_DRAWN";
         public const string CardBurned = "CARD_BURNED";

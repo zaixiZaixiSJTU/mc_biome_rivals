@@ -391,6 +391,61 @@ namespace BiomeRivals.Demo.Tests
         }
 
         [Test]
+        public void LocalMagmaCubeDeathrattleSummonsTokenIntoReleasedSlot()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            Assert.That(registry.TryGetDefinition("nt_001", out var magmaCube), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_008", out var ironGolem), Is.True);
+            match.ResetHand(new[] { magmaCube.id });
+            match.ResetOpponent(new[] { ironGolem });
+            Assert.That(match.TryDeploy(magmaCube, DemoSlotKind.Unit, 2, out _), Is.True);
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            Assert.That(match.ApplyEnterCombat(match.CreateEnterCombatCommand()).Accepted, Is.True);
+
+            var attacker = match.GetObject(true, DemoSlotKind.Unit, 2);
+            var target = match.GetObject(false, DemoSlotKind.Unit, 0);
+            var result = match.ApplyAttack(match.CreateAttackCommand(attacker.InstanceId, "UNIT", target.InstanceId));
+
+            Assert.That(result.Accepted, Is.True);
+            Assert.That(result.Message, Does.Contain("岩浆怪亡语"));
+            Assert.That(result.Message, Does.Contain("单位格 3"));
+            Assert.That(match.UnitSlots[2], Is.EqualTo("tk_014"));
+            var token = match.GetObject(true, DemoSlotKind.Unit, 2);
+            Assert.That(token.CardId, Is.EqualTo("tk_014"));
+            Assert.That(token.Attack, Is.EqualTo(1));
+            Assert.That(token.Health, Is.EqualTo(1));
+            Assert.That(token.SummonedRound, Is.EqualTo(match.Round));
+            Assert.That(match.CanAttackWith(token, out var message), Is.False);
+            Assert.That(message, Does.Contain("冲锋"));
+        }
+
+        [Test]
+        public void LocalSimultaneousMagmaDeathsResolveBothSummonsAfterTheDeathBatch()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            Assert.That(registry.TryGetDefinition("nt_001", out var magmaCube), Is.True);
+            Assert.That(registry.TryGetDefinition("db_006", out var sandstorm), Is.True);
+            match.ResetHand(new[] { magmaCube.id, sandstorm.id });
+            match.ResetOpponent(new[] { magmaCube });
+            Assert.That(match.TryDeploy(magmaCube, DemoSlotKind.Unit, 1, out _), Is.True);
+
+            var result = match.ApplyPlayCard(sandstorm, match.CreatePlayCardCommand(sandstorm.id));
+
+            Assert.That(result.Accepted, Is.True);
+            Assert.That(match.UnitSlots[1], Is.EqualTo("tk_014"));
+            Assert.That(match.OpponentUnitSlots[0], Is.EqualTo("tk_014"));
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 1).CardId, Is.EqualTo("tk_014"));
+            Assert.That(match.GetObject(false, DemoSlotKind.Unit, 0).CardId, Is.EqualTo("tk_014"));
+            var ownMessageIndex = result.Message.IndexOf("岩浆怪亡语", System.StringComparison.Ordinal);
+            var enemyMessageIndex = result.Message.IndexOf("敌方岩浆怪亡语", System.StringComparison.Ordinal);
+            Assert.That(ownMessageIndex, Is.GreaterThanOrEqualTo(0));
+            Assert.That(enemyMessageIndex, Is.GreaterThan(ownMessageIndex));
+        }
+
+        [Test]
         public void LocalCombatCanDefeatOpponentHero()
         {
             var registry = CardContentLoader.Load();
@@ -639,6 +694,8 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(beeTexture, Is.EqualTo("entity_bee"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("nt_003", out var blazeTexture), Is.True);
                 Assert.That(blazeTexture, Is.EqualTo("entity_blaze"));
+                Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("tk_014", out var smallMagmaTexture), Is.True);
+                Assert.That(smallMagmaTexture, Is.EqualTo("entity_magma_cube"));
                 battlefield.SetSlotState(true, DemoSlotKind.Unit, 0, true, false);
                 battlefield.SetSlotHovered(true, DemoSlotKind.Unit, 0, true);
                 Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.EqualTo(0.78f).Within(0.001f));
