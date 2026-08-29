@@ -25,7 +25,7 @@ npm run smoke:integration --workspace server-nakama
 
 默认参数与 `docker-compose.yml` 一致：
 
-- HTTP `127.0.0.1:7350`
+- HTTP `127.0.0.1:17350`（映射到容器内标准端口 `7350`）
 - server key `local_only_change_me`
 - 两人严格匹配
 - 匹配超时 30 秒

@@ -5,7 +5,7 @@ import WebSocket from 'ws';
 globalThis.WebSocket = WebSocket;
 
 const host = process.env.BIOME_RIVALS_NAKAMA_HOST || '127.0.0.1';
-const port = process.env.BIOME_RIVALS_NAKAMA_PORT || '7350';
+const port = process.env.BIOME_RIVALS_NAKAMA_PORT || '17350';
 const serverKey = process.env.BIOME_RIVALS_NAKAMA_SERVER_KEY || 'local_only_change_me';
 const timeoutMs = Number(process.env.BIOME_RIVALS_SMOKE_TIMEOUT_MS || 30000);
 

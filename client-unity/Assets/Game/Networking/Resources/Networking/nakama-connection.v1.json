@@ -1,7 +1,7 @@
 {
   "scheme": "http",
   "host": "127.0.0.1",
-  "port": 7350,
+  "port": 17350,
   "serverKey": "local_only_change_me",
   "requestTimeoutSeconds": 10,
   "matchmakingTimeoutSeconds": 30,

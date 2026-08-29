@@ -10,7 +10,7 @@ namespace BiomeRivals.Networking
 
         public string scheme = "http";
         public string host = "127.0.0.1";
-        public int port = 7350;
+        public int port = 17350;
         public string serverKey = "local_only_change_me";
         public int requestTimeoutSeconds = 10;
         public int matchmakingTimeoutSeconds = 30;

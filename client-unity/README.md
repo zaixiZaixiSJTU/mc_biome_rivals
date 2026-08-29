@@ -18,7 +18,7 @@
 
 ## 本地联机
 
-默认连接参数位于 `Assets/Game/Networking/Resources/Networking/nakama-connection.v1.json`，与根目录 `docker-compose.yml` 对齐。主机、端口、协议和 server key 可分别用 `BIOME_RIVALS_NAKAMA_HOST`、`BIOME_RIVALS_NAKAMA_PORT`、`BIOME_RIVALS_NAKAMA_SCHEME`、`BIOME_RIVALS_NAKAMA_SERVER_KEY` 覆盖。
+默认连接参数位于 `Assets/Game/Networking/Resources/Networking/nakama-connection.v1.json`，与根目录 `docker-compose.yml` 对齐；本机 HTTP 端口为 `17350`，映射到容器内 Nakama 标准端口 `7350`，以避开 Windows Hyper-V 常见的 `73xx` 保留段。主机、端口、协议和 server key 可分别用 `BIOME_RIVALS_NAKAMA_HOST`、`BIOME_RIVALS_NAKAMA_PORT`、`BIOME_RIVALS_NAKAMA_SCHEME`、`BIOME_RIVALS_NAKAMA_SERVER_KEY` 覆盖。
 
 Demo 顶部的联机状态条用于认证、Socket、匹配、权威 Match 加入和重连。点击联机时会把当前己方群系作为 `factionId` 匹配属性提交，并在连接生命周期结束前锁定阵营选择；对手阵营由另一名玩家独立选择，不能由本机预设。收到私有快照后，`DemoOnlineMatchSession` 会切换到权威棋盘视图；双方群系、手牌、能量、生命、阶段、双排槽位与生物状态均来自 `MatchStateStore`。部署、施法、进入战斗、攻击和结束回合不做本地乐观结算，必须等 `acknowledgedCommandId` 对应的事件批次后才更新界面。
 
