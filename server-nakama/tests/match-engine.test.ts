@@ -928,6 +928,128 @@ TestHarness.test('sends Husk loot to the killers public discard when its hand is
   TestHarness.equal(projected.payload.cardId, 'tk_005');
 });
 
+TestHarness.test('resolves Dungeon Skeleton deathrattle damage before its Bone drop', function (): void {
+  const state = activeState('match-1', ['alice', 'bob']);
+  state.turn = 2;
+  state.phase = 'COMBAT';
+  state.nextInstanceId = 3;
+  state.players[0]!.hand = [];
+  state.players[1]!.hand = [];
+  placeUnit(state, 0, 'pf_008', 0, 'object-1', 1);
+  placeUnit(state, 1, 'cd_003', 0, 'object-2', 1);
+
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', attackCommand('dungeon-skeleton-death', 0, 'object-1', 'UNIT', 'object-2'));
+  TestHarness.equal(result.accepted, true);
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[0]!.battlefield[0]!.health, 3);
+  TestHarness.equal(result.state.players[0]!.hand[0], 'tk_009');
+  TestHarness.equal(result.state.players[1]!.discardPile[0], 'cd_003');
+  TestHarness.equal(result.batch.events[0]!.type, 'ATTACK_RESOLVED');
+  TestHarness.equal(result.batch.events[1]!.type, 'OBJECT_DIED');
+  TestHarness.equal(result.batch.events[2]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(result.batch.events[2]!.payload.sourceCardId, 'cd_003');
+  TestHarness.equal(result.batch.events[2]!.payload.sourceInstanceId, 'object-2');
+  TestHarness.equal(result.batch.events[2]!.payload.effectId, 'effect.cd_003.01');
+  TestHarness.equal(result.batch.events[2]!.payload.instanceId, 'object-1');
+  TestHarness.equal(result.batch.events[2]!.payload.health, 3);
+  TestHarness.equal(result.batch.events[3]!.type, 'CARD_GENERATED');
+  TestHarness.equal(result.batch.events[3]!.payload.playerId, 'alice');
+  TestHarness.equal(result.batch.events[3]!.payload.cardId, 'tk_009');
+});
+
+TestHarness.test('skips Dungeon Skeleton deathrattle when simultaneous combat leaves no legal enemy unit', function (): void {
+  const state = activeState('match-1', ['alice', 'bob']);
+  state.turn = 2;
+  state.phase = 'COMBAT';
+  state.nextInstanceId = 3;
+  state.players[0]!.hand = [];
+  placeUnit(state, 0, 'pf_003', 0, 'object-1', 1);
+  placeUnit(state, 1, 'cd_003', 0, 'object-2', 1);
+
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', attackCommand('dungeon-skeleton-no-target', 0, 'object-1', 'UNIT', 'object-2'));
+  TestHarness.equal(result.accepted, true);
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[0]!.battlefield.length, 0);
+  TestHarness.equal(result.state.players[1]!.battlefield.length, 0);
+  TestHarness.equal(result.state.players[0]!.hand[0], 'tk_009');
+  TestHarness.equal(result.batch.events.some(function (event): boolean {
+    return event.type === 'OBJECT_STATS_CHANGED' && event.payload.effectId === 'effect.cd_003.01';
+  }), false);
+});
+
+TestHarness.test('records a repeatable legal random target for Dungeon Skeleton deathrattle', function (): void {
+  const initial = activeState('repeatable-random-match', ['alice', 'bob']);
+  initial.turn = 2;
+  initial.phase = 'COMBAT';
+  initial.nextInstanceId = 4;
+  initial.players[0]!.hand = [];
+  initial.players[1]!.hand = [];
+  placeUnit(initial, 0, 'pf_008', 0, 'object-1', 1);
+  placeUnit(initial, 0, 'pf_001', 3, 'object-2', 1);
+  placeUnit(initial, 1, 'cd_003', 0, 'object-3', 1);
+  const leftState = JSON.parse(JSON.stringify(initial)) as BiomeRivalsRules.MatchState;
+  const rightState = JSON.parse(JSON.stringify(initial)) as BiomeRivalsRules.MatchState;
+
+  const left = BiomeRivalsRules.applyCommand(leftState, 'alice', attackCommand('repeatable-random', 0, 'object-1', 'UNIT', 'object-3'));
+  const right = BiomeRivalsRules.applyCommand(rightState, 'alice', attackCommand('repeatable-random', 0, 'object-1', 'UNIT', 'object-3'));
+  TestHarness.equal(left.accepted, true);
+  TestHarness.equal(right.accepted, true);
+  if (!left.accepted || !right.accepted) return;
+  const leftDamage = left.batch.events.filter(function (event): boolean {
+    return event.type === 'OBJECT_STATS_CHANGED' && event.payload.effectId === 'effect.cd_003.01';
+  })[0]!;
+  const rightDamage = right.batch.events.filter(function (event): boolean {
+    return event.type === 'OBJECT_STATS_CHANGED' && event.payload.effectId === 'effect.cd_003.01';
+  })[0]!;
+  TestHarness.equal(leftDamage.payload.instanceId, rightDamage.payload.instanceId);
+  TestHarness.equal(leftDamage.payload.instanceId === 'object-1' || leftDamage.payload.instanceId === 'object-2', true);
+});
+
+TestHarness.test('propagates Dungeon Skeleton deathrattle kill credit into a chained Husk drop', function (): void {
+  const state = activeState('match-1', ['alice', 'bob']);
+  state.turn = 2;
+  state.phase = 'COMBAT';
+  state.nextInstanceId = 4;
+  state.players[0]!.hand = [];
+  state.players[1]!.hand = [];
+  placeUnit(state, 0, 'pf_003', 0, 'object-1', 1);
+  placeUnit(state, 0, 'db_001', 1, 'object-2', 1);
+  placeUnit(state, 1, 'cd_003', 0, 'object-3', 1);
+
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', attackCommand('chained-loot', 0, 'object-1', 'UNIT', 'object-3'));
+  TestHarness.equal(result.accepted, true);
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[0]!.battlefield.length, 0);
+  TestHarness.equal(result.state.players[1]!.battlefield.length, 0);
+  TestHarness.equal(result.state.players[0]!.hand[0], 'tk_009');
+  TestHarness.equal(result.state.players[1]!.hand[0], 'tk_005');
+  const eventTypes = result.batch.events.map(function (event): string { return event.type; });
+  TestHarness.equal(eventTypes.join(','), 'ATTACK_RESOLVED,OBJECT_DIED,OBJECT_DIED,OBJECT_STATS_CHANGED,CARD_GENERATED,OBJECT_DIED,CARD_GENERATED');
+  TestHarness.equal(result.batch.events[3]!.payload.instanceId, 'object-2');
+  TestHarness.equal(result.batch.events[4]!.payload.cardId, 'tk_009');
+  TestHarness.equal(result.batch.events[6]!.payload.cardId, 'tk_005');
+  TestHarness.equal(result.batch.events[6]!.payload.playerId, 'bob');
+});
+
+TestHarness.test('awards Wool when an enemy kills a Grazing Sheep', function (): void {
+  const state = activeState('match-1', ['alice', 'bob']);
+  state.turn = 2;
+  state.phase = 'COMBAT';
+  state.nextInstanceId = 3;
+  state.players[0]!.hand = [];
+  placeUnit(state, 0, 'pf_008', 0, 'object-1', 1);
+  placeUnit(state, 1, 'pf_002', 0, 'object-2', 1);
+
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', attackCommand('sheep-drop', 0, 'object-1', 'UNIT', 'object-2'));
+  TestHarness.equal(result.accepted, true);
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[0]!.hand[0], 'tk_001');
+  const generated = result.batch.events.filter(function (event): boolean { return event.type === 'CARD_GENERATED'; })[0]!;
+  TestHarness.equal(generated.payload.sourceCardId, 'pf_002');
+  TestHarness.equal(generated.payload.effectId, 'effect.pf_002.01');
+  TestHarness.equal(generated.payload.cardId, 'tk_001');
+});
+
 TestHarness.test('rejects summoning sickness and duplicate attacks', function (): void {
   const state = activeState('match-1', ['alice', 'bob']);
   state.turn = 2;

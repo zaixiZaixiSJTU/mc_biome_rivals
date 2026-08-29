@@ -526,27 +526,36 @@ namespace BiomeRivalsRules {
       nonCurrentPlayer: PlayerState,
       killCredits?: { [instanceId: string]: string }
     ): void {
+      const resolvedKillCredits = killCredits || {};
       while (true) {
         const currentDeaths = removeDeadObjects(currentPlayer);
         const nonCurrentDeaths = removeDeadObjects(nonCurrentPlayer);
         if (currentDeaths.length === 0 && nonCurrentDeaths.length === 0) return;
         for (let index = 0; index < currentDeaths.length; index += 1) {
           const object = currentDeaths[index]!;
-          resolveDeathTriggers(currentPlayer, object, killCredits && killCredits[object.instanceId]);
+          resolveDeathTriggers(currentPlayer, object, resolvedKillCredits);
         }
         for (let index = 0; index < nonCurrentDeaths.length; index += 1) {
           const object = nonCurrentDeaths[index]!;
-          resolveDeathTriggers(nonCurrentPlayer, object, killCredits && killCredits[object.instanceId]);
+          resolveDeathTriggers(nonCurrentPlayer, object, resolvedKillCredits);
         }
       }
     }
 
-    function resolveDeathTriggers(player: PlayerState, object: BattlefieldObjectState, killerPlayerId?: string): void {
-      resolveDeathrattles(player, object);
-      resolveDrops(player, object, killerPlayerId);
+    function resolveDeathTriggers(
+      player: PlayerState,
+      object: BattlefieldObjectState,
+      killCredits: { [instanceId: string]: string }
+    ): void {
+      resolveDeathrattles(player, object, killCredits);
+      resolveDrops(player, object, killCredits[object.instanceId]);
     }
 
-    function resolveDeathrattles(player: PlayerState, object: BattlefieldObjectState): void {
+    function resolveDeathrattles(
+      player: PlayerState,
+      object: BattlefieldObjectState,
+      killCredits: { [instanceId: string]: string }
+    ): void {
       const definition = getCardDefinition(object.cardId);
       if (definition === null || definition.effectImplementationStatus !== 'IMPLEMENTED') return;
       if (definition.effectIds.indexOf('effect.ed_004.01') >= 0) {
@@ -555,18 +564,55 @@ namespace BiomeRivalsRules {
       if (definition.effectIds.indexOf('effect.nt_001.01') >= 0) {
         summonUnit(player, 'tk_014', object.cardId, object.instanceId, 'effect.nt_001.01', object.slotIndex);
       }
+      if (definition.effectIds.indexOf('effect.cd_003.01') >= 0) {
+        const enemy = next.players.filter(function (candidate): boolean {
+          return candidate.playerId !== player.playerId;
+        })[0];
+        if (!enemy) throw new Error('deathrattle owner has no opposing player: ' + player.playerId);
+        const candidates = enemy.battlefield.filter(function (candidate): boolean {
+          return candidate.cardType === 'UNIT' && candidate.health > 0;
+        });
+        candidates.sort(function (left, right): number {
+          if (left.slotIndex !== right.slotIndex) return left.slotIndex - right.slotIndex;
+          return left.instanceId < right.instanceId ? -1 : left.instanceId > right.instanceId ? 1 : 0;
+        });
+        if (candidates.length > 0) {
+          const randomIndex = (seedFromText(
+            next.matchId + ':deathrattle:' + object.instanceId + ':' + next.lastEventId
+          ) >>> 0) % candidates.length;
+          const target = candidates[randomIndex]!;
+          target.health = Math.max(0, target.health - 1);
+          if (target.health === 0) killCredits[target.instanceId] = player.playerId;
+          emit('OBJECT_STATS_CHANGED', {
+            playerId: enemy.playerId,
+            instanceId: target.instanceId,
+            sourceCardId: object.cardId,
+            sourceInstanceId: object.instanceId,
+            effectId: 'effect.cd_003.01',
+            reason: 'DAMAGE',
+            attack: target.attack,
+            health: target.health,
+            temporaryAttackModifier: target.temporaryAttackModifier,
+            temporaryAttackModifierExpiresOnTurn: target.temporaryAttackModifierExpiresOnTurn
+          });
+        }
+      }
     }
 
     function resolveDrops(player: PlayerState, object: BattlefieldObjectState, killerPlayerId?: string): void {
       if (!killerPlayerId || killerPlayerId === player.playerId) return;
       const definition = getCardDefinition(object.cardId);
-      if (definition === null || definition.effectImplementationStatus !== 'IMPLEMENTED' ||
-          definition.effectIds.indexOf('effect.db_001.01') < 0) return;
+      if (definition === null || definition.effectImplementationStatus !== 'IMPLEMENTED') return;
+      let dropCardId: string | null = null;
+      if (definition.effectIds.indexOf('effect.db_001.01') >= 0) dropCardId = 'tk_005';
+      else if (definition.effectIds.indexOf('effect.pf_002.01') >= 0) dropCardId = 'tk_001';
+      else if (definition.effectIds.indexOf('effect.cd_003.01') >= 0) dropCardId = 'tk_009';
+      if (dropCardId === null) return;
       const killer = next.players.filter(function (candidate): boolean {
         return candidate.playerId === killerPlayerId;
       })[0];
       if (!killer) throw new Error('drop killer is not a match player: ' + killerPlayerId);
-      generateCard(killer, 'tk_005', object.cardId, object.instanceId, 'effect.db_001.01');
+      generateCard(killer, dropCardId, object.cardId, object.instanceId, definition.effectIds[0]!);
     }
 
     function summonUnit(

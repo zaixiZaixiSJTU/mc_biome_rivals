@@ -575,6 +575,112 @@ namespace BiomeRivals.Demo.Tests
         }
 
         [Test]
+        public void LocalDungeonSkeletonDeathrattleDamagesBeforeDroppingBone()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            Assert.That(registry.TryGetDefinition("pf_008", out var ironGolem), Is.True);
+            Assert.That(registry.TryGetDefinition("cd_003", out var dungeonSkeleton), Is.True);
+            Assert.That(dungeonSkeleton.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+            match.ResetDeckAndHand(new[] { ironGolem.id }, new string[0]);
+            match.ResetOpponent(new[] { dungeonSkeleton });
+            Assert.That(match.TryDeploy(ironGolem, DemoSlotKind.Unit, 0, out _), Is.True);
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            Assert.That(match.ApplyEnterCombat(match.CreateEnterCombatCommand()).Accepted, Is.True);
+
+            var attacker = match.GetObject(true, DemoSlotKind.Unit, 0);
+            var target = match.GetObject(false, DemoSlotKind.Unit, 0);
+            var result = match.ApplyAttack(match.CreateAttackCommand(attacker.InstanceId, "UNIT", target.InstanceId));
+
+            Assert.That(result.Accepted, Is.True);
+            Assert.That(attacker.Health, Is.EqualTo(3));
+            Assert.That(match.Hand, Is.EqualTo(new[] { "tk_009" }));
+            var deathrattleIndex = result.Message.IndexOf("地牢骷髅亡语", System.StringComparison.Ordinal);
+            var dropIndex = result.Message.IndexOf("地牢骷髅掉落", System.StringComparison.Ordinal);
+            Assert.That(deathrattleIndex, Is.GreaterThanOrEqualTo(0));
+            Assert.That(dropIndex, Is.GreaterThan(deathrattleIndex));
+        }
+
+        [Test]
+        public void LocalDungeonSkeletonSkipsDeathrattleWithoutALegalEnemyUnit()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            Assert.That(registry.TryGetDefinition("pf_003", out var wolf), Is.True);
+            Assert.That(registry.TryGetDefinition("cd_003", out var dungeonSkeleton), Is.True);
+            match.ResetDeckAndHand(new[] { wolf.id }, new string[0]);
+            match.ResetOpponent(new[] { dungeonSkeleton });
+            Assert.That(match.TryDeploy(wolf, DemoSlotKind.Unit, 0, out _), Is.True);
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            Assert.That(match.ApplyEnterCombat(match.CreateEnterCombatCommand()).Accepted, Is.True);
+
+            var attacker = match.GetObject(true, DemoSlotKind.Unit, 0);
+            var target = match.GetObject(false, DemoSlotKind.Unit, 0);
+            var result = match.ApplyAttack(match.CreateAttackCommand(attacker.InstanceId, "UNIT", target.InstanceId));
+
+            Assert.That(result.Accepted, Is.True);
+            Assert.That(match.PlayerBattlefield, Is.Empty);
+            Assert.That(match.OpponentBattlefield, Is.Empty);
+            Assert.That(match.Hand, Is.EqualTo(new[] { "tk_009" }));
+            Assert.That(result.Message, Does.Not.Contain("地牢骷髅亡语"));
+            Assert.That(result.Message, Does.Contain("地牢骷髅掉落"));
+        }
+
+        [Test]
+        public void LocalDungeonSkeletonPropagatesAChainedHuskKillCredit()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            Assert.That(registry.TryGetDefinition("pf_003", out var wolf), Is.True);
+            Assert.That(registry.TryGetDefinition("db_001", out var husk), Is.True);
+            Assert.That(registry.TryGetDefinition("cd_003", out var dungeonSkeleton), Is.True);
+            match.ResetDeckAndHand(new[] { wolf.id, husk.id }, new string[0]);
+            match.ResetOpponent(new[] { dungeonSkeleton });
+            Assert.That(match.TryDeploy(wolf, DemoSlotKind.Unit, 0, out _), Is.True);
+            Assert.That(match.TryDeploy(husk, DemoSlotKind.Unit, 1, out _), Is.True);
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            Assert.That(match.ApplyEnterCombat(match.CreateEnterCombatCommand()).Accepted, Is.True);
+
+            var attacker = match.GetObject(true, DemoSlotKind.Unit, 0);
+            var target = match.GetObject(false, DemoSlotKind.Unit, 0);
+            var result = match.ApplyAttack(match.CreateAttackCommand(attacker.InstanceId, "UNIT", target.InstanceId));
+
+            Assert.That(result.Accepted, Is.True);
+            Assert.That(match.PlayerBattlefield, Is.Empty);
+            Assert.That(match.OpponentBattlefield, Is.Empty);
+            Assert.That(match.Hand, Is.EqualTo(new[] { "tk_009" }));
+            Assert.That(match.OpponentHandCount, Is.EqualTo(6));
+            Assert.That(result.Message, Does.Contain("对手获得一张腐肉"));
+        }
+
+        [Test]
+        public void LocalGrazingSheepDropsWoolToItsEnemyKiller()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            Assert.That(registry.TryGetDefinition("pf_008", out var ironGolem), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_002", out var sheep), Is.True);
+            Assert.That(sheep.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+            match.ResetDeckAndHand(new[] { ironGolem.id }, new string[0]);
+            match.ResetOpponent(new[] { sheep });
+            Assert.That(match.TryDeploy(ironGolem, DemoSlotKind.Unit, 0, out _), Is.True);
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            Assert.That(match.ApplyEnterCombat(match.CreateEnterCombatCommand()).Accepted, Is.True);
+
+            var attacker = match.GetObject(true, DemoSlotKind.Unit, 0);
+            var target = match.GetObject(false, DemoSlotKind.Unit, 0);
+            var result = match.ApplyAttack(match.CreateAttackCommand(attacker.InstanceId, "UNIT", target.InstanceId));
+
+            Assert.That(result.Accepted, Is.True);
+            Assert.That(match.Hand, Is.EqualTo(new[] { "tk_001" }));
+            Assert.That(result.Message, Does.Contain("放牧绵羊掉落"));
+        }
+
+        [Test]
         public void LocalCombatAllowsChargeOnTheSummonedRound()
         {
             var registry = CardContentLoader.Load();

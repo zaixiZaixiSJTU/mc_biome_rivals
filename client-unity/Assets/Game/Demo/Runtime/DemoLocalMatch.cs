@@ -784,9 +784,10 @@ namespace BiomeRivals.Demo
             return deadObjects;
         }
 
-        private List<string> SettleDeaths(IReadOnlyDictionary<string, bool> killCredits = null)
+        private List<string> SettleDeaths(IDictionary<string, bool> killCredits = null)
         {
             var messages = new List<string>();
+            var resolvedKillCredits = killCredits ?? new Dictionary<string, bool>(StringComparer.Ordinal);
             while (true)
             {
                 var playerDeaths = RemoveDeadObjects(_playerBattlefield, UnitSlots, BuildingSlots);
@@ -794,46 +795,72 @@ namespace BiomeRivals.Demo
                 if (playerDeaths.Count == 0 && opponentDeaths.Count == 0) return messages;
                 foreach (var value in playerDeaths)
                 {
-                    var message = ResolveLocalDeathrattle(value);
+                    var message = ResolveLocalDeathrattle(value, resolvedKillCredits);
                     if (!string.IsNullOrEmpty(message)) messages.Add(message);
-                    message = ResolveLocalDrop(value, killCredits);
+                    message = ResolveLocalDrop(value, resolvedKillCredits);
                     if (!string.IsNullOrEmpty(message)) messages.Add(message);
                 }
                 foreach (var value in opponentDeaths)
                 {
-                    var message = ResolveLocalDeathrattle(value);
+                    var message = ResolveLocalDeathrattle(value, resolvedKillCredits);
                     if (!string.IsNullOrEmpty(message)) messages.Add(message);
-                    message = ResolveLocalDrop(value, killCredits);
+                    message = ResolveLocalDrop(value, resolvedKillCredits);
                     if (!string.IsNullOrEmpty(message)) messages.Add(message);
                 }
             }
         }
 
-        private string ResolveLocalDrop(DemoBattlefieldObject value, IReadOnlyDictionary<string, bool> killCredits)
+        private string ResolveLocalDrop(DemoBattlefieldObject value, IDictionary<string, bool> killCredits)
         {
-            if (value.CardId != "db_001" || killCredits == null ||
-                !killCredits.TryGetValue(value.InstanceId, out var killerIsPlayer) || killerIsPlayer == value.Player)
+            if (killCredits == null || !killCredits.TryGetValue(value.InstanceId, out var killerIsPlayer) || killerIsPlayer == value.Player)
                 return string.Empty;
+            string dropCardId;
+            string sourceName;
+            string dropName;
+            switch (value.CardId)
+            {
+                case "db_001": dropCardId = "tk_005"; sourceName = "尸壳"; dropName = "腐肉"; break;
+                case "pf_002": dropCardId = "tk_001"; sourceName = "放牧绵羊"; dropName = "羊毛"; break;
+                case "cd_003": dropCardId = "tk_009"; sourceName = "地牢骷髅"; dropName = "骨头"; break;
+                default: return string.Empty;
+            }
             if (killerIsPlayer)
             {
                 if (_hand.Count < 7)
                 {
-                    _hand.Add("tk_005");
-                    return "尸壳掉落：腐肉已置入你的手牌。";
+                    _hand.Add(dropCardId);
+                    return $"{sourceName}掉落：{dropName}已置入你的手牌。";
                 }
-                _discardPile.Add("tk_005");
-                return "尸壳掉落：手牌已满，腐肉进入弃牌堆。";
+                _discardPile.Add(dropCardId);
+                return $"{sourceName}掉落：手牌已满，{dropName}进入弃牌堆。";
             }
             if (_opponentHandCount < 7)
             {
                 _opponentHandCount++;
-                return "己方尸壳被敌方击杀：对手获得一张腐肉。";
+                return $"己方{sourceName}被敌方击杀：对手获得一张{dropName}。";
             }
-            return "己方尸壳被敌方击杀：对手手牌已满，腐肉进入弃牌堆。";
+            return $"己方{sourceName}被敌方击杀：对手手牌已满，{dropName}进入弃牌堆。";
         }
 
-        private string ResolveLocalDeathrattle(DemoBattlefieldObject value)
+        private string ResolveLocalDeathrattle(DemoBattlefieldObject value, IDictionary<string, bool> killCredits)
         {
+            if (value.CardId == "cd_003")
+            {
+                var enemyBattlefield = value.Player ? _opponentBattlefield : _playerBattlefield;
+                var candidates = enemyBattlefield
+                    .Where(candidate => candidate.SlotKind == DemoSlotKind.Unit && candidate.Health > 0)
+                    .OrderBy(candidate => candidate.SlotIndex)
+                    .ThenBy(candidate => candidate.InstanceId, StringComparer.Ordinal)
+                    .ToArray();
+                if (candidates.Length == 0) return string.Empty;
+                var seed = SeedFromText($"{Round}:deathrattle:{value.InstanceId}:{Revision}");
+                var target = candidates[(int)((uint)seed % candidates.Length)];
+                target.Health = Math.Max(0, target.Health - 1);
+                if (target.Health == 0) killCredits[target.InstanceId] = value.Player;
+                return value.Player
+                    ? "地牢骷髅亡语：随机对一个敌方生物造成 1 点伤害。"
+                    : "敌方地牢骷髅亡语：随机对一个己方生物造成 1 点伤害。";
+            }
             if (value.CardId == "ed_004")
             {
                 if (value.Player)
@@ -884,6 +911,16 @@ namespace BiomeRivals.Demo
                     : $"敌方岩浆怪亡语：小型岩浆怪已在单位格 {slotIndex + 1} 召唤。";
             }
             return string.Empty;
+        }
+
+        private static int SeedFromText(string value)
+        {
+            unchecked
+            {
+                var seed = 17;
+                foreach (var character in value) seed = seed * 31 + character;
+                return seed;
+            }
         }
 
         private void AcceptCommand(MatchCommandDto command)

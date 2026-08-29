@@ -154,6 +154,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewRaiderDiscount")) SetupRaiderDiscountPreview();
             else if (HasCommandLineFlag("-previewArchaeology")) SetupArchaeologyPreview();
             else if (HasCommandLineFlag("-previewLoot")) SetupLootPreview();
+            else if (HasCommandLineFlag("-previewDungeonSkeleton")) SetupDungeonSkeletonPreview();
             else if (HasCommandLineFlag("-previewCombat")) OnEndTurn();
             if (HasCommandLineFlag("-previewGroundHover")) _battlefield.SetSlotHovered(true, DemoSlotKind.Unit, 0, true);
             var capturePath = GetCommandLineValue("-captureDemo");
@@ -591,7 +592,9 @@ namespace BiomeRivals.Demo
                     var generatedName = string.IsNullOrEmpty(matchEvent.payload?.cardId)
                         ? "一张牌"
                         : GetCardName(matchEvent.payload.cardId);
-                    var isLoot = matchEvent.payload?.effectId == "effect.db_001.01";
+                    var isLoot = matchEvent.payload?.effectId == "effect.db_001.01" ||
+                        matchEvent.payload?.effectId == "effect.pf_002.01" ||
+                        matchEvent.payload?.effectId == "effect.cd_003.01";
                     var triggerName = isLoot ? "掉落" : matchEvent.payload?.effectId == "effect.ed_004.01" ? "亡语" : "效果";
                     if (generatedToHand)
                     {
@@ -634,6 +637,15 @@ namespace BiomeRivals.Demo
                         yield return PulsePlayerHud(Cyan);
                     break;
                 case MatchEventTypes.ObjectStatsChanged:
+                    if (matchEvent.payload?.effectId == "effect.cd_003.01")
+                    {
+                        var damageViewerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
+                        var hitFriendly = matchEvent.payload?.playerId == damageViewerId;
+                        ShowStatus(hitFriendly
+                            ? "敌方地牢骷髅亡语：随机命中一个己方生物并造成 1 点伤害。"
+                            : "地牢骷髅亡语：随机命中一个敌方生物并造成 1 点伤害。", false);
+                        yield return ShowTurnBanner("亡语", Ember);
+                    }
                     yield return PulseBattlefieldObject(matchEvent.payload?.instanceId);
                     break;
                 default:
@@ -896,6 +908,34 @@ namespace BiomeRivals.Demo
             }
             _selectedAttackerInstanceId = null;
             _selectedCardId = result.Accepted && _match.Hand.Contains("tk_005") ? "tk_005" : null;
+            RefreshAll();
+            ShowStatus(result.Message, !result.Accepted);
+            if (result.Accepted) StartCoroutine(PulseBattlefieldObject(attacker.InstanceId));
+        }
+
+        private void SetupDungeonSkeletonPreview()
+        {
+            SelectFaction("plains_forest");
+            SelectOpponentFaction("cave_dark_forest");
+            if (!_registry.TryGetDefinition("pf_008", out var ironGolemDefinition) ||
+                !_registry.TryGetDefinition("cd_003", out var skeletonDefinition)) return;
+            _match.ResetDeckAndHand(new[] { ironGolemDefinition.id }, Array.Empty<string>());
+            _match.ResetOpponent(new[] { skeletonDefinition });
+            if (!_match.TryDeploy(ironGolemDefinition, DemoSlotKind.Unit, 0, out _)) return;
+            _match.EndPlayerTurn();
+            _match.BeginNextPlayerTurn();
+            if (!_match.ApplyEnterCombat(_match.CreateEnterCombatCommand()).Accepted) return;
+            var attacker = _match.GetObject(true, DemoSlotKind.Unit, 0);
+            var target = _match.GetObject(false, DemoSlotKind.Unit, 0);
+            if (attacker == null || target == null) return;
+            var result = _match.ApplyAttack(_match.CreateAttackCommand(attacker.InstanceId, "UNIT", target.InstanceId));
+            if (result.Accepted)
+            {
+                _match.EndPlayerTurn();
+                _match.BeginNextPlayerTurn();
+            }
+            _selectedAttackerInstanceId = null;
+            _selectedCardId = result.Accepted && _match.Hand.Contains("tk_009") ? "tk_009" : null;
             RefreshAll();
             ShowStatus(result.Message, !result.Accepted);
             if (result.Accepted) StartCoroutine(PulseBattlefieldObject(attacker.InstanceId));

@@ -98,6 +98,8 @@ DB-005 的动态费用直接复用卡面左上角费用槽，不增加独立 Web
 
 尸壳掉落预览：[`assets/demo-loot-drop-preview-v1.png`](assets/demo-loot-drop-preview-v1.png)。铁傀儡击杀敌方尸壳后，腐肉作为战利品进入击杀者手牌并复用完整卡面/详情组件；底部状态明确显示伤害、反击、死亡和掉落结果。联机表现沿用 `CARD_GENERATED` 的私有手牌投影，并以金色“战利品”横幅区分于亡语。
 
+地牢骷髅连锁预览：[`assets/demo-dungeon-skeleton-preview-v1.png`](assets/demo-dungeon-skeleton-preview-v1.png)。铁傀儡击杀地牢骷髅后，亡语先随机命中一个仍存活的合法敌方生物，再结算骨头掉落；伤害后的 5/3 铁傀儡保留在真实地表，骨头在手牌和详情视图中复用同一雪原材质卡面。状态板按实际事件顺序逐行呈现攻击、亡语与掉落。
+
 岩浆怪召唤预览：[`assets/demo-magma-summon-preview-v1.png`](assets/demo-magma-summon-preview-v1.png)。同批死亡对象先全部离场，随后小型岩浆怪以新的稳定实例 ID 出现在来源释放格；模型复用 Minecraft 岩浆怪纹理与分层方块结构，并缩放为成体的 `62%`，出生位置通过真实地表材质短促发光。
 
 多格结构部署预览：[`assets/demo-structure-placement-preview-v1.png`](assets/demo-structure-placement-preview-v1.png)。选中两格“沙漠神殿”后，建筑格 1—2 的真实地表作为一个候选范围同步变金；右侧提示同时给出占格数和确切格号。[`非法起点预览`](assets/demo-structure-placement-invalid-preview-v1.png) 使用高饱和深红地表和红色原因文字反馈越界，[`落地结构预览`](assets/demo-structure-deployed-preview-v1.png) 则证明一个实例模型居中横跨建筑格 1—2。重叠与三格结构释放另由规则/回放测试覆盖。
