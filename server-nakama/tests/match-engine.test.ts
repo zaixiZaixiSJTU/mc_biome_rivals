@@ -360,6 +360,7 @@ TestHarness.test('resolves an archaeology choice into excavation and a normal dr
   TestHarness.equal(JSON.stringify(result.state.players[0]!.hand), JSON.stringify(['tk_006', 'db_004']));
   TestHarness.equal(JSON.stringify(result.state.players[0]!.deck), JSON.stringify(['db_001', 'db_002']));
   TestHarness.equal(result.state.players[0]!.buriedCardIds.length, 0);
+  TestHarness.equal(result.state.players[0]!.excavatedThisTurn, true);
   TestHarness.equal(result.state.players[0]!.armor, 1);
   TestHarness.equal(result.batch.events.length, 4);
   TestHarness.equal(result.batch.events[0]!.type, 'CHOICE_RESOLVED');
@@ -367,6 +368,41 @@ TestHarness.test('resolves an archaeology choice into excavation and a normal dr
   TestHarness.equal(result.batch.events[2]!.type, 'ARMOR_GAINED');
   TestHarness.equal(result.batch.events[3]!.type, 'CARD_DRAWN');
   TestHarness.equal(BiomeRivalsRules.validateState(result.state).length, 0);
+});
+
+TestHarness.test('discounts the Badlands Raider only after an excavation in the active turn', function (): void {
+  const withoutExcavation = activeState('match-1', ['alice', 'bob'], ['desert_badlands', 'nether']);
+  withoutExcavation.players[0]!.hand = ['db_005'];
+  withoutExcavation.players[0]!.redstone = 2;
+  withoutExcavation.players[0]!.redstoneCapacity = 2;
+  const rejected = BiomeRivalsRules.applyCommand(
+    withoutExcavation, 'alice', deployCommand('raider-full-cost', 0, 'db_005', 'UNIT', 0));
+  TestHarness.equal(rejected.accepted, false);
+  if (!rejected.accepted) TestHarness.equal(rejected.code, 'INSUFFICIENT_REDSTONE');
+  TestHarness.equal(withoutExcavation.players[0]!.redstone, 2, 'a rejected dynamic cost must be atomic');
+
+  const afterExcavation = activeState('match-1', ['alice', 'bob'], ['desert_badlands', 'nether']);
+  afterExcavation.players[0]!.hand = ['db_005'];
+  afterExcavation.players[0]!.redstone = 2;
+  afterExcavation.players[0]!.redstoneCapacity = 2;
+  afterExcavation.players[0]!.excavatedThisTurn = true;
+  const discounted = BiomeRivalsRules.applyCommand(
+    afterExcavation, 'alice', deployCommand('raider-discounted', 0, 'db_005', 'UNIT', 0));
+  TestHarness.ok(discounted.accepted);
+  if (!discounted.accepted) return;
+  TestHarness.equal(discounted.state.players[0]!.redstone, 0);
+  TestHarness.equal(discounted.batch.events[0]!.payload.redstone, 0);
+  TestHarness.equal(BiomeRivalsRules.createClientSnapshot(discounted.state, 'alice').players[0]!.excavatedThisTurn, true);
+
+  const unrelatedCard = activeState('match-1', ['alice', 'bob'], ['desert_badlands', 'nether']);
+  unrelatedCard.players[0]!.hand = ['db_004'];
+  unrelatedCard.players[0]!.redstone = 1;
+  unrelatedCard.players[0]!.redstoneCapacity = 1;
+  unrelatedCard.players[0]!.excavatedThisTurn = true;
+  const unrelatedRejected = BiomeRivalsRules.applyCommand(
+    unrelatedCard, 'alice', deployCommand('fence-not-discounted', 0, 'db_004', 'BUILDING', 0));
+  TestHarness.equal(unrelatedRejected.accepted, false);
+  if (!unrelatedRejected.accepted) TestHarness.equal(unrelatedRejected.code, 'INSUFFICIENT_REDSTONE');
 });
 
 TestHarness.test('requires an explicit no-selection confirmation when no buried card is inspected', function (): void {
@@ -582,6 +618,8 @@ TestHarness.test('excavates a public pottery sherd before the normal turn draw',
   TestHarness.equal(result.state.players[1]!.hand.length, handCount + 2);
   TestHarness.equal(result.state.players[1]!.deck.length, 0);
   TestHarness.equal(result.state.players[1]!.buriedCardIds.length, 0);
+  TestHarness.equal(result.state.players[1]!.excavatedThisTurn, true);
+  TestHarness.equal(result.state.players[0]!.excavatedThisTurn, false);
   TestHarness.equal(result.state.players[1]!.armor, 1);
   TestHarness.equal(result.batch.events[2]!.type, 'CARD_EXCAVATED');
   TestHarness.equal(result.batch.events[2]!.payload.destination, 'HAND');
@@ -590,6 +628,19 @@ TestHarness.test('excavates a public pottery sherd before the normal turn draw',
   const opponentProjection = BiomeRivalsRules.createClientEventBatch(result.batch, 'alice');
   TestHarness.equal(opponentProjection.events[2]!.payload.cardId, 'tk_006', 'excavated cards are public');
   TestHarness.equal(opponentProjection.events[4]!.payload.cardId, null, 'the following normal draw remains private');
+});
+
+TestHarness.test('clears the excavation discount marker when its owners turn ends', function (): void {
+  const state = activeState('match-1', ['alice', 'bob'], ['desert_badlands', 'nether']);
+  state.players[0]!.excavatedThisTurn = true;
+
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', command('end-excavation-turn', 0, 'END_TURN'));
+
+  TestHarness.ok(result.accepted);
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[0]!.excavatedThisTurn, false);
+  TestHarness.equal(result.state.players[1]!.excavatedThisTurn, false);
+  TestHarness.equal(BiomeRivalsRules.createClientSnapshot(result.state, 'alice').players[0]!.excavatedThisTurn, false);
 });
 
 TestHarness.test('excavation and its following draw both enter discard when the hand is full', function (): void {

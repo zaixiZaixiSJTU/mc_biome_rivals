@@ -62,7 +62,7 @@ namespace BiomeRivals.Demo
 
             if (paymentMethod == MatchPaymentMethods.Redstone)
             {
-                if (definition.cost > match.Energy) return Reject(occupiedSlots, "红石能量不足。");
+                if (match.GetEffectiveCost(definition) > match.Energy) return Reject(occupiedSlots, "红石能量不足。");
             }
             else if (paymentMethod == MatchPaymentMethods.Crafting)
             {

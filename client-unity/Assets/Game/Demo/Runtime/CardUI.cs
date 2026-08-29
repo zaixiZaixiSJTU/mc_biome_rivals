@@ -13,9 +13,11 @@ namespace BiomeRivals.Demo
 
         public string CardId { get; private set; }
         public bool IsCompact { get; private set; }
+        public int BaseCost { get; private set; }
+        public int DisplayedCost { get; private set; }
         public RectTransform RectTransform => (RectTransform)transform;
 
-        public void Bind(CardContentRegistry registry, string cardId, Vector2 size, bool compact, Font font, Action onClick)
+        public void Bind(CardContentRegistry registry, string cardId, Vector2 size, bool compact, Font font, Action onClick, int? costOverride = null)
         {
             if (!registry.TryGetDefinition(cardId, out var definition) || !registry.TryGetText(cardId, out var text))
                 throw new InvalidOperationException("Card content is not registered: " + cardId);
@@ -23,6 +25,8 @@ namespace BiomeRivals.Demo
             ClearChildren();
             CardId = cardId;
             IsCompact = compact;
+            BaseCost = definition.cost;
+            DisplayedCost = costOverride ?? BaseCost;
             gameObject.name = "Card_" + cardId;
             RectTransform.anchorMin = RectTransform.anchorMax = RectTransform.pivot = new Vector2(0.5f, 0.5f);
             RectTransform.sizeDelta = size;
@@ -86,7 +90,18 @@ namespace BiomeRivals.Demo
             var costPosition = new Vector2(-w * 0.5f + costVisualSize * 0.52f, h * 0.5f - costVisualSize * 0.52f);
             CreateSocket("CostSocketFrame", costPosition, costVisualSize, DemoCardFrameProvider.LoadCostSocket(definition.themeId), theme.Accent);
             CreateText("Name", new Vector2(usesStudyFrame ? 12f : 7f, titleY), new Vector2(w - (usesStudyFrame ? 64f : 50f), titleHeight - 4), text.name, compact ? 15 : 20, theme.TitleText, TextAnchor.MiddleCenter, FontStyle.Bold, font);
-            CreateText("Cost", costPosition, new Vector2(costSize, costSize), definition.cost.ToString(), compact ? 18 : 23, usesStudyFrame ? Pale : Ink, TextAnchor.MiddleCenter, FontStyle.Bold, font);
+            var isDiscounted = DisplayedCost < BaseCost;
+            CreateText("Cost", costPosition, new Vector2(costSize, costSize), DisplayedCost.ToString(), compact ? 18 : 23, isDiscounted ? Hex("#9CDC72") : usesStudyFrame ? Pale : Ink, TextAnchor.MiddleCenter, FontStyle.Bold, font);
+            if (isDiscounted)
+            {
+                var modifierPosition = costPosition + new Vector2(costVisualSize * 0.35f, -costVisualSize * 0.34f);
+                var modifierSize = new Vector2(compact ? 26f : 34f, compact ? 17f : 21f);
+                var badge = CreateImage("CostModifierBadge", modifierPosition, modifierSize, Hex("#173821"));
+                badge.sprite = DemoCardSurfaceProvider.LoadArtSurface();
+                badge.type = Image.Type.Tiled;
+                badge.pixelsPerUnitMultiplier = 1f;
+                CreateText("CostModifier", modifierPosition, modifierSize, "-1", compact ? 10 : 12, Hex("#D9FFB5"), TextAnchor.MiddleCenter, FontStyle.Bold, font);
+            }
 
             var rulesHeight = compact ? h * 0.31f : h * 0.29f;
             var rulesY = usesStudyFrame ? -h * 0.21f : -h * 0.235f;

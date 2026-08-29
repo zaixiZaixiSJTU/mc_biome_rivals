@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using BiomeRivals.Content;
 using BiomeRivals.Core;
 
 namespace BiomeRivals.Demo
@@ -31,6 +32,7 @@ namespace BiomeRivals.Demo
         public IReadOnlyList<DemoBattlefieldObject> OpponentBattlefield => MapBattlefield(Opponent, false);
         public int DeckCount => Player?.deckCount ?? 0;
         public int BuriedCount => Player?.buriedCount ?? 0;
+        public bool ExcavatedThisTurn => Player?.excavatedThisTurn == true;
         public PendingChoiceDto PendingChoice => Current?.pendingChoice;
         public bool IsChoiceOwner => PendingChoice != null && PendingChoice.playerId == Current?.viewerPlayerId;
         public int DiscardCount => Player?.discardPile?.Length ?? 0;
@@ -45,6 +47,14 @@ namespace BiomeRivals.Demo
         public int OpponentLife => Opponent?.life ?? 0;
         public bool IsFinished => Current?.status == "FINISHED";
         public int Revision => Current?.revision ?? 0;
+
+        public int GetEffectiveCost(CardDefinitionEntry definition)
+        {
+            if (definition == null) return 0;
+            return definition.id == "db_005" && ExcavatedThisTurn
+                ? Math.Max(0, definition.cost - 1)
+                : definition.cost;
+        }
 
         private MatchStateDto Current => _store.Current;
 

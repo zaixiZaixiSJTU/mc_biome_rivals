@@ -151,6 +151,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewStructureDeployed")) SetupStructureDeployedPreview();
             else if (HasCommandLineFlag("-previewCraftingMissing")) SetupCraftingPreview(false);
             else if (HasCommandLineFlag("-previewCrafting")) SetupCraftingPreview(true);
+            else if (HasCommandLineFlag("-previewRaiderDiscount")) SetupRaiderDiscountPreview();
             else if (HasCommandLineFlag("-previewArchaeology")) SetupArchaeologyPreview();
             else if (HasCommandLineFlag("-previewCombat")) OnEndTurn();
             if (HasCommandLineFlag("-previewGroundHover")) _battlefield.SetSlotHovered(true, DemoSlotKind.Unit, 0, true);
@@ -856,6 +857,19 @@ namespace BiomeRivals.Demo
             ShowStatus(preview.Message, !preview.IsLegal);
         }
 
+        private void SetupRaiderDiscountPreview()
+        {
+            SelectFaction("desert_badlands");
+            _match.ResetDeckAndHand(new[] { "db_005" }, new[] { "db_001", "tk_006" }, new[] { "tk_006" });
+            _match.EndPlayerTurn();
+            var draw = _match.BeginNextPlayerTurn();
+            _selectedCardId = "db_005";
+            RefreshAll();
+            ShowStatus(draw.ExcavatedCardIds.Contains("tk_006")
+                ? "本回合已发掘埋藏牌：恶地劫掠者费用由 3 降为 2。"
+                : "考古预览初始化失败。", !draw.ExcavatedCardIds.Contains("tk_006"));
+        }
+
         private void SetupStructureDeployedPreview()
         {
             SelectFaction("desert_badlands");
@@ -1225,10 +1239,11 @@ namespace BiomeRivals.Demo
             for (var i = 0; i < count; i++)
             {
                 var cardId = match.Hand[i];
+                if (!_registry.TryGetDefinition(cardId, out var definition)) continue;
                 var selected = cardId == _selectedCardId;
                 var x = (i - (count - 1) * 0.5f) * 176f;
                 var y = selected ? 20f : -Mathf.Abs(i - (count - 1) * 0.5f) * 4f;
-                var card = DemoCardUiFactory.Create(_handRoot, _registry, cardId, new Vector2(158, 216), true, UiFont, () => SelectCard(cardId));
+                var card = DemoCardUiFactory.Create(_handRoot, _registry, cardId, new Vector2(158, 216), true, UiFont, () => SelectCard(cardId), match.GetEffectiveCost(definition));
                 card.RectTransform.anchoredPosition = new Vector2(x, y);
                 card.RectTransform.localRotation = Quaternion.Euler(0, 0, (i - (count - 1) * 0.5f) * -1.8f);
                 card.gameObject.AddComponent<DemoHoverScale>().Configure(1.08f, 16f);
@@ -1312,7 +1327,9 @@ namespace BiomeRivals.Demo
                 return;
             }
 
-            _cardDetailsView.ShowCard(_selectedCardId, new Vector2(238, 350), new Vector2(0, 100));
+            var effectiveCost = match.GetEffectiveCost(definition);
+            var isDiscounted = effectiveCost < definition.cost;
+            _cardDetailsView.ShowCard(_selectedCardId, new Vector2(238, 350), new Vector2(0, 100), effectiveCost);
             var deployType = definition.cardType == "UNIT" || definition.cardType == "BUILDING" || definition.cardType == "STRUCTURE";
             if (deployType)
             {
@@ -1323,7 +1340,7 @@ namespace BiomeRivals.Demo
                                       (!IsOnlineBoard || _onlineSession.CanIssueCommand);
                     var redstoneSelected = _selectedPaymentMethod == MatchPaymentMethods.Redstone;
                     var craftingSelected = _selectedPaymentMethod == MatchPaymentMethods.Crafting;
-                    var redstoneLabel = $"{(redstoneSelected ? "◆ " : string.Empty)}红石 {definition.cost}";
+                    var redstoneLabel = $"{(redstoneSelected ? "◆ " : string.Empty)}红石 {effectiveCost}";
                     var redstoneButton = CreateSecondaryButton(_inspectorRoot, "PayRedstone", new Vector2(-61, -112), new Vector2(116, 52), redstoneLabel, 14);
                     redstoneButton.interactable = canInteract;
                     redstoneButton.onClick.AddListener(() => SelectPaymentMethod(MatchPaymentMethods.Redstone));
@@ -1339,12 +1356,14 @@ namespace BiomeRivals.Demo
 
                     var paymentHint = craftingSelected && !hasMaterials
                         ? ReplaceCardIdsWithNames(materialMessage, definition)
-                        : $"{(craftingSelected ? "合成 " + GetCraftingBonusLabel(definition) : $"消耗 {definition.cost} 红石")} · 选择发光的{target}";
+                        : $"{(craftingSelected ? "合成 " + GetCraftingBonusLabel(definition) : $"消耗 {effectiveCost} 红石")} · 选择发光的{target}";
                     CreateText(_inspectorRoot, "DeployHint", new Vector2(0, -174), new Vector2(246, 48), paymentHint, 13,
                         craftingSelected && !hasMaterials ? Danger : Cyan, TextAnchor.MiddleCenter, FontStyle.Bold);
                 }
                 else
-                    CreateText(_inspectorRoot, "DeployHint", new Vector2(0, -118), new Vector2(246, 64), $"选择发光的{target}完成部署", 15, Cyan, TextAnchor.MiddleCenter, FontStyle.Bold);
+                    CreateText(_inspectorRoot, "DeployHint", new Vector2(0, -118), new Vector2(246, 64), isDiscounted
+                        ? $"考古触发 · 费用 {definition.cost} → {effectiveCost}\n选择发光的{target}完成部署"
+                        : $"选择发光的{target}完成部署", 15, isDiscounted ? Gold : Cyan, TextAnchor.MiddleCenter, FontStyle.Bold);
             }
             else
             {
@@ -1354,14 +1373,16 @@ namespace BiomeRivals.Demo
                 var hasLegalTarget = !requiresTarget || DemoCardTargeting.HasLegalTarget(match, targetRule);
                 var actionLabel = !implemented ? "效果尚未接入" : targeting ? "取消目标选择" : !hasLegalTarget ? "没有合法目标" : requiresTarget ? targetRule.ActionLabel : "释放卡牌";
                 var cast = CreateSecondaryButton(_inspectorRoot, "Cast", new Vector2(0, -118), new Vector2(235, 60), actionLabel, 17);
-                var canPlay = match.IsPlayerTurn && match.Phase == DemoTurnPhase.Main && match.Hand.Contains(definition.id) && definition.cost <= match.Energy;
+                var canPlay = match.IsPlayerTurn && match.Phase == DemoTurnPhase.Main && match.Hand.Contains(definition.id) && effectiveCost <= match.Energy;
                 cast.interactable = targeting || (implemented && hasLegalTarget && canPlay && (!IsOnlineBoard || _onlineSession.CanIssueCommand));
                 cast.onClick.AddListener(targeting ? (UnityEngine.Events.UnityAction)CancelTargetSelection : CastSelectedCard);
                 cast.gameObject.AddComponent<DemoHoverScale>().Configure(1.04f, 16f);
             }
             var implementationLabel = definition.effectImplementationStatus == "IMPLEMENTED" ? "已接入" : definition.effectImplementationStatus == "NONE" ? "无额外效果" : "待接入";
             var implementationY = deployType && definition.hasCraftingRecipe ? -236 : -190;
-            var implementationText = definition.hasCraftingRecipe
+            var implementationText = isDiscounted
+                ? $"考古联动：本回合费用 -1（{definition.cost} → {effectiveCost}）\n稳定效果槽：{string.Join(", ", definition.effectIds ?? Array.Empty<string>())}"
+                : definition.hasCraftingRecipe
                 ? $"配方：已接入 · {definition.recipeId}\n卡牌效果：{implementationLabel}\n{string.Join(", ", definition.effectIds ?? Array.Empty<string>())}"
                 : $"规则状态：{implementationLabel}\n稳定效果槽：{string.Join(", ", definition.effectIds ?? Array.Empty<string>())}";
             CreateText(_inspectorRoot, "Implementation", new Vector2(0, implementationY), new Vector2(250, 68), implementationText,

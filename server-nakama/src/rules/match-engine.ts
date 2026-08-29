@@ -27,6 +27,11 @@ namespace BiomeRivalsRules {
     return deck;
   }
 
+  export function getEffectiveCardCost(player: PlayerState, definition: CardRuleDefinition): number {
+    if (definition.id === 'db_005' && player.excavatedThisTurn) return Math.max(0, definition.cost - 1);
+    return definition.cost;
+  }
+
   function makePlayer(playerId: string, startingCards: number, matchId: string, factionId: FactionId): PlayerState {
     const deck = prototypeDeck(FACTION_CARD_PREFIXES[factionId]!, matchId + ':' + playerId + ':' + factionId);
     const hand: string[] = [];
@@ -42,6 +47,7 @@ namespace BiomeRivalsRules {
       hand: hand,
       deck: deck,
       buriedCardIds: [],
+      excavatedThisTurn: false,
       discardPile: [],
       fatigueCount: 0,
       unitSlots: [null, null, null, null],
@@ -116,6 +122,7 @@ namespace BiomeRivalsRules {
             : player.hand.map(function (): null { return null; }),
           deckCount: player.deck.length,
           buriedCount: player.buriedCardIds.length,
+          excavatedThisTurn: player.excavatedThisTurn,
           discardPile: player.discardPile.slice(),
           fatigueCount: player.fatigueCount,
           unitSlots: player.unitSlots.slice(),
@@ -201,6 +208,7 @@ namespace BiomeRivalsRules {
           hand: player.hand.slice(),
           deck: player.deck.slice(),
           buriedCardIds: player.buriedCardIds.slice(),
+          excavatedThisTurn: player.excavatedThisTurn,
           discardPile: player.discardPile.slice(),
           fatigueCount: player.fatigueCount,
           unitSlots: player.unitSlots.slice(),
@@ -367,8 +375,9 @@ namespace BiomeRivalsRules {
 
       const materialIndices: number[] = [];
       const consumedMaterials: string[] = [];
+      const effectiveCost = getEffectiveCardCost(player, definition);
       if (paymentMethod === 'REDSTONE') {
-        if (definition.cost > player.redstone) return reject(state, 'INSUFFICIENT_REDSTONE', 'not enough redstone');
+        if (effectiveCost > player.redstone) return reject(state, 'INSUFFICIENT_REDSTONE', 'not enough redstone');
       } else {
         if (!definition.hasCraftingRecipe || !definition.recipeId || definition.craftingRecipe.length === 0) {
           return reject(state, 'INVALID_PAYMENT_METHOD', 'card does not have a crafting recipe');
@@ -429,7 +438,7 @@ namespace BiomeRivalsRules {
       const productHandIndex = player.hand.indexOf(cardId);
       if (productHandIndex < 0) return reject(state, 'INVALID_STATE', 'crafted product was removed while consuming materials');
       player.hand.splice(productHandIndex, 1);
-      if (paymentMethod === 'REDSTONE') player.redstone -= definition.cost;
+      if (paymentMethod === 'REDSTONE') player.redstone -= effectiveCost;
       emit('CARD_DEPLOYED', {
         playerId: actorPlayerId,
         instanceId: instanceId,
@@ -640,6 +649,7 @@ namespace BiomeRivalsRules {
       const destination = player.hand.length >= HAND_LIMIT ? 'DISCARD' : 'HAND';
       if (destination === 'HAND') player.hand.push(cardId);
       else player.discardPile.push(cardId);
+      player.excavatedThisTurn = true;
       emit('CARD_EXCAVATED', {
         playerId: player.playerId,
         cardId: cardId,
@@ -1121,10 +1131,12 @@ namespace BiomeRivalsRules {
             });
           }
         }
+        next.players[actorIndex]!.excavatedThisTurn = false;
         emit('TURN_ENDED', { playerId: actorPlayerId, turn: state.turn });
         next.activePlayerIndex = (state.activePlayerIndex + 1) % state.players.length;
         if (next.activePlayerIndex === 0) next.turn += 1;
         const nextPlayer = next.players[next.activePlayerIndex]!;
+        nextPlayer.excavatedThisTurn = false;
         next.phase = 'MAIN';
         if (next.turn > 1) nextPlayer.redstoneCapacity = Math.min(10, nextPlayer.redstoneCapacity + 1);
         nextPlayer.redstone = nextPlayer.redstoneCapacity;

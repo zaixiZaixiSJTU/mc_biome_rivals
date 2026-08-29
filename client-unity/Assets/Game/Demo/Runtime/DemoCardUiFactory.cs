@@ -13,7 +13,8 @@ namespace BiomeRivals.Demo
             Vector2 size,
             bool compact,
             Font font,
-            Action onClick)
+            Action onClick,
+            int? costOverride = null)
         {
             var prefab = DemoUiPrefabProvider.LoadCardUI();
             var rootObject = prefab != null
@@ -21,7 +22,7 @@ namespace BiomeRivals.Demo
                 : new GameObject("CardUI", typeof(RectTransform), typeof(UnityEngine.UI.Image), typeof(CardUI));
             if (rootObject.transform.parent != parent) rootObject.transform.SetParent(parent, false);
             var card = rootObject.GetComponent<CardUI>() ?? rootObject.AddComponent<CardUI>();
-            card.Bind(registry, cardId, size, compact, font, onClick);
+            card.Bind(registry, cardId, size, compact, font, onClick, costOverride);
             return card;
         }
     }

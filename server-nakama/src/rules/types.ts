@@ -1,6 +1,6 @@
 namespace BiomeRivalsRules {
-  export const PROTOCOL_VERSION = 13;
-  export const RULESET_VERSION = 'prototype-0.14';
+  export const PROTOCOL_VERSION = 14;
+  export const RULESET_VERSION = 'prototype-0.15';
 
   export type MatchStatus = 'WAITING' | 'MULLIGAN' | 'ACTIVE' | 'FINISHED';
   export type CommandType = 'MULLIGAN' | 'DEPLOY_CARD' | 'PLAY_CARD' | 'RESOLVE_CHOICE' | 'ENTER_COMBAT' | 'ATTACK' | 'END_TURN' | 'CONCEDE';
@@ -105,6 +105,7 @@ namespace BiomeRivalsRules {
     hand: string[];
     deck: string[];
     buriedCardIds: string[];
+    excavatedThisTurn: boolean;
     discardPile: string[];
     fatigueCount: number;
     unitSlots: Array<string | null>;
@@ -140,6 +141,7 @@ namespace BiomeRivalsRules {
     hand: Array<string | null>;
     deckCount: number;
     buriedCount: number;
+    excavatedThisTurn: boolean;
     discardPile: string[];
     fatigueCount: number;
     unitSlots: Array<string | null>;

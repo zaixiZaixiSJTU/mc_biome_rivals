@@ -43,6 +43,7 @@ namespace BiomeRivals.Demo
         public int ViewerIndex => 0;
         public int DeckCount => _deck.Count;
         public int BuriedCount => _buriedCardIds.Count;
+        public bool ExcavatedThisTurn { get; private set; }
         public PendingChoiceDto PendingChoice { get; private set; }
         public bool IsChoiceOwner => PendingChoice != null;
         public int DiscardCount => _discardPile.Count;
@@ -105,6 +106,7 @@ namespace BiomeRivals.Demo
                 _buriedCardIds.Add(buriedCardId);
             }
             PendingChoice = null;
+            ExcavatedThisTurn = false;
             _discardPile.Clear();
             FatigueCount = 0;
             LastDrawResult = null;
@@ -503,6 +505,7 @@ namespace BiomeRivals.Demo
             if (!IsPlayerTurn) return Reject(DemoCommandRejectionCode.NotActivePlayer, "当前不是你的回合。");
             RestoreExpiredAttackModifiers(_playerBattlefield);
             RestoreExpiredAttackModifiers(_opponentBattlefield);
+            ExcavatedThisTurn = false;
             IsPlayerTurn = false;
             AcceptCommand(command);
             return DemoCommandResult.Accept("已结束回合。", Revision);
@@ -513,6 +516,7 @@ namespace BiomeRivals.Demo
             Round++;
             MaxEnergy = Math.Min(10, MaxEnergy + 1);
             Energy = MaxEnergy;
+            ExcavatedThisTurn = false;
             IsPlayerTurn = true;
             Phase = DemoTurnPhase.Main;
             foreach (var battlefieldObject in _playerBattlefield) battlefieldObject.HasAttacked = false;
@@ -559,6 +563,15 @@ namespace BiomeRivals.Demo
             if (_hand.Count >= 7) _discardPile.Add(cardId);
             else _hand.Add(cardId);
             PlayerArmor += 1;
+            ExcavatedThisTurn = true;
+        }
+
+        public int GetEffectiveCost(CardDefinitionEntry definition)
+        {
+            if (definition == null) return 0;
+            return definition.id == "db_005" && ExcavatedThisTurn
+                ? Math.Max(0, definition.cost - 1)
+                : definition.cost;
         }
 
         private void OfferArchaeologyChoice(DemoBattlefieldObject source)
@@ -611,7 +624,7 @@ namespace BiomeRivals.Demo
             if (!IsPlayerTurn) return Fail("当前是对手回合。", out message);
             if (Phase != DemoTurnPhase.Main) return Fail("进入战斗阶段后不能继续打出卡牌。", out message);
             if (!_hand.Contains(definition.id)) return Fail("该牌不在手牌中。", out message);
-            if (definition.cost > Energy) return Fail("红石能量不足。", out message);
+            if (GetEffectiveCost(definition) > Energy) return Fail("红石能量不足。", out message);
             message = string.Empty;
             return true;
         }
@@ -625,7 +638,7 @@ namespace BiomeRivals.Demo
             if (!_hand.Contains(definition.id)) return Fail("该牌不在手牌中。", out message);
             if (paymentMethod == MatchPaymentMethods.Redstone)
             {
-                if (definition.cost > Energy) return Fail("红石能量不足。", out message);
+                if (GetEffectiveCost(definition) > Energy) return Fail("红石能量不足。", out message);
                 message = string.Empty;
                 return true;
             }
@@ -636,7 +649,7 @@ namespace BiomeRivals.Demo
 
         private void Consume(CardDefinitionEntry definition)
         {
-            Energy -= definition.cost;
+            Energy -= GetEffectiveCost(definition);
             _hand.Remove(definition.id);
         }
 
@@ -710,7 +723,7 @@ namespace BiomeRivals.Demo
             if (!_hand.Contains(definition.id)) return Reject(DemoCommandRejectionCode.CardNotInHand, message);
             if (message.StartsWith("缺少材料", StringComparison.Ordinal)) return Reject(DemoCommandRejectionCode.MissingMaterials, message);
             if (message.Contains("支付方式") || message.Contains("合成配方")) return Reject(DemoCommandRejectionCode.InvalidPaymentMethod, message);
-            if (definition.cost > Energy) return Reject(DemoCommandRejectionCode.InsufficientRedstone, message);
+            if (GetEffectiveCost(definition) > Energy) return Reject(DemoCommandRejectionCode.InsufficientRedstone, message);
             return Reject(DemoCommandRejectionCode.InvalidCommand, message);
         }
 

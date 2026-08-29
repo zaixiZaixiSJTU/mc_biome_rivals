@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BiomeRivals.Content;
 using BiomeRivals.Core;
 
 namespace BiomeRivals.Demo
@@ -71,6 +72,7 @@ namespace BiomeRivals.Demo
         int ViewerIndex { get; }
         int DeckCount { get; }
         int BuriedCount { get; }
+        bool ExcavatedThisTurn { get; }
         PendingChoiceDto PendingChoice { get; }
         bool IsChoiceOwner { get; }
         int DiscardCount { get; }
@@ -85,6 +87,7 @@ namespace BiomeRivals.Demo
         int OpponentLife { get; }
         bool IsFinished { get; }
         int Revision { get; }
+        int GetEffectiveCost(CardDefinitionEntry definition);
         DemoBattlefieldObject GetObject(bool player, DemoSlotKind kind, int slotIndex);
         bool CanAttackWith(DemoBattlefieldObject attacker, out string message);
         bool CanAttackTarget(DemoBattlefieldObject target, string targetType, out string message);

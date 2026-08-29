@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using BiomeRivals.Content;
 using BiomeRivals.Core;
 using BiomeRivals.Networking;
 using BiomeRivals.Presentation;
@@ -25,6 +26,20 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(view.IsPlayerTurn, Is.True);
             Assert.That(view.PlayerFactionId, Is.EqualTo(FactionIds.End));
             Assert.That(view.OpponentFactionId, Is.EqualTo(FactionIds.OceanRiver));
+        }
+
+        [Test]
+        public void AuthoritativeViewDerivesRaiderCostFromSnapshotTurnMarker()
+        {
+            var store = CreateStore(viewerIndex: 0);
+            var view = new DemoAuthoritativeMatchView(store);
+            Assert.That(CardContentLoader.Load().TryGetDefinition("db_005", out var raider), Is.True);
+
+            Assert.That(view.GetEffectiveCost(raider), Is.EqualTo(3));
+            store.Current.players[0].excavatedThisTurn = true;
+
+            Assert.That(view.ExcavatedThisTurn, Is.True);
+            Assert.That(view.GetEffectiveCost(raider), Is.EqualTo(2));
         }
 
         [Test]

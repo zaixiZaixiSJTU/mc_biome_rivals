@@ -710,9 +710,24 @@ namespace BiomeRivals.Core.Tests
             Assert.That(store.Current.players[1].buriedCount, Is.Zero);
             Assert.That(store.Current.players[1].deckCount, Is.EqualTo(1));
             Assert.That(store.Current.players[1].armor, Is.EqualTo(1));
+            Assert.That(store.Current.players[1].excavatedThisTurn, Is.True);
             Assert.That(store.Current.players[1].hand, Has.Length.EqualTo(3));
             Assert.That(store.Current.players[1].hand[1], Is.Empty);
             Assert.That(store.Current.players[1].hand[2], Is.Empty);
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 2,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 5, type = MatchEventTypes.TurnEnded,
+                        payload = new MatchEventPayloadDto { playerId = "bob" }
+                    }
+                }
+            });
+            Assert.That(store.Current.players[1].excavatedThisTurn, Is.False);
         }
 
         [Test]
@@ -1028,6 +1043,7 @@ namespace BiomeRivals.Core.Tests
             Assert.That(store.Current.players[0].deckCount, Is.EqualTo(1));
             Assert.That(store.Current.players[0].buriedCount, Is.Zero);
             Assert.That(store.Current.players[0].armor, Is.EqualTo(1));
+            Assert.That(store.Current.players[0].excavatedThisTurn, Is.True);
         }
 
         [Test]

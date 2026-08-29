@@ -59,6 +59,10 @@ namespace BiomeRivalsRules {
     }
     for (let playerIndex = 0; playerIndex < state.players.length; playerIndex += 1) {
       const player = state.players[playerIndex]!;
+      if (typeof player.excavatedThisTurn !== 'boolean') violations.push('player excavation turn marker is invalid');
+      if (state.status === 'ACTIVE' && playerIndex !== state.activePlayerIndex && player.excavatedThisTurn) {
+        violations.push('inactive player cannot retain an excavation turn marker');
+      }
       if (!isFactionId(player.factionId)) violations.push('player faction is unsupported');
       if (typeof player.mulliganCompleted !== 'boolean') violations.push('player mulligan state is invalid');
       if (player.life < 0 || player.armor < 0) violations.push('player combat values cannot be negative');

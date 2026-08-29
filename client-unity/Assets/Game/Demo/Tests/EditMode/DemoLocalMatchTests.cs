@@ -133,6 +133,34 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(match.BuriedCount, Is.Zero);
             Assert.That(match.Hand, Does.Contain("tk_006"));
             Assert.That(match.PlayerArmor, Is.EqualTo(2));
+            Assert.That(match.ExcavatedThisTurn, Is.True);
+        }
+
+        [Test]
+        public void LocalBadlandsRaiderCostsOneLessOnlyDuringAnExcavationTurn()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("db_005", out var raider), Is.True);
+            Assert.That(registry.TryGetDefinition("db_004", out var camel), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(new[] { raider.id }, new[] { "db_001", "tk_006" }, new[] { "tk_006" });
+
+            Assert.That(match.GetEffectiveCost(raider), Is.EqualTo(3));
+            Assert.That(match.GetEffectiveCost(camel), Is.EqualTo(camel.cost));
+
+            match.EndPlayerTurn();
+            var draw = match.BeginNextPlayerTurn();
+
+            Assert.That(draw.ExcavatedCardIds, Is.EqualTo(new[] { "tk_006" }));
+            Assert.That(match.ExcavatedThisTurn, Is.True);
+            Assert.That(match.GetEffectiveCost(raider), Is.EqualTo(2));
+            Assert.That(match.GetEffectiveCost(camel), Is.EqualTo(camel.cost));
+            Assert.That(match.TryDeploy(raider, DemoSlotKind.Unit, 0, out _), Is.True);
+            Assert.That(match.Energy, Is.EqualTo(5), "Turn two starts at seven energy and the discounted raider spends two.");
+
+            match.EndPlayerTurn();
+            Assert.That(match.ExcavatedThisTurn, Is.False);
+            Assert.That(match.GetEffectiveCost(raider), Is.EqualTo(3));
         }
 
         [Test]
@@ -962,6 +990,27 @@ namespace BiomeRivals.Demo.Tests
             finally
             {
                 Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void CardUiShowsARegisteredDiscountWithoutChangingBaseCost()
+        {
+            var root = new GameObject("DiscountedCardTest", typeof(RectTransform), typeof(UnityEngine.UI.Image), typeof(CardUI));
+            try
+            {
+                var card = root.GetComponent<CardUI>();
+                card.Bind(CardContentLoader.Load(), "db_005", new Vector2(158, 216), true, null, null, 2);
+
+                Assert.That(card.BaseCost, Is.EqualTo(3));
+                Assert.That(card.DisplayedCost, Is.EqualTo(2));
+                Assert.That(root.transform.Find("Cost").GetComponent<UnityEngine.UI.Text>().text, Is.EqualTo("2"));
+                Assert.That(root.transform.Find("CostModifierBadge").GetComponent<UnityEngine.UI.Image>().type, Is.EqualTo(UnityEngine.UI.Image.Type.Tiled));
+                Assert.That(root.transform.Find("CostModifier").GetComponent<UnityEngine.UI.Text>().text, Is.EqualTo("-1"));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(root);
             }
         }
 

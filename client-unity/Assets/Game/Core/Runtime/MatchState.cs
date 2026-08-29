@@ -36,6 +36,7 @@ namespace BiomeRivals.Core
         public string[] hand = Array.Empty<string>();
         public int deckCount;
         public int buriedCount;
+        public bool excavatedThisTurn;
         public string[] discardPile = Array.Empty<string>();
         public int fatigueCount;
         public string[] unitSlots = Array.Empty<string>();
@@ -221,6 +222,7 @@ namespace BiomeRivals.Core
                     excavatingPlayer.discardPile = excavatedDiscard.ToArray();
                     excavatingPlayer.deckCount = payload.deckCount;
                     excavatingPlayer.buriedCount = payload.buriedCount;
+                    excavatingPlayer.excavatedThisTurn = true;
                     break;
                 case MatchEventTypes.CardDrawn:
                     var drawingPlayer = FindPlayer(payload.playerId);
@@ -318,10 +320,14 @@ namespace BiomeRivals.Core
                     Current.turn = payload.turn;
                     Current.phase = payload.phase;
                     Current.activePlayerIndex = payload.activePlayerIndex;
+                    activePlayer.excavatedThisTurn = false;
                     activePlayer.redstone = payload.redstone;
                     activePlayer.redstoneCapacity = payload.redstoneCapacity;
                     foreach (var battlefieldObject in activePlayer.battlefield ?? Array.Empty<BattlefieldObjectStateDto>())
                         if (battlefieldObject != null) battlefieldObject.hasAttacked = false;
+                    break;
+                case MatchEventTypes.TurnEnded:
+                    FindPlayer(payload.playerId).excavatedThisTurn = false;
                     break;
                 case MatchEventTypes.MatchEnded:
                     Current.status = "FINISHED";
