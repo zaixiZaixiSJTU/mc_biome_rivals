@@ -833,6 +833,101 @@ TestHarness.test('resolves simultaneous unit combat and releases dead object slo
   TestHarness.equal(result.batch.events[1]!.type, 'OBJECT_DIED');
 });
 
+TestHarness.test('awards Rotten Flesh to the enemy unit that kills a Husk', function (): void {
+  const state = activeState('match-1', ['alice', 'bob']);
+  state.turn = 2;
+  state.phase = 'COMBAT';
+  state.nextInstanceId = 3;
+  state.players[0]!.hand = [];
+  placeUnit(state, 0, 'pf_008', 0, 'object-1', 1);
+  placeUnit(state, 1, 'db_001', 0, 'object-2', 1);
+
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', attackCommand('husk-drop', 0, 'object-1', 'UNIT', 'object-2'));
+  TestHarness.equal(result.accepted, true);
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[0]!.hand[0], 'tk_005');
+  TestHarness.equal(result.state.players[1]!.discardPile[0], 'db_001');
+  TestHarness.equal(result.batch.events[0]!.type, 'ATTACK_RESOLVED');
+  TestHarness.equal(result.batch.events[1]!.type, 'OBJECT_DIED');
+  TestHarness.equal(result.batch.events[2]!.type, 'CARD_GENERATED');
+  TestHarness.equal(result.batch.events[2]!.payload.playerId, 'alice');
+  TestHarness.equal(result.batch.events[2]!.payload.sourceCardId, 'db_001');
+  TestHarness.equal(result.batch.events[2]!.payload.sourceInstanceId, 'object-2');
+  TestHarness.equal(result.batch.events[2]!.payload.effectId, 'effect.db_001.01');
+  TestHarness.equal(result.batch.events[2]!.payload.destination, 'HAND');
+  TestHarness.equal(result.batch.events[2]!.payload.cardId, 'tk_005');
+
+  const killerProjection = BiomeRivalsRules.createClientEventBatch(result.batch, 'alice');
+  const ownerProjection = BiomeRivalsRules.createClientEventBatch(result.batch, 'bob');
+  TestHarness.equal(killerProjection.events[2]!.payload.cardId, 'tk_005');
+  TestHarness.equal(ownerProjection.events[2]!.payload.cardId, null);
+});
+
+TestHarness.test('credits a retaliation kill to the Husk defenders opponent', function (): void {
+  const state = activeState('match-1', ['alice', 'bob']);
+  state.turn = 2;
+  state.phase = 'COMBAT';
+  state.nextInstanceId = 3;
+  state.players[1]!.hand = [];
+  placeUnit(state, 0, 'db_001', 0, 'object-1', 1);
+  placeUnit(state, 1, 'nt_003', 0, 'object-2', 1);
+
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', attackCommand('husk-retaliation-drop', 0, 'object-1', 'UNIT', 'object-2'));
+  TestHarness.equal(result.accepted, true);
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[0]!.battlefield.length, 0);
+  TestHarness.equal(result.state.players[1]!.hand[0], 'tk_005');
+  const generated = result.batch.events.filter(function (event): boolean { return event.type === 'CARD_GENERATED'; });
+  TestHarness.equal(generated.length, 1);
+  TestHarness.equal(generated[0]!.payload.playerId, 'bob');
+  TestHarness.equal(generated[0]!.payload.effectId, 'effect.db_001.01');
+});
+
+TestHarness.test('Sandstorm drops only the enemy Husk loot to its caster', function (): void {
+  const state = activeState('match-1', ['alice', 'bob']);
+  state.players[0]!.hand = ['db_006'];
+  state.players[0]!.redstone = 3;
+  state.players[0]!.redstoneCapacity = 3;
+  placeUnit(state, 0, 'db_001', 0, 'object-1', 1);
+  placeUnit(state, 1, 'db_001', 0, 'object-2', 1);
+  state.nextInstanceId = 3;
+
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', playCommand('sandstorm-husk-drop', 0, 'db_006'));
+  TestHarness.equal(result.accepted, true);
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[0]!.hand.length, 1);
+  TestHarness.equal(result.state.players[0]!.hand[0], 'tk_005');
+  TestHarness.equal(result.state.players[0]!.discardPile[0], 'db_006');
+  TestHarness.equal(result.state.players[0]!.discardPile[1], 'db_001');
+  TestHarness.equal(result.state.players[1]!.discardPile[0], 'db_001');
+  const generated = result.batch.events.filter(function (event): boolean { return event.type === 'CARD_GENERATED'; });
+  TestHarness.equal(generated.length, 1);
+  TestHarness.equal(generated[0]!.payload.playerId, 'alice');
+  TestHarness.equal(generated[0]!.payload.cardId, 'tk_005');
+});
+
+TestHarness.test('sends Husk loot to the killers public discard when its hand is full', function (): void {
+  const state = activeState('match-1', ['alice', 'bob']);
+  state.turn = 2;
+  state.phase = 'COMBAT';
+  state.nextInstanceId = 3;
+  state.players[0]!.hand = ['pf_001', 'pf_001', 'pf_001', 'pf_001', 'pf_001', 'pf_001', 'pf_001'];
+  placeUnit(state, 0, 'pf_008', 0, 'object-1', 1);
+  placeUnit(state, 1, 'db_001', 0, 'object-2', 1);
+
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', attackCommand('husk-full-hand-drop', 0, 'object-1', 'UNIT', 'object-2'));
+  TestHarness.equal(result.accepted, true);
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[0]!.hand.length, 7);
+  TestHarness.equal(result.state.players[0]!.discardPile[0], 'tk_005');
+  const generated = result.batch.events.filter(function (event): boolean { return event.type === 'CARD_GENERATED'; })[0]!;
+  TestHarness.equal(generated.payload.destination, 'DISCARD');
+  TestHarness.equal(generated.payload.cardId, 'tk_005');
+  const ownerProjection = BiomeRivalsRules.createClientEventBatch(result.batch, 'bob');
+  const projected = ownerProjection.events.filter(function (event): boolean { return event.type === 'CARD_GENERATED'; })[0]!;
+  TestHarness.equal(projected.payload.cardId, 'tk_005');
+});
+
 TestHarness.test('rejects summoning sickness and duplicate attacks', function (): void {
   const state = activeState('match-1', ['alice', 'bob']);
   state.turn = 2;

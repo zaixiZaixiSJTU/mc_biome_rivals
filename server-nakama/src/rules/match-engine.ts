@@ -521,14 +521,29 @@ namespace BiomeRivalsRules {
       return deadObjects;
     }
 
-    function settleDeaths(currentPlayer: PlayerState, nonCurrentPlayer: PlayerState): void {
+    function settleDeaths(
+      currentPlayer: PlayerState,
+      nonCurrentPlayer: PlayerState,
+      killCredits?: { [instanceId: string]: string }
+    ): void {
       while (true) {
         const currentDeaths = removeDeadObjects(currentPlayer);
         const nonCurrentDeaths = removeDeadObjects(nonCurrentPlayer);
         if (currentDeaths.length === 0 && nonCurrentDeaths.length === 0) return;
-        for (let index = 0; index < currentDeaths.length; index += 1) resolveDeathrattles(currentPlayer, currentDeaths[index]!);
-        for (let index = 0; index < nonCurrentDeaths.length; index += 1) resolveDeathrattles(nonCurrentPlayer, nonCurrentDeaths[index]!);
+        for (let index = 0; index < currentDeaths.length; index += 1) {
+          const object = currentDeaths[index]!;
+          resolveDeathTriggers(currentPlayer, object, killCredits && killCredits[object.instanceId]);
+        }
+        for (let index = 0; index < nonCurrentDeaths.length; index += 1) {
+          const object = nonCurrentDeaths[index]!;
+          resolveDeathTriggers(nonCurrentPlayer, object, killCredits && killCredits[object.instanceId]);
+        }
       }
+    }
+
+    function resolveDeathTriggers(player: PlayerState, object: BattlefieldObjectState, killerPlayerId?: string): void {
+      resolveDeathrattles(player, object);
+      resolveDrops(player, object, killerPlayerId);
     }
 
     function resolveDeathrattles(player: PlayerState, object: BattlefieldObjectState): void {
@@ -540,6 +555,18 @@ namespace BiomeRivalsRules {
       if (definition.effectIds.indexOf('effect.nt_001.01') >= 0) {
         summonUnit(player, 'tk_014', object.cardId, object.instanceId, 'effect.nt_001.01', object.slotIndex);
       }
+    }
+
+    function resolveDrops(player: PlayerState, object: BattlefieldObjectState, killerPlayerId?: string): void {
+      if (!killerPlayerId || killerPlayerId === player.playerId) return;
+      const definition = getCardDefinition(object.cardId);
+      if (definition === null || definition.effectImplementationStatus !== 'IMPLEMENTED' ||
+          definition.effectIds.indexOf('effect.db_001.01') < 0) return;
+      const killer = next.players.filter(function (candidate): boolean {
+        return candidate.playerId === killerPlayerId;
+      })[0];
+      if (!killer) throw new Error('drop killer is not a match player: ' + killerPlayerId);
+      generateCard(killer, 'tk_005', object.cardId, object.instanceId, 'effect.db_001.01');
     }
 
     function summonUnit(
@@ -827,12 +854,16 @@ namespace BiomeRivalsRules {
           });
           return null;
         case 'effect.db_006.01':
+          const sandstormKillCredits: { [instanceId: string]: string } = {};
           for (let playerIndex = 0; playerIndex < next.players.length; playerIndex += 1) {
             const damagedPlayer = next.players[playerIndex]!;
             for (let objectIndex = 0; objectIndex < damagedPlayer.battlefield.length; objectIndex += 1) {
               const damagedObject = damagedPlayer.battlefield[objectIndex]!;
               if (damagedObject.cardType !== 'UNIT') continue;
               damagedObject.health = Math.max(0, damagedObject.health - 2);
+              if (damagedObject.health === 0 && damagedPlayer.playerId !== player.playerId) {
+                sandstormKillCredits[damagedObject.instanceId] = player.playerId;
+              }
               emit('OBJECT_STATS_CHANGED', {
                 playerId: damagedPlayer.playerId,
                 instanceId: damagedObject.instanceId,
@@ -846,7 +877,7 @@ namespace BiomeRivalsRules {
               });
             }
           }
-          settleDeaths(player, opponent);
+          settleDeaths(player, opponent, sandstormKillCredits);
           return null;
         case 'effect.nt_006.01':
           player.life = Math.max(0, player.life - 2);
@@ -1048,6 +1079,9 @@ namespace BiomeRivalsRules {
         const retaliation = target.cardType === 'UNIT' ? target.attack : 0;
         target.health = Math.max(0, target.health - attacker.attack);
         attacker.health = Math.max(0, attacker.health - retaliation);
+        const combatKillCredits: { [instanceId: string]: string } = {};
+        if (target.health === 0) combatKillCredits[target.instanceId] = attackerPlayer.playerId;
+        if (attacker.health === 0 && retaliation > 0) combatKillCredits[attacker.instanceId] = defenderPlayer.playerId;
         emit('ATTACK_RESOLVED', {
           attackerPlayerId: attackerPlayer.playerId,
           attackerInstanceId: attacker.instanceId,
@@ -1060,7 +1094,7 @@ namespace BiomeRivalsRules {
           targetHealth: target.health,
           targetArmor: 0
         });
-        settleDeaths(attackerPlayer, defenderPlayer);
+        settleDeaths(attackerPlayer, defenderPlayer, combatKillCredits);
       }
 
       if (defenderPlayer.life <= 0) {

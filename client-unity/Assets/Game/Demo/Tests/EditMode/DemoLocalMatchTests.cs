@@ -506,6 +506,75 @@ namespace BiomeRivals.Demo.Tests
         }
 
         [Test]
+        public void LocalHuskDropsRottenFleshToItsEnemyKiller()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            Assert.That(registry.TryGetDefinition("pf_008", out var ironGolem), Is.True);
+            Assert.That(registry.TryGetDefinition("db_001", out var husk), Is.True);
+            Assert.That(husk.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+            match.ResetDeckAndHand(new[] { ironGolem.id }, new string[0]);
+            match.ResetOpponent(new[] { husk });
+            Assert.That(match.TryDeploy(ironGolem, DemoSlotKind.Unit, 0, out _), Is.True);
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            Assert.That(match.ApplyEnterCombat(match.CreateEnterCombatCommand()).Accepted, Is.True);
+
+            var attacker = match.GetObject(true, DemoSlotKind.Unit, 0);
+            var target = match.GetObject(false, DemoSlotKind.Unit, 0);
+            var result = match.ApplyAttack(match.CreateAttackCommand(attacker.InstanceId, "UNIT", target.InstanceId));
+
+            Assert.That(result.Accepted, Is.True);
+            Assert.That(result.Message, Does.Contain("尸壳掉落"));
+            Assert.That(match.Hand, Is.EqualTo(new[] { "tk_005" }));
+            Assert.That(match.GetObject(false, DemoSlotKind.Unit, 0), Is.Null);
+        }
+
+        [Test]
+        public void LocalRetaliationCreditsHuskLootToTheOpponent()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            Assert.That(registry.TryGetDefinition("db_001", out var husk), Is.True);
+            Assert.That(registry.TryGetDefinition("nt_003", out var blaze), Is.True);
+            match.ResetDeckAndHand(new[] { husk.id }, new string[0]);
+            match.ResetOpponent(new[] { blaze });
+            Assert.That(match.TryDeploy(husk, DemoSlotKind.Unit, 0, out _), Is.True);
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            Assert.That(match.ApplyEnterCombat(match.CreateEnterCombatCommand()).Accepted, Is.True);
+
+            var attacker = match.GetObject(true, DemoSlotKind.Unit, 0);
+            var target = match.GetObject(false, DemoSlotKind.Unit, 0);
+            var result = match.ApplyAttack(match.CreateAttackCommand(attacker.InstanceId, "UNIT", target.InstanceId));
+
+            Assert.That(result.Accepted, Is.True);
+            Assert.That(result.Message, Does.Contain("对手获得一张腐肉"));
+            Assert.That(match.OpponentHandCount, Is.EqualTo(6));
+            Assert.That(match.DiscardPile, Is.EqualTo(new[] { "db_001" }));
+        }
+
+        [Test]
+        public void LocalSandstormDropsOnlyTheEnemyHuskLoot()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            Assert.That(registry.TryGetDefinition("db_001", out var husk), Is.True);
+            Assert.That(registry.TryGetDefinition("db_006", out var sandstorm), Is.True);
+            match.ResetHand(new[] { husk.id, sandstorm.id });
+            match.ResetOpponent(new[] { husk });
+            Assert.That(match.TryDeploy(husk, DemoSlotKind.Unit, 0, out _), Is.True);
+
+            var result = match.ApplyPlayCard(sandstorm, match.CreatePlayCardCommand(sandstorm.id));
+
+            Assert.That(result.Accepted, Is.True);
+            Assert.That(result.Message, Does.Contain("尸壳掉落"));
+            Assert.That(match.Hand, Is.EqualTo(new[] { "tk_005" }));
+            Assert.That(match.DiscardPile, Is.EqualTo(new[] { "db_006", "db_001" }));
+            Assert.That(match.OpponentHandCount, Is.EqualTo(5));
+        }
+
+        [Test]
         public void LocalCombatAllowsChargeOnTheSummonedRound()
         {
             var registry = CardContentLoader.Load();

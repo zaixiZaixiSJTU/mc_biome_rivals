@@ -301,6 +301,7 @@ namespace BiomeRivals.Demo
                 case "effect.db_006.01":
                     var damaged = 0;
                     var destroyed = 0;
+                    var sandstormKillCredits = new Dictionary<string, bool>(StringComparer.Ordinal);
                     foreach (var value in _playerBattlefield.ToArray())
                     {
                         if (value.SlotKind != DemoSlotKind.Unit) continue;
@@ -313,9 +314,13 @@ namespace BiomeRivals.Demo
                         if (value.SlotKind != DemoSlotKind.Unit) continue;
                         value.Health = Math.Max(0, value.Health - 2);
                         damaged++;
-                        if (value.Health == 0) destroyed++;
+                        if (value.Health == 0)
+                        {
+                            destroyed++;
+                            sandstormKillCredits[value.InstanceId] = true;
+                        }
                     }
-                    var deathrattleMessages = SettleDeaths();
+                    var deathrattleMessages = SettleDeaths(sandstormKillCredits);
                     message = $"沙尘暴：对 {damaged} 个生物造成 2 点伤害，消灭 {destroyed} 个。";
                     if (deathrattleMessages.Count > 0) message += " " + string.Join(" ", deathrattleMessages);
                     break;
@@ -485,7 +490,10 @@ namespace BiomeRivals.Demo
             target.Health = Math.Max(0, target.Health - attacker.Attack);
             attacker.Health = Math.Max(0, attacker.Health - retaliation);
             var targetDied = target.Health == 0;
-            var deathrattleMessages = SettleDeaths();
+            var combatKillCredits = new Dictionary<string, bool>(StringComparer.Ordinal);
+            if (targetDied) combatKillCredits[target.InstanceId] = true;
+            if (attacker.Health == 0 && retaliation > 0) combatKillCredits[attacker.InstanceId] = false;
+            var deathrattleMessages = SettleDeaths(combatKillCredits);
             AcceptCommand(command);
             return DemoCommandResult.Accept(
                 $"造成 {attacker.Attack} 点伤害，受到 {retaliation} 点反击" + (targetDied ? "；目标死亡。" : "。") +
@@ -776,7 +784,7 @@ namespace BiomeRivals.Demo
             return deadObjects;
         }
 
-        private List<string> SettleDeaths()
+        private List<string> SettleDeaths(IReadOnlyDictionary<string, bool> killCredits = null)
         {
             var messages = new List<string>();
             while (true)
@@ -788,13 +796,40 @@ namespace BiomeRivals.Demo
                 {
                     var message = ResolveLocalDeathrattle(value);
                     if (!string.IsNullOrEmpty(message)) messages.Add(message);
+                    message = ResolveLocalDrop(value, killCredits);
+                    if (!string.IsNullOrEmpty(message)) messages.Add(message);
                 }
                 foreach (var value in opponentDeaths)
                 {
                     var message = ResolveLocalDeathrattle(value);
                     if (!string.IsNullOrEmpty(message)) messages.Add(message);
+                    message = ResolveLocalDrop(value, killCredits);
+                    if (!string.IsNullOrEmpty(message)) messages.Add(message);
                 }
             }
+        }
+
+        private string ResolveLocalDrop(DemoBattlefieldObject value, IReadOnlyDictionary<string, bool> killCredits)
+        {
+            if (value.CardId != "db_001" || killCredits == null ||
+                !killCredits.TryGetValue(value.InstanceId, out var killerIsPlayer) || killerIsPlayer == value.Player)
+                return string.Empty;
+            if (killerIsPlayer)
+            {
+                if (_hand.Count < 7)
+                {
+                    _hand.Add("tk_005");
+                    return "尸壳掉落：腐肉已置入你的手牌。";
+                }
+                _discardPile.Add("tk_005");
+                return "尸壳掉落：手牌已满，腐肉进入弃牌堆。";
+            }
+            if (_opponentHandCount < 7)
+            {
+                _opponentHandCount++;
+                return "己方尸壳被敌方击杀：对手获得一张腐肉。";
+            }
+            return "己方尸壳被敌方击杀：对手手牌已满，腐肉进入弃牌堆。";
         }
 
         private string ResolveLocalDeathrattle(DemoBattlefieldObject value)

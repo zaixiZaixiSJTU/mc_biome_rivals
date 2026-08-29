@@ -153,6 +153,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewCrafting")) SetupCraftingPreview(true);
             else if (HasCommandLineFlag("-previewRaiderDiscount")) SetupRaiderDiscountPreview();
             else if (HasCommandLineFlag("-previewArchaeology")) SetupArchaeologyPreview();
+            else if (HasCommandLineFlag("-previewLoot")) SetupLootPreview();
             else if (HasCommandLineFlag("-previewCombat")) OnEndTurn();
             if (HasCommandLineFlag("-previewGroundHover")) _battlefield.SetSlotHovered(true, DemoSlotKind.Unit, 0, true);
             var capturePath = GetCommandLineValue("-captureDemo");
@@ -590,7 +591,8 @@ namespace BiomeRivals.Demo
                     var generatedName = string.IsNullOrEmpty(matchEvent.payload?.cardId)
                         ? "一张牌"
                         : GetCardName(matchEvent.payload.cardId);
-                    var triggerName = matchEvent.payload?.effectId == "effect.ed_004.01" ? "亡语" : "效果";
+                    var isLoot = matchEvent.payload?.effectId == "effect.db_001.01";
+                    var triggerName = isLoot ? "掉落" : matchEvent.payload?.effectId == "effect.ed_004.01" ? "亡语" : "效果";
                     if (generatedToHand)
                     {
                         ShowStatus(ownGeneration
@@ -603,7 +605,8 @@ namespace BiomeRivals.Demo
                             ? $"{sourceName}{triggerName}：手牌已满，{generatedName}进入弃牌堆。"
                             : $"敌方{sourceName}{triggerName}：对手手牌已满，{generatedName}进入弃牌堆。", false);
                     }
-                    if (ownGeneration) yield return PulsePlayerHud(generatedToHand ? Cyan : Ember);
+                    if (isLoot) yield return ShowTurnBanner("战利品", Gold);
+                    if (ownGeneration) yield return PulsePlayerHud(generatedToHand ? Gold : Ember);
                     else yield return null;
                     break;
                 }
@@ -868,6 +871,34 @@ namespace BiomeRivals.Demo
             ShowStatus(draw.ExcavatedCardIds.Contains("tk_006")
                 ? "本回合已发掘埋藏牌：恶地劫掠者费用由 3 降为 2。"
                 : "考古预览初始化失败。", !draw.ExcavatedCardIds.Contains("tk_006"));
+        }
+
+        private void SetupLootPreview()
+        {
+            SelectFaction("plains_forest");
+            SelectOpponentFaction("desert_badlands");
+            if (!_registry.TryGetDefinition("pf_008", out var ironGolemDefinition) ||
+                !_registry.TryGetDefinition("db_001", out var huskDefinition)) return;
+            _match.ResetDeckAndHand(new[] { ironGolemDefinition.id }, Array.Empty<string>());
+            _match.ResetOpponent(new[] { huskDefinition });
+            if (!_match.TryDeploy(ironGolemDefinition, DemoSlotKind.Unit, 0, out _)) return;
+            _match.EndPlayerTurn();
+            _match.BeginNextPlayerTurn();
+            if (!_match.ApplyEnterCombat(_match.CreateEnterCombatCommand()).Accepted) return;
+            var attacker = _match.GetObject(true, DemoSlotKind.Unit, 0);
+            var target = _match.GetObject(false, DemoSlotKind.Unit, 0);
+            if (attacker == null || target == null) return;
+            var result = _match.ApplyAttack(_match.CreateAttackCommand(attacker.InstanceId, "UNIT", target.InstanceId));
+            if (result.Accepted)
+            {
+                _match.EndPlayerTurn();
+                _match.BeginNextPlayerTurn();
+            }
+            _selectedAttackerInstanceId = null;
+            _selectedCardId = result.Accepted && _match.Hand.Contains("tk_005") ? "tk_005" : null;
+            RefreshAll();
+            ShowStatus(result.Message, !result.Accepted);
+            if (result.Accepted) StartCoroutine(PulseBattlefieldObject(attacker.InstanceId));
         }
 
         private void SetupStructureDeployedPreview()
