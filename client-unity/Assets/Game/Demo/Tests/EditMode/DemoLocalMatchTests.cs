@@ -1189,6 +1189,36 @@ namespace BiomeRivals.Demo.Tests
             }
         }
 
+        [Test]
+        public void PowderSnowUsesTargetingAndExpiresAfterTheSkippedOpponentTurn()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { "si_006" });
+            Assert.That(registry.TryGetDefinition("si_006", out var powderSnow), Is.True);
+            Assert.That(powderSnow.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+            Assert.That(registry.TryGetDefinition("nt_003", out var blaze), Is.True);
+            match.ResetOpponent(new[] { blaze });
+            var target = match.GetObject(false, DemoSlotKind.Unit, 0);
+
+            var missing = match.ApplyPlayCard(powderSnow, match.CreatePlayCardCommand("si_006"));
+            Assert.That(missing.Accepted, Is.False);
+            Assert.That(match.Hand, Does.Contain("si_006"));
+
+            var played = match.ApplyPlayCard(powderSnow,
+                match.CreatePlayCardCommand("si_006", "UNIT", target.InstanceId));
+            Assert.That(played.Accepted, Is.True);
+            Assert.That(target.Attack, Is.EqualTo(1));
+            Assert.That(target.HasStatus("SLOW"), Is.True);
+            Assert.That(target.Statuses.Single().remainingDuration, Is.EqualTo(1));
+
+            match.EndPlayerTurn();
+            Assert.That(target.HasStatus("SLOW"), Is.True, "Slow belongs to the enemy and must not expire at the caster end phase.");
+            match.BeginNextPlayerTurn();
+            Assert.That(target.HasStatus("SLOW"), Is.False);
+            Assert.That(target.Attack, Is.EqualTo(3));
+        }
+
         private static float ProjectedWidth(Camera camera, Transform surface, Vector3[] vertices)
         {
             var min = vertices.Min(vertex => camera.WorldToViewportPoint(surface.TransformPoint(vertex)).x);

@@ -100,7 +100,8 @@ function placeUnit(
     hasAttacked: false,
     keywords: definition.keywords.slice(),
     temporaryAttackModifier: 0,
-    temporaryAttackModifierExpiresOnTurn: 0
+    temporaryAttackModifierExpiresOnTurn: 0,
+    statuses: []
   });
 }
 
@@ -130,7 +131,8 @@ function placeBuilding(
     hasAttacked: false,
     keywords: definition.keywords.slice(),
     temporaryAttackModifier: 0,
-    temporaryAttackModifierExpiresOnTurn: 0
+    temporaryAttackModifierExpiresOnTurn: 0,
+    statuses: []
   });
 }
 
@@ -714,6 +716,65 @@ TestHarness.test('applies a targeted snowball debuff and restores it when the ca
   TestHarness.equal(ended.batch.events[0]!.type, 'OBJECT_STATS_CHANGED');
   TestHarness.equal(ended.batch.events[0]!.payload.reason, 'TEMPORARY_EXPIRED');
   TestHarness.equal(ended.batch.events[1]!.type, 'TURN_ENDED');
+});
+
+TestHarness.test('powder snow applies one replayable slow with a bound attack penalty', function (): void {
+  const state = activeState('match-slow', ['alice', 'bob']);
+  state.players[0]!.hand = ['si_006', 'si_006'];
+  state.players[0]!.redstone = 4;
+  state.players[0]!.redstoneCapacity = 4;
+  placeUnit(state, 1, 'pf_001', 1, 'object-1', 1);
+  state.players[1]!.battlefield[0]!.keywords.push('CHARGE');
+
+  const first = BiomeRivalsRules.applyCommand(state, 'alice', playCommand('play-powder-snow', 0, 'si_006', 'UNIT', 'object-1'));
+  TestHarness.ok(first.accepted);
+  if (!first.accepted) return;
+  const target = first.state.players[1]!.battlefield[0]!;
+  TestHarness.equal(target.attack, 0);
+  TestHarness.equal(target.statuses.length, 1);
+  TestHarness.equal(target.statuses[0]!.statusId, 'SLOW');
+  TestHarness.equal(target.statuses[0]!.remainingDuration, 1);
+  TestHarness.equal(target.statuses[0]!.attackModifier, -1);
+  TestHarness.equal(first.batch.events[1]!.type, 'OBJECT_STATUS_APPLIED');
+  TestHarness.equal(first.batch.events[1]!.payload.sourcePlayerId, 'alice');
+  TestHarness.equal(BiomeRivalsRules.createClientSnapshot(first.state, 'alice').players[1]!.battlefield[0]!.statuses[0]!.statusId, 'SLOW');
+
+  const reapplied = BiomeRivalsRules.applyCommand(first.state, 'alice', playCommand('reapply-powder-snow', 1, 'si_006', 'UNIT', 'object-1'));
+  TestHarness.ok(reapplied.accepted);
+  if (!reapplied.accepted) return;
+  TestHarness.equal(reapplied.state.players[1]!.battlefield[0]!.attack, 0);
+  TestHarness.equal(reapplied.state.players[1]!.battlefield[0]!.statuses.length, 1);
+  TestHarness.equal(reapplied.state.players[1]!.battlefield[0]!.statuses[0]!.attackModifier, -1);
+});
+
+TestHarness.test('slow blocks its controllers attack and expires at that controllers end phase', function (): void {
+  const state = activeState('match-slow-expiry', ['alice', 'bob']);
+  state.players[0]!.hand = ['si_006'];
+  state.players[0]!.redstone = 2;
+  state.players[0]!.redstoneCapacity = 2;
+  placeUnit(state, 1, 'nt_003', 1, 'object-1', 1);
+  state.players[1]!.battlefield[0]!.keywords.push('CHARGE');
+
+  const played = BiomeRivalsRules.applyCommand(state, 'alice', playCommand('slow-before-turn', 0, 'si_006', 'UNIT', 'object-1'));
+  TestHarness.ok(played.accepted);
+  if (!played.accepted) return;
+  const bobTurn = BiomeRivalsRules.applyCommand(played.state, 'alice', command('pass-to-bob', 1, 'END_TURN'));
+  TestHarness.ok(bobTurn.accepted);
+  if (!bobTurn.accepted) return;
+  const combat = BiomeRivalsRules.applyCommand(bobTurn.state, 'bob', enterCombatCommand('bob-combat', 2));
+  TestHarness.ok(combat.accepted);
+  if (!combat.accepted) return;
+  const blocked = BiomeRivalsRules.applyCommand(combat.state, 'bob', attackCommand('slow-attack', 3, 'object-1', 'HERO'));
+  TestHarness.equal(blocked.accepted, false);
+  if (!blocked.accepted) TestHarness.equal(blocked.code, 'ATTACKER_NOT_READY');
+
+  const expired = BiomeRivalsRules.applyCommand(combat.state, 'bob', command('bob-end', 3, 'END_TURN'));
+  TestHarness.ok(expired.accepted);
+  if (!expired.accepted) return;
+  TestHarness.equal(expired.state.players[1]!.battlefield[0]!.attack, 3);
+  TestHarness.equal(expired.state.players[1]!.battlefield[0]!.statuses.length, 0);
+  TestHarness.equal(expired.batch.events[0]!.type, 'OBJECT_STATUS_REMOVED');
+  TestHarness.equal(expired.batch.events[0]!.payload.reason, 'DURATION_EXPIRED');
 });
 
 TestHarness.test('sandstorm damages every unit and removes deaths in event order', function (): void {

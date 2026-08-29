@@ -274,7 +274,7 @@ namespace BiomeRivals.Demo
 
             var effectId = definition.effectIds[0];
             if (effectId != "effect.db_002.01" && effectId != "effect.db_006.01" && effectId != "effect.nt_006.01" &&
-                effectId != "effect.si_001.01" && effectId != "effect.tk_005.01" &&
+                effectId != "effect.si_001.01" && effectId != "effect.si_006.01" && effectId != "effect.tk_005.01" &&
                 effectId != "effect.tk_009.01" && effectId != "effect.tk_010.01" &&
                 effectId != "effect.tk_016.01")
                 return Reject(DemoCommandRejectionCode.EffectNotImplemented, "找不到该 effectId 的规则处理器。");
@@ -351,6 +351,10 @@ namespace BiomeRivals.Demo
                         ? $"雪球：{targetedObject.CardId} 的攻击力降低 {reduced}，持续到本回合结束。"
                         : $"雪球命中 {targetedObject.CardId}，但其攻击力已经为 0。";
                     break;
+                case "effect.si_006.01":
+                    ApplySlow(targetedObject, definition.id, effectId, -2);
+                    message = $"粉雪桶：{targetedObject.CardId} 获得缓慢与 -2 攻击，直到其控制者的结束阶段。";
+                    break;
                 case "effect.tk_005.01":
                     PlayerLife = Math.Min(30, PlayerLife + 2);
                     PlayerLife = Math.Max(0, PlayerLife - 1);
@@ -417,8 +421,10 @@ namespace BiomeRivals.Demo
             if (IsFinished) return Fail("对局已经结束。", out message);
             if (PendingChoice != null) return Fail("请先完成考古学家的牌库选择。", out message);
             if (!IsPlayerTurn || Phase != DemoTurnPhase.Combat) return Fail("请先进入战斗阶段。", out message);
-            if (attacker == null || !attacker.Player || attacker.SlotKind != DemoSlotKind.Unit || attacker.Attack <= 0)
+            if (attacker == null || !attacker.Player || attacker.SlotKind != DemoSlotKind.Unit)
                 return Fail("请选择一个可攻击的己方生物。", out message);
+            if (attacker.HasStatus("SLOW")) return Fail("该生物处于缓慢状态，本回合不能普通攻击。", out message);
+            if (attacker.Attack <= 0) return Fail("该生物当前没有攻击力。", out message);
             if (attacker.SummonedRound == Round && !attacker.HasKeyword("CHARGE")) return Fail("该生物本回合刚被召唤，且不具有冲锋。", out message);
             if (attacker.HasAttacked) return Fail("该生物本回合已经攻击过。", out message);
             message = string.Empty;
@@ -521,6 +527,7 @@ namespace BiomeRivals.Demo
 
         public DemoDrawResult BeginNextPlayerTurn()
         {
+            ExpireStatuses(_opponentBattlefield);
             Round++;
             MaxEnergy = Math.Min(10, MaxEnergy + 1);
             Energy = MaxEnergy;
@@ -759,6 +766,52 @@ namespace BiomeRivals.Demo
                 value.Attack -= value.TemporaryAttackModifier;
                 value.TemporaryAttackModifier = 0;
                 value.TemporaryAttackModifierExpiresOnRound = 0;
+            }
+        }
+
+        private static void ApplySlow(DemoBattlefieldObject target, string sourceCardId, string effectId, int attackModifier)
+        {
+            if (target == null) throw new ArgumentNullException(nameof(target));
+            var statuses = new List<BattlefieldStatusStateDto>(target.Statuses ?? Array.Empty<BattlefieldStatusStateDto>());
+            var status = statuses.Find(value => value != null && value.statusId == "SLOW");
+            if (status == null)
+            {
+                var attackBefore = target.Attack;
+                target.Attack = Math.Max(0, target.Attack + Math.Min(0, attackModifier));
+                status = new BattlefieldStatusStateDto
+                {
+                    statusId = "SLOW",
+                    remainingDuration = 1,
+                    sourcePlayerId = "local-player",
+                    sourceCardId = sourceCardId,
+                    effectId = effectId,
+                    attackModifier = target.Attack - attackBefore
+                };
+                statuses.Add(status);
+            }
+            else
+            {
+                status.remainingDuration = Math.Max(status.remainingDuration, 1);
+                status.sourceCardId = sourceCardId;
+                status.effectId = effectId;
+            }
+            target.Statuses = statuses.ToArray();
+        }
+
+        private static void ExpireStatuses(List<DemoBattlefieldObject> battlefield)
+        {
+            foreach (var value in battlefield)
+            {
+                var statuses = new List<BattlefieldStatusStateDto>(value.Statuses ?? Array.Empty<BattlefieldStatusStateDto>());
+                for (var index = statuses.Count - 1; index >= 0; index--)
+                {
+                    var status = statuses[index];
+                    status.remainingDuration--;
+                    if (status.remainingDuration > 0) continue;
+                    value.Attack = Math.Max(0, value.Attack - status.attackModifier);
+                    statuses.RemoveAt(index);
+                }
+                value.Statuses = statuses.ToArray();
             }
         }
 

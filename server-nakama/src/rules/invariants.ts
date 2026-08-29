@@ -128,6 +128,27 @@ namespace BiomeRivalsRules {
         if ((object.temporaryAttackModifier === 0) !== (object.temporaryAttackModifierExpiresOnTurn === 0)) {
           violations.push('temporary attack modifier and expiry must be cleared together');
         }
+        if (!Array.isArray(object.statuses)) violations.push('battlefield statuses must be an array');
+        else {
+          const seenStatuses: { [statusId: string]: boolean } = {};
+          for (let statusIndex = 0; statusIndex < object.statuses.length; statusIndex += 1) {
+            const status = object.statuses[statusIndex]!;
+            if (status.statusId !== 'SLOW') violations.push('battlefield status is unsupported');
+            if (seenStatuses[status.statusId]) violations.push('battlefield statuses must be unique');
+            seenStatuses[status.statusId] = true;
+            if (status.remainingDuration < 1 || status.remainingDuration % 1 !== 0) violations.push('battlefield status duration is invalid');
+            if (!status.sourcePlayerId || !status.sourceCardId || !status.effectId) violations.push('battlefield status source is incomplete');
+            if (!state.players.some(function (candidate): boolean { return candidate.playerId === status.sourcePlayerId; })) {
+              violations.push('battlefield status source player is not in the match');
+            }
+            const sourceDefinition = getCardDefinition(status.sourceCardId);
+            if (sourceDefinition === null || sourceDefinition.effectIds.indexOf(status.effectId) < 0 ||
+                !/^effect\.[a-z0-9_]+\.[0-9]{2}$/.test(status.effectId)) {
+              violations.push('battlefield status source card or effect is invalid');
+            }
+            if (status.attackModifier > 0) violations.push('battlefield status attack modifier is invalid');
+          }
+        }
         if (object.occupiedSlots < 1) violations.push('battlefield object must occupy at least one slot');
         const expectedRow = object.slotKind === 'UNIT' ? player.unitSlots : player.buildingSlots;
         if (object.slotIndex < 0 || object.slotIndex + object.occupiedSlots > expectedRow.length) {

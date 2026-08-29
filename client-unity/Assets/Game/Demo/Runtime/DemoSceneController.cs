@@ -155,6 +155,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewArchaeology")) SetupArchaeologyPreview();
             else if (HasCommandLineFlag("-previewLoot")) SetupLootPreview();
             else if (HasCommandLineFlag("-previewDungeonSkeleton")) SetupDungeonSkeletonPreview();
+            else if (HasCommandLineFlag("-previewSlow")) SetupSlowPreview();
             else if (HasCommandLineFlag("-previewCombat")) OnEndTurn();
             if (HasCommandLineFlag("-previewGroundHover")) _battlefield.SetSlotHovered(true, DemoSlotKind.Unit, 0, true);
             var capturePath = GetCommandLineValue("-captureDemo");
@@ -466,6 +467,7 @@ namespace BiomeRivals.Demo
                 MatchEventTypes.CardExcavated, MatchEventTypes.CardDrawn,
                 MatchEventTypes.CardBurned, MatchEventTypes.CardGenerated, MatchEventTypes.FatigueDamage, MatchEventTypes.HeroDamaged,
                 MatchEventTypes.HeroHealed, MatchEventTypes.ArmorGained, MatchEventTypes.ObjectStatsChanged,
+                MatchEventTypes.ObjectStatusApplied, MatchEventTypes.ObjectStatusRemoved,
                 MatchEventTypes.PhaseChanged, MatchEventTypes.AttackResolved, MatchEventTypes.ObjectDied,
                 MatchEventTypes.TurnEnded, MatchEventTypes.TurnStarted, MatchEventTypes.PlayerConceded,
                 MatchEventTypes.MatchEnded
@@ -646,6 +648,15 @@ namespace BiomeRivals.Demo
                             : "地牢骷髅亡语：随机命中一个敌方生物并造成 1 点伤害。", false);
                         yield return ShowTurnBanner("亡语", Ember);
                     }
+                    yield return PulseBattlefieldObject(matchEvent.payload?.instanceId);
+                    break;
+                case MatchEventTypes.ObjectStatusApplied:
+                    ShowStatus($"粉雪覆盖目标：缓慢 {matchEvent.payload?.remainingDuration}，期间不能普通攻击。", false);
+                    yield return ShowTurnBanner("缓慢", Cyan);
+                    yield return PulseBattlefieldObject(matchEvent.payload?.instanceId);
+                    break;
+                case MatchEventTypes.ObjectStatusRemoved:
+                    ShowStatus("目标控制者的结束阶段已结算，缓慢与绑定的攻击修正已移除。", false);
                     yield return PulseBattlefieldObject(matchEvent.payload?.instanceId);
                     break;
                 default:
@@ -939,6 +950,24 @@ namespace BiomeRivals.Demo
             RefreshAll();
             ShowStatus(result.Message, !result.Accepted);
             if (result.Accepted) StartCoroutine(PulseBattlefieldObject(attacker.InstanceId));
+        }
+
+        private void SetupSlowPreview()
+        {
+            SelectFaction("snow_ice");
+            SelectOpponentFaction("nether");
+            if (!_registry.TryGetDefinition("si_006", out var powderSnowDefinition) ||
+                !_registry.TryGetDefinition("nt_003", out var blazeDefinition)) return;
+            _match.ResetDeckAndHand(new[] { powderSnowDefinition.id, powderSnowDefinition.id }, Array.Empty<string>());
+            _match.ResetOpponent(new[] { blazeDefinition });
+            var target = _match.GetObject(false, DemoSlotKind.Unit, 0);
+            if (target == null) return;
+            var result = _match.ApplyPlayCard(powderSnowDefinition,
+                _match.CreatePlayCardCommand(powderSnowDefinition.id, "UNIT", target.InstanceId));
+            _selectedCardId = result.Accepted ? powderSnowDefinition.id : null;
+            RefreshAll();
+            ShowStatus(result.Message, !result.Accepted);
+            if (result.Accepted) StartCoroutine(PulseBattlefieldObject(target.InstanceId));
         }
 
         private void SetupStructureDeployedPreview()
@@ -2059,6 +2088,13 @@ namespace BiomeRivals.Demo
                     : text.name;
             if (battlefieldObject?.HasKeyword("TAUNT") == true) stats = $"◆ 嘲讽   {stats}";
             else if (battlefieldObject?.HasKeyword("CHARGE") == true) stats = $"➤ 冲锋   {stats}";
+            var slow = (battlefieldObject?.Statuses ?? Array.Empty<BattlefieldStatusStateDto>())
+                .FirstOrDefault(value => value != null && value.statusId == "SLOW");
+            if (slow != null)
+            {
+                stats = $"缓慢 {slow.remainingDuration} · {stats}";
+                accent = Cyan;
+            }
             var labelY = -size.y * 0.34f;
             var plate = CreatePanel(parent, "WorldLabel", new Vector2(0, labelY), new Vector2(size.x - 8, 30), new Color(Ink.r, Ink.g, Ink.b, 0.84f));
             plate.raycastTarget = false;

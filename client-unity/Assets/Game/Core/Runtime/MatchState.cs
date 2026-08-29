@@ -5,6 +5,18 @@ using System.Linq;
 namespace BiomeRivals.Core
 {
     [Serializable]
+    public sealed class BattlefieldStatusStateDto
+    {
+        public string statusId = string.Empty;
+        public int remainingDuration;
+        public string sourcePlayerId = string.Empty;
+        public string sourceCardId = string.Empty;
+        public string sourceInstanceId = string.Empty;
+        public string effectId = string.Empty;
+        public int attackModifier;
+    }
+
+    [Serializable]
     public sealed class BattlefieldObjectStateDto
     {
         public string instanceId = string.Empty;
@@ -21,6 +33,7 @@ namespace BiomeRivals.Core
         public string[] keywords = Array.Empty<string>();
         public int temporaryAttackModifier;
         public int temporaryAttackModifierExpiresOnTurn;
+        public BattlefieldStatusStateDto[] statuses = Array.Empty<BattlefieldStatusStateDto>();
     }
 
     [Serializable]
@@ -76,10 +89,24 @@ namespace BiomeRivals.Core
             if (snapshot.players == null || snapshot.players.Length != 2)
                 throw new InvalidOperationException("Snapshot must contain exactly two players.");
             foreach (var player in snapshot.players)
+            {
                 if (player == null || !FactionIds.IsSupported(player.factionId))
                     throw new InvalidOperationException("Snapshot contains an unsupported player faction.");
                 else if (player.buriedCount < 0 || player.buriedCount > player.deckCount)
                     throw new InvalidOperationException("Snapshot contains an invalid buried card count.");
+                foreach (var battlefieldObject in player.battlefield ?? Array.Empty<BattlefieldObjectStateDto>())
+                {
+                    if (battlefieldObject == null) throw new InvalidOperationException("Snapshot contains a missing battlefield object.");
+                    var seenStatuses = new HashSet<string>(StringComparer.Ordinal);
+                    foreach (var status in battlefieldObject.statuses ?? Array.Empty<BattlefieldStatusStateDto>())
+                    {
+                        if (status == null || status.statusId != "SLOW" || status.remainingDuration < 1 ||
+                            string.IsNullOrWhiteSpace(status.sourcePlayerId) || string.IsNullOrWhiteSpace(status.sourceCardId) ||
+                            string.IsNullOrWhiteSpace(status.effectId) || status.attackModifier > 0 || !seenStatuses.Add(status.statusId))
+                            throw new InvalidOperationException("Snapshot contains an invalid battlefield status.");
+                    }
+                }
+            }
             if (snapshot.pendingChoice != null)
             {
                 ValidatePendingChoice(snapshot, snapshot.pendingChoice, "Snapshot");
@@ -286,6 +313,33 @@ namespace BiomeRivals.Core
                     statsObject.temporaryAttackModifier = payload.temporaryAttackModifier;
                     statsObject.temporaryAttackModifierExpiresOnTurn = payload.temporaryAttackModifierExpiresOnTurn;
                     break;
+                case MatchEventTypes.ObjectStatusApplied:
+                    var statusObject = FindObject(FindPlayer(payload.playerId), payload.instanceId);
+                    var statuses = new List<BattlefieldStatusStateDto>(statusObject.statuses ?? Array.Empty<BattlefieldStatusStateDto>());
+                    statuses.RemoveAll(value => value != null && value.statusId == payload.statusId);
+                    statuses.Add(new BattlefieldStatusStateDto
+                    {
+                        statusId = payload.statusId,
+                        remainingDuration = payload.remainingDuration,
+                        sourcePlayerId = payload.sourcePlayerId,
+                        sourceCardId = payload.sourceCardId,
+                        sourceInstanceId = payload.sourceInstanceId,
+                        effectId = payload.effectId,
+                        attackModifier = payload.statusAttackModifier
+                    });
+                    statusObject.statuses = statuses.ToArray();
+                    statusObject.attack = payload.attack;
+                    statusObject.health = payload.health;
+                    break;
+                case MatchEventTypes.ObjectStatusRemoved:
+                    var clearedObject = FindObject(FindPlayer(payload.playerId), payload.instanceId);
+                    var remainingStatuses = new List<BattlefieldStatusStateDto>(clearedObject.statuses ?? Array.Empty<BattlefieldStatusStateDto>());
+                    if (remainingStatuses.RemoveAll(value => value != null && value.statusId == payload.statusId) != 1)
+                        throw new InvalidOperationException("Status removal does not match exactly one projected status.");
+                    clearedObject.statuses = remainingStatuses.ToArray();
+                    clearedObject.attack = payload.attack;
+                    clearedObject.health = payload.health;
+                    break;
                 case MatchEventTypes.PhaseChanged:
                     Current.phase = payload.phase;
                     break;
@@ -434,7 +488,8 @@ namespace BiomeRivals.Core
                     hasAttacked = false,
                     keywords = payload.keywords ?? Array.Empty<string>(),
                     temporaryAttackModifier = 0,
-                    temporaryAttackModifierExpiresOnTurn = 0
+                    temporaryAttackModifierExpiresOnTurn = 0,
+                    statuses = Array.Empty<BattlefieldStatusStateDto>()
                 }
             };
             player.battlefield = battlefield.ToArray();

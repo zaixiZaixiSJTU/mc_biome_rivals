@@ -1,16 +1,17 @@
 namespace BiomeRivalsRules {
-  export const PROTOCOL_VERSION = 14;
-  export const RULESET_VERSION = 'prototype-0.17';
+  export const PROTOCOL_VERSION = 15;
+  export const RULESET_VERSION = 'prototype-0.18';
 
   export type MatchStatus = 'WAITING' | 'MULLIGAN' | 'ACTIVE' | 'FINISHED';
   export type CommandType = 'MULLIGAN' | 'DEPLOY_CARD' | 'PLAY_CARD' | 'RESOLVE_CHOICE' | 'ENTER_COMBAT' | 'ATTACK' | 'END_TURN' | 'CONCEDE';
-  export type EventType = 'MULLIGAN_COMPLETED' | 'MATCH_STARTED' | 'MATERIALS_CONSUMED' | 'CARD_DEPLOYED' | 'OBJECT_SUMMONED' | 'CARD_PLAYED' | 'CARD_BURIED' | 'CHOICE_OFFERED' | 'CHOICE_RESOLVED' | 'CARD_EXCAVATED' | 'CARD_DRAWN' | 'CARD_BURNED' | 'CARD_GENERATED' | 'FATIGUE_DAMAGE' | 'HERO_DAMAGED' | 'HERO_HEALED' | 'ARMOR_GAINED' | 'OBJECT_STATS_CHANGED' | 'PHASE_CHANGED' | 'ATTACK_RESOLVED' | 'OBJECT_DIED' | 'TURN_ENDED' | 'TURN_STARTED' | 'PLAYER_CONCEDED' | 'MATCH_ENDED';
+  export type EventType = 'MULLIGAN_COMPLETED' | 'MATCH_STARTED' | 'MATERIALS_CONSUMED' | 'CARD_DEPLOYED' | 'OBJECT_SUMMONED' | 'CARD_PLAYED' | 'CARD_BURIED' | 'CHOICE_OFFERED' | 'CHOICE_RESOLVED' | 'CARD_EXCAVATED' | 'CARD_DRAWN' | 'CARD_BURNED' | 'CARD_GENERATED' | 'FATIGUE_DAMAGE' | 'HERO_DAMAGED' | 'HERO_HEALED' | 'ARMOR_GAINED' | 'OBJECT_STATS_CHANGED' | 'OBJECT_STATUS_APPLIED' | 'OBJECT_STATUS_REMOVED' | 'PHASE_CHANGED' | 'ATTACK_RESOLVED' | 'OBJECT_DIED' | 'TURN_ENDED' | 'TURN_STARTED' | 'PLAYER_CONCEDED' | 'MATCH_ENDED';
   export type DeploySlotKind = 'UNIT' | 'BUILDING';
   export type PaymentMethod = 'REDSTONE' | 'CRAFTING';
   export type TurnPhase = 'MAIN' | 'COMBAT';
   export type AttackTargetType = 'HERO' | 'UNIT' | 'BUILDING';
   export type CardType = 'UNIT' | 'SPELL' | 'BUILDING' | 'STRUCTURE' | 'EQUIPMENT' | 'MATERIAL';
   export type CardKeyword = 'TAUNT' | 'CHARGE';
+  export type BattlefieldStatusId = 'SLOW';
   export type FactionId = 'plains_forest' | 'desert_badlands' | 'snow_ice' | 'cave_dark_forest' | 'ocean_river' | 'nether' | 'end';
 
   export const FACTION_CARD_PREFIXES: { [factionId: string]: string } = {
@@ -45,6 +46,16 @@ namespace BiomeRivalsRules {
     effectIds: string[];
   }
 
+  export interface BattlefieldStatusState {
+    statusId: BattlefieldStatusId;
+    remainingDuration: number;
+    sourcePlayerId: string;
+    sourceCardId: string;
+    sourceInstanceId: string;
+    effectId: string;
+    attackModifier: number;
+  }
+
   export interface BattlefieldObjectState {
     instanceId: string;
     cardId: string;
@@ -60,6 +71,7 @@ namespace BiomeRivalsRules {
     keywords: CardKeyword[];
     temporaryAttackModifier: number;
     temporaryAttackModifierExpiresOnTurn: number;
+    statuses: BattlefieldStatusState[];
   }
 
   export interface PendingChoiceOptionState {

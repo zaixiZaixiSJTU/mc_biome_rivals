@@ -49,9 +49,14 @@ namespace BiomeRivals.Demo
         public string[] Keywords { get; set; } = System.Array.Empty<string>();
         public int TemporaryAttackModifier { get; set; }
         public int TemporaryAttackModifierExpiresOnRound { get; set; }
+        public BattlefieldStatusStateDto[] Statuses { get; set; } = System.Array.Empty<BattlefieldStatusStateDto>();
 
         public bool HasKeyword(string keyword) =>
             !string.IsNullOrEmpty(keyword) && System.Array.IndexOf(Keywords ?? System.Array.Empty<string>(), keyword) >= 0;
+
+        public bool HasStatus(string statusId) =>
+            !string.IsNullOrEmpty(statusId) && System.Array.Exists(Statuses ?? System.Array.Empty<BattlefieldStatusStateDto>(),
+                value => value != null && value.statusId == statusId);
     }
 
     public interface IDemoMatchView

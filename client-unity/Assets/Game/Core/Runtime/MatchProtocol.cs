@@ -42,6 +42,8 @@ namespace BiomeRivals.Core
         public const string HeroHealed = "HERO_HEALED";
         public const string ArmorGained = "ARMOR_GAINED";
         public const string ObjectStatsChanged = "OBJECT_STATS_CHANGED";
+        public const string ObjectStatusApplied = "OBJECT_STATUS_APPLIED";
+        public const string ObjectStatusRemoved = "OBJECT_STATUS_REMOVED";
         public const string PhaseChanged = "PHASE_CHANGED";
         public const string AttackResolved = "ATTACK_RESOLVED";
         public const string ObjectDied = "OBJECT_DIED";
@@ -279,6 +281,10 @@ namespace BiomeRivals.Core
         public int amount;
         public int temporaryAttackModifier;
         public int temporaryAttackModifierExpiresOnTurn;
+        public string statusId = string.Empty;
+        public int remainingDuration;
+        public string sourcePlayerId = string.Empty;
+        public int statusAttackModifier;
         public string craftedCardId = string.Empty;
         public string recipeId = string.Empty;
         public CraftingMaterialDto[] materials = Array.Empty<CraftingMaterialDto>();

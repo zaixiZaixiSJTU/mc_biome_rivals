@@ -1110,5 +1110,70 @@ namespace BiomeRivals.Core.Tests
             Assert.Throws<InvalidOperationException>(() => store.Apply(batch));
             Assert.That(store.Current.revision, Is.EqualTo(3));
         }
+
+        [Test]
+        public void Apply_ReplaysSlowApplicationAndRemoval()
+        {
+            var target = new BattlefieldObjectStateDto
+            {
+                instanceId = "object-7", cardId = "nt_003", cardType = "UNIT", attack = 3,
+                health = 3, maxHealth = 3, slotKind = "UNIT", slotIndex = 1, occupiedSlots = 1, summonedTurn = 1
+            };
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "slow-replay", protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice" },
+                    new PlayerStateDto
+                    {
+                        playerId = "bob", unitSlots = new[] { null, "object-7", null, null },
+                        battlefield = new[] { target }
+                    }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 1, type = MatchEventTypes.ObjectStatusApplied,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "bob", instanceId = "object-7", statusId = "SLOW", remainingDuration = 1,
+                            sourcePlayerId = "alice", sourceCardId = "si_006", effectId = "effect.si_006.01",
+                            statusAttackModifier = -2, attack = 1, health = 3
+                        }
+                    }
+                }
+            });
+            Assert.That(target.attack, Is.EqualTo(1));
+            Assert.That(target.statuses.Single().statusId, Is.EqualTo("SLOW"));
+            Assert.That(target.statuses.Single().sourcePlayerId, Is.EqualTo("alice"));
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 2,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 2, type = MatchEventTypes.ObjectStatusRemoved,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "bob", instanceId = "object-7", statusId = "SLOW",
+                            sourcePlayerId = "alice", sourceCardId = "si_006", effectId = "effect.si_006.01",
+                            reason = "DURATION_EXPIRED", attack = 3, health = 3
+                        }
+                    }
+                }
+            });
+            Assert.That(target.attack, Is.EqualTo(3));
+            Assert.That(target.statuses, Is.Empty);
+        }
     }
 }

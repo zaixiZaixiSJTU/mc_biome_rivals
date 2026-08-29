@@ -90,8 +90,10 @@ namespace BiomeRivals.Demo
         public bool CanAttackWith(DemoBattlefieldObject attacker, out string message)
         {
             if (!IsPlayerTurn || Phase != DemoTurnPhase.Combat) return Fail("请先进入战斗阶段。", out message);
-            if (attacker == null || !attacker.Player || attacker.SlotKind != DemoSlotKind.Unit || attacker.Health <= 0 || attacker.Attack <= 0)
+            if (attacker == null || !attacker.Player || attacker.SlotKind != DemoSlotKind.Unit || attacker.Health <= 0)
                 return Fail("请选择一个存活且具有攻击力的己方生物。", out message);
+            if (attacker.HasStatus("SLOW")) return Fail("该生物处于缓慢状态，本回合不能普通攻击。", out message);
+            if (attacker.Attack <= 0) return Fail("该生物当前没有攻击力。", out message);
             if (attacker.SummonedRound >= Round && !attacker.HasKeyword("CHARGE")) return Fail("该生物本回合刚被召唤，且不具有冲锋。", out message);
             if (attacker.HasAttacked) return Fail("该生物本回合已经攻击过。", out message);
             message = string.Empty;
@@ -157,7 +159,8 @@ namespace BiomeRivals.Demo
                 HasAttacked = value.hasAttacked,
                 Keywords = value.keywords ?? Array.Empty<string>(),
                 TemporaryAttackModifier = value.temporaryAttackModifier,
-                TemporaryAttackModifierExpiresOnRound = value.temporaryAttackModifierExpiresOnTurn
+                TemporaryAttackModifierExpiresOnRound = value.temporaryAttackModifierExpiresOnTurn,
+                Statuses = value.statuses ?? Array.Empty<BattlefieldStatusStateDto>()
             };
 
         private static bool Fail(string value, out string message)
