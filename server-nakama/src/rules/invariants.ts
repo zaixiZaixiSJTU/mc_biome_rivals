@@ -20,6 +20,36 @@ namespace BiomeRivalsRules {
     if (state.status !== 'FINISHED' && state.winnerPlayerId !== null) {
       violations.push('unfinished match cannot have a winner');
     }
+    if (state.pendingChoice !== null) {
+      const choice = state.pendingChoice;
+      const choicePlayerIndex = state.players.map(function (player): string { return player.playerId; }).indexOf(choice.playerId);
+      if (state.status !== 'ACTIVE' || state.phase !== 'MAIN') violations.push('pending choices require the active main phase');
+      if (choicePlayerIndex < 0 || choicePlayerIndex !== state.activePlayerIndex) violations.push('pending choice owner must be the active player');
+      if (!/^choice-[0-9]+$/.test(choice.choiceId)) violations.push('pending choice id is invalid');
+      if (choice.kind !== 'ARCHAEOLOGY_TOP_3' || choice.effectId !== 'effect.db_003.01' || choice.sourceCardId !== 'db_003') {
+        violations.push('pending choice kind or source is unsupported');
+      }
+      if (!Array.isArray(choice.options) || choice.options.length > 3) violations.push('pending choice options are invalid');
+      if (choicePlayerIndex >= 0) {
+        const choicePlayer = state.players[choicePlayerIndex]!;
+        const expectedCount = Math.min(3, choicePlayer.deck.length);
+        if (choice.options.length !== expectedCount) violations.push('archaeology choice must inspect the complete top-three range');
+        const sourceExists = choicePlayer.battlefield.some(function (object): boolean {
+          return object.instanceId === choice.sourceInstanceId && object.cardId === choice.sourceCardId;
+        });
+        if (!sourceExists) violations.push('pending choice source object is missing');
+        for (let optionIndex = 0; optionIndex < choice.options.length; optionIndex += 1) {
+          const option = choice.options[optionIndex]!;
+          const expectedCardId = choicePlayer.deck[choicePlayer.deck.length - 1 - optionIndex];
+          if (option.optionIndex !== optionIndex || option.cardId !== expectedCardId) {
+            violations.push('pending choice options no longer match the deck top');
+          }
+          if (option.selectable !== (choicePlayer.buriedCardIds.indexOf(option.cardId) >= 0)) {
+            violations.push('pending choice selectable marker differs from buried state');
+          }
+        }
+      }
+    }
     const completedMulligans = state.players.filter(function (player): boolean { return player.mulliganCompleted; }).length;
     if (state.status === 'MULLIGAN' && completedMulligans === state.players.length) {
       violations.push('mulligan state cannot have every player confirmed');

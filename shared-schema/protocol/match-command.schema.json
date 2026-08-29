@@ -6,11 +6,11 @@
   "additionalProperties": false,
   "required": ["protocolVersion", "rulesetVersion", "commandId", "expectedRevision", "type", "payload"],
   "properties": {
-    "protocolVersion": { "const": 12 },
+    "protocolVersion": { "const": 13 },
     "rulesetVersion": { "type": "string", "minLength": 1 },
     "commandId": { "type": "string", "minLength": 1, "maxLength": 80 },
     "expectedRevision": { "type": "integer", "minimum": 0 },
-    "type": { "enum": ["MULLIGAN", "DEPLOY_CARD", "PLAY_CARD", "ENTER_COMBAT", "ATTACK", "END_TURN", "CONCEDE"] },
+    "type": { "enum": ["MULLIGAN", "DEPLOY_CARD", "PLAY_CARD", "RESOLVE_CHOICE", "ENTER_COMBAT", "ATTACK", "END_TURN", "CONCEDE"] },
     "payload": { "type": "object" }
   },
   "allOf": [
@@ -61,6 +61,21 @@
               "cardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
               "targetType": { "enum": ["HERO", "UNIT", "BUILDING"] },
               "targetInstanceId": { "type": "string", "pattern": "^object-[0-9]+$" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "RESOLVE_CHOICE" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object", "additionalProperties": false,
+            "required": ["choiceId", "selectedOptionIndex"],
+            "properties": {
+              "choiceId": { "type": "string", "pattern": "^choice-[0-9]+$" },
+              "selectedOptionIndex": { "type": "integer", "minimum": -1, "maximum": 2 }
             }
           }
         }

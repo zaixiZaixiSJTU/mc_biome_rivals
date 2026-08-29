@@ -34,6 +34,12 @@ function playCommand(id: string, revision: number, cardId: string, targetType?: 
   return result;
 }
 
+function resolveChoiceCommand(id: string, revision: number, choiceId: string, selectedOptionIndex: number): BiomeRivalsRules.MatchCommand {
+  const result = command(id, revision, 'RESOLVE_CHOICE');
+  result.payload = { choiceId: choiceId, selectedOptionIndex: selectedOptionIndex };
+  return result;
+}
+
 function attackCommand(
   id: string,
   revision: number,
@@ -274,6 +280,117 @@ TestHarness.test('resolves the bee battlecry after deployment', function (): voi
   TestHarness.equal(result.batch.events[1]!.type, 'HERO_HEALED');
   TestHarness.equal(result.batch.events[1]!.payload.effectId, 'effect.pf_001.01');
   TestHarness.equal(result.batch.events[1]!.payload.healing, 1);
+});
+
+TestHarness.test('offers the archaeologists top-three choice privately after deployment', function (): void {
+  const state = activeState('match-1', ['alice', 'bob'], ['desert_badlands', 'nether']);
+  state.players[0]!.hand = ['db_003'];
+  state.players[0]!.deck = ['db_001', 'db_002', 'tk_006', 'db_004'];
+  state.players[0]!.buriedCardIds = ['tk_006'];
+  state.players[0]!.redstone = 2;
+  state.players[0]!.redstoneCapacity = 2;
+
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', deployCommand('deploy-archaeologist', 0, 'db_003', 'UNIT', 0));
+
+  TestHarness.ok(result.accepted);
+  if (!result.accepted) return;
+  TestHarness.equal(result.batch.events.length, 2);
+  TestHarness.equal(result.batch.events[0]!.type, 'CARD_DEPLOYED');
+  TestHarness.equal(result.batch.events[1]!.type, 'CHOICE_OFFERED');
+  TestHarness.equal(result.state.pendingChoice!.kind, 'ARCHAEOLOGY_TOP_3');
+  TestHarness.equal(result.state.pendingChoice!.options.length, 3);
+  TestHarness.equal(JSON.stringify(result.state.pendingChoice!.options), JSON.stringify([
+    { optionIndex: 0, cardId: 'db_004', selectable: false },
+    { optionIndex: 1, cardId: 'tk_006', selectable: true },
+    { optionIndex: 2, cardId: 'db_002', selectable: false }
+  ]));
+  const ownerSnapshot = BiomeRivalsRules.createClientSnapshot(result.state, 'alice');
+  const opponentSnapshot = BiomeRivalsRules.createClientSnapshot(result.state, 'bob');
+  TestHarness.equal(ownerSnapshot.pendingChoice!.options[1]!.cardId, 'tk_006');
+  TestHarness.equal(ownerSnapshot.pendingChoice!.options[1]!.selectable, true);
+  TestHarness.equal(opponentSnapshot.pendingChoice!.options[1]!.cardId, null);
+  TestHarness.equal(opponentSnapshot.pendingChoice!.options[1]!.selectable, false);
+  const opponentBatch = BiomeRivalsRules.createClientEventBatch(result.batch, 'bob');
+  const hiddenOptions = opponentBatch.events[1]!.payload.options as BiomeRivalsRules.PendingChoiceOptionSnapshot[];
+  TestHarness.equal(hiddenOptions[1]!.cardId, null);
+  TestHarness.equal(hiddenOptions[1]!.selectable, false);
+  TestHarness.equal(state.pendingChoice, null, 'accepted commands must not mutate input');
+});
+
+TestHarness.test('blocks other actions until the archaeology choice resolves', function (): void {
+  const state = activeState('match-1', ['alice', 'bob'], ['desert_badlands', 'nether']);
+  state.players[0]!.hand = ['db_003'];
+  state.players[0]!.deck = ['db_001', 'tk_006'];
+  state.players[0]!.buriedCardIds = ['tk_006'];
+  state.players[0]!.redstone = 2;
+  state.players[0]!.redstoneCapacity = 2;
+  const deployed = BiomeRivalsRules.applyCommand(state, 'alice', deployCommand('deploy-choice-lock', 0, 'db_003', 'UNIT', 0));
+  TestHarness.ok(deployed.accepted);
+  if (!deployed.accepted) return;
+
+  const blocked = BiomeRivalsRules.applyCommand(deployed.state, 'alice', command('blocked-end-turn', 1, 'END_TURN'));
+
+  TestHarness.equal(blocked.accepted, false);
+  if (!blocked.accepted) TestHarness.equal(blocked.code, 'CHOICE_REQUIRED');
+  TestHarness.ok(deployed.state.pendingChoice !== null);
+  TestHarness.equal(deployed.state.revision, 1);
+});
+
+TestHarness.test('resolves an archaeology choice into excavation and a normal draw', function (): void {
+  const state = activeState('match-1', ['alice', 'bob'], ['desert_badlands', 'nether']);
+  state.players[0]!.hand = ['db_003'];
+  state.players[0]!.deck = ['db_001', 'db_002', 'tk_006', 'db_004'];
+  state.players[0]!.buriedCardIds = ['tk_006'];
+  state.players[0]!.redstone = 2;
+  state.players[0]!.redstoneCapacity = 2;
+  const deployed = BiomeRivalsRules.applyCommand(state, 'alice', deployCommand('deploy-choice', 0, 'db_003', 'UNIT', 0));
+  TestHarness.ok(deployed.accepted);
+  if (!deployed.accepted) return;
+  const choiceId = deployed.state.pendingChoice!.choiceId;
+
+  const invalid = BiomeRivalsRules.applyCommand(deployed.state, 'alice', resolveChoiceCommand('invalid-choice', 1, choiceId, 0));
+  TestHarness.equal(invalid.accepted, false);
+  if (!invalid.accepted) TestHarness.equal(invalid.code, 'INVALID_CHOICE');
+  TestHarness.ok(deployed.state.pendingChoice !== null, 'rejected choices must be atomic');
+
+  const result = BiomeRivalsRules.applyCommand(deployed.state, 'alice', resolveChoiceCommand('resolve-choice', 1, choiceId, 1));
+  TestHarness.ok(result.accepted);
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.pendingChoice, null);
+  TestHarness.equal(JSON.stringify(result.state.players[0]!.hand), JSON.stringify(['tk_006', 'db_004']));
+  TestHarness.equal(JSON.stringify(result.state.players[0]!.deck), JSON.stringify(['db_001', 'db_002']));
+  TestHarness.equal(result.state.players[0]!.buriedCardIds.length, 0);
+  TestHarness.equal(result.state.players[0]!.armor, 1);
+  TestHarness.equal(result.batch.events.length, 4);
+  TestHarness.equal(result.batch.events[0]!.type, 'CHOICE_RESOLVED');
+  TestHarness.equal(result.batch.events[1]!.type, 'CARD_EXCAVATED');
+  TestHarness.equal(result.batch.events[2]!.type, 'ARMOR_GAINED');
+  TestHarness.equal(result.batch.events[3]!.type, 'CARD_DRAWN');
+  TestHarness.equal(BiomeRivalsRules.validateState(result.state).length, 0);
+});
+
+TestHarness.test('requires an explicit no-selection confirmation when no buried card is inspected', function (): void {
+  const state = activeState('match-1', ['alice', 'bob'], ['desert_badlands', 'nether']);
+  state.players[0]!.hand = ['db_003'];
+  state.players[0]!.deck = ['db_001', 'db_002'];
+  state.players[0]!.buriedCardIds = [];
+  state.players[0]!.redstone = 2;
+  state.players[0]!.redstoneCapacity = 2;
+  const deployed = BiomeRivalsRules.applyCommand(state, 'alice', deployCommand('deploy-empty-choice', 0, 'db_003', 'UNIT', 0));
+  TestHarness.ok(deployed.accepted);
+  if (!deployed.accepted) return;
+  const choiceId = deployed.state.pendingChoice!.choiceId;
+  TestHarness.equal(deployed.state.pendingChoice!.options.every(function (option): boolean { return !option.selectable; }), true);
+
+  const result = BiomeRivalsRules.applyCommand(deployed.state, 'alice', resolveChoiceCommand('confirm-empty-choice', 1, choiceId, -1));
+
+  TestHarness.ok(result.accepted);
+  if (!result.accepted) return;
+  TestHarness.equal(result.batch.events.length, 1);
+  TestHarness.equal(result.batch.events[0]!.type, 'CHOICE_RESOLVED');
+  TestHarness.equal(result.batch.events[0]!.payload.selectedCardId, null);
+  TestHarness.equal(JSON.stringify(result.state.players[0]!.deck), JSON.stringify(['db_001', 'db_002']));
+  TestHarness.equal(result.state.players[0]!.hand.length, 0);
 });
 
 TestHarness.test('deploys a structure only across consecutive free building slots', function (): void {

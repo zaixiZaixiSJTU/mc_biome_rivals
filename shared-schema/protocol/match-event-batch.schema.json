@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["protocolVersion", "rulesetVersion", "revision", "acknowledgedCommandId", "events"],
   "properties": {
-    "protocolVersion": { "const": 12 },
+    "protocolVersion": { "const": 13 },
     "rulesetVersion": { "type": "string" },
     "revision": { "type": "integer", "minimum": 0 },
     "acknowledgedCommandId": { "type": "string" },
@@ -18,7 +18,7 @@
         "required": ["eventId", "type", "payload"],
         "properties": {
           "eventId": { "type": "integer", "minimum": 1 },
-          "type": { "enum": ["MULLIGAN_COMPLETED", "MATCH_STARTED", "MATERIALS_CONSUMED", "CARD_DEPLOYED", "OBJECT_SUMMONED", "CARD_PLAYED", "CARD_BURIED", "CARD_EXCAVATED", "CARD_DRAWN", "CARD_BURNED", "CARD_GENERATED", "FATIGUE_DAMAGE", "HERO_DAMAGED", "HERO_HEALED", "ARMOR_GAINED", "OBJECT_STATS_CHANGED", "PHASE_CHANGED", "ATTACK_RESOLVED", "OBJECT_DIED", "TURN_ENDED", "TURN_STARTED", "PLAYER_CONCEDED", "MATCH_ENDED"] },
+          "type": { "enum": ["MULLIGAN_COMPLETED", "MATCH_STARTED", "MATERIALS_CONSUMED", "CARD_DEPLOYED", "OBJECT_SUMMONED", "CARD_PLAYED", "CARD_BURIED", "CHOICE_OFFERED", "CHOICE_RESOLVED", "CARD_EXCAVATED", "CARD_DRAWN", "CARD_BURNED", "CARD_GENERATED", "FATIGUE_DAMAGE", "HERO_DAMAGED", "HERO_HEALED", "ARMOR_GAINED", "OBJECT_STATS_CHANGED", "PHASE_CHANGED", "ATTACK_RESOLVED", "OBJECT_DIED", "TURN_ENDED", "TURN_STARTED", "PLAYER_CONCEDED", "MATCH_ENDED"] },
           "payload": { "type": "object" }
         },
         "allOf": [
@@ -179,6 +179,58 @@
                     "cardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
                     "deckCount": { "type": "integer", "minimum": 1 },
                     "buriedCount": { "type": "integer", "minimum": 1 }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": { "properties": { "type": { "const": "CHOICE_OFFERED" } } },
+            "then": {
+              "properties": {
+                "payload": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["choiceId", "playerId", "sourceCardId", "sourceInstanceId", "effectId", "kind", "options"],
+                  "properties": {
+                    "choiceId": { "type": "string", "pattern": "^choice-[0-9]+$" },
+                    "playerId": { "type": "string", "minLength": 1 },
+                    "sourceCardId": { "const": "db_003" },
+                    "sourceInstanceId": { "type": "string", "pattern": "^object-[0-9]+$" },
+                    "effectId": { "const": "effect.db_003.01" },
+                    "kind": { "const": "ARCHAEOLOGY_TOP_3" },
+                    "options": {
+                      "type": "array", "maxItems": 3,
+                      "items": {
+                        "type": "object", "additionalProperties": false,
+                        "required": ["optionIndex", "cardId", "selectable"],
+                        "properties": {
+                          "optionIndex": { "type": "integer", "minimum": 0, "maximum": 2 },
+                          "cardId": { "type": ["string", "null"], "pattern": "^[a-z0-9_]+$" },
+                          "selectable": { "type": "boolean" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": { "properties": { "type": { "const": "CHOICE_RESOLVED" } } },
+            "then": {
+              "properties": {
+                "payload": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["choiceId", "playerId", "sourceCardId", "sourceInstanceId", "effectId", "kind", "selectedOptionIndex", "selectedCardId"],
+                  "properties": {
+                    "choiceId": { "type": "string", "pattern": "^choice-[0-9]+$" },
+                    "playerId": { "type": "string", "minLength": 1 },
+                    "sourceCardId": { "const": "db_003" },
+                    "sourceInstanceId": { "type": "string", "pattern": "^object-[0-9]+$" },
+                    "effectId": { "const": "effect.db_003.01" },
+                    "kind": { "const": "ARCHAEOLOGY_TOP_3" },
+                    "selectedOptionIndex": { "type": "integer", "minimum": -1, "maximum": 2 },
+                    "selectedCardId": { "type": ["string", "null"], "pattern": "^[a-z0-9_]+$" }
                   }
                 }
               }

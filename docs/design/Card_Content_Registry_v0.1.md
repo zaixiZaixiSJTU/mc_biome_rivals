@@ -21,9 +21,9 @@
 
 - 56 张可收集牌。
 - 18 张不可收集衍生物。
-- 69 张有规则文本的牌预留 `effect.<cardId>.01`；其中 11 张为 `IMPLEMENTED`，其余 58 张为 `PENDING`。
+- 69 张有规则文本的牌预留 `effect.<cardId>.01`；其中 12 张为 `IMPLEMENTED`，其余 57 张为 `PENDING`。
 - 5 张无规则文本衍生物状态为 `NONE`。
-- 卡牌定义 Schema v3 / 内容版本 v5 注册通用 `keywords` 与二元支付配方；当前注册 4 张 `TAUNT`，并预留 `CHARGE`。首个完整材料循环为 `DB-002 → TK-006 → DB-007`。
+- 卡牌定义 Schema v3 / 内容版本 v6 注册通用 `keywords`、二元支付配方与 DB-003 考古选择效果；当前注册 4 张 `TAUNT`，并预留 `CHARGE`。首个完整材料循环为 `DB-002 → TK-006 → DB-007`。
 
 ## 效果实现约束
 

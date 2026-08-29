@@ -136,6 +136,66 @@ namespace BiomeRivals.Demo.Tests
         }
 
         [Test]
+        public void LocalArchaeologistRequiresAChoiceAndExcavatesTheSelectedBuriedCard()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(
+                new[] { "db_003" },
+                new[] { "db_004", "tk_006", "db_001" },
+                new[] { "tk_006" });
+            Assert.That(registry.TryGetDefinition("db_003", out var archaeologist), Is.True);
+            Assert.That(archaeologist.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+
+            var deployed = match.ApplyDeploy(archaeologist, match.CreateDeployCommand("db_003", DemoSlotKind.Unit, 0));
+
+            Assert.That(deployed.Accepted, Is.True);
+            Assert.That(match.PendingChoice, Is.Not.Null);
+            Assert.That(match.PendingChoice.options.Select(option => option.cardId),
+                Is.EqualTo(new[] { "db_001", "tk_006", "db_004" }));
+            Assert.That(match.PendingChoice.options.Single(option => option.selectable).optionIndex, Is.EqualTo(1));
+            var blocked = match.ApplyEnterCombat(match.CreateEnterCombatCommand());
+            Assert.That(blocked.Accepted, Is.False);
+            Assert.That(blocked.Code, Is.EqualTo(DemoCommandRejectionCode.ChoiceRequired));
+
+            var revisionBeforeInvalidChoice = match.Revision;
+            var invalid = match.ApplyResolveChoice(match.CreateResolveChoiceCommand(match.PendingChoice.choiceId, 0));
+            Assert.That(invalid.Accepted, Is.False);
+            Assert.That(invalid.Code, Is.EqualTo(DemoCommandRejectionCode.InvalidChoice));
+            Assert.That(match.Revision, Is.EqualTo(revisionBeforeInvalidChoice));
+            Assert.That(match.PendingChoice, Is.Not.Null);
+
+            var resolved = match.ApplyResolveChoice(match.CreateResolveChoiceCommand(match.PendingChoice.choiceId, 1));
+            Assert.That(resolved.Accepted, Is.True);
+            Assert.That(match.PendingChoice, Is.Null);
+            Assert.That(match.Hand, Is.EqualTo(new[] { "tk_006", "db_001" }));
+            Assert.That(match.Deck, Is.EqualTo(new[] { "db_004" }));
+            Assert.That(match.BuriedCount, Is.Zero);
+            Assert.That(match.PlayerArmor, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void LocalArchaeologistExplicitlyConfirmsWhenInspectionFindsNoBuriedCard()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(new[] { "db_003" }, new[] { "db_004", "db_001" });
+            Assert.That(registry.TryGetDefinition("db_003", out var archaeologist), Is.True);
+            Assert.That(match.TryDeploy(archaeologist, DemoSlotKind.Unit, 0, out _), Is.True);
+
+            var choiceId = match.PendingChoice.choiceId;
+            Assert.That(match.PendingChoice.options.All(option => !option.selectable), Is.True);
+            var invalid = match.ApplyResolveChoice(match.CreateResolveChoiceCommand(choiceId, 0));
+            Assert.That(invalid.Accepted, Is.False);
+            var resolved = match.ApplyResolveChoice(match.CreateResolveChoiceCommand(choiceId, -1));
+
+            Assert.That(resolved.Accepted, Is.True);
+            Assert.That(match.PendingChoice, Is.Null);
+            Assert.That(match.Hand, Is.Empty);
+            Assert.That(match.Deck, Is.EqualTo(new[] { "db_004", "db_001" }));
+        }
+
+        [Test]
         public void TargetedSnowballUsesStableInstanceAndExpiresAtEndOfTurn()
         {
             var registry = CardContentLoader.Load();
@@ -709,11 +769,15 @@ namespace BiomeRivals.Demo.Tests
                 var endTurn = root.transform.Find("DemoCanvas/EndTurnButton");
                 Assert.That(endTurn.GetComponent<PrimaryActionButton>(), Is.Not.Null);
                 Assert.That(endTurn.GetComponent<SecondaryButton>(), Is.Null);
-                Assert.That(root.GetComponentsInChildren<PrimaryActionButton>(true), Has.Length.EqualTo(2));
+                Assert.That(root.GetComponentsInChildren<PrimaryActionButton>(true), Has.Length.EqualTo(3));
                 var mulliganOverlay = root.transform.Find("DemoCanvas/MulliganOverlay");
                 Assert.That(mulliganOverlay, Is.Not.Null);
                 Assert.That(mulliganOverlay.gameObject.activeSelf, Is.False, "Opening-hand UI stays hidden in the offline sandbox.");
                 Assert.That(mulliganOverlay.Find("MulliganPanel/ConfirmMulligan").GetComponent<PrimaryActionButton>(), Is.Not.Null);
+                var choiceOverlay = root.transform.Find("DemoCanvas/ChoiceOverlay");
+                Assert.That(choiceOverlay, Is.Not.Null);
+                Assert.That(choiceOverlay.gameObject.activeSelf, Is.False, "Card choices stay hidden until an effect offers one.");
+                Assert.That(choiceOverlay.Find("ArchaeologyPanel/ConfirmChoice").GetComponent<PrimaryActionButton>(), Is.Not.Null);
                 var factionButtons = root.GetComponentsInChildren<SecondaryButton>(true)
                     .Where(style => style.name.StartsWith("Faction_", System.StringComparison.Ordinal))
                     .ToArray();

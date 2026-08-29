@@ -78,6 +78,7 @@ namespace BiomeRivalsRules {
         makePlayer(orderedPlayerIds[0]!, 3, matchId, orderedFactions[0]!),
         makePlayer(orderedPlayerIds[1]!, 4, matchId, orderedFactions[1]!)
       ],
+      pendingChoice: null,
       winnerPlayerId: null,
       processedCommandIds: []
     };
@@ -132,6 +133,22 @@ namespace BiomeRivalsRules {
           })
         };
       }),
+      pendingChoice: state.pendingChoice === null ? null : {
+        choiceId: state.pendingChoice.choiceId,
+        playerId: state.pendingChoice.playerId,
+        sourceCardId: state.pendingChoice.sourceCardId,
+        sourceInstanceId: state.pendingChoice.sourceInstanceId,
+        effectId: state.pendingChoice.effectId,
+        kind: state.pendingChoice.kind,
+        options: state.pendingChoice.options.map(function (option): PendingChoiceOptionSnapshot {
+          const ownsChoice = state.pendingChoice !== null && state.pendingChoice.playerId === viewerPlayerId;
+          return {
+            optionIndex: option.optionIndex,
+            cardId: ownsChoice ? option.cardId : null,
+            selectable: ownsChoice && option.selectable
+          };
+        })
+      },
       winnerPlayerId: state.winnerPlayerId
     };
   }
@@ -147,6 +164,11 @@ namespace BiomeRivalsRules {
         Object.keys(event.payload).forEach(function (key): void { payload[key] = event.payload[key]; });
         if (event.type === 'CARD_DRAWN' && payload.playerId !== viewerPlayerId) payload.cardId = null;
         if (event.type === 'CARD_GENERATED' && payload.playerId !== viewerPlayerId && payload.destination === 'HAND') payload.cardId = null;
+        if (event.type === 'CHOICE_OFFERED' && payload.playerId !== viewerPlayerId && Array.isArray(payload.options)) {
+          payload.options = (payload.options as PendingChoiceOptionState[]).map(function (option): PendingChoiceOptionSnapshot {
+            return { optionIndex: option.optionIndex, cardId: null, selectable: false };
+          });
+        }
         if (event.type === 'MULLIGAN_COMPLETED' && payload.playerId !== viewerPlayerId && Array.isArray(payload.hand)) {
           payload.hand = (payload.hand as string[]).map(function (): null { return null; });
         }
@@ -203,6 +225,17 @@ namespace BiomeRivalsRules {
           })
         };
       }),
+      pendingChoice: state.pendingChoice === null ? null : {
+        choiceId: state.pendingChoice.choiceId,
+        playerId: state.pendingChoice.playerId,
+        sourceCardId: state.pendingChoice.sourceCardId,
+        sourceInstanceId: state.pendingChoice.sourceInstanceId,
+        effectId: state.pendingChoice.effectId,
+        kind: state.pendingChoice.kind,
+        options: state.pendingChoice.options.map(function (option): PendingChoiceOptionState {
+          return { optionIndex: option.optionIndex, cardId: option.cardId, selectable: option.selectable };
+        })
+      },
       winnerPlayerId: state.winnerPlayerId,
       processedCommandIds: state.processedCommandIds.slice()
     };
@@ -226,6 +259,9 @@ namespace BiomeRivalsRules {
 
     const actorIndex = state.players.map(function (player): string { return player.playerId; }).indexOf(actorPlayerId);
     if (actorIndex < 0) return reject(state, 'NOT_A_PLAYER', 'actor does not belong to this match');
+    if (state.pendingChoice !== null && command.type !== 'RESOLVE_CHOICE' && command.type !== 'CONCEDE') {
+      return reject(state, 'CHOICE_REQUIRED', 'the pending card choice must be resolved before another action');
+    }
 
     const next = cloneState(state);
     const events: MatchEvent[] = [];
@@ -423,6 +459,9 @@ namespace BiomeRivalsRules {
           healing: healing,
           life: player.life
         });
+      } else if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
+          definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.db_003.01') {
+        offerArchaeologyChoice(player, battlefieldObject, definition.effectIds[0]);
       }
       return null;
     }
@@ -593,6 +632,31 @@ namespace BiomeRivalsRules {
       });
     }
 
+    function resolveExcavatedCard(player: PlayerState, cardId: string): void {
+      const buriedIndex = player.buriedCardIds.indexOf(cardId);
+      if (buriedIndex < 0) throw new Error('excavated card does not have a buried marker: ' + cardId);
+      player.buriedCardIds.splice(buriedIndex, 1);
+      if (cardId !== 'tk_006') throw new Error('buried effect handler is not registered: ' + cardId);
+      const destination = player.hand.length >= HAND_LIMIT ? 'DISCARD' : 'HAND';
+      if (destination === 'HAND') player.hand.push(cardId);
+      else player.discardPile.push(cardId);
+      emit('CARD_EXCAVATED', {
+        playerId: player.playerId,
+        cardId: cardId,
+        effectId: 'effect.tk_006.01',
+        destination: destination,
+        handCount: player.hand.length,
+        deckCount: player.deck.length,
+        discardCount: player.discardPile.length,
+        buriedCount: player.buriedCardIds.length
+      });
+      player.armor += 1;
+      emit('ARMOR_GAINED', {
+        playerId: player.playerId, sourceCardId: cardId, effectId: 'effect.tk_006.01',
+        amount: 1, armor: player.armor
+      });
+    }
+
     function drawCard(player: PlayerState): void {
       while (true) {
         if (player.deck.length === 0) {
@@ -610,28 +674,8 @@ namespace BiomeRivalsRules {
           return;
         }
         const cardId = player.deck.pop()!;
-        const buriedIndex = player.buriedCardIds.indexOf(cardId);
-        if (buriedIndex >= 0) {
-          player.buriedCardIds.splice(buriedIndex, 1);
-          if (cardId !== 'tk_006') throw new Error('buried effect handler is not registered: ' + cardId);
-          const destination = player.hand.length >= HAND_LIMIT ? 'DISCARD' : 'HAND';
-          if (destination === 'HAND') player.hand.push(cardId);
-          else player.discardPile.push(cardId);
-          emit('CARD_EXCAVATED', {
-            playerId: player.playerId,
-            cardId: cardId,
-            effectId: 'effect.tk_006.01',
-            destination: destination,
-            handCount: player.hand.length,
-            deckCount: player.deck.length,
-            discardCount: player.discardPile.length,
-            buriedCount: player.buriedCardIds.length
-          });
-          player.armor += 1;
-          emit('ARMOR_GAINED', {
-            playerId: player.playerId, sourceCardId: cardId, effectId: 'effect.tk_006.01',
-            amount: 1, armor: player.armor
-          });
+        if (player.buriedCardIds.indexOf(cardId) >= 0) {
+          resolveExcavatedCard(player, cardId);
           continue;
         }
         if (player.hand.length >= HAND_LIMIT) {
@@ -654,6 +698,40 @@ namespace BiomeRivalsRules {
         });
         return;
       }
+    }
+
+    function offerArchaeologyChoice(player: PlayerState, source: BattlefieldObjectState, effectId: string): void {
+      if (next.pendingChoice !== null) throw new Error('cannot offer a second choice while one is pending');
+      const options: PendingChoiceOptionState[] = [];
+      const optionCount = Math.min(3, player.deck.length);
+      for (let optionIndex = 0; optionIndex < optionCount; optionIndex += 1) {
+        const cardId = player.deck[player.deck.length - 1 - optionIndex]!;
+        options.push({
+          optionIndex: optionIndex,
+          cardId: cardId,
+          selectable: player.buriedCardIds.indexOf(cardId) >= 0
+        });
+      }
+      next.pendingChoice = {
+        choiceId: 'choice-' + String(next.lastEventId + 1),
+        playerId: player.playerId,
+        sourceCardId: source.cardId,
+        sourceInstanceId: source.instanceId,
+        effectId: effectId,
+        kind: 'ARCHAEOLOGY_TOP_3',
+        options: options
+      };
+      emit('CHOICE_OFFERED', {
+        choiceId: next.pendingChoice.choiceId,
+        playerId: player.playerId,
+        sourceCardId: source.cardId,
+        sourceInstanceId: source.instanceId,
+        effectId: effectId,
+        kind: next.pendingChoice.kind,
+        options: options.map(function (option): PendingChoiceOptionState {
+          return { optionIndex: option.optionIndex, cardId: option.cardId, selectable: option.selectable };
+        })
+      });
     }
 
     function finishForSelfDefeat(player: PlayerState, reason: string): boolean {
@@ -851,6 +929,53 @@ namespace BiomeRivalsRules {
       }
     }
 
+    function resolveChoice(): CommandRejected | null {
+      const pendingChoice = next.pendingChoice;
+      if (pendingChoice === null) return reject(state, 'INVALID_CHOICE', 'there is no pending card choice');
+      if (pendingChoice.playerId !== actorPlayerId) return reject(state, 'CHOICE_REQUIRED', 'only the choice owner may resolve it');
+      const choiceId = command.payload && command.payload.choiceId;
+      const selectedOptionIndex = command.payload && command.payload.selectedOptionIndex;
+      if (typeof choiceId !== 'string' || choiceId !== pendingChoice.choiceId ||
+          typeof selectedOptionIndex !== 'number' || selectedOptionIndex % 1 !== 0) {
+        return reject(state, 'INVALID_CHOICE', 'RESOLVE_CHOICE requires the current choiceId and an integer selectedOptionIndex');
+      }
+      const selectableOptions = pendingChoice.options.filter(function (option): boolean { return option.selectable; });
+      let selectedOption: PendingChoiceOptionState | null = null;
+      if (selectableOptions.length === 0) {
+        if (selectedOptionIndex !== -1) return reject(state, 'INVALID_CHOICE', 'this inspection has no selectable buried card');
+      } else {
+        for (let index = 0; index < selectableOptions.length; index += 1) {
+          if (selectableOptions[index]!.optionIndex === selectedOptionIndex) selectedOption = selectableOptions[index]!;
+        }
+        if (selectedOption === null) return reject(state, 'INVALID_CHOICE', 'the selected option is not a buried card');
+      }
+
+      const player = next.players[actorIndex]!;
+      next.pendingChoice = null;
+      emit('CHOICE_RESOLVED', {
+        choiceId: pendingChoice.choiceId,
+        playerId: player.playerId,
+        sourceCardId: pendingChoice.sourceCardId,
+        sourceInstanceId: pendingChoice.sourceInstanceId,
+        effectId: pendingChoice.effectId,
+        kind: pendingChoice.kind,
+        selectedOptionIndex: selectedOptionIndex,
+        selectedCardId: selectedOption === null ? null : selectedOption.cardId
+      });
+      if (selectedOption !== null) {
+        const deckIndex = player.deck.length - 1 - selectedOption.optionIndex;
+        if (deckIndex < 0 || player.deck[deckIndex] !== selectedOption.cardId ||
+            player.buriedCardIds.indexOf(selectedOption.cardId) < 0) {
+          throw new Error('pending archaeology choice no longer matches the authoritative deck');
+        }
+        player.deck.splice(deckIndex, 1);
+        resolveExcavatedCard(player, selectedOption.cardId);
+        drawCard(player);
+        finishForSelfDefeat(player, 'FATIGUE');
+      }
+      return null;
+    }
+
     function attack(): CommandRejected | null {
       if (actorIndex !== state.activePlayerIndex) {
         return reject(state, 'NOT_ACTIVE_PLAYER', 'only the active player may attack');
@@ -954,6 +1079,12 @@ namespace BiomeRivalsRules {
         if (playRejection !== null) return playRejection;
         break;
       }
+      case 'RESOLVE_CHOICE': {
+        if (state.status !== 'ACTIVE') return reject(state, 'MULLIGAN_REQUIRED', 'both players must confirm their opening hands first');
+        const choiceRejection = resolveChoice();
+        if (choiceRejection !== null) return choiceRejection;
+        break;
+      }
       case 'ENTER_COMBAT': {
         if (state.status !== 'ACTIVE') return reject(state, 'MULLIGAN_REQUIRED', 'both players must confirm their opening hands first');
         const phaseRejection = enterCombat();
@@ -1018,6 +1149,7 @@ namespace BiomeRivalsRules {
       }
       case 'CONCEDE': {
         const winnerIndex = actorIndex === 0 ? 1 : 0;
+        next.pendingChoice = null;
         next.status = 'FINISHED';
         next.winnerPlayerId = next.players[winnerIndex]!.playerId;
         emit('PLAYER_CONCEDED', { playerId: actorPlayerId });

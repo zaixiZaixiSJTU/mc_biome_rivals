@@ -43,6 +43,8 @@ namespace BiomeRivals.Demo
         public int ViewerIndex => 0;
         public int DeckCount => _deck.Count;
         public int BuriedCount => _buriedCardIds.Count;
+        public PendingChoiceDto PendingChoice { get; private set; }
+        public bool IsChoiceOwner => PendingChoice != null;
         public int DiscardCount => _discardPile.Count;
         public int OpponentHandCount => _opponentHandCount;
         public int Round { get; private set; } = 1;
@@ -79,14 +81,30 @@ namespace BiomeRivals.Demo
 
         public void ResetDeckAndHand(IEnumerable<string> handCardIds, IEnumerable<string> deckCardIds)
         {
+            ResetDeckAndHand(handCardIds, deckCardIds, Array.Empty<string>());
+        }
+
+        public void ResetDeckAndHand(
+            IEnumerable<string> handCardIds,
+            IEnumerable<string> deckCardIds,
+            IEnumerable<string> buriedCardIds)
+        {
             if (handCardIds == null) throw new ArgumentNullException(nameof(handCardIds));
             if (deckCardIds == null) throw new ArgumentNullException(nameof(deckCardIds));
+            if (buriedCardIds == null) throw new ArgumentNullException(nameof(buriedCardIds));
             _hand.Clear();
             _hand.AddRange(handCardIds);
             if (_hand.Count > 7) throw new ArgumentException("Hand cannot exceed seven cards.", nameof(handCardIds));
             _deck.Clear();
             _deck.AddRange(deckCardIds);
             _buriedCardIds.Clear();
+            foreach (var buriedCardId in buriedCardIds)
+            {
+                if (string.IsNullOrWhiteSpace(buriedCardId) || !_deck.Contains(buriedCardId))
+                    throw new ArgumentException("Every buried card must identify a card in the deck.", nameof(buriedCardIds));
+                _buriedCardIds.Add(buriedCardId);
+            }
+            PendingChoice = null;
             _discardPile.Clear();
             FatigueCount = 0;
             LastDrawResult = null;
@@ -181,8 +199,56 @@ namespace BiomeRivals.Demo
                 PlayerLife = Math.Min(30, PlayerLife + 1);
                 deployMessage += $"；蜜蜂战吼恢复 {PlayerLife - lifeBefore} 点生命。";
             }
+            else if (definition.effectImplementationStatus == "IMPLEMENTED" &&
+                definition.effectIds != null && definition.effectIds.Contains("effect.db_003.01"))
+            {
+                OfferArchaeologyChoice(deployedObject);
+                deployMessage += "；查看牌库顶 3 张并选择其中的掩埋牌。";
+            }
             AcceptCommand(command);
             return DemoCommandResult.Accept(deployMessage, Revision);
+        }
+
+        public MatchCommandDto CreateResolveChoiceCommand(string choiceId, int selectedOptionIndex) =>
+            MatchCommandFactory.ResolveChoice(NextCommandId(), Revision, choiceId, selectedOptionIndex);
+
+        public DemoCommandResult ApplyResolveChoice(MatchCommandDto command)
+        {
+            if (!ValidateCommand(command, MatchCommandTypes.ResolveChoice, out var rejection)) return rejection;
+            if (PendingChoice == null) return Reject(DemoCommandRejectionCode.InvalidChoice, "当前没有待处理的卡牌选择。");
+            if (command.payload == null || command.payload.choiceId != PendingChoice.choiceId)
+                return Reject(DemoCommandRejectionCode.InvalidChoice, "选择请求已经过期，请按当前界面重新选择。");
+            var selectable = (PendingChoice.options ?? Array.Empty<PendingChoiceOptionDto>()).Where(option => option != null && option.selectable).ToArray();
+            PendingChoiceOptionDto selected = null;
+            if (selectable.Length == 0)
+            {
+                if (command.payload.selectedOptionIndex != -1)
+                    return Reject(DemoCommandRejectionCode.InvalidChoice, "本次查看没有可以出土的掩埋牌。");
+            }
+            else
+            {
+                selected = selectable.FirstOrDefault(option => option.optionIndex == command.payload.selectedOptionIndex);
+                if (selected == null) return Reject(DemoCommandRejectionCode.InvalidChoice, "只能选择带有出土标记的牌。" );
+            }
+
+            PendingChoice = null;
+            var message = "牌库顶没有掩埋牌，已保持原顺序放回。";
+            if (selected != null)
+            {
+                var deckIndex = _deck.Count - 1 - selected.optionIndex;
+                if (deckIndex < 0 || _deck[deckIndex] != selected.cardId || !_buriedCardIds.Contains(selected.cardId))
+                    throw new InvalidOperationException("Pending archaeology choice no longer matches the local deck.");
+                _deck.RemoveAt(deckIndex);
+                ResolveExcavatedCard(selected.cardId);
+                var draw = DrawCard();
+                message = draw.Outcome == DemoDrawOutcome.Drawn
+                    ? $"出土 {selected.cardId}，随后正常抽到 {draw.CardId}。"
+                    : draw.Outcome == DemoDrawOutcome.Burned
+                        ? $"出土 {selected.cardId}，随后 {draw.CardId} 因满手爆牌。"
+                        : $"出土 {selected.cardId}，随后受到 {draw.FatigueDamage} 点疲劳伤害。";
+            }
+            AcceptCommand(command);
+            return DemoCommandResult.Accept(message, Revision);
         }
 
         public bool TryCast(CardDefinitionEntry definition, out string message)
@@ -342,6 +408,7 @@ namespace BiomeRivals.Demo
         public bool CanAttackWith(DemoBattlefieldObject attacker, out string message)
         {
             if (IsFinished) return Fail("对局已经结束。", out message);
+            if (PendingChoice != null) return Fail("请先完成考古学家的牌库选择。", out message);
             if (!IsPlayerTurn || Phase != DemoTurnPhase.Combat) return Fail("请先进入战斗阶段。", out message);
             if (attacker == null || !attacker.Player || attacker.SlotKind != DemoSlotKind.Unit || attacker.Attack <= 0)
                 return Fail("请选择一个可攻击的己方生物。", out message);
@@ -353,6 +420,7 @@ namespace BiomeRivals.Demo
 
         public bool CanAttackTarget(DemoBattlefieldObject target, string targetType, out string message)
         {
+            if (PendingChoice != null) return Fail("请先完成考古学家的牌库选择。", out message);
             if (targetType != "HERO" && targetType != "UNIT" && targetType != "BUILDING")
                 return Fail("攻击目标类型无效。", out message);
             if (targetType != "HERO" && (target == null || target.Player ||
@@ -467,14 +535,9 @@ namespace BiomeRivals.Demo
                 var cardIndex = _deck.Count - 1;
                 var cardId = _deck[cardIndex];
                 _deck.RemoveAt(cardIndex);
-                var buriedIndex = _buriedCardIds.IndexOf(cardId);
-                if (buriedIndex >= 0)
+                if (_buriedCardIds.Contains(cardId))
                 {
-                    _buriedCardIds.RemoveAt(buriedIndex);
-                    if (cardId != "tk_006") throw new InvalidOperationException($"Buried effect handler is not registered: {cardId}");
-                    if (_hand.Count >= 7) _discardPile.Add(cardId);
-                    else _hand.Add(cardId);
-                    PlayerArmor += 1;
+                    ResolveExcavatedCard(cardId);
                     excavated.Add(cardId);
                     continue;
                 }
@@ -487,6 +550,42 @@ namespace BiomeRivals.Demo
                 _hand.Add(cardId);
                 return RememberDraw(new DemoDrawResult(DemoDrawOutcome.Drawn, cardId, 0, excavated.ToArray()));
             }
+        }
+
+        private void ResolveExcavatedCard(string cardId)
+        {
+            if (!_buriedCardIds.Remove(cardId)) throw new InvalidOperationException($"Excavated card has no buried marker: {cardId}");
+            if (cardId != "tk_006") throw new InvalidOperationException($"Buried effect handler is not registered: {cardId}");
+            if (_hand.Count >= 7) _discardPile.Add(cardId);
+            else _hand.Add(cardId);
+            PlayerArmor += 1;
+        }
+
+        private void OfferArchaeologyChoice(DemoBattlefieldObject source)
+        {
+            if (PendingChoice != null) throw new InvalidOperationException("Cannot offer a second choice while one is pending.");
+            var optionCount = Math.Min(3, _deck.Count);
+            var options = new PendingChoiceOptionDto[optionCount];
+            for (var optionIndex = 0; optionIndex < optionCount; optionIndex++)
+            {
+                var cardId = _deck[_deck.Count - 1 - optionIndex];
+                options[optionIndex] = new PendingChoiceOptionDto
+                {
+                    optionIndex = optionIndex,
+                    cardId = cardId,
+                    selectable = _buriedCardIds.Contains(cardId)
+                };
+            }
+            PendingChoice = new PendingChoiceDto
+            {
+                choiceId = $"choice-{Revision + 1}",
+                playerId = "local-player",
+                sourceCardId = source.CardId,
+                sourceInstanceId = source.InstanceId,
+                effectId = "effect.db_003.01",
+                kind = "ARCHAEOLOGY_TOP_3",
+                options = options
+            };
         }
 
         private void BuryCard(string cardId)
@@ -508,6 +607,7 @@ namespace BiomeRivals.Demo
         private bool CanPlay(CardDefinitionEntry definition, out string message)
         {
             if (definition == null) return Fail("卡牌定义不存在。", out message);
+            if (PendingChoice != null) return Fail("请先完成考古学家的牌库选择。", out message);
             if (!IsPlayerTurn) return Fail("当前是对手回合。", out message);
             if (Phase != DemoTurnPhase.Main) return Fail("进入战斗阶段后不能继续打出卡牌。", out message);
             if (!_hand.Contains(definition.id)) return Fail("该牌不在手牌中。", out message);
@@ -519,6 +619,7 @@ namespace BiomeRivals.Demo
         private bool CanDeploy(CardDefinitionEntry definition, string paymentMethod, out string message)
         {
             if (definition == null) return Fail("卡牌定义不存在。", out message);
+            if (PendingChoice != null) return Fail("请先完成考古学家的牌库选择。", out message);
             if (!IsPlayerTurn) return Fail("当前是对手回合。", out message);
             if (Phase != DemoTurnPhase.Main) return Fail("进入战斗阶段后不能继续部署卡牌。", out message);
             if (!_hand.Contains(definition.id)) return Fail("该牌不在手牌中。", out message);
@@ -591,6 +692,11 @@ namespace BiomeRivals.Demo
             if (_processedCommandIds.Contains(command.commandId))
             {
                 rejection = Reject(DemoCommandRejectionCode.DuplicateCommand, "该命令已经处理过。");
+                return false;
+            }
+            if (PendingChoice != null && expectedType != MatchCommandTypes.ResolveChoice)
+            {
+                rejection = Reject(DemoCommandRejectionCode.ChoiceRequired, "请先完成考古学家的牌库选择。");
                 return false;
             }
             rejection = null;

@@ -1,10 +1,10 @@
 namespace BiomeRivalsRules {
-  export const PROTOCOL_VERSION = 12;
-  export const RULESET_VERSION = 'prototype-0.13';
+  export const PROTOCOL_VERSION = 13;
+  export const RULESET_VERSION = 'prototype-0.14';
 
   export type MatchStatus = 'WAITING' | 'MULLIGAN' | 'ACTIVE' | 'FINISHED';
-  export type CommandType = 'MULLIGAN' | 'DEPLOY_CARD' | 'PLAY_CARD' | 'ENTER_COMBAT' | 'ATTACK' | 'END_TURN' | 'CONCEDE';
-  export type EventType = 'MULLIGAN_COMPLETED' | 'MATCH_STARTED' | 'MATERIALS_CONSUMED' | 'CARD_DEPLOYED' | 'OBJECT_SUMMONED' | 'CARD_PLAYED' | 'CARD_BURIED' | 'CARD_EXCAVATED' | 'CARD_DRAWN' | 'CARD_BURNED' | 'CARD_GENERATED' | 'FATIGUE_DAMAGE' | 'HERO_DAMAGED' | 'HERO_HEALED' | 'ARMOR_GAINED' | 'OBJECT_STATS_CHANGED' | 'PHASE_CHANGED' | 'ATTACK_RESOLVED' | 'OBJECT_DIED' | 'TURN_ENDED' | 'TURN_STARTED' | 'PLAYER_CONCEDED' | 'MATCH_ENDED';
+  export type CommandType = 'MULLIGAN' | 'DEPLOY_CARD' | 'PLAY_CARD' | 'RESOLVE_CHOICE' | 'ENTER_COMBAT' | 'ATTACK' | 'END_TURN' | 'CONCEDE';
+  export type EventType = 'MULLIGAN_COMPLETED' | 'MATCH_STARTED' | 'MATERIALS_CONSUMED' | 'CARD_DEPLOYED' | 'OBJECT_SUMMONED' | 'CARD_PLAYED' | 'CARD_BURIED' | 'CHOICE_OFFERED' | 'CHOICE_RESOLVED' | 'CARD_EXCAVATED' | 'CARD_DRAWN' | 'CARD_BURNED' | 'CARD_GENERATED' | 'FATIGUE_DAMAGE' | 'HERO_DAMAGED' | 'HERO_HEALED' | 'ARMOR_GAINED' | 'OBJECT_STATS_CHANGED' | 'PHASE_CHANGED' | 'ATTACK_RESOLVED' | 'OBJECT_DIED' | 'TURN_ENDED' | 'TURN_STARTED' | 'PLAYER_CONCEDED' | 'MATCH_ENDED';
   export type DeploySlotKind = 'UNIT' | 'BUILDING';
   export type PaymentMethod = 'REDSTONE' | 'CRAFTING';
   export type TurnPhase = 'MAIN' | 'COMBAT';
@@ -62,6 +62,38 @@ namespace BiomeRivalsRules {
     temporaryAttackModifierExpiresOnTurn: number;
   }
 
+  export interface PendingChoiceOptionState {
+    optionIndex: number;
+    cardId: string;
+    selectable: boolean;
+  }
+
+  export interface PendingChoiceState {
+    choiceId: string;
+    playerId: string;
+    sourceCardId: string;
+    sourceInstanceId: string;
+    effectId: string;
+    kind: 'ARCHAEOLOGY_TOP_3';
+    options: PendingChoiceOptionState[];
+  }
+
+  export interface PendingChoiceOptionSnapshot {
+    optionIndex: number;
+    cardId: string | null;
+    selectable: boolean;
+  }
+
+  export interface PendingChoiceSnapshot {
+    choiceId: string;
+    playerId: string;
+    sourceCardId: string;
+    sourceInstanceId: string;
+    effectId: string;
+    kind: 'ARCHAEOLOGY_TOP_3';
+    options: PendingChoiceOptionSnapshot[];
+  }
+
   export interface PlayerState {
     playerId: string;
     factionId: FactionId;
@@ -92,6 +124,7 @@ namespace BiomeRivalsRules {
     activePlayerIndex: number;
     nextInstanceId: number;
     players: PlayerState[];
+    pendingChoice: PendingChoiceState | null;
     winnerPlayerId: string | null;
     processedCommandIds: string[];
   }
@@ -127,6 +160,7 @@ namespace BiomeRivalsRules {
     activePlayerIndex: number;
     nextInstanceId: number;
     players: PlayerSnapshot[];
+    pendingChoice: PendingChoiceSnapshot | null;
     winnerPlayerId: string | null;
   }
 
@@ -171,6 +205,8 @@ namespace BiomeRivalsRules {
     | 'INSUFFICIENT_REDSTONE'
     | 'INVALID_PAYMENT_METHOD'
     | 'MISSING_MATERIALS'
+    | 'CHOICE_REQUIRED'
+    | 'INVALID_CHOICE'
     | 'INVALID_TARGET'
     | 'SLOT_OCCUPIED'
     | 'WRONG_PHASE'

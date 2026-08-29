@@ -15,6 +15,7 @@ namespace BiomeRivals.Core
         public const string Mulligan = "MULLIGAN";
         public const string DeployCard = "DEPLOY_CARD";
         public const string PlayCard = "PLAY_CARD";
+        public const string ResolveChoice = "RESOLVE_CHOICE";
         public const string EnterCombat = "ENTER_COMBAT";
         public const string Attack = "ATTACK";
         public const string EndTurn = "END_TURN";
@@ -30,6 +31,8 @@ namespace BiomeRivals.Core
         public const string ObjectSummoned = "OBJECT_SUMMONED";
         public const string CardPlayed = "CARD_PLAYED";
         public const string CardBuried = "CARD_BURIED";
+        public const string ChoiceOffered = "CHOICE_OFFERED";
+        public const string ChoiceResolved = "CHOICE_RESOLVED";
         public const string CardExcavated = "CARD_EXCAVATED";
         public const string CardDrawn = "CARD_DRAWN";
         public const string CardBurned = "CARD_BURNED";
@@ -65,6 +68,8 @@ namespace BiomeRivals.Core
         public string attackerInstanceId = string.Empty;
         public string targetType = string.Empty;
         public string targetInstanceId = string.Empty;
+        public string choiceId = string.Empty;
+        public int selectedOptionIndex = -1;
     }
 
     [Serializable]
@@ -141,6 +146,21 @@ namespace BiomeRivals.Core
                 }
             };
 
+        public static MatchCommandDto ResolveChoice(string commandId, int revision, string choiceId, int selectedOptionIndex) =>
+            new MatchCommandDto
+            {
+                protocolVersion = GameVersions.Protocol,
+                rulesetVersion = GameVersions.Ruleset,
+                commandId = commandId,
+                expectedRevision = revision,
+                type = MatchCommandTypes.ResolveChoice,
+                payload = new MatchCommandPayloadDto
+                {
+                    choiceId = choiceId,
+                    selectedOptionIndex = selectedOptionIndex
+                }
+            };
+
         public static MatchCommandDto EnterCombat(string commandId, int revision) =>
             new MatchCommandDto
             {
@@ -182,6 +202,26 @@ namespace BiomeRivals.Core
     }
 
     [Serializable]
+    public sealed class PendingChoiceOptionDto
+    {
+        public int optionIndex;
+        public string cardId = string.Empty;
+        public bool selectable;
+    }
+
+    [Serializable]
+    public sealed class PendingChoiceDto
+    {
+        public string choiceId = string.Empty;
+        public string playerId = string.Empty;
+        public string sourceCardId = string.Empty;
+        public string sourceInstanceId = string.Empty;
+        public string effectId = string.Empty;
+        public string kind = string.Empty;
+        public PendingChoiceOptionDto[] options = Array.Empty<PendingChoiceOptionDto>();
+    }
+
+    [Serializable]
     public sealed class MatchEventPayloadDto
     {
         public string playerId = string.Empty;
@@ -220,6 +260,11 @@ namespace BiomeRivals.Core
         public int replacedCount;
         public int deckCount;
         public int buriedCount;
+        public string choiceId = string.Empty;
+        public string kind = string.Empty;
+        public PendingChoiceOptionDto[] options = Array.Empty<PendingChoiceOptionDto>();
+        public int selectedOptionIndex = -1;
+        public string selectedCardId = string.Empty;
         public int discardCount;
         public int fatigueCount;
         public int damage;

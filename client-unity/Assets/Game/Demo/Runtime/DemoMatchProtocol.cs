@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BiomeRivals.Core;
 
 namespace BiomeRivals.Demo
 {
@@ -70,6 +71,8 @@ namespace BiomeRivals.Demo
         int ViewerIndex { get; }
         int DeckCount { get; }
         int BuriedCount { get; }
+        PendingChoiceDto PendingChoice { get; }
+        bool IsChoiceOwner { get; }
         int DiscardCount { get; }
         int OpponentHandCount { get; }
         int Round { get; }
@@ -104,6 +107,8 @@ namespace BiomeRivals.Demo
         WrongPhase,
         AttackerNotReady,
         TauntTargetRequired,
+        ChoiceRequired,
+        InvalidChoice,
         EffectNotImplemented
     }
 

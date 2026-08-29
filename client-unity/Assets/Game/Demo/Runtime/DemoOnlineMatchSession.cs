@@ -52,6 +52,9 @@ namespace BiomeRivals.Demo
         public Task<MatchCommandDispatchResult> PlayCardAsync(string cardId, string targetType = "", string targetInstanceId = "") =>
             Send(MatchCommandFactory.PlayCard(NewCommandId(), Revision, cardId, targetType, targetInstanceId));
 
+        public Task<MatchCommandDispatchResult> ResolveChoiceAsync(string choiceId, int selectedOptionIndex) =>
+            Send(MatchCommandFactory.ResolveChoice(NewCommandId(), Revision, choiceId, selectedOptionIndex));
+
         public Task<MatchCommandDispatchResult> EnterCombatAsync() =>
             Send(MatchCommandFactory.EnterCombat(NewCommandId(), Revision));
 

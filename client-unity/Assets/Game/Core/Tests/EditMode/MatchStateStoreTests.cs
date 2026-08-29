@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using NUnit.Framework;
 
 namespace BiomeRivals.Core.Tests
@@ -930,6 +931,148 @@ namespace BiomeRivals.Core.Tests
             Assert.That(unit.attack, Is.EqualTo(2));
             Assert.That(unit.temporaryAttackModifier, Is.EqualTo(1));
             Assert.That(building.health, Is.EqualTo(3));
+        }
+
+        [Test]
+        public void Apply_ReplaysPrivateArchaeologyChoiceAndItsResolution()
+        {
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "match-1", viewerPlayerId = "alice", protocolVersion = GameVersions.Protocol,
+                rulesetVersion = GameVersions.Ruleset, status = "ACTIVE", phase = "MAIN",
+                players = new[]
+                {
+                    new PlayerStateDto
+                    {
+                        playerId = "alice", hand = new string[0], deckCount = 3, buriedCount = 1,
+                        battlefield = new[]
+                        {
+                            new BattlefieldObjectStateDto
+                            {
+                                instanceId = "object-1", cardId = "db_003", cardType = "UNIT", slotKind = "UNIT",
+                                slotIndex = 0, occupiedSlots = 1, attack = 2, health = 3, maxHealth = 3
+                            }
+                        }
+                    },
+                    new PlayerStateDto { playerId = "bob" }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 1, type = MatchEventTypes.ChoiceOffered,
+                        payload = new MatchEventPayloadDto
+                        {
+                            choiceId = "choice-1", playerId = "alice", sourceCardId = "db_003",
+                            sourceInstanceId = "object-1", effectId = "effect.db_003.01", kind = "ARCHAEOLOGY_TOP_3",
+                            options = new[]
+                            {
+                                new PendingChoiceOptionDto { optionIndex = 0, cardId = "db_001", selectable = false },
+                                new PendingChoiceOptionDto { optionIndex = 1, cardId = "tk_006", selectable = true },
+                                new PendingChoiceOptionDto { optionIndex = 2, cardId = "db_004", selectable = false }
+                            }
+                        }
+                    }
+                }
+            });
+
+            Assert.That(store.Current.pendingChoice, Is.Not.Null);
+            Assert.That(store.Current.pendingChoice.options[1].cardId, Is.EqualTo("tk_006"));
+            Assert.That(store.Current.pendingChoice.options[1].selectable, Is.True);
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 2,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 2, type = MatchEventTypes.ChoiceResolved,
+                        payload = new MatchEventPayloadDto
+                        {
+                            choiceId = "choice-1", playerId = "alice", selectedOptionIndex = 1,
+                            selectedCardId = "tk_006", sourceCardId = "db_003", sourceInstanceId = "object-1",
+                            effectId = "effect.db_003.01", kind = "ARCHAEOLOGY_TOP_3"
+                        }
+                    },
+                    new MatchEventDto
+                    {
+                        eventId = 3, type = MatchEventTypes.CardExcavated,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", cardId = "tk_006", destination = "HAND",
+                            handCount = 1, deckCount = 2, buriedCount = 0, discardCount = 0
+                        }
+                    },
+                    new MatchEventDto
+                    {
+                        eventId = 4, type = MatchEventTypes.ArmorGained,
+                        payload = new MatchEventPayloadDto { playerId = "alice", amount = 1, armor = 1 }
+                    },
+                    new MatchEventDto
+                    {
+                        eventId = 5, type = MatchEventTypes.CardDrawn,
+                        payload = new MatchEventPayloadDto { playerId = "alice", cardId = "db_001", handCount = 2, deckCount = 1 }
+                    }
+                }
+            });
+
+            Assert.That(store.Current.pendingChoice, Is.Null);
+            Assert.That(store.Current.players[0].hand, Is.EqualTo(new[] { "tk_006", "db_001" }));
+            Assert.That(store.Current.players[0].deckCount, Is.EqualTo(1));
+            Assert.That(store.Current.players[0].buriedCount, Is.Zero);
+            Assert.That(store.Current.players[0].armor, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void Replace_AcceptsRedactedOpponentChoiceWithoutLeakingCardIds()
+        {
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "match-1", viewerPlayerId = "bob", protocolVersion = GameVersions.Protocol,
+                rulesetVersion = GameVersions.Ruleset, status = "ACTIVE", phase = "MAIN",
+                players = new[]
+                {
+                    new PlayerStateDto
+                    {
+                        playerId = "alice",
+                        battlefield = new[]
+                        {
+                            new BattlefieldObjectStateDto
+                            {
+                                instanceId = "object-1", cardId = "db_003", cardType = "UNIT",
+                                slotKind = "UNIT", slotIndex = 0, occupiedSlots = 1
+                            }
+                        }
+                    },
+                    new PlayerStateDto { playerId = "bob" }
+                },
+                pendingChoice = new PendingChoiceDto
+                {
+                    choiceId = "choice-1", playerId = "alice", sourceCardId = "db_003", sourceInstanceId = "object-1",
+                    effectId = "effect.db_003.01", kind = "ARCHAEOLOGY_TOP_3",
+                    options = new[]
+                    {
+                        new PendingChoiceOptionDto { optionIndex = 0, cardId = string.Empty, selectable = false },
+                        new PendingChoiceOptionDto { optionIndex = 1, cardId = string.Empty, selectable = false },
+                        new PendingChoiceOptionDto { optionIndex = 2, cardId = string.Empty, selectable = false }
+                    }
+                }
+            });
+
+            Assert.That(store.Current.pendingChoice.playerId, Is.EqualTo("alice"));
+            Assert.That(store.Current.pendingChoice.options.All(option => option.cardId == string.Empty), Is.True);
+            Assert.That(store.Current.pendingChoice.options.All(option => !option.selectable), Is.True);
+            store.Current.pendingChoice.options[0].cardId = "db_001";
+            Assert.Throws<InvalidOperationException>(() => store.Replace(store.Current),
+                "A non-owner snapshot must be rejected if it leaks a real option card id.");
         }
 
         [Test]

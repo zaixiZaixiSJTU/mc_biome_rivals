@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace BiomeRivals.Core
 {
@@ -57,6 +58,7 @@ namespace BiomeRivals.Core
         public int activePlayerIndex;
         public int nextInstanceId;
         public PlayerStateDto[] players = Array.Empty<PlayerStateDto>();
+        public PendingChoiceDto pendingChoice;
         public string winnerPlayerId = string.Empty;
     }
 
@@ -77,6 +79,10 @@ namespace BiomeRivals.Core
                     throw new InvalidOperationException("Snapshot contains an unsupported player faction.");
                 else if (player.buriedCount < 0 || player.buriedCount > player.deckCount)
                     throw new InvalidOperationException("Snapshot contains an invalid buried card count.");
+            if (snapshot.pendingChoice != null)
+            {
+                ValidatePendingChoice(snapshot, snapshot.pendingChoice, "Snapshot");
+            }
             Current = snapshot;
             Changed?.Invoke(Current);
         }
@@ -177,6 +183,27 @@ namespace BiomeRivals.Core
                         throw new InvalidOperationException("Burial event counts do not match the projected deck.");
                     buryingPlayer.deckCount = payload.deckCount;
                     buryingPlayer.buriedCount = payload.buriedCount;
+                    break;
+                case MatchEventTypes.ChoiceOffered:
+                    if (Current.pendingChoice != null) throw new InvalidOperationException("Choice event overlaps an existing pending choice.");
+                    var offeredChoice = new PendingChoiceDto
+                    {
+                        choiceId = payload.choiceId,
+                        playerId = payload.playerId,
+                        sourceCardId = payload.sourceCardId,
+                        sourceInstanceId = payload.sourceInstanceId,
+                        effectId = payload.effectId,
+                        kind = payload.kind,
+                        options = CloneChoiceOptions(payload.options)
+                    };
+                    ValidatePendingChoice(Current, offeredChoice, "Choice event");
+                    Current.pendingChoice = offeredChoice;
+                    break;
+                case MatchEventTypes.ChoiceResolved:
+                    if (Current.pendingChoice == null || Current.pendingChoice.choiceId != payload.choiceId ||
+                        Current.pendingChoice.playerId != payload.playerId)
+                        throw new InvalidOperationException("Choice resolution does not match the pending choice.");
+                    Current.pendingChoice = null;
                     break;
                 case MatchEventTypes.CardExcavated:
                     var excavatingPlayer = FindPlayer(payload.playerId);
@@ -308,6 +335,55 @@ namespace BiomeRivals.Core
             foreach (var player in Current.players ?? Array.Empty<PlayerStateDto>())
                 if (player != null && string.Equals(player.playerId, playerId, StringComparison.Ordinal)) return player;
             throw new InvalidOperationException($"Event references unknown player '{playerId}'.");
+        }
+
+        private static PlayerStateDto FindPlayer(MatchStateDto state, string playerId)
+        {
+            foreach (var player in state?.players ?? Array.Empty<PlayerStateDto>())
+                if (player != null && string.Equals(player.playerId, playerId, StringComparison.Ordinal)) return player;
+            return null;
+        }
+
+        private static void ValidatePendingChoice(MatchStateDto state, PendingChoiceDto choice, string source)
+        {
+            if (choice == null || choice.kind != "ARCHAEOLOGY_TOP_3" || choice.effectId != "effect.db_003.01" ||
+                choice.sourceCardId != "db_003" || string.IsNullOrWhiteSpace(choice.choiceId) ||
+                string.IsNullOrWhiteSpace(choice.sourceInstanceId) || choice.options == null || choice.options.Length > 3 ||
+                state.status != "ACTIVE" || state.phase != "MAIN")
+                throw new InvalidOperationException($"{source} contains an invalid pending card choice.");
+            var owner = FindPlayer(state, choice.playerId);
+            if (owner == null || state.activePlayerIndex < 0 || state.activePlayerIndex >= state.players.Length ||
+                !ReferenceEquals(state.players[state.activePlayerIndex], owner) ||
+                !(owner.battlefield ?? Array.Empty<BattlefieldObjectStateDto>()).Any(value =>
+                    value != null && value.instanceId == choice.sourceInstanceId && value.cardId == choice.sourceCardId))
+                throw new InvalidOperationException($"{source} pending choice has no active source object.");
+
+            var isOwnerProjection = choice.playerId == state.viewerPlayerId;
+            for (var index = 0; index < choice.options.Length; index++)
+            {
+                var option = choice.options[index];
+                if (option == null || option.optionIndex != index ||
+                    (isOwnerProjection && string.IsNullOrWhiteSpace(option.cardId)) ||
+                    (!isOwnerProjection && (!string.IsNullOrEmpty(option.cardId) || option.selectable)))
+                    throw new InvalidOperationException($"{source} pending choice violates option ordering or privacy projection.");
+            }
+        }
+
+        private static PendingChoiceOptionDto[] CloneChoiceOptions(PendingChoiceOptionDto[] options)
+        {
+            var source = options ?? Array.Empty<PendingChoiceOptionDto>();
+            var result = new PendingChoiceOptionDto[source.Length];
+            for (var index = 0; index < source.Length; index++)
+            {
+                var option = source[index] ?? throw new InvalidOperationException("Choice contains a missing option.");
+                result[index] = new PendingChoiceOptionDto
+                {
+                    optionIndex = option.optionIndex,
+                    cardId = option.cardId,
+                    selectable = option.selectable
+                };
+            }
+            return result;
         }
 
         private static BattlefieldObjectStateDto FindObject(PlayerStateDto player, string instanceId)

@@ -49,6 +49,8 @@ namespace BiomeRivals.Networking
                     return string.IsNullOrEmpty(command.payload.targetType)
                         ? JsonUtility.ToJson(new PlayCardCommandWire(command))
                         : JsonUtility.ToJson(new TargetedPlayCardCommandWire(command));
+                case MatchCommandTypes.ResolveChoice:
+                    return JsonUtility.ToJson(new ResolveChoiceCommandWire(command));
                 case MatchCommandTypes.Attack:
                     return command.payload.targetType == "HERO"
                         ? JsonUtility.ToJson(new HeroAttackCommandWire(command))
@@ -81,6 +83,7 @@ namespace BiomeRivals.Networking
                         break;
                     case MatchOpcodes.Snapshot:
                         var snapshot = JsonUtility.FromJson<MatchStateDto>(json);
+                        if (snapshot != null && IsExplicitJsonNull(json, "pendingChoice")) snapshot.pendingChoice = null;
                         if (snapshot == null || snapshot.protocolVersion != GameVersions.Protocol || snapshot.rulesetVersion != GameVersions.Ruleset)
                             throw new InvalidOperationException("Server snapshot protocol or ruleset version is unsupported.");
                         SnapshotReceived?.Invoke(snapshot);
@@ -96,6 +99,18 @@ namespace BiomeRivals.Networking
         private void HandleFault(Exception exception) => Faulted?.Invoke(exception);
 
         private void HandleConnectionState(MatchConnectionStatus status) => ConnectionStateChanged?.Invoke(status);
+
+        private static bool IsExplicitJsonNull(string json, string propertyName)
+        {
+            if (string.IsNullOrEmpty(json) || string.IsNullOrEmpty(propertyName)) return false;
+            var propertyIndex = json.IndexOf("\"" + propertyName + "\"", StringComparison.Ordinal);
+            if (propertyIndex < 0) return false;
+            var colonIndex = json.IndexOf(':', propertyIndex + propertyName.Length + 2);
+            if (colonIndex < 0) return false;
+            var valueIndex = colonIndex + 1;
+            while (valueIndex < json.Length && char.IsWhiteSpace(json[valueIndex])) valueIndex++;
+            return valueIndex + 4 <= json.Length && string.CompareOrdinal(json, valueIndex, "null", 0, 4) == 0;
+        }
 
         public void Dispose()
         {
@@ -137,6 +152,13 @@ namespace BiomeRivals.Networking
             public string cardId;
             public string targetType;
             public string targetInstanceId;
+        }
+
+        [Serializable]
+        private sealed class ResolveChoiceWirePayload
+        {
+            public string choiceId;
+            public int selectedOptionIndex;
         }
 
         [Serializable]
@@ -231,6 +253,21 @@ namespace BiomeRivals.Networking
                     cardId = command.payload.cardId,
                     targetType = command.payload.targetType,
                     targetInstanceId = command.payload.targetInstanceId
+                };
+            }
+        }
+
+        [Serializable]
+        private sealed class ResolveChoiceCommandWire : CommandWireBase
+        {
+            public ResolveChoiceWirePayload payload;
+
+            public ResolveChoiceCommandWire(MatchCommandDto command) : base(command)
+            {
+                payload = new ResolveChoiceWirePayload
+                {
+                    choiceId = command.payload.choiceId,
+                    selectedOptionIndex = command.payload.selectedOptionIndex
                 };
             }
         }

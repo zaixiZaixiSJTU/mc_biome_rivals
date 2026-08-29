@@ -75,6 +75,12 @@ namespace BiomeRivals.Demo
         private Text _mulliganStatusText;
         private Text _mulliganConfirmLabel;
         private Button _mulliganConfirmButton;
+        private RectTransform _choiceOverlay;
+        private RectTransform _choiceCardsRoot;
+        private Text _choiceRuleText;
+        private Text _choiceStatusText;
+        private Text _choiceConfirmLabel;
+        private Button _choiceConfirmButton;
         private IMatchGateway _onlineGateway;
         private DemoOnlineMatchSession _onlineSession;
         private Image _opponentTint;
@@ -87,13 +93,15 @@ namespace BiomeRivals.Demo
         private string _opponentFaction = "nether";
         private bool _built;
         private bool _previewMulligan;
+        private int _selectedChoiceOptionIndex = -1;
+        private string _renderedChoiceId;
         private Font _font;
         private DemoHudMaterialFactory _hudMaterialFactory;
 
         private bool IsOnlineBoard => _onlineSession?.HasAuthoritativeState == true;
-        private bool IsFactionSelectionLocked => _onlineGateway != null &&
+        private bool IsFactionSelectionLocked => MatchView.PendingChoice != null || (_onlineGateway != null &&
             _onlineGateway.CurrentStatus.Phase != MatchConnectionPhase.Offline &&
-            _onlineGateway.CurrentStatus.Phase != MatchConnectionPhase.Failed;
+            _onlineGateway.CurrentStatus.Phase != MatchConnectionPhase.Failed);
         private IDemoMatchView MatchView => IsOnlineBoard ? _onlineSession.View : _match;
 
         private static readonly FactionSpec[] Factions =
@@ -143,6 +151,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewStructureDeployed")) SetupStructureDeployedPreview();
             else if (HasCommandLineFlag("-previewCraftingMissing")) SetupCraftingPreview(false);
             else if (HasCommandLineFlag("-previewCrafting")) SetupCraftingPreview(true);
+            else if (HasCommandLineFlag("-previewArchaeology")) SetupArchaeologyPreview();
             else if (HasCommandLineFlag("-previewCombat")) OnEndTurn();
             if (HasCommandLineFlag("-previewGroundHover")) _battlefield.SetSlotHovered(true, DemoSlotKind.Unit, 0, true);
             var capturePath = GetCommandLineValue("-captureDemo");
@@ -226,6 +235,7 @@ namespace BiomeRivals.Demo
             BuildBanner();
             _playerHud.SetAsLastSibling();
             BuildMulliganOverlay();
+            BuildChoiceOverlay();
         }
 
         private void BuildTopChrome()
@@ -449,7 +459,8 @@ namespace BiomeRivals.Demo
             var eventTypes = new[]
             {
                 MatchEventTypes.MaterialsConsumed, MatchEventTypes.CardDeployed, MatchEventTypes.ObjectSummoned, MatchEventTypes.CardPlayed,
-                MatchEventTypes.CardBuried, MatchEventTypes.CardExcavated, MatchEventTypes.CardDrawn,
+                MatchEventTypes.CardBuried, MatchEventTypes.ChoiceOffered, MatchEventTypes.ChoiceResolved,
+                MatchEventTypes.CardExcavated, MatchEventTypes.CardDrawn,
                 MatchEventTypes.CardBurned, MatchEventTypes.CardGenerated, MatchEventTypes.FatigueDamage, MatchEventTypes.HeroDamaged,
                 MatchEventTypes.HeroHealed, MatchEventTypes.ArmorGained, MatchEventTypes.ObjectStatsChanged,
                 MatchEventTypes.PhaseChanged, MatchEventTypes.AttackResolved, MatchEventTypes.ObjectDied,
@@ -546,6 +557,18 @@ namespace BiomeRivals.Demo
                     yield return ShowTurnBanner("掩埋", Ember);
                     break;
                 }
+                case MatchEventTypes.ChoiceOffered: {
+                    var choiceViewerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
+                    var ownChoice = matchEvent.payload?.playerId == choiceViewerId;
+                    ShowStatus(ownChoice
+                        ? "沙漠考古学家发现了牌库顶三张牌，请选择可出土的掩埋牌。"
+                        : "对手的沙漠考古学家正在查看牌库。", false);
+                    yield return ShowTurnBanner("沙漠考古", ownChoice ? Gold : Ember);
+                    break;
+                }
+                case MatchEventTypes.ChoiceResolved:
+                    yield return null;
+                    break;
                 case MatchEventTypes.CardExcavated: {
                     var excavationViewerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
                     var ownExcavation = matchEvent.payload?.playerId == excavationViewerId;
@@ -709,6 +732,25 @@ namespace BiomeRivals.Demo
             _mulliganOverlay.gameObject.SetActive(false);
         }
 
+        private void BuildChoiceOverlay()
+        {
+            _choiceOverlay = CreateRect(_canvasRoot, "ChoiceOverlay", Vector2.zero, new Vector2(ReferenceWidth, ReferenceHeight));
+            var dim = _choiceOverlay.gameObject.AddComponent<Image>();
+            dim.color = new Color(0.025f, 0.03f, 0.035f, 0.84f);
+            dim.raycastTarget = true;
+
+            var panel = CreateBasePanel(_choiceOverlay, "ArchaeologyPanel", new Vector2(0, 10), new Vector2(1080, 670));
+            CreateText(panel, "Title", new Vector2(0, 282), new Vector2(940, 54), "沙漠考古", 30, Gold, TextAnchor.MiddleCenter, FontStyle.Bold);
+            _choiceRuleText = CreateText(panel, "Rule", new Vector2(0, 235), new Vector2(920, 44), string.Empty, 16, Muted, TextAnchor.MiddleCenter, FontStyle.Normal);
+            _choiceCardsRoot = CreateRect(panel, "InspectedCards", new Vector2(0, 20), new Vector2(780, 390));
+            _choiceStatusText = CreateText(panel, "ChoiceStatus", new Vector2(0, -218), new Vector2(780, 44), string.Empty, 16, Gold, TextAnchor.MiddleCenter, FontStyle.Bold);
+            _choiceConfirmButton = CreatePrimaryActionButton(panel, "ConfirmChoice", new Vector2(0, -280), new Vector2(310, 66), "确认", 20);
+            _choiceConfirmLabel = _choiceConfirmButton.GetComponentInChildren<Text>();
+            _choiceConfirmButton.onClick.AddListener(ConfirmChoice);
+            _choiceConfirmButton.gameObject.AddComponent<DemoHoverScale>().Configure(1.035f, 16f);
+            _choiceOverlay.gameObject.SetActive(false);
+        }
+
         private void SelectFaction(string factionId)
         {
             if (IsFactionSelectionLocked)
@@ -844,6 +886,24 @@ namespace BiomeRivals.Demo
                 ShowStatus(ReplaceCardIdsWithNames(preview.Message, templeDefinition), true);
         }
 
+        private void SetupArchaeologyPreview()
+        {
+            SelectFaction("desert_badlands");
+            if (!_registry.TryGetDefinition("db_003", out var archaeologistDefinition)) return;
+            _match.ResetDeckAndHand(
+                new[] { archaeologistDefinition.id },
+                new[] { "db_004", "tk_006", "db_001" },
+                new[] { "tk_006" });
+            _selectedCardId = archaeologistDefinition.id;
+            var result = _match.ApplyDeploy(
+                archaeologistDefinition,
+                _match.CreateDeployCommand(archaeologistDefinition.id, DemoSlotKind.Unit, 0));
+            _selectedCardId = _match.Hand.FirstOrDefault();
+            RefreshAll();
+            SelectChoiceOption(1);
+            ShowStatus(result.Accepted ? "考古学家正在查看牌库顶三张牌；只有金色标记的掩埋牌可以出土。" : result.Message, !result.Accepted);
+        }
+
         private void ApplyPlayerFactionVisuals(FactionSpec spec)
         {
             _activeFaction = spec.Id;
@@ -926,6 +986,7 @@ namespace BiomeRivals.Demo
             if (!_built || _battlefield == null) return;
             var match = MatchView;
             RefreshMulligan();
+            RefreshPendingChoice();
             RefreshFactionButtons();
             RefreshHand();
             RefreshOpponentHand(match.OpponentHandCount);
@@ -941,15 +1002,135 @@ namespace BiomeRivals.Demo
             _handLabel.text = match.BuriedCount > 0
                 ? $"手牌 {match.Hand.Count}/7 · 牌库 {match.DeckCount}（掩埋 {match.BuriedCount}）· 弃牌 {match.DiscardCount}"
                 : $"手牌 {match.Hand.Count}/7 · 牌库 {match.DeckCount} · 弃牌 {match.DiscardCount}";
-            var canUseHand = !match.IsMulligan && match.Phase == DemoTurnPhase.Main && match.IsPlayerTurn && (!IsOnlineBoard || _onlineSession.CanIssueCommand);
+            var canUseHand = !match.IsMulligan && match.PendingChoice == null && match.Phase == DemoTurnPhase.Main && match.IsPlayerTurn && (!IsOnlineBoard || _onlineSession.CanIssueCommand);
             _handCanvasGroup.alpha = canUseHand ? 1f : 0.52f;
             _handCanvasGroup.interactable = canUseHand;
             _handCanvasGroup.blocksRaycasts = canUseHand;
-            _endTurnButton.interactable = !match.IsMulligan && match.IsPlayerTurn && !match.IsFinished && (!IsOnlineBoard || _onlineSession.CanIssueCommand);
+            _endTurnButton.interactable = !match.IsMulligan && match.PendingChoice == null && match.IsPlayerTurn && !match.IsFinished && (!IsOnlineBoard || _onlineSession.CanIssueCommand);
             _endTurnLabel.text = IsOnlineBoard && _onlineSession.HasPendingCommand
                 ? "等待服务器"
                 : match.IsMulligan ? "等待起手确认"
+                : match.PendingChoice != null ? match.IsChoiceOwner ? "完成考古选择" : "对手正在选择"
                 : !match.IsPlayerTurn ? "对手行动中" : match.IsFinished ? "对局结束" : match.Phase == DemoTurnPhase.Main ? "进入战斗" : "结束回合";
+        }
+
+        private void RefreshPendingChoice()
+        {
+            if (_choiceOverlay == null) return;
+            var match = MatchView;
+            var choice = match.PendingChoice;
+            var visible = choice != null;
+            _choiceOverlay.gameObject.SetActive(visible);
+            if (!visible)
+            {
+                _selectedChoiceOptionIndex = -1;
+                _renderedChoiceId = null;
+                return;
+            }
+
+            if (_renderedChoiceId != choice.choiceId)
+            {
+                _renderedChoiceId = choice.choiceId;
+                _selectedChoiceOptionIndex = -1;
+            }
+            _choiceOverlay.SetAsLastSibling();
+            ClearChildren(_choiceCardsRoot);
+
+            if (!match.IsChoiceOwner)
+            {
+                _choiceRuleText.text = "对手正在查看自己的牌库顶三张牌；牌面信息对你保密";
+                _choiceStatusText.text = "等待对手完成考古选择…";
+                _choiceConfirmButton.gameObject.SetActive(false);
+                var hiddenCount = choice.options?.Length ?? 0;
+                for (var index = 0; index < hiddenCount; index++) CreateHiddenChoiceCard(index, hiddenCount);
+                return;
+            }
+
+            _choiceConfirmButton.gameObject.SetActive(true);
+            _choiceRuleText.text = "查看牌库顶 3 张；选择一张带“掩埋”标记的牌立即出土，然后正常抽一张牌";
+            var options = (choice.options ?? Array.Empty<PendingChoiceOptionDto>()).Where(option => option != null).ToArray();
+            var hasSelectable = options.Any(option => option.selectable);
+            foreach (var option in options) CreateChoiceCard(option, options.Length);
+            if (hasSelectable)
+            {
+                _choiceStatusText.text = _selectedChoiceOptionIndex < 0 ? "请选择一张金色标记的掩埋牌" : "已选择出土目标";
+                _choiceConfirmLabel.text = _selectedChoiceOptionIndex < 0 ? "选择一张掩埋牌" : "确认出土";
+            }
+            else
+            {
+                _choiceStatusText.text = "这三张牌中没有掩埋牌，将保持原顺序放回";
+                _choiceConfirmLabel.text = "确认未发现";
+            }
+            _choiceConfirmButton.interactable = (!IsOnlineBoard || _onlineSession.CanIssueCommand) && (!hasSelectable || _selectedChoiceOptionIndex >= 0);
+        }
+
+        private void CreateChoiceCard(PendingChoiceOptionDto option, int optionCount)
+        {
+            var selected = option.optionIndex == _selectedChoiceOptionIndex;
+            var x = (option.optionIndex - (optionCount - 1) * 0.5f) * 244f;
+            var slot = CreateBasePanel(_choiceCardsRoot, "ChoiceSlot" + option.optionIndex, new Vector2(x, selected ? 18f : 0f), new Vector2(220, 350));
+            var accent = option.selectable ? Gold : Muted;
+            slot.GetComponent<Image>().color = selected
+                ? Color.Lerp(DemoUiStyleCatalog.GetRootFill(DemoUiStyleClass.BasePanel), Gold, 0.46f)
+                : DemoUiStyleCatalog.GetRootFill(DemoUiStyleClass.BasePanel);
+            var materialFill = slot.Find("MaterialFill")?.GetComponent<Image>();
+            if (materialFill != null && (option.selectable || selected))
+                materialFill.color = Color.Lerp(materialFill.color, accent, selected ? 0.42f : 0.18f);
+            var optionIndex = option.optionIndex;
+            var card = DemoCardUiFactory.Create(
+                slot, _registry, option.cardId, new Vector2(188, 270), true, UiFont,
+                option.selectable ? (Action)(() => SelectChoiceOption(optionIndex)) : null);
+            card.RectTransform.anchoredPosition = new Vector2(0, 18);
+            if (option.selectable) card.gameObject.AddComponent<DemoHoverScale>().Configure(1.045f, 16f);
+            CreateText(slot, "ChoiceLabel", new Vector2(0, -151), new Vector2(188, 30),
+                option.selectable ? selected ? "◆ 已选中" : "◆ 可出土" : "保持牌库顺序",
+                14, accent, TextAnchor.MiddleCenter, FontStyle.Bold);
+        }
+
+        private void CreateHiddenChoiceCard(int index, int optionCount)
+        {
+            var x = (index - (optionCount - 1) * 0.5f) * 244f;
+            var slot = CreateBasePanel(_choiceCardsRoot, "HiddenChoiceSlot" + index, new Vector2(x, 0), new Vector2(220, 350));
+            CreateText(slot, "HiddenGlyph", new Vector2(0, 22), new Vector2(160, 210), "◇\n?", 46, Ember, TextAnchor.MiddleCenter, FontStyle.Bold);
+            CreateText(slot, "HiddenLabel", new Vector2(0, -144), new Vector2(180, 30), "牌库信息保密", 14, Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
+        }
+
+        private void SelectChoiceOption(int optionIndex)
+        {
+            var choice = MatchView.PendingChoice;
+            if (choice == null || !MatchView.IsChoiceOwner || (IsOnlineBoard && !_onlineSession.CanIssueCommand)) return;
+            var option = (choice.options ?? Array.Empty<PendingChoiceOptionDto>())
+                .FirstOrDefault(value => value != null && value.optionIndex == optionIndex && value.selectable);
+            if (option == null) return;
+            _selectedChoiceOptionIndex = optionIndex;
+            RefreshPendingChoice();
+        }
+
+        private async void ConfirmChoice()
+        {
+            var choice = MatchView.PendingChoice;
+            if (choice == null || !MatchView.IsChoiceOwner) return;
+            var options = choice.options ?? Array.Empty<PendingChoiceOptionDto>();
+            var hasSelectable = options.Any(option => option != null && option.selectable);
+            if (hasSelectable && _selectedChoiceOptionIndex < 0) return;
+            var selectedOptionIndex = hasSelectable ? _selectedChoiceOptionIndex : -1;
+            if (IsOnlineBoard)
+            {
+                if (!_onlineSession.CanIssueCommand) return;
+                await SendOnline(() => _onlineSession.ResolveChoiceAsync(choice.choiceId, selectedOptionIndex));
+                RefreshAll();
+                return;
+            }
+
+            var result = _match.ApplyResolveChoice(_match.CreateResolveChoiceCommand(choice.choiceId, selectedOptionIndex));
+            var message = result.Message;
+            foreach (var option in options)
+                if (option != null && !string.IsNullOrEmpty(option.cardId)) message = message.Replace(option.cardId, GetCardName(option.cardId));
+            if (_match.LastDrawResult != null && !string.IsNullOrEmpty(_match.LastDrawResult.CardId))
+                message = message.Replace(_match.LastDrawResult.CardId, GetCardName(_match.LastDrawResult.CardId));
+            ShowStatus(result.Accepted ? $"{message} · 状态 r{result.Revision}" : message, !result.Accepted);
+            if (result.Accepted) StartCoroutine(ShowTurnBanner(hasSelectable ? "出土" : "未发现", hasSelectable ? Gold : Muted));
+            RefreshAll();
         }
 
         private void RefreshMulligan()
@@ -1206,6 +1387,7 @@ namespace BiomeRivals.Demo
 
         private void OnSlotHovered(bool player, DemoSlotKind kind, int index, bool hovered)
         {
+            if (MatchView.PendingChoice != null) return;
             var preview = EvaluateSelectedDeployment(kind, index);
             var isDeployment = IsPreviewingDeployment(player, out var occupiedSlots);
             var rejected = isDeployment && !preview.IsLegal;
@@ -1215,6 +1397,7 @@ namespace BiomeRivals.Demo
 
         private void OnSlotPressed(bool player, DemoSlotKind kind, int index, bool pressed)
         {
+            if (MatchView.PendingChoice != null) return;
             var preview = EvaluateSelectedDeployment(kind, index);
             var isDeployment = IsPreviewingDeployment(player, out var occupiedSlots);
             _battlefield.SetSlotRangePressed(player, kind, index, isDeployment ? occupiedSlots : 1, pressed, isDeployment && !preview.IsLegal);
@@ -1222,6 +1405,7 @@ namespace BiomeRivals.Demo
 
         private void SelectCard(string cardId)
         {
+            if (MatchView.PendingChoice != null) return;
             _pendingTargetCardId = null;
             _selectedCardId = cardId;
             _selectedPaymentMethod = MatchPaymentMethods.Redstone;
@@ -1231,6 +1415,7 @@ namespace BiomeRivals.Demo
 
         private async void OnSlotClicked(bool player, DemoSlotKind kind, int index)
         {
+            if (MatchView.PendingChoice != null) return;
             if (!string.IsNullOrEmpty(_pendingTargetCardId))
             {
                 ResolveTargetedCard(player, kind, index);
@@ -1329,6 +1514,7 @@ namespace BiomeRivals.Demo
 
         private void AttackOpponentHero()
         {
+            if (MatchView.PendingChoice != null) return;
             if (MatchView.Phase != DemoTurnPhase.Combat) return;
             var selected = FindSelectedAttacker();
             if (selected == null)
@@ -1410,6 +1596,7 @@ namespace BiomeRivals.Demo
 
         private void SelectPaymentMethod(string paymentMethod)
         {
+            if (MatchView.PendingChoice != null) return;
             _selectedPaymentMethod = paymentMethod;
             if (_registry.TryGetDefinition(_selectedCardId, out var definition) && paymentMethod == MatchPaymentMethods.Crafting)
             {
@@ -1422,6 +1609,7 @@ namespace BiomeRivals.Demo
 
         private async void CastSelectedCard()
         {
+            if (MatchView.PendingChoice != null) return;
             if (string.IsNullOrEmpty(_selectedCardId) || !_registry.TryGetDefinition(_selectedCardId, out var definition)) return;
             if (DemoCardTargeting.TryGetRule(definition, out var targetRule))
             {
@@ -1650,6 +1838,7 @@ namespace BiomeRivals.Demo
         private async void OnEndTurn()
         {
             var match = MatchView;
+            if (match.PendingChoice != null) return;
             if (!match.IsPlayerTurn) return;
             _pendingTargetCardId = null;
             if (IsOnlineBoard)
