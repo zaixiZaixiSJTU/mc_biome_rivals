@@ -485,18 +485,25 @@ namespace BiomeRivals.Core
         {
             var archaeology = choice != null && choice.kind == "ARCHAEOLOGY_TOP_3" &&
                 choice.effectId == "effect.db_003.01" && choice.sourceCardId == "db_003";
-            var movement = choice != null && choice.kind == "MOVE_UNIT" &&
+            var riptideMovement = choice != null && choice.kind == "MOVE_UNIT" &&
                 choice.effectId == "effect.or_006.01" && choice.sourceCardId == "or_006";
+            var salmonMovement = choice != null && choice.kind == "MOVE_UNIT" &&
+                choice.effectId == "effect.or_001.01" && choice.sourceCardId == "or_001";
+            var movement = riptideMovement || salmonMovement;
             if (choice == null || (!archaeology && !movement) || string.IsNullOrWhiteSpace(choice.choiceId) ||
                 string.IsNullOrWhiteSpace(choice.sourceInstanceId) || choice.options == null ||
                 choice.options.Length > (movement ? 2 : 3) || state.status != "ACTIVE" ||
-                (archaeology && state.phase != "MAIN") || (movement && state.phase != "COMBAT"))
+                (archaeology && state.phase != "MAIN") || (riptideMovement && state.phase != "COMBAT") ||
+                (salmonMovement && state.phase != "MAIN"))
                 throw new InvalidOperationException($"{source} contains an invalid pending card choice.");
             var owner = FindPlayer(state, choice.playerId);
             var sourceValid = archaeology
                 ? (owner?.battlefield ?? Array.Empty<BattlefieldObjectStateDto>()).Any(value =>
                     value != null && value.instanceId == choice.sourceInstanceId && value.cardId == choice.sourceCardId)
-                : !string.IsNullOrWhiteSpace(choice.targetPlayerId) && !string.IsNullOrWhiteSpace(choice.targetInstanceId);
+                : !string.IsNullOrWhiteSpace(choice.targetPlayerId) && !string.IsNullOrWhiteSpace(choice.targetInstanceId) &&
+                    (!salmonMovement || (owner?.battlefield ?? Array.Empty<BattlefieldObjectStateDto>()).Any(value =>
+                        value != null && value.instanceId == choice.sourceInstanceId && value.cardId == choice.sourceCardId &&
+                        value.instanceId == choice.targetInstanceId));
             if (owner == null || state.activePlayerIndex < 0 || state.activePlayerIndex >= state.players.Length ||
                 !ReferenceEquals(state.players[state.activePlayerIndex], owner) || !sourceValid)
                 throw new InvalidOperationException($"{source} pending choice has no active source object.");

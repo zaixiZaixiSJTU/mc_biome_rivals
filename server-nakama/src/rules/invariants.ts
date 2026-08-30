@@ -23,12 +23,14 @@ namespace BiomeRivalsRules {
     if (state.pendingChoice !== null) {
       const choice = state.pendingChoice;
       const choicePlayerIndex = state.players.map(function (player): string { return player.playerId; }).indexOf(choice.playerId);
+      const riptideMove = choice.kind === 'MOVE_UNIT' && choice.effectId === 'effect.or_006.01' && choice.sourceCardId === 'or_006';
+      const salmonMove = choice.kind === 'MOVE_UNIT' && choice.effectId === 'effect.or_001.01' && choice.sourceCardId === 'or_001';
       if (state.status !== 'ACTIVE' || (choice.kind === 'ARCHAEOLOGY_TOP_3' && state.phase !== 'MAIN') ||
-          (choice.kind === 'MOVE_UNIT' && state.phase !== 'COMBAT')) violations.push('pending choice phase is invalid');
+          (riptideMove && state.phase !== 'COMBAT') || (salmonMove && state.phase !== 'MAIN')) violations.push('pending choice phase is invalid');
       if (choicePlayerIndex < 0 || choicePlayerIndex !== state.activePlayerIndex) violations.push('pending choice owner must be the active player');
       if (!/^choice-[0-9]+$/.test(choice.choiceId)) violations.push('pending choice id is invalid');
       const archaeologyChoice = choice.kind === 'ARCHAEOLOGY_TOP_3' && choice.effectId === 'effect.db_003.01' && choice.sourceCardId === 'db_003';
-      const moveChoice = choice.kind === 'MOVE_UNIT' && choice.effectId === 'effect.or_006.01' && choice.sourceCardId === 'or_006';
+      const moveChoice = riptideMove || salmonMove;
       if (!archaeologyChoice && !moveChoice) violations.push('pending choice kind or source is unsupported');
       if (!Array.isArray(choice.options) || choice.options.length > (moveChoice ? 2 : 3)) violations.push('pending choice options are invalid');
       if (choicePlayerIndex >= 0) {
@@ -56,11 +58,22 @@ namespace BiomeRivalsRules {
             return object.instanceId === choice.targetInstanceId && object.cardType === 'UNIT';
           })[0];
           if (target === undefined) violations.push('pending movement target is missing');
-          else for (let optionIndex = 0; optionIndex < choice.options.length; optionIndex += 1) {
-            const option = choice.options[optionIndex]!;
-            if (option.optionIndex !== optionIndex || option.cardId !== target.cardId || !option.selectable ||
-                Math.abs(option.slotIndex - target.slotIndex) !== 1 || targetPlayer!.unitSlots[option.slotIndex] !== null) {
-              violations.push('pending movement option is invalid');
+          else {
+            const expectedSlots = [target.slotIndex - 1, target.slotIndex + 1].filter(function (slotIndex): boolean {
+              return slotIndex >= 0 && slotIndex < targetPlayer!.unitSlots.length && targetPlayer!.unitSlots[slotIndex] === null;
+            });
+            if (choice.options.length !== expectedSlots.length || expectedSlots.length === 0) {
+              violations.push('pending movement options must include every adjacent empty slot');
+            }
+            for (let optionIndex = 0; optionIndex < choice.options.length; optionIndex += 1) {
+              const option = choice.options[optionIndex]!;
+              if (option.optionIndex !== optionIndex || option.cardId !== target.cardId || !option.selectable ||
+                  option.slotIndex !== expectedSlots[optionIndex]) {
+                violations.push('pending movement option is invalid');
+              }
+            }
+            if (salmonMove && (targetPlayer!.playerId !== choice.playerId || target.instanceId !== choice.sourceInstanceId)) {
+              violations.push('salmon movement must target its own source unit');
             }
           }
         }

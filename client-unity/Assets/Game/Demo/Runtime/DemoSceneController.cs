@@ -161,6 +161,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewDungeonSkeleton")) SetupDungeonSkeletonPreview();
             else if (HasCommandLineFlag("-previewStray")) SetupStrayPreview();
             else if (HasCommandLineFlag("-previewEquipment")) SetupEquipmentPreview();
+            else if (HasCommandLineFlag("-previewWaterCurrent")) SetupWaterCurrentPreview();
             else if (HasCommandLineFlag("-previewSlow")) SetupSlowPreview();
             else if (HasCommandLineFlag("-previewCombat")) OnEndTurn();
             if (HasCommandLineFlag("-previewGroundHover")) _battlefield.SetSlotHovered(true, DemoSlotKind.Unit, 0, true);
@@ -606,8 +607,11 @@ namespace BiomeRivals.Demo
                     var ownChoice = matchEvent.payload?.playerId == choiceViewerId;
                     if (matchEvent.payload?.kind == "MOVE_UNIT")
                     {
-                        ShowStatus(ownChoice ? "激流三叉戟：选择目标旁的发光地块，或保持原位。" : "对手正在决定三叉戟目标的位置。", false);
-                        yield return ShowTurnBanner("激流位移", ownChoice ? Gold : Ember);
+                        var salmonCurrent = matchEvent.payload.effectId == "effect.or_001.01";
+                        ShowStatus(ownChoice
+                            ? salmonCurrent ? "鲑鱼群水流：选择己方相邻发光地块，或保持原位。" : "激流三叉戟：选择目标旁的发光地块，或保持原位。"
+                            : salmonCurrent ? "对手正在决定鲑鱼群的位置。" : "对手正在决定三叉戟目标的位置。", false);
+                        yield return ShowTurnBanner(salmonCurrent ? "水流" : "激流位移", ownChoice ? Gold : Ember);
                         break;
                     }
                     ShowStatus(ownChoice
@@ -1065,6 +1069,23 @@ namespace BiomeRivals.Demo
             if (attacked.Accepted) StartCoroutine(PulseBattlefieldObject(target.InstanceId));
         }
 
+        private void SetupWaterCurrentPreview()
+        {
+            SelectFaction("ocean_river");
+            SelectOpponentFaction("plains_forest");
+            if (!_registry.TryGetDefinition("or_001", out var salmonDefinition)) return;
+            _match.ResetDeckAndHand(new[] { salmonDefinition.id }, Array.Empty<string>());
+            var deployed = _match.ApplyDeploy(salmonDefinition,
+                _match.CreateDeployCommand(salmonDefinition.id, DemoSlotKind.Unit, 1));
+            _selectedCardId = null;
+            RefreshAll();
+            ShowStatus(deployed.Accepted
+                ? "鲑鱼群触发水流：点击左右任一发光地块移动，成功后本回合获得 +1 攻击。"
+                : deployed.Message, !deployed.Accepted);
+            var salmon = _match.GetObject(true, DemoSlotKind.Unit, 1);
+            if (deployed.Accepted && salmon != null) StartCoroutine(PulseBattlefieldObject(salmon.InstanceId));
+        }
+
         private void SetupStructureDeployedPreview()
         {
             SelectFaction("desert_badlands");
@@ -1361,9 +1382,10 @@ namespace BiomeRivals.Demo
                 RefreshAll();
                 return;
             }
+            var waterCurrent = choice.effectId == "effect.or_001.01";
             var result = _match.ApplyResolveChoice(_match.CreateResolveChoiceCommand(choice.choiceId, optionIndex));
             ShowStatus(result.Accepted ? $"{result.Message} · 状态 r{result.Revision}" : result.Message, !result.Accepted);
-            if (result.Accepted) StartCoroutine(ShowTurnBanner(optionIndex < 0 ? "保持原位" : "激流位移", Gold));
+            if (result.Accepted) StartCoroutine(ShowTurnBanner(optionIndex < 0 ? "保持原位" : waterCurrent ? "水流移动" : "激流位移", Gold));
             RefreshAll();
         }
 
@@ -1504,8 +1526,10 @@ namespace BiomeRivals.Demo
             var canInteract = !IsOnlineBoard || _onlineSession.CanIssueCommand;
             var valid = false;
             var movementChoice = match.PendingChoice != null && match.PendingChoice.kind == "MOVE_UNIT";
+            var movementTargetIsPlayer = movementChoice && match.PlayerBattlefield.Any(value =>
+                value != null && value.InstanceId == match.PendingChoice.targetInstanceId);
             if (canInteract && movementChoice)
-                valid = !player && view.Kind == DemoSlotKind.Unit && empty && match.IsChoiceOwner &&
+                valid = player == movementTargetIsPlayer && view.Kind == DemoSlotKind.Unit && empty && match.IsChoiceOwner &&
                     (match.PendingChoice.options ?? Array.Empty<PendingChoiceOptionDto>()).Any(option =>
                         option != null && option.selectable && option.slotIndex == view.Index);
             else if (canInteract && selectingCardTarget)
@@ -1517,7 +1541,7 @@ namespace BiomeRivals.Demo
             else if (canInteract && match.Phase == DemoTurnPhase.Combat && !string.IsNullOrEmpty(_selectedAttackerInstanceId) && !empty)
                 valid = match.CanAttackTarget(battlefieldObject, view.Kind == DemoSlotKind.Unit ? "UNIT" : "BUILDING", out _);
             view.EmptyLabel.color = Color.clear;
-            var priorityTarget = movementChoice && !player && battlefieldObject?.InstanceId == match.PendingChoice.targetInstanceId ||
+            var priorityTarget = movementChoice && battlefieldObject?.InstanceId == match.PendingChoice.targetInstanceId ||
                 valid && !player && battlefieldObject?.HasKeyword("TAUNT") == true;
             _battlefield.SetSlotState(player, view.Kind, view.Index, valid, !empty, priorityTarget);
 
@@ -1534,25 +1558,28 @@ namespace BiomeRivals.Demo
         {
             var match = MatchView;
             ClearChildren(_inspectorRoot);
-            CreateText(_inspectorRoot, "Header", new Vector2(0, 315), new Vector2(250, 38), match.Phase == DemoTurnPhase.Main ? "卡牌详情" : "战斗指令", 20, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
+            var moving = match.PendingChoice != null && match.PendingChoice.kind == "MOVE_UNIT";
+            CreateText(_inspectorRoot, "Header", new Vector2(0, 315), new Vector2(250, 38), moving ? "位移指令" : match.Phase == DemoTurnPhase.Main ? "卡牌详情" : "战斗指令", 20, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
+            if (moving)
+            {
+                _cardDetailsView.Clear();
+                var waterCurrent = match.PendingChoice.effectId == "effect.or_001.01";
+                CreateText(_inspectorRoot, "CombatTitle", new Vector2(0, 105), new Vector2(245, 120),
+                    waterCurrent ? "鲑鱼群 · 水流\n选择发光的相邻地块" : "激流三叉戟\n选择发光的相邻地块", 19, Gold, TextAnchor.MiddleCenter, FontStyle.Bold);
+                CreateText(_inspectorRoot, "CombatHint", new Vector2(0, -5), new Vector2(245, 100),
+                    match.IsChoiceOwner ? "直接点击目标旁的发光地块，\n或保持目标原位。" : "等待对手决定目标单位的位置。",
+                    15, Pale, TextAnchor.MiddleCenter, FontStyle.Normal);
+                if (match.IsChoiceOwner)
+                {
+                    var stay = CreateSecondaryButton(_inspectorRoot, "KeepPosition", new Vector2(0, -105), new Vector2(220, 52), "保持原位", 16);
+                    stay.interactable = !IsOnlineBoard || _onlineSession.CanIssueCommand;
+                    stay.onClick.AddListener(() => ResolveMovementChoice(-1));
+                }
+                return;
+            }
             if (match.Phase == DemoTurnPhase.Combat)
             {
                 _cardDetailsView.Clear();
-                if (match.PendingChoice != null && match.PendingChoice.kind == "MOVE_UNIT")
-                {
-                    CreateText(_inspectorRoot, "CombatTitle", new Vector2(0, 105), new Vector2(245, 120),
-                        "激流三叉戟\n选择发光的相邻地块", 19, Gold, TextAnchor.MiddleCenter, FontStyle.Bold);
-                    CreateText(_inspectorRoot, "CombatHint", new Vector2(0, -5), new Vector2(245, 100),
-                        match.IsChoiceOwner ? "直接点击敌方单位旁的发光地块，\n或保持目标原位。" : "等待对手决定目标单位的位置。",
-                        15, Pale, TextAnchor.MiddleCenter, FontStyle.Normal);
-                    if (match.IsChoiceOwner)
-                    {
-                        var stay = CreateSecondaryButton(_inspectorRoot, "KeepPosition", new Vector2(0, -105), new Vector2(220, 52), "保持原位", 16);
-                        stay.interactable = !IsOnlineBoard || _onlineSession.CanIssueCommand;
-                        stay.onClick.AddListener(() => ResolveMovementChoice(-1));
-                    }
-                    return;
-                }
                 var attacker = FindSelectedAttacker();
                 var heroSelected = _selectedAttackerInstanceId == MatchAttackerIds.Hero;
                 var title = heroSelected && match.PlayerEquipment != null
@@ -1709,10 +1736,11 @@ namespace BiomeRivals.Demo
             if (MatchView.PendingChoice != null)
             {
                 var choice = MatchView.PendingChoice;
-                if (choice.kind == "MOVE_UNIT" && MatchView.IsChoiceOwner && !player && kind == DemoSlotKind.Unit)
+                if (choice.kind == "MOVE_UNIT" && MatchView.IsChoiceOwner && kind == DemoSlotKind.Unit)
                 {
+                    var targetIsPlayer = MatchView.PlayerBattlefield.Any(value => value != null && value.InstanceId == choice.targetInstanceId);
                     var option = (choice.options ?? Array.Empty<PendingChoiceOptionDto>()).FirstOrDefault(value =>
-                        value != null && value.selectable && value.slotIndex == index);
+                        value != null && value.selectable && value.slotIndex == index && player == targetIsPlayer);
                     if (option != null) ResolveMovementChoice(option.optionIndex);
                 }
                 return;

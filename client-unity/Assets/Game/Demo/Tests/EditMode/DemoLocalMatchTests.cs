@@ -1295,6 +1295,33 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(match.OpponentUnitSlots[2], Is.Null.Or.Empty);
         }
 
+        [Test]
+        public void SalmonSchoolMovesAcrossFriendlyWorldSlotsAndItsAttackBonusExpiresAtEndOfTurn()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { "or_001" });
+            Assert.That(registry.TryGetDefinition("or_001", out var salmon), Is.True);
+            Assert.That(salmon.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+
+            var deployed = match.ApplyDeploy(salmon, match.CreateDeployCommand("or_001", DemoSlotKind.Unit, 1));
+            Assert.That(deployed.Accepted, Is.True);
+            Assert.That(match.PendingChoice.kind, Is.EqualTo("MOVE_UNIT"));
+            Assert.That(match.PendingChoice.effectId, Is.EqualTo("effect.or_001.01"));
+            Assert.That(match.PendingChoice.options.Select(value => value.slotIndex), Is.EquivalentTo(new[] { 0, 2 }));
+
+            var unit = match.GetObject(true, DemoSlotKind.Unit, 1);
+            var moved = match.ApplyResolveChoice(match.CreateResolveChoiceCommand(match.PendingChoice.choiceId, 1));
+            Assert.That(moved.Accepted, Is.True);
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 2).InstanceId, Is.EqualTo(unit.InstanceId));
+            Assert.That(unit.Attack, Is.EqualTo(2));
+            Assert.That(unit.TemporaryAttackModifier, Is.EqualTo(1));
+
+            match.EndPlayerTurn();
+            Assert.That(unit.Attack, Is.EqualTo(1));
+            Assert.That(unit.TemporaryAttackModifier, Is.Zero);
+        }
+
         private static float ProjectedWidth(Camera camera, Transform surface, Vector3[] vertices)
         {
             var min = vertices.Min(vertex => camera.WorldToViewportPoint(surface.TransformPoint(vertex)).x);

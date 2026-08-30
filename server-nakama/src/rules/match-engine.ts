@@ -546,6 +546,9 @@ namespace BiomeRivalsRules {
           definition.effectIds[0],
           0
         );
+      } else if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
+          definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.or_001.01') {
+        offerMoveChoice(player, cardId, battlefieldObject.instanceId, player, battlefieldObject, definition.effectIds[0]);
       }
       return null;
     }
@@ -989,7 +992,7 @@ namespace BiomeRivalsRules {
       });
     }
 
-    function offerMoveChoice(player: PlayerState, equipment: EquipmentState, targetPlayer: PlayerState,
+    function offerMoveChoice(player: PlayerState, sourceCardId: string, sourceInstanceId: string, targetPlayer: PlayerState,
       target: BattlefieldObjectState, effectId: string): void {
       const options: PendingChoiceOptionState[] = [];
       const candidates = [target.slotIndex - 1, target.slotIndex + 1];
@@ -1002,8 +1005,8 @@ namespace BiomeRivalsRules {
       next.pendingChoice = {
         choiceId: 'choice-' + String(next.lastEventId + 1),
         playerId: player.playerId,
-        sourceCardId: equipment.cardId,
-        sourceInstanceId: equipment.instanceId,
+        sourceCardId: sourceCardId,
+        sourceInstanceId: sourceInstanceId,
         effectId: effectId,
         kind: 'MOVE_UNIT',
         targetPlayerId: targetPlayer.playerId,
@@ -1013,8 +1016,8 @@ namespace BiomeRivalsRules {
       emit('CHOICE_OFFERED', {
         choiceId: next.pendingChoice.choiceId,
         playerId: player.playerId,
-        sourceCardId: equipment.cardId,
-        sourceInstanceId: equipment.instanceId,
+        sourceCardId: sourceCardId,
+        sourceInstanceId: sourceInstanceId,
         effectId: effectId,
         kind: 'MOVE_UNIT',
         targetPlayerId: targetPlayer.playerId,
@@ -1301,6 +1304,19 @@ namespace BiomeRivalsRules {
             sourceInstanceId: pendingChoice.sourceInstanceId, effectId: pendingChoice.effectId,
             fromSlotIndex: fromSlotIndex, toSlotIndex: moveOption.slotIndex
           });
+          if (pendingChoice.effectId === 'effect.or_001.01') {
+            target.attack += 1;
+            target.temporaryAttackModifier += 1;
+            target.temporaryAttackModifierExpiresOnTurn = next.turn;
+            emit('OBJECT_STATS_CHANGED', {
+              playerId: targetPlayer.playerId, instanceId: target.instanceId,
+              sourceCardId: pendingChoice.sourceCardId, sourceInstanceId: pendingChoice.sourceInstanceId,
+              effectId: pendingChoice.effectId, reason: 'TEMPORARY_ATTACK_MODIFIER',
+              attack: target.attack, health: target.health,
+              temporaryAttackModifier: target.temporaryAttackModifier,
+              temporaryAttackModifierExpiresOnTurn: target.temporaryAttackModifierExpiresOnTurn
+            });
+          }
         }
         return null;
       }
@@ -1456,7 +1472,8 @@ namespace BiomeRivalsRules {
           }
           const survivingTarget = findObject(defenderPlayer, target.instanceId);
           if (attackingEquipment.cardId === 'or_006' && survivingTarget !== null && survivingTarget.cardType === 'UNIT') {
-            offerMoveChoice(attackerPlayer, attackingEquipment, defenderPlayer, survivingTarget, 'effect.or_006.01');
+            offerMoveChoice(attackerPlayer, attackingEquipment.cardId, attackingEquipment.instanceId,
+              defenderPlayer, survivingTarget, 'effect.or_006.01');
           }
         }
       }

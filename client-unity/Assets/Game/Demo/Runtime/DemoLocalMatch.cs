@@ -233,6 +233,12 @@ namespace BiomeRivals.Demo
                 ApplySlow(battlecryTarget, definition.id, deployedObject.InstanceId, "effect.si_003.01", 0);
                 deployMessage += $"；战吼使 {battlecryTarget.CardId} 获得缓慢。";
             }
+            else if (definition.effectImplementationStatus == "IMPLEMENTED" &&
+                definition.effectIds != null && definition.effectIds.Contains("effect.or_001.01"))
+            {
+                OfferUnitMove(deployedObject, true, definition.id, deployedObject.InstanceId, "effect.or_001.01");
+                if (PendingChoice != null) deployMessage += "；水流：选择一个相邻空格移动，或保持原位。";
+            }
             AcceptCommand(command);
             return DemoCommandResult.Accept(deployMessage, Revision);
         }
@@ -255,21 +261,32 @@ namespace BiomeRivals.Demo
                         .FirstOrDefault(option => option != null && option.selectable && option.optionIndex == command.payload.selectedOptionIndex);
                     if (move == null) return Reject(DemoCommandRejectionCode.InvalidChoice, "该移动目的地已经不可用。");
                 }
-                var target = _opponentBattlefield.Find(value => value.InstanceId == PendingChoice.targetInstanceId);
+                var moveEffectId = PendingChoice.effectId;
+                var targetIsPlayer = _playerBattlefield.Any(value => value.InstanceId == PendingChoice.targetInstanceId);
+                var targetBattlefield = targetIsPlayer ? _playerBattlefield : _opponentBattlefield;
+                var targetSlots = targetIsPlayer ? UnitSlots : OpponentUnitSlots;
+                var target = targetBattlefield.Find(value => value.InstanceId == PendingChoice.targetInstanceId);
                 if (target == null || target.SlotKind != DemoSlotKind.Unit)
                     return Reject(DemoCommandRejectionCode.InvalidChoice, "待移动单位已经离场。");
                 if (move != null)
                 {
-                    if (move.slotIndex < 0 || move.slotIndex >= OpponentUnitSlots.Length ||
-                        Math.Abs(move.slotIndex - target.SlotIndex) != 1 || !string.IsNullOrEmpty(OpponentUnitSlots[move.slotIndex]))
+                    if (move.slotIndex < 0 || move.slotIndex >= targetSlots.Length ||
+                        Math.Abs(move.slotIndex - target.SlotIndex) != 1 || !string.IsNullOrEmpty(targetSlots[move.slotIndex]))
                         return Reject(DemoCommandRejectionCode.InvalidChoice, "该相邻地块已经被占用。");
-                    OpponentUnitSlots[target.SlotIndex] = null;
-                    OpponentUnitSlots[move.slotIndex] = target.CardId;
+                    targetSlots[target.SlotIndex] = null;
+                    targetSlots[move.slotIndex] = target.CardId;
                     target.SlotIndex = move.slotIndex;
+                    if (moveEffectId == "effect.or_001.01")
+                    {
+                        target.Attack += 1;
+                        target.TemporaryAttackModifier += 1;
+                        target.TemporaryAttackModifierExpiresOnRound = Round;
+                    }
                 }
                 PendingChoice = null;
                 AcceptCommand(command);
-                return DemoCommandResult.Accept(move == null ? "激流三叉戟：目标保持原位。" : "激流三叉戟：目标被推向相邻地块。", Revision);
+                var sourceName = moveEffectId == "effect.or_001.01" ? "鲑鱼群水流" : "激流三叉戟";
+                return DemoCommandResult.Accept(move == null ? $"{sourceName}：目标保持原位。" : $"{sourceName}：移动成功。", Revision);
             }
             var selectable = (PendingChoice.options ?? Array.Empty<PendingChoiceOptionDto>()).Where(option => option != null && option.selectable).ToArray();
             PendingChoiceOptionDto selected = null;
@@ -595,7 +612,7 @@ namespace BiomeRivals.Demo
                 var equipment = PlayerEquipment;
                 ConsumeEquipmentDurability();
                 if (!targetDied && target.SlotKind == DemoSlotKind.Unit && equipment != null && equipment.CardId == "or_006")
-                    OfferRiptideMove(equipment, target);
+                    OfferUnitMove(target, false, equipment.CardId, equipment.InstanceId, "effect.or_006.01");
                 if (PlayerLife == 0)
                 {
                     PendingChoice = null;
@@ -870,12 +887,14 @@ namespace BiomeRivals.Demo
             PlayerEquipment = null;
         }
 
-        private void OfferRiptideMove(DemoEquipment equipment, DemoBattlefieldObject target)
+        private void OfferUnitMove(DemoBattlefieldObject target, bool targetIsPlayer,
+            string sourceCardId, string sourceInstanceId, string effectId)
         {
             var options = new List<PendingChoiceOptionDto>();
+            var slots = targetIsPlayer ? UnitSlots : OpponentUnitSlots;
             foreach (var slotIndex in new[] { target.SlotIndex - 1, target.SlotIndex + 1 })
             {
-                if (slotIndex < 0 || slotIndex >= OpponentUnitSlots.Length || !string.IsNullOrEmpty(OpponentUnitSlots[slotIndex])) continue;
+                if (slotIndex < 0 || slotIndex >= slots.Length || !string.IsNullOrEmpty(slots[slotIndex])) continue;
                 options.Add(new PendingChoiceOptionDto
                 {
                     optionIndex = options.Count, cardId = target.CardId, slotIndex = slotIndex, selectable = true
@@ -885,9 +904,9 @@ namespace BiomeRivals.Demo
             PendingChoice = new PendingChoiceDto
             {
                 choiceId = $"choice-local-{Revision + 1}", playerId = "local-player",
-                sourceCardId = equipment.CardId, sourceInstanceId = equipment.InstanceId,
-                effectId = "effect.or_006.01", kind = "MOVE_UNIT",
-                targetPlayerId = "local-opponent", targetInstanceId = target.InstanceId,
+                sourceCardId = sourceCardId, sourceInstanceId = sourceInstanceId,
+                effectId = effectId, kind = "MOVE_UNIT",
+                targetPlayerId = targetIsPlayer ? "local-player" : "local-opponent", targetInstanceId = target.InstanceId,
                 options = options.ToArray()
             };
         }

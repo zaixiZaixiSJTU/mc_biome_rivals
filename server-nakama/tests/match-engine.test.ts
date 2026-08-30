@@ -1584,6 +1584,53 @@ TestHarness.test('hero attack consumes durability, takes retaliation, and offers
   TestHarness.equal(moved.batch.events[1]!.type, 'OBJECT_MOVED');
 });
 
+TestHarness.test('Salmon School offers friendly water-current movement and grants a temporary attack bonus', function (): void {
+  const state = activeState('match-1', ['alice', 'bob'], ['ocean_river', 'nether']);
+  state.players[0]!.hand = ['or_001'];
+  state.players[0]!.redstone = 1;
+  state.players[0]!.redstoneCapacity = 1;
+  const deployed = BiomeRivalsRules.applyCommand(state, 'alice', deployCommand('salmon-deploy', 0, 'or_001', 'UNIT', 1));
+  TestHarness.ok(deployed.accepted);
+  if (!deployed.accepted) return;
+  TestHarness.equal(deployed.state.pendingChoice!.kind, 'MOVE_UNIT');
+  TestHarness.equal(deployed.state.pendingChoice!.effectId, 'effect.or_001.01');
+  TestHarness.equal(deployed.state.pendingChoice!.targetPlayerId, 'alice');
+  TestHarness.equal(deployed.state.pendingChoice!.targetInstanceId, 'object-1');
+  TestHarness.equal(deployed.state.pendingChoice!.options[0]!.slotIndex, 0);
+  TestHarness.equal(deployed.state.pendingChoice!.options[1]!.slotIndex, 2);
+  const moved = BiomeRivalsRules.applyCommand(deployed.state, 'alice',
+    resolveChoiceCommand('salmon-move', 1, deployed.state.pendingChoice!.choiceId, 1));
+  TestHarness.ok(moved.accepted);
+  if (!moved.accepted) return;
+  const salmon = moved.state.players[0]!.battlefield[0]!;
+  TestHarness.equal(salmon.slotIndex, 2);
+  TestHarness.equal(salmon.attack, 2);
+  TestHarness.equal(salmon.temporaryAttackModifier, 1);
+  TestHarness.equal(salmon.temporaryAttackModifierExpiresOnTurn, 1);
+  TestHarness.equal(moved.batch.events[1]!.type, 'OBJECT_MOVED');
+  TestHarness.equal(moved.batch.events[2]!.type, 'OBJECT_STATS_CHANGED');
+  const ended = BiomeRivalsRules.applyCommand(moved.state, 'alice', command('salmon-end', 2, 'END_TURN'));
+  TestHarness.ok(ended.accepted);
+  if (!ended.accepted) return;
+  TestHarness.equal(ended.state.players[0]!.battlefield[0]!.attack, 1);
+  TestHarness.equal(ended.state.players[0]!.battlefield[0]!.temporaryAttackModifier, 0);
+});
+
+TestHarness.test('Salmon School may keep its deployment position without receiving the move bonus', function (): void {
+  const state = activeState('match-1', ['alice', 'bob'], ['ocean_river', 'nether']);
+  state.players[0]!.hand = ['or_001'];
+  const deployed = BiomeRivalsRules.applyCommand(state, 'alice', deployCommand('salmon-stay-deploy', 0, 'or_001', 'UNIT', 1));
+  TestHarness.ok(deployed.accepted);
+  if (!deployed.accepted) return;
+  const stayed = BiomeRivalsRules.applyCommand(deployed.state, 'alice',
+    resolveChoiceCommand('salmon-stay', 1, deployed.state.pendingChoice!.choiceId, -1));
+  TestHarness.ok(stayed.accepted);
+  if (!stayed.accepted) return;
+  TestHarness.equal(stayed.state.players[0]!.battlefield[0]!.slotIndex, 1);
+  TestHarness.equal(stayed.state.players[0]!.battlefield[0]!.attack, 1);
+  TestHarness.equal(stayed.batch.events.length, 1);
+});
+
 TestHarness.test('rejects stale revisions', function (): void {
   const state = activeState('match-1', ['alice', 'bob']);
   const result = BiomeRivalsRules.applyCommand(state, 'alice', command('cmd-1', 99, 'END_TURN'));
