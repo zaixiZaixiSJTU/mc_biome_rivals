@@ -1257,5 +1257,68 @@ namespace BiomeRivals.Core.Tests
             Assert.That(store.Current.players[1].unitSlots[1], Is.EqualTo("object-7"));
             Assert.That(store.Current.pendingChoice, Is.Null);
         }
+
+        [Test]
+        public void Apply_TracksAndClearsGuardianOncePerTurnReactionMarker()
+        {
+            var guardian = new BattlefieldObjectStateDto
+            {
+                instanceId = "object-10", cardId = "or_004", cardType = "UNIT", attack = 3,
+                health = 4, maxHealth = 4, slotKind = "UNIT", slotIndex = 0, occupiedSlots = 1, summonedTurn = 1
+            };
+            var movedUnit = new BattlefieldObjectStateDto
+            {
+                instanceId = "object-20", cardId = "or_001", cardType = "UNIT", attack = 2,
+                health = 2, maxHealth = 2, slotKind = "UNIT", slotIndex = 1, occupiedSlots = 1, summonedTurn = 1
+            };
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "guardian-reaction-replay", viewerPlayerId = "alice", protocolVersion = GameVersions.Protocol,
+                rulesetVersion = GameVersions.Ruleset, status = "ACTIVE", phase = "MAIN", turn = 1, activePlayerIndex = 1,
+                players = new[]
+                {
+                    new PlayerStateDto
+                    {
+                        playerId = "alice", life = 30, unitSlots = new[] { "object-10", null, null, null },
+                        battlefield = new[] { guardian }
+                    },
+                    new PlayerStateDto
+                    {
+                        playerId = "bob", life = 30, unitSlots = new[] { null, "object-20", null, null },
+                        battlefield = new[] { movedUnit }
+                    }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 1, type = MatchEventTypes.ObjectStatsChanged, payload = new MatchEventPayloadDto
+                    {
+                        playerId = "bob", instanceId = "object-20", sourceCardId = "or_004",
+                        sourceInstanceId = "object-10", effectId = "effect.or_004.01",
+                        attack = 2, health = 1, temporaryAttackModifier = 1, temporaryAttackModifierExpiresOnTurn = 1
+                    }}
+                }
+            });
+            Assert.That(movedUnit.health, Is.EqualTo(1));
+            Assert.That(store.Current.players[0].triggeredEffectKeysThisTurn,
+                Is.EqualTo(new[] { "object-10:effect.or_004.01" }));
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 2,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 2, type = MatchEventTypes.TurnEnded,
+                        payload = new MatchEventPayloadDto { playerId = "bob" } }
+                }
+            });
+            Assert.That(store.Current.players[0].triggeredEffectKeysThisTurn, Is.Empty);
+            Assert.That(store.Current.players[1].triggeredEffectKeysThisTurn, Is.Empty);
+        }
     }
 }

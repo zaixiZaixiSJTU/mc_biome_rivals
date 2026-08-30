@@ -1732,6 +1732,104 @@ TestHarness.test('Drowned deploys without a target when no adjacent aquatic ally
   TestHarness.equal(deployed.state.players[0]!.unitSlots[2], 'object-1');
 });
 
+TestHarness.test('Guardian damages only the first enemy unit that actually moves each turn', function (): void {
+  const state = activeState('match-guardian-movement', ['alice', 'bob'], ['ocean_river', 'ocean_river']);
+  state.players[0]!.hand = ['or_001', 'or_001', 'or_001'];
+  state.players[0]!.redstone = 3;
+  state.players[0]!.redstoneCapacity = 3;
+  placeUnit(state, 1, 'or_004', 1, 'object-20', 1);
+
+  const stayedDeployment = BiomeRivalsRules.applyCommand(state, 'alice',
+    deployCommand('guardian-stay-deploy', 0, 'or_001', 'UNIT', 0));
+  if (!stayedDeployment.accepted) throw new Error('guardian stay deployment rejected: ' + stayedDeployment.code + ' ' + stayedDeployment.message);
+  if (!stayedDeployment.accepted) return;
+  const stayed = BiomeRivalsRules.applyCommand(stayedDeployment.state, 'alice',
+    resolveChoiceCommand('guardian-stay', 1, stayedDeployment.state.pendingChoice!.choiceId, -1));
+  if (!stayed.accepted) throw new Error('guardian stay choice rejected: ' + stayed.code + ' ' + stayed.message);
+  if (!stayed.accepted) return;
+  TestHarness.equal(stayed.state.players[1]!.triggeredEffectKeysThisTurn.length, 0);
+
+  const firstDeployment = BiomeRivalsRules.applyCommand(stayed.state, 'alice',
+    deployCommand('guardian-first-deploy', 2, 'or_001', 'UNIT', 2));
+  if (!firstDeployment.accepted) throw new Error('guardian first deployment rejected: ' + firstDeployment.code + ' ' + firstDeployment.message);
+  if (!firstDeployment.accepted) return;
+  const firstMoved = BiomeRivalsRules.applyCommand(firstDeployment.state, 'alice',
+    resolveChoiceCommand('guardian-first-move', 3, firstDeployment.state.pendingChoice!.choiceId, 1));
+  if (!firstMoved.accepted) throw new Error('guardian first move rejected: ' + firstMoved.code + ' ' + firstMoved.message);
+  if (!firstMoved.accepted) return;
+  const firstSalmon = firstMoved.state.players[0]!.battlefield.filter(function (object): boolean {
+    return object.slotIndex === 3;
+  })[0]!;
+  TestHarness.equal(firstSalmon.health, 1);
+  TestHarness.equal(firstMoved.batch.events[3]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(firstMoved.batch.events[3]!.payload.effectId, 'effect.or_004.01');
+  TestHarness.equal(firstMoved.batch.events[3]!.payload.sourceInstanceId, 'object-20');
+  TestHarness.equal(firstMoved.state.players[1]!.triggeredEffectKeysThisTurn[0], 'object-20:effect.or_004.01');
+
+  const secondDeployment = BiomeRivalsRules.applyCommand(firstMoved.state, 'alice',
+    deployCommand('guardian-second-deploy', 4, 'or_001', 'UNIT', 2));
+  if (!secondDeployment.accepted) throw new Error('guardian second deployment rejected: ' + secondDeployment.code + ' ' + secondDeployment.message);
+  if (!secondDeployment.accepted) return;
+  const secondMoved = BiomeRivalsRules.applyCommand(secondDeployment.state, 'alice',
+    resolveChoiceCommand('guardian-second-move', 5, secondDeployment.state.pendingChoice!.choiceId, 0));
+  if (!secondMoved.accepted) throw new Error('guardian second move rejected: ' + secondMoved.code + ' ' + secondMoved.message);
+  if (!secondMoved.accepted) return;
+  const secondSalmon = secondMoved.state.players[0]!.battlefield.filter(function (object): boolean {
+    return object.slotIndex === 1;
+  })[0]!;
+  TestHarness.equal(secondSalmon.health, 2);
+  TestHarness.equal(secondMoved.batch.events.length, 3);
+});
+
+TestHarness.test('Guardian drops a Prismarine Shard to the enemy that kills it', function (): void {
+  const state = activeState('match-guardian-drop', ['alice', 'bob'], ['plains_forest', 'ocean_river']);
+  state.turn = 2;
+  state.players[0]!.hand = [];
+  placeUnit(state, 0, 'pf_008', 0, 'object-10', 1);
+  placeUnit(state, 1, 'or_004', 0, 'object-20', 1);
+  state.players[0]!.battlefield[0]!.attack = 4;
+  state.players[0]!.battlefield[0]!.health = 8;
+  state.players[0]!.battlefield[0]!.maxHealth = 8;
+  const combat = BiomeRivalsRules.applyCommand(state, 'alice', enterCombatCommand('guardian-drop-combat', 0));
+  if (!combat.accepted) throw new Error('guardian drop combat rejected: ' + combat.code + ' ' + combat.message);
+  if (!combat.accepted) return;
+  const attacked = BiomeRivalsRules.applyCommand(combat.state, 'alice',
+    attackCommand('guardian-drop-attack', 1, 'object-10', 'UNIT', 'object-20'));
+  if (!attacked.accepted) throw new Error('guardian drop attack rejected: ' + attacked.code + ' ' + attacked.message);
+  if (!attacked.accepted) return;
+  const generated = attacked.batch.events.filter(function (event): boolean { return event.type === 'CARD_GENERATED'; })[0]!;
+  TestHarness.equal(generated.payload.cardId, 'tk_012');
+  TestHarness.equal(generated.payload.effectId, 'effect.or_004.01');
+  TestHarness.equal(attacked.state.players[0]!.hand[0], 'tk_012');
+});
+
+TestHarness.test('Guardian reactions stop after lethal damage without creating hidden trigger markers', function (): void {
+  const state = activeState('match-guardian-lethal-order', ['alice', 'bob'], ['ocean_river', 'ocean_river']);
+  state.players[0]!.hand = ['or_001'];
+  state.players[0]!.redstone = 1;
+  state.players[0]!.redstoneCapacity = 1;
+  placeUnit(state, 1, 'or_004', 0, 'object-20', 1);
+  placeUnit(state, 1, 'or_004', 1, 'object-21', 1);
+  placeUnit(state, 1, 'or_004', 2, 'object-22', 1);
+  const deployed = BiomeRivalsRules.applyCommand(state, 'alice',
+    deployCommand('guardian-lethal-deploy', 0, 'or_001', 'UNIT', 1));
+  TestHarness.ok(deployed.accepted);
+  if (!deployed.accepted) return;
+  const moved = BiomeRivalsRules.applyCommand(deployed.state, 'alice',
+    resolveChoiceCommand('guardian-lethal-move', 1, deployed.state.pendingChoice!.choiceId, 0));
+  TestHarness.ok(moved.accepted);
+  if (!moved.accepted) return;
+  const guardianEvents = moved.batch.events.filter(function (event): boolean {
+    return event.type === 'OBJECT_STATS_CHANGED' && event.payload.effectId === 'effect.or_004.01';
+  });
+  TestHarness.equal(guardianEvents.length, 2);
+  TestHarness.equal(guardianEvents[0]!.payload.sourceInstanceId, 'object-20');
+  TestHarness.equal(guardianEvents[1]!.payload.sourceInstanceId, 'object-21');
+  TestHarness.equal(moved.state.players[1]!.triggeredEffectKeysThisTurn.length, 2);
+  TestHarness.equal(moved.state.players[1]!.triggeredEffectKeysThisTurn.indexOf('object-22:effect.or_004.01'), -1);
+  TestHarness.equal(moved.state.players[0]!.battlefield.length, 0);
+});
+
 TestHarness.test('rejects stale revisions', function (): void {
   const state = activeState('match-1', ['alice', 'bob']);
   const result = BiomeRivalsRules.applyCommand(state, 'alice', command('cmd-1', 99, 'END_TURN'));

@@ -108,6 +108,7 @@ namespace BiomeRivals.Demo
         int OpponentLife { get; }
         bool IsFinished { get; }
         int Revision { get; }
+        bool HasTriggeredEffect(bool player, string sourceInstanceId, string effectId);
         int GetEffectiveCost(CardDefinitionEntry definition);
         DemoBattlefieldObject GetObject(bool player, DemoSlotKind kind, int slotIndex);
         bool CanAttackWith(DemoBattlefieldObject attacker, out string message);

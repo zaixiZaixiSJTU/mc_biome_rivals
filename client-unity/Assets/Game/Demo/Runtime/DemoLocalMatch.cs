@@ -65,6 +65,10 @@ namespace BiomeRivals.Demo
         public bool IsFinished { get; private set; }
         public int Revision { get; private set; }
 
+        public bool HasTriggeredEffect(bool player, string sourceInstanceId, string effectId) =>
+            !string.IsNullOrEmpty(sourceInstanceId) && !string.IsNullOrEmpty(effectId) &&
+            _triggeredEffectKeysThisTurn.Contains($"{sourceInstanceId}:{effectId}");
+
         public void SetPlayerFaction(string factionId)
         {
             if (!FactionIds.IsSupported(factionId)) throw new ArgumentOutOfRangeException(nameof(factionId));
@@ -310,11 +314,21 @@ namespace BiomeRivals.Demo
                     }
                 }
                 PendingChoice = null;
-                var triggeredGuides = move == null ? 0 : TriggerSuccessfulMovement(targetBattlefield, target);
+                var triggeredGuides = 0;
+                var triggeredGuardians = 0;
+                var movementDeathMessages = new List<string>();
+                if (move != null)
+                    triggeredGuides = TriggerSuccessfulMovement(targetBattlefield, target, out triggeredGuardians, movementDeathMessages);
                 AcceptCommand(command);
                 var sourceName = moveEffectId == "effect.or_001.01" ? "鲑鱼群水流" : "激流三叉戟";
                 var guideMessage = triggeredGuides > 0 ? $" 海豚向导触发 {triggeredGuides} 次，目标额外获得 +{triggeredGuides} 攻击。" : string.Empty;
-                return DemoCommandResult.Accept(move == null ? $"{sourceName}：目标保持原位。" : $"{sourceName}：移动成功。{guideMessage}", Revision);
+                var guardianMessage = triggeredGuardians > 0
+                    ? $" 守卫者射线触发 {triggeredGuardians} 次，目标受到 {triggeredGuardians} 点伤害。"
+                    : string.Empty;
+                var deathMessage = movementDeathMessages.Count > 0 ? " " + string.Join(" ", movementDeathMessages) : string.Empty;
+                return DemoCommandResult.Accept(move == null
+                    ? $"{sourceName}：目标保持原位，未触发移动反应。"
+                    : $"{sourceName}：移动成功。{guideMessage}{guardianMessage}{deathMessage}", Revision);
             }
             var selectable = (PendingChoice.options ?? Array.Empty<PendingChoiceOptionDto>()).Where(option => option != null && option.selectable).ToArray();
             PendingChoiceOptionDto selected = null;
@@ -958,7 +972,11 @@ namespace BiomeRivals.Demo
                 Math.Abs(value.SlotIndex - slotIndex) == 1 && value.HasTag("aquatic"));
         }
 
-        private int TriggerSuccessfulMovement(List<DemoBattlefieldObject> battlefield, DemoBattlefieldObject movedUnit)
+        private int TriggerSuccessfulMovement(
+            List<DemoBattlefieldObject> battlefield,
+            DemoBattlefieldObject movedUnit,
+            out int triggeredGuardians,
+            List<string> deathMessages)
         {
             var triggered = 0;
             foreach (var guide in battlefield
@@ -973,6 +991,24 @@ namespace BiomeRivals.Demo
                 movedUnit.TemporaryAttackModifierExpiresOnRound = movedUnit.TemporaryAttackModifier == 0 ? 0 : Round;
                 triggered++;
             }
+
+            triggeredGuardians = 0;
+            var guardianBattlefield = movedUnit.Player ? _opponentBattlefield : _playerBattlefield;
+            var killCredits = new Dictionary<string, bool>(StringComparer.Ordinal);
+            foreach (var guardian in guardianBattlefield
+                .Where(value => value.CardId == "or_004" && value.SlotKind == DemoSlotKind.Unit && value.Health > 0)
+                .OrderBy(value => value.SlotIndex)
+                .ThenBy(value => value.InstanceId, StringComparer.Ordinal))
+            {
+                if (movedUnit.Health <= 0) break;
+                var triggerKey = $"{guardian.InstanceId}:effect.or_004.01";
+                if (!_triggeredEffectKeysThisTurn.Add(triggerKey)) continue;
+                movedUnit.Health = Math.Max(0, movedUnit.Health - 1);
+                triggeredGuardians++;
+                if (movedUnit.Health == 0) killCredits[movedUnit.InstanceId] = guardian.Player;
+            }
+            if (movedUnit.Health == 0 && deathMessages != null)
+                deathMessages.AddRange(SettleDeaths(killCredits));
             return triggered;
         }
 
@@ -1108,6 +1144,7 @@ namespace BiomeRivals.Demo
                 case "pf_002": dropCardId = "tk_001"; sourceName = "放牧绵羊"; dropName = "羊毛"; break;
                 case "cd_003": dropCardId = "tk_009"; sourceName = "地牢骷髅"; dropName = "骨头"; break;
                 case "si_003": dropCardId = "tk_009"; sourceName = "流浪者"; dropName = "骨头"; break;
+                case "or_004": dropCardId = "tk_012"; sourceName = "守卫者"; dropName = "海晶碎片"; break;
                 default: return string.Empty;
             }
             if (killerIsPlayer)

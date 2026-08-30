@@ -1398,6 +1398,59 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(inactiveTarget.Health, Is.EqualTo(sheep.health));
         }
 
+        [Test]
+        public void GuardianPunishesOnlyTheFirstActualEnemyMovementAndDropsPrismarineShard()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("or_001", out var salmon), Is.True);
+            Assert.That(registry.TryGetDefinition("or_004", out var guardian), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_008", out var ironGolem), Is.True);
+            Assert.That(guardian.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+
+            var movement = new DemoLocalMatch();
+            movement.ResetHand(new[] { "or_001", "or_001", "or_001" });
+            movement.ResetOpponent(new[] { guardian });
+            Assert.That(movement.ApplyDeploy(salmon,
+                movement.CreateDeployCommand("or_001", DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            var stayed = movement.ApplyResolveChoice(
+                movement.CreateResolveChoiceCommand(movement.PendingChoice.choiceId, -1));
+            Assert.That(stayed.Accepted, Is.True);
+            var guardianObject = movement.GetObject(false, DemoSlotKind.Unit, 0);
+            Assert.That(movement.HasTriggeredEffect(false, guardianObject.InstanceId, "effect.or_004.01"), Is.False);
+
+            Assert.That(movement.ApplyDeploy(salmon,
+                movement.CreateDeployCommand("or_001", DemoSlotKind.Unit, 2)).Accepted, Is.True);
+            var firstMove = movement.ApplyResolveChoice(
+                movement.CreateResolveChoiceCommand(movement.PendingChoice.choiceId, 1));
+            Assert.That(firstMove.Accepted, Is.True);
+            Assert.That(firstMove.Message, Does.Contain("守卫者射线触发 1 次"));
+            Assert.That(movement.GetObject(true, DemoSlotKind.Unit, 3).Health, Is.EqualTo(1));
+            Assert.That(movement.HasTriggeredEffect(false, guardianObject.InstanceId, "effect.or_004.01"), Is.True);
+
+            Assert.That(movement.ApplyDeploy(salmon,
+                movement.CreateDeployCommand("or_001", DemoSlotKind.Unit, 2)).Accepted, Is.True);
+            var secondMove = movement.ApplyResolveChoice(
+                movement.CreateResolveChoiceCommand(movement.PendingChoice.choiceId, 0));
+            Assert.That(secondMove.Accepted, Is.True);
+            Assert.That(secondMove.Message, Does.Not.Contain("守卫者射线触发"));
+            Assert.That(movement.GetObject(true, DemoSlotKind.Unit, 1).Health, Is.EqualTo(2));
+
+            var loot = new DemoLocalMatch();
+            loot.ResetHand(new[] { ironGolem.id });
+            loot.ResetOpponent(new[] { guardian });
+            Assert.That(loot.ApplyDeploy(ironGolem,
+                loot.CreateDeployCommand(ironGolem.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            loot.EndPlayerTurn();
+            loot.BeginNextPlayerTurn();
+            Assert.That(loot.ApplyEnterCombat(loot.CreateEnterCombatCommand()).Accepted, Is.True);
+            var lootTarget = loot.GetObject(false, DemoSlotKind.Unit, 0);
+            var killed = loot.ApplyAttack(loot.CreateAttackCommand(
+                loot.GetObject(true, DemoSlotKind.Unit, 0).InstanceId, "UNIT", lootTarget.InstanceId));
+            Assert.That(killed.Accepted, Is.True);
+            Assert.That(killed.Message, Does.Contain("海晶碎片"));
+            Assert.That(loot.Hand, Does.Contain("tk_012"));
+        }
+
         private static float ProjectedWidth(Camera camera, Transform surface, Vector3[] vertices)
         {
             var min = vertices.Min(vertex => camera.WorldToViewportPoint(surface.TransformPoint(vertex)).x);

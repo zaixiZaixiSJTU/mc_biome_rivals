@@ -17,7 +17,8 @@ namespace BiomeRivals.Demo
             { "si_003", "entity_stray" },
             { "or_001", "entity_salmon" },
             { "or_002", "entity_dolphin" },
-            { "or_003", "entity_drowned" }
+            { "or_003", "entity_drowned" },
+            { "or_004", "entity_guardian" }
         };
 
         public static bool TryGetTextureKey(string cardId, out string textureKey) =>
@@ -44,6 +45,7 @@ namespace BiomeRivals.Demo
                 case "or_001": BuildSalmon(root, material); break;
                 case "or_002": BuildDolphin(root, material); break;
                 case "or_003": BuildDrowned(root, material); break;
+                case "or_004": BuildGuardian(root, material); break;
                 default: return false;
             }
             return true;
@@ -159,6 +161,27 @@ namespace BiomeRivals.Demo
             Cuboid(root, "RightArm", new Vector3(0.42f, 1.17f, -0.18f), new Vector3(0.20f, 0.86f, 0.20f), material, 32, 48, 4, 12, 4, 64, 64, Quaternion.Euler(-58f, 0f, -8f));
             Cuboid(root, "LeftLeg", new Vector3(-0.15f, 0.38f, 0f), new Vector3(0.22f, 0.86f, 0.22f), material, 0, 16, 4, 12, 4, 64, 64);
             Cuboid(root, "RightLeg", new Vector3(0.15f, 0.38f, 0f), new Vector3(0.22f, 0.86f, 0.22f), material, 16, 48, 4, 12, 4, 64, 64);
+        }
+
+        private static void BuildGuardian(Transform root, Material material)
+        {
+            root.localPosition += new Vector3(0f, 0.22f, 0f);
+            Cuboid(root, "Body", new Vector3(0f, 0.82f, 0f), new Vector3(1.08f, 1.02f, 1.28f), material, 0, 0, 12, 12, 16, 64, 64);
+            Cuboid(root, "TailBase", new Vector3(0f, 0.78f, 0.78f), new Vector3(0.48f, 0.42f, 0.58f), material, 40, 0, 4, 4, 6, 64, 64, Quaternion.Euler(0f, 12f, 0f));
+            Cuboid(root, "TailMiddle", new Vector3(0.18f, 0.76f, 1.18f), new Vector3(0.34f, 0.32f, 0.52f), material, 0, 32, 3, 3, 5, 64, 64, Quaternion.Euler(0f, 28f, 0f));
+            Cuboid(root, "TailFin", new Vector3(0.43f, 0.76f, 1.48f), new Vector3(0.58f, 0.62f, 0.07f), material, 24, 32, 5, 5, 1, 64, 64, Quaternion.Euler(0f, 36f, 0f));
+
+            for (var spike = 0; spike < 4; spike++)
+            {
+                var x = -0.42f + spike * 0.28f;
+                Cuboid(root, "TopSpike_" + spike, new Vector3(x, 1.48f, 0f), new Vector3(0.13f, 0.42f, 0.13f), material, 0, 28, 2, 4, 2, 64, 64);
+                Cuboid(root, "BottomSpike_" + spike, new Vector3(x, 0.17f, 0f), new Vector3(0.13f, 0.36f, 0.13f), material, 0, 28, 2, 4, 2, 64, 64);
+            }
+            for (var side = -1; side <= 1; side += 2)
+            {
+                Cuboid(root, side < 0 ? "LeftSpikeFront" : "RightSpikeFront", new Vector3(side * 0.70f, 1.05f, -0.30f), new Vector3(0.42f, 0.13f, 0.13f), material, 0, 28, 2, 4, 2, 64, 64);
+                Cuboid(root, side < 0 ? "LeftSpikeRear" : "RightSpikeRear", new Vector3(side * 0.70f, 0.62f, 0.28f), new Vector3(0.42f, 0.13f, 0.13f), material, 0, 28, 2, 4, 2, 64, 64);
+            }
         }
 
         private static void Leg(Transform root, string name, float x, float z, Material material, int u, int v, int textureWidth, int textureHeight)

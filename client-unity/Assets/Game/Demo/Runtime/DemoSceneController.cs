@@ -161,6 +161,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewDungeonSkeleton")) SetupDungeonSkeletonPreview();
             else if (HasCommandLineFlag("-previewStray")) SetupStrayPreview();
             else if (HasCommandLineFlag("-previewEquipment")) SetupEquipmentPreview();
+            else if (HasCommandLineFlag("-previewGuardianReaction")) SetupGuardianReactionPreview();
             else if (HasCommandLineFlag("-previewDrownedAdjacency")) SetupDrownedAdjacencyPreview();
             else if (HasCommandLineFlag("-previewDolphinCurrent")) SetupDolphinCurrentPreview();
             else if (HasCommandLineFlag("-previewWaterCurrent")) SetupWaterCurrentPreview();
@@ -651,7 +652,9 @@ namespace BiomeRivals.Demo
                         : GetCardName(matchEvent.payload.cardId);
                     var isLoot = matchEvent.payload?.effectId == "effect.db_001.01" ||
                         matchEvent.payload?.effectId == "effect.pf_002.01" ||
-                        matchEvent.payload?.effectId == "effect.cd_003.01";
+                        matchEvent.payload?.effectId == "effect.cd_003.01" ||
+                        matchEvent.payload?.effectId == "effect.si_003.01" ||
+                        matchEvent.payload?.effectId == "effect.or_004.01";
                     var triggerName = isLoot ? "掉落" : matchEvent.payload?.effectId == "effect.ed_004.01" ? "亡语" : "效果";
                     if (generatedToHand)
                     {
@@ -716,6 +719,12 @@ namespace BiomeRivals.Demo
                     {
                         ShowStatus("溺尸战吼：相邻水生友军激活效果，对选定的敌方生物造成 1 点伤害。", false);
                         yield return ShowTurnBanner("潮汐伏击", Cyan);
+                    }
+                    else if (matchEvent.payload?.effectId == "effect.or_004.01")
+                    {
+                        ShowStatus("守卫者射线：敌方本回合第一次实际移动的生物受到 1 点伤害。", false);
+                        yield return PulseBattlefieldObject(matchEvent.payload?.sourceInstanceId);
+                        yield return ShowTurnBanner("守卫射线", Ember);
                     }
                     yield return PulseBattlefieldObject(matchEvent.payload?.instanceId);
                     break;
@@ -1149,6 +1158,27 @@ namespace BiomeRivals.Demo
                 ? "溺尸已借相邻鲑鱼触发战吼；金色地表格表示下一张溺尸可再次激活相邻条件。"
                 : !salmonDeployed.Accepted ? salmonDeployed.Message : drownedDeployed.Message,
                 !salmonDeployed.Accepted || !drownedDeployed.Accepted);
+        }
+
+        private void SetupGuardianReactionPreview()
+        {
+            SelectFaction("ocean_river");
+            SelectOpponentFaction("ocean_river");
+            if (!_registry.TryGetDefinition("or_001", out var salmonDefinition) ||
+                !_registry.TryGetDefinition("or_004", out var guardianDefinition)) return;
+            _match.ResetDeckAndHand(new[] { salmonDefinition.id }, Array.Empty<string>());
+            _match.ResetOpponent(new[] { guardianDefinition });
+            var deployed = _match.ApplyDeploy(salmonDefinition,
+                _match.CreateDeployCommand(salmonDefinition.id, DemoSlotKind.Unit, 1));
+            _selectedCardId = null;
+            RefreshAll();
+            ShowStatus(deployed.Accepted
+                ? "敌方守卫者尚未触发：移动鲑鱼群会受到 1 点射线伤害；保持原位不会消耗其反应。"
+                : deployed.Message, !deployed.Accepted);
+            var salmon = _match.GetObject(true, DemoSlotKind.Unit, 1);
+            var guardian = _match.GetObject(false, DemoSlotKind.Unit, 0);
+            if (salmon != null) StartCoroutine(PulseBattlefieldObject(salmon.InstanceId));
+            if (guardian != null) StartCoroutine(PulseBattlefieldObject(guardian.InstanceId));
         }
 
         private void SetupStructureDeployedPreview()
@@ -1607,6 +1637,7 @@ namespace BiomeRivals.Demo
                 valid = match.CanAttackTarget(battlefieldObject, view.Kind == DemoSlotKind.Unit ? "UNIT" : "BUILDING", out _);
             view.EmptyLabel.color = Color.clear;
             var activatesDrowned = valid && player && empty && view.Kind == DemoSlotKind.Unit &&
+                !string.IsNullOrEmpty(_selectedCardId) &&
                 _registry.TryGetDefinition(_selectedCardId, out var selectedDefinition) && IsDrowned(selectedDefinition) &&
                 DrownedBattlecryActivatesAt(view.Index);
             var priorityTarget = movementChoice && battlefieldObject?.InstanceId == match.PendingChoice.targetInstanceId ||
@@ -1633,14 +1664,23 @@ namespace BiomeRivals.Demo
                 _cardDetailsView.Clear();
                 var waterCurrent = match.PendingChoice.effectId == "effect.or_001.01";
                 var guideReady = waterCurrent && match.PlayerBattlefield.Any(value => value != null &&
-                    value.CardId == "or_002" && value.InstanceId != match.PendingChoice.targetInstanceId);
+                    value.CardId == "or_002" && value.InstanceId != match.PendingChoice.targetInstanceId &&
+                    !match.HasTriggeredEffect(true, value.InstanceId, "effect.or_002.01"));
+                var movementTargetIsPlayer = match.PlayerBattlefield.Any(value => value != null &&
+                    value.InstanceId == match.PendingChoice.targetInstanceId);
+                var guardianOwnerIsPlayer = !movementTargetIsPlayer;
+                var guardianBattlefield = guardianOwnerIsPlayer ? match.PlayerBattlefield : match.OpponentBattlefield;
+                var guardianThreats = guardianBattlefield.Count(value => value != null && value.Health > 0 &&
+                    value.CardId == "or_004" && !match.HasTriggeredEffect(
+                        guardianOwnerIsPlayer, value.InstanceId, "effect.or_004.01"));
                 CreateText(_inspectorRoot, "CombatTitle", new Vector2(0, 105), new Vector2(245, 120),
                     waterCurrent ? "鲑鱼群 · 水流\n选择发光的相邻地块" : "激流三叉戟\n选择发光的相邻地块", 19, Gold, TextAnchor.MiddleCenter, FontStyle.Bold);
+                var movementHint = "直接点击目标旁的发光地块，\n或保持目标原位。";
+                if (guideReady) movementHint = "移动后：海豚向导追加 +1 攻击。";
+                if (guardianThreats > 0) movementHint += $"\n警告：移动后承受 {guardianThreats} 点守卫者伤害；保持原位不触发。";
                 CreateText(_inspectorRoot, "CombatHint", new Vector2(0, -5), new Vector2(245, 100),
-                    match.IsChoiceOwner
-                        ? guideReady ? "点击发光地块移动。\n海豚向导将追加 +1 攻击。" : "直接点击目标旁的发光地块，\n或保持目标原位。"
-                        : "等待对手决定目标单位的位置。",
-                    15, Pale, TextAnchor.MiddleCenter, FontStyle.Normal);
+                    match.IsChoiceOwner ? movementHint : "等待对手决定目标单位的位置。",
+                    guardianThreats > 0 ? 14 : 15, guardianThreats > 0 ? Gold : Pale, TextAnchor.MiddleCenter, FontStyle.Normal);
                 if (match.IsChoiceOwner)
                 {
                     var stay = CreateSecondaryButton(_inspectorRoot, "KeepPosition", new Vector2(0, -105), new Vector2(220, 52), "保持原位", 16);

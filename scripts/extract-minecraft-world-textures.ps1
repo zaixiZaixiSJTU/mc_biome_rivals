@@ -51,6 +51,7 @@ $textures = [ordered]@{
     entity_salmon = 'assets/minecraft/textures/entity/fish/salmon.png'
     entity_dolphin = 'assets/minecraft/textures/entity/dolphin.png'
     entity_drowned = 'assets/minecraft/textures/entity/zombie/drowned.png'
+    entity_guardian = 'assets/minecraft/textures/entity/guardian.png'
 }
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem

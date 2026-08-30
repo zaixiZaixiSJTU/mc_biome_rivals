@@ -92,7 +92,7 @@ namespace BiomeRivalsRules {
       if (typeof player.heroHasAttacked !== 'boolean') violations.push('player hero attack marker is invalid');
       if (!Array.isArray(player.triggeredEffectKeysThisTurn) ||
           player.triggeredEffectKeysThisTurn.some(function (key): boolean {
-            return typeof key !== 'string' || !/^object-[0-9]+:effect\.or_002\.01$/.test(key);
+            return typeof key !== 'string' || !/^object-[0-9]+:effect\.or_(?:002|004)\.01$/.test(key);
           }) || player.triggeredEffectKeysThisTurn.some(function (key, keyIndex): boolean {
             return player.triggeredEffectKeysThisTurn.indexOf(key) !== keyIndex;
           })) {

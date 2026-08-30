@@ -1,6 +1,6 @@
 # 水流移动交互规范 v1
 
-本规范对应 `protocolVersion 18`、`rulesetVersion prototype-0.23` 与内容版本 15。
+本规范对应 `protocolVersion 18`、`rulesetVersion prototype-0.24` 与内容版本 16。
 
 ## 公共位移约束
 

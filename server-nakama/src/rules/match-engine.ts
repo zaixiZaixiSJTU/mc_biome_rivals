@@ -830,6 +830,7 @@ namespace BiomeRivalsRules {
       else if (definition.effectIds.indexOf('effect.pf_002.01') >= 0) dropCardId = 'tk_001';
       else if (definition.effectIds.indexOf('effect.cd_003.01') >= 0) dropCardId = 'tk_009';
       else if (definition.effectIds.indexOf('effect.si_003.01') >= 0) dropCardId = 'tk_009';
+      else if (definition.effectIds.indexOf('effect.or_004.01') >= 0) dropCardId = 'tk_012';
       if (dropCardId === null) return;
       const killer = next.players.filter(function (candidate): boolean {
         return candidate.playerId === killerPlayerId;
@@ -1105,6 +1106,43 @@ namespace BiomeRivalsRules {
           temporaryAttackModifier: movedUnit.temporaryAttackModifier,
           temporaryAttackModifierExpiresOnTurn: movedUnit.temporaryAttackModifierExpiresOnTurn
         });
+      }
+
+      const guardianPlayer = next.players.filter(function (candidate): boolean {
+        return candidate.playerId !== targetPlayer.playerId;
+      })[0];
+      if (!guardianPlayer) throw new Error('moved unit has no opposing player: ' + targetPlayer.playerId);
+      const guardians = guardianPlayer.battlefield.filter(function (object): boolean {
+        if (object.cardType !== 'UNIT' || object.health <= 0) return false;
+        const definition = getCardDefinition(object.cardId);
+        return definition !== null && definition.effectImplementationStatus === 'IMPLEMENTED' &&
+          definition.effectIds.indexOf('effect.or_004.01') >= 0;
+      }).slice().sort(function (left, right): number {
+        if (left.slotIndex !== right.slotIndex) return left.slotIndex - right.slotIndex;
+        return left.instanceId < right.instanceId ? -1 : left.instanceId > right.instanceId ? 1 : 0;
+      });
+      const killCredits: { [instanceId: string]: string } = {};
+      for (let guardianIndex = 0; guardianIndex < guardians.length; guardianIndex += 1) {
+        if (movedUnit.health <= 0) break;
+        const guardian = guardians[guardianIndex]!;
+        const triggerKey = guardian.instanceId + ':effect.or_004.01';
+        if (guardianPlayer.triggeredEffectKeysThisTurn.indexOf(triggerKey) >= 0) continue;
+        guardianPlayer.triggeredEffectKeysThisTurn.push(triggerKey);
+        movedUnit.health = Math.max(0, movedUnit.health - 1);
+        if (movedUnit.health === 0) killCredits[movedUnit.instanceId] = guardianPlayer.playerId;
+        emit('OBJECT_STATS_CHANGED', {
+          playerId: targetPlayer.playerId, instanceId: movedUnit.instanceId,
+          sourceCardId: guardian.cardId, sourceInstanceId: guardian.instanceId,
+          effectId: 'effect.or_004.01', reason: 'DAMAGE',
+          attack: movedUnit.attack, health: movedUnit.health,
+          temporaryAttackModifier: movedUnit.temporaryAttackModifier,
+          temporaryAttackModifierExpiresOnTurn: movedUnit.temporaryAttackModifierExpiresOnTurn
+        });
+      }
+      if (movedUnit.health === 0) {
+        const activePlayer = next.players[next.activePlayerIndex]!;
+        const nonActivePlayer = next.players[next.activePlayerIndex === 0 ? 1 : 0]!;
+        settleDeaths(activePlayer, nonActivePlayer, killCredits);
       }
     }
 

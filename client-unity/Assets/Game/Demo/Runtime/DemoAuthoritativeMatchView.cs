@@ -51,6 +51,14 @@ namespace BiomeRivals.Demo
         public bool IsFinished => Current?.status == "FINISHED";
         public int Revision => Current?.revision ?? 0;
 
+        public bool HasTriggeredEffect(bool player, string sourceInstanceId, string effectId)
+        {
+            if (string.IsNullOrEmpty(sourceInstanceId) || string.IsNullOrEmpty(effectId)) return false;
+            var owner = player ? Player : Opponent;
+            return Array.IndexOf(owner?.triggeredEffectKeysThisTurn ?? Array.Empty<string>(),
+                $"{sourceInstanceId}:{effectId}") >= 0;
+        }
+
         public int GetEffectiveCost(CardDefinitionEntry definition)
         {
             if (definition == null) return 0;

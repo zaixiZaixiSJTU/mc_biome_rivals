@@ -65,6 +65,7 @@ namespace BiomeRivals.Core
         public int fatigueCount;
         public EquipmentStateDto equipment;
         public bool heroHasAttacked;
+        public string[] triggeredEffectKeysThisTurn = Array.Empty<string>();
         public string[] unitSlots = Array.Empty<string>();
         public string[] buildingSlots = Array.Empty<string>();
         public BattlefieldObjectStateDto[] battlefield = Array.Empty<BattlefieldObjectStateDto>();
@@ -105,6 +106,11 @@ namespace BiomeRivals.Core
             {
                 if (player == null || !FactionIds.IsSupported(player.factionId))
                     throw new InvalidOperationException("Snapshot contains an unsupported player faction.");
+                if (player.triggeredEffectKeysThisTurn == null) player.triggeredEffectKeysThisTurn = Array.Empty<string>();
+                if (player.triggeredEffectKeysThisTurn.Any(value => string.IsNullOrWhiteSpace(value) ||
+                    !System.Text.RegularExpressions.Regex.IsMatch(value, "^object-[0-9]+:effect\\.or_(002|004)\\.01$")) ||
+                    player.triggeredEffectKeysThisTurn.Distinct(StringComparer.Ordinal).Count() != player.triggeredEffectKeysThisTurn.Length)
+                    throw new InvalidOperationException("Snapshot contains invalid once-per-turn effect markers.");
                 else if (player.buriedCount < 0 || player.buriedCount > player.deckCount)
                     throw new InvalidOperationException("Snapshot contains an invalid buried card count.");
                 if (player.equipment != null && string.IsNullOrEmpty(player.equipment.instanceId) &&
@@ -367,6 +373,18 @@ namespace BiomeRivals.Core
                     statsObject.health = payload.health;
                     statsObject.temporaryAttackModifier = payload.temporaryAttackModifier;
                     statsObject.temporaryAttackModifierExpiresOnTurn = payload.temporaryAttackModifierExpiresOnTurn;
+                    if ((payload.effectId == "effect.or_002.01" || payload.effectId == "effect.or_004.01") &&
+                        !string.IsNullOrEmpty(payload.sourceInstanceId))
+                    {
+                        var sourceOwner = Current.players.FirstOrDefault(candidate =>
+                            (candidate?.battlefield ?? Array.Empty<BattlefieldObjectStateDto>()).Any(value =>
+                                value != null && value.instanceId == payload.sourceInstanceId));
+                        if (sourceOwner == null) throw new InvalidOperationException("Movement reaction source is missing from the battlefield.");
+                        var triggerKey = $"{payload.sourceInstanceId}:{payload.effectId}";
+                        if (Array.IndexOf(sourceOwner.triggeredEffectKeysThisTurn ?? Array.Empty<string>(), triggerKey) < 0)
+                            sourceOwner.triggeredEffectKeysThisTurn = (sourceOwner.triggeredEffectKeysThisTurn ?? Array.Empty<string>())
+                                .Concat(new[] { triggerKey }).ToArray();
+                    }
                     break;
                 case MatchEventTypes.ObjectStatusApplied:
                     var statusObject = FindObject(FindPlayer(payload.playerId), payload.instanceId);
@@ -459,6 +477,7 @@ namespace BiomeRivals.Core
                     break;
                 case MatchEventTypes.TurnEnded:
                     FindPlayer(payload.playerId).excavatedThisTurn = false;
+                    foreach (var turnPlayer in Current.players) turnPlayer.triggeredEffectKeysThisTurn = Array.Empty<string>();
                     break;
                 case MatchEventTypes.MatchEnded:
                     Current.status = "FINISHED";
