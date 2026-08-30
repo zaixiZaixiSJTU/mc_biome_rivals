@@ -52,6 +52,7 @@ namespace BiomeRivalsRules {
       fatigueCount: 0,
       equipment: null,
       heroHasAttacked: false,
+      triggeredEffectKeysThisTurn: [],
       unitSlots: [null, null, null, null],
       buildingSlots: [null, null, null],
       battlefield: []
@@ -246,6 +247,7 @@ namespace BiomeRivalsRules {
             maxDurability: player.equipment.maxDurability
           },
           heroHasAttacked: player.heroHasAttacked,
+          triggeredEffectKeysThisTurn: player.triggeredEffectKeysThisTurn.slice(),
           unitSlots: player.unitSlots.slice(),
           buildingSlots: player.buildingSlots.slice(),
           battlefield: player.battlefield.map(function (object): BattlefieldObjectState {
@@ -1028,6 +1030,32 @@ namespace BiomeRivalsRules {
       });
     }
 
+    function triggerSuccessfulMovement(targetPlayer: PlayerState, movedUnit: BattlefieldObjectState): void {
+      const guides = targetPlayer.battlefield.filter(function (object): boolean {
+        return object.cardType === 'UNIT' && object.cardId === 'or_002' && object.instanceId !== movedUnit.instanceId;
+      }).slice().sort(function (left, right): number {
+        if (left.slotIndex !== right.slotIndex) return left.slotIndex - right.slotIndex;
+        return left.instanceId < right.instanceId ? -1 : left.instanceId > right.instanceId ? 1 : 0;
+      });
+      for (let guideIndex = 0; guideIndex < guides.length; guideIndex += 1) {
+        const guide = guides[guideIndex]!;
+        const triggerKey = guide.instanceId + ':effect.or_002.01';
+        if (targetPlayer.triggeredEffectKeysThisTurn.indexOf(triggerKey) >= 0) continue;
+        targetPlayer.triggeredEffectKeysThisTurn.push(triggerKey);
+        movedUnit.attack += 1;
+        movedUnit.temporaryAttackModifier += 1;
+        movedUnit.temporaryAttackModifierExpiresOnTurn = movedUnit.temporaryAttackModifier === 0 ? 0 : next.turn;
+        emit('OBJECT_STATS_CHANGED', {
+          playerId: targetPlayer.playerId, instanceId: movedUnit.instanceId,
+          sourceCardId: guide.cardId, sourceInstanceId: guide.instanceId,
+          effectId: 'effect.or_002.01', reason: 'TEMPORARY_ATTACK_MODIFIER',
+          attack: movedUnit.attack, health: movedUnit.health,
+          temporaryAttackModifier: movedUnit.temporaryAttackModifier,
+          temporaryAttackModifierExpiresOnTurn: movedUnit.temporaryAttackModifierExpiresOnTurn
+        });
+      }
+    }
+
     function finishForSelfDefeat(player: PlayerState, reason: string): boolean {
       if (player.life > 0) return false;
       const winner = next.players[0]!.playerId === player.playerId ? next.players[1]! : next.players[0]!;
@@ -1307,7 +1335,7 @@ namespace BiomeRivalsRules {
           if (pendingChoice.effectId === 'effect.or_001.01') {
             target.attack += 1;
             target.temporaryAttackModifier += 1;
-            target.temporaryAttackModifierExpiresOnTurn = next.turn;
+            target.temporaryAttackModifierExpiresOnTurn = target.temporaryAttackModifier === 0 ? 0 : next.turn;
             emit('OBJECT_STATS_CHANGED', {
               playerId: targetPlayer.playerId, instanceId: target.instanceId,
               sourceCardId: pendingChoice.sourceCardId, sourceInstanceId: pendingChoice.sourceInstanceId,
@@ -1317,6 +1345,7 @@ namespace BiomeRivalsRules {
               temporaryAttackModifierExpiresOnTurn: target.temporaryAttackModifierExpiresOnTurn
             });
           }
+          triggerSuccessfulMovement(targetPlayer, target);
         }
         return null;
       }
@@ -1571,6 +1600,9 @@ namespace BiomeRivalsRules {
           }
         }
         next.players[actorIndex]!.excavatedThisTurn = false;
+        for (let playerIndex = 0; playerIndex < next.players.length; playerIndex += 1) {
+          next.players[playerIndex]!.triggeredEffectKeysThisTurn = [];
+        }
         emit('TURN_ENDED', { playerId: actorPlayerId, turn: state.turn });
         next.activePlayerIndex = (state.activePlayerIndex + 1) % state.players.length;
         if (next.activePlayerIndex === 0) next.turn += 1;

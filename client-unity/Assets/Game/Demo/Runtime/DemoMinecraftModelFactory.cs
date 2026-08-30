@@ -14,7 +14,9 @@ namespace BiomeRivals.Demo
             { "nt_001", "entity_magma_cube" },
             { "tk_014", "entity_magma_cube" },
             { "nt_003", "entity_blaze" },
-            { "si_003", "entity_stray" }
+            { "si_003", "entity_stray" },
+            { "or_001", "entity_salmon" },
+            { "or_002", "entity_dolphin" }
         };
 
         public static bool TryGetTextureKey(string cardId, out string textureKey) =>
@@ -38,6 +40,8 @@ namespace BiomeRivals.Demo
                     break;
                 case "nt_003": BuildBlaze(root, material); break;
                 case "si_003": BuildStray(root, material); break;
+                case "or_001": BuildSalmon(root, material); break;
+                case "or_002": BuildDolphin(root, material); break;
                 default: return false;
             }
             return true;
@@ -118,6 +122,31 @@ namespace BiomeRivals.Demo
             Cuboid(root, "RightArm", new Vector3(0.39f, 1.08f, 0f), new Vector3(0.18f, 0.86f, 0.18f), material, 40, 16, 2, 12, 2, 64, 32, Quaternion.Euler(0f, 0f, -8f));
             Cuboid(root, "LeftLeg", new Vector3(-0.14f, 0.38f, 0f), new Vector3(0.19f, 0.86f, 0.19f), material, 0, 16, 2, 12, 2, 64, 32);
             Cuboid(root, "RightLeg", new Vector3(0.14f, 0.38f, 0f), new Vector3(0.19f, 0.86f, 0.19f), material, 0, 16, 2, 12, 2, 64, 32);
+        }
+
+        private static void BuildSalmon(Transform root, Material material)
+        {
+            root.localPosition += new Vector3(0f, 0.30f, 0f);
+            Cuboid(root, "FrontBody", new Vector3(-0.24f, 0.70f, 0f), new Vector3(0.78f, 0.62f, 0.48f), material, 0, 0, 3, 4, 5, 32, 32);
+            Cuboid(root, "RearBody", new Vector3(0.52f, 0.70f, 0f), new Vector3(0.76f, 0.56f, 0.45f), material, 0, 9, 3, 4, 5, 32, 32);
+            Cuboid(root, "Head", new Vector3(-0.78f, 0.67f, 0f), new Vector3(0.42f, 0.48f, 0.38f), material, 22, 0, 2, 3, 3, 32, 32);
+            Cuboid(root, "DorsalFin", new Vector3(0.18f, 1.05f, 0f), new Vector3(0.46f, 0.34f, 0.055f), material, 20, 10, 1, 2, 3, 32, 32, Quaternion.Euler(0f, 0f, 10f));
+            Cuboid(root, "LeftFin", new Vector3(-0.08f, 0.60f, -0.32f), new Vector3(0.28f, 0.055f, 0.36f), material, 2, 2, 2, 1, 2, 32, 32, Quaternion.Euler(-22f, 0f, 0f));
+            Cuboid(root, "RightFin", new Vector3(-0.08f, 0.60f, 0.32f), new Vector3(0.28f, 0.055f, 0.36f), material, 2, 2, 2, 1, 2, 32, 32, Quaternion.Euler(22f, 0f, 0f));
+            Cuboid(root, "Tail", new Vector3(1.05f, 0.70f, 0f), new Vector3(0.46f, 0.72f, 0.055f), material, 20, 15, 1, 4, 3, 32, 32);
+        }
+
+        private static void BuildDolphin(Transform root, Material material)
+        {
+            root.localPosition += new Vector3(0f, 0.20f, 0f);
+            Cuboid(root, "Body", new Vector3(0f, 0.78f, 0.05f), new Vector3(0.86f, 0.68f, 1.42f), material, 22, 0, 8, 7, 13, 64, 64);
+            Cuboid(root, "Head", new Vector3(0f, 0.80f, -0.86f), new Vector3(0.78f, 0.62f, 0.58f), material, 0, 0, 8, 7, 6, 64, 64);
+            Cuboid(root, "Snout", new Vector3(0f, 0.68f, -1.27f), new Vector3(0.42f, 0.25f, 0.48f), material, 0, 13, 4, 2, 4, 64, 64);
+            Cuboid(root, "DorsalFin", new Vector3(0f, 1.23f, 0.12f), new Vector3(0.07f, 0.48f, 0.56f), material, 51, 0, 1, 4, 5, 64, 64, Quaternion.Euler(-18f, 0f, 0f));
+            Cuboid(root, "LeftFlipper", new Vector3(-0.58f, 0.63f, -0.12f), new Vector3(0.56f, 0.07f, 0.34f), material, 48, 20, 4, 1, 3, 64, 64, Quaternion.Euler(0f, -8f, -28f));
+            Cuboid(root, "RightFlipper", new Vector3(0.58f, 0.63f, -0.12f), new Vector3(0.56f, 0.07f, 0.34f), material, 48, 20, 4, 1, 3, 64, 64, Quaternion.Euler(0f, 8f, 28f));
+            Cuboid(root, "TailStem", new Vector3(0f, 0.79f, 0.98f), new Vector3(0.42f, 0.38f, 0.58f), material, 0, 19, 4, 4, 5, 64, 64);
+            Cuboid(root, "TailFlukes", new Vector3(0f, 0.80f, 1.37f), new Vector3(1.02f, 0.08f, 0.44f), material, 19, 20, 9, 1, 4, 64, 64);
         }
 
         private static void Leg(Transform root, string name, float x, float z, Material material, int u, int v, int textureWidth, int textureHeight)

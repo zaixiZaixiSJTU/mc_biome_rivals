@@ -90,6 +90,14 @@ namespace BiomeRivalsRules {
       const player = state.players[playerIndex]!;
       if (typeof player.excavatedThisTurn !== 'boolean') violations.push('player excavation turn marker is invalid');
       if (typeof player.heroHasAttacked !== 'boolean') violations.push('player hero attack marker is invalid');
+      if (!Array.isArray(player.triggeredEffectKeysThisTurn) ||
+          player.triggeredEffectKeysThisTurn.some(function (key): boolean {
+            return typeof key !== 'string' || !/^object-[0-9]+:effect\.or_002\.01$/.test(key);
+          }) || player.triggeredEffectKeysThisTurn.some(function (key, keyIndex): boolean {
+            return player.triggeredEffectKeysThisTurn.indexOf(key) !== keyIndex;
+          })) {
+        violations.push('player once-per-turn effect markers are invalid');
+      }
       if (state.status === 'ACTIVE' && playerIndex !== state.activePlayerIndex && player.excavatedThisTurn) {
         violations.push('inactive player cannot retain an excavation turn marker');
       }

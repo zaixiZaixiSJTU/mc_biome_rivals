@@ -1553,6 +1553,7 @@ TestHarness.test('hero attack consumes durability, takes retaliation, and offers
   state.players[0]!.redstone = 6;
   state.players[0]!.redstoneCapacity = 6;
   state.players[0]!.armor = 1;
+  placeUnit(state, 1, 'or_002', 0, 'object-21', 1);
   placeUnit(state, 1, 'si_005', 2, 'object-20', 1);
   const equipped = BiomeRivalsRules.applyCommand(state, 'alice', playCommand('equip', 0, 'or_006'));
   TestHarness.ok(equipped.accepted);
@@ -1582,6 +1583,11 @@ TestHarness.test('hero attack consumes durability, takes retaliation, and offers
   TestHarness.equal(moved.state.players[1]!.unitSlots[1], 'object-20');
   TestHarness.equal(moved.state.players[1]!.unitSlots[2], null);
   TestHarness.equal(moved.batch.events[1]!.type, 'OBJECT_MOVED');
+  TestHarness.equal(moved.batch.events[2]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(moved.batch.events[2]!.payload.effectId, 'effect.or_002.01');
+  TestHarness.equal(moved.state.players[1]!.battlefield.filter(function (object): boolean {
+    return object.instanceId === 'object-20';
+  })[0]!.temporaryAttackModifier, 1);
 });
 
 TestHarness.test('Salmon School offers friendly water-current movement and grants a temporary attack bonus', function (): void {
@@ -1629,6 +1635,54 @@ TestHarness.test('Salmon School may keep its deployment position without receivi
   TestHarness.equal(stayed.state.players[0]!.battlefield[0]!.slotIndex, 1);
   TestHarness.equal(stayed.state.players[0]!.battlefield[0]!.attack, 1);
   TestHarness.equal(stayed.batch.events.length, 1);
+});
+
+TestHarness.test('Dolphin Guide buffs only the first other friendly unit that moves each turn', function (): void {
+  const state = activeState('match-1', ['alice', 'bob'], ['ocean_river', 'nether']);
+  state.players[0]!.hand = ['or_002', 'or_001', 'or_001'];
+  state.players[0]!.redstone = 4;
+  state.players[0]!.redstoneCapacity = 4;
+  const guideDeployed = BiomeRivalsRules.applyCommand(state, 'alice',
+    deployCommand('guide-deploy', 0, 'or_002', 'UNIT', 0));
+  TestHarness.ok(guideDeployed.accepted);
+  if (!guideDeployed.accepted) return;
+  const firstDeployed = BiomeRivalsRules.applyCommand(guideDeployed.state, 'alice',
+    deployCommand('first-salmon-deploy', 1, 'or_001', 'UNIT', 2));
+  TestHarness.ok(firstDeployed.accepted);
+  if (!firstDeployed.accepted) return;
+  const firstMoved = BiomeRivalsRules.applyCommand(firstDeployed.state, 'alice',
+    resolveChoiceCommand('first-salmon-move', 2, firstDeployed.state.pendingChoice!.choiceId, 1));
+  TestHarness.ok(firstMoved.accepted);
+  if (!firstMoved.accepted) return;
+  const firstSalmon = firstMoved.state.players[0]!.battlefield.filter(function (object): boolean {
+    return object.cardId === 'or_001';
+  })[0]!;
+  TestHarness.equal(firstSalmon.slotIndex, 3);
+  TestHarness.equal(firstSalmon.attack, 3);
+  TestHarness.equal(firstSalmon.temporaryAttackModifier, 2);
+  TestHarness.equal(firstMoved.batch.events.length, 4);
+  TestHarness.equal(firstMoved.batch.events[3]!.payload.effectId, 'effect.or_002.01');
+  TestHarness.equal(firstMoved.batch.events[3]!.payload.sourceInstanceId, 'object-1');
+  TestHarness.equal(firstMoved.state.players[0]!.triggeredEffectKeysThisTurn[0], 'object-1:effect.or_002.01');
+
+  const secondDeployed = BiomeRivalsRules.applyCommand(firstMoved.state, 'alice',
+    deployCommand('second-salmon-deploy', 3, 'or_001', 'UNIT', 2));
+  TestHarness.ok(secondDeployed.accepted);
+  if (!secondDeployed.accepted) return;
+  const secondMoved = BiomeRivalsRules.applyCommand(secondDeployed.state, 'alice',
+    resolveChoiceCommand('second-salmon-move', 4, secondDeployed.state.pendingChoice!.choiceId, 0));
+  TestHarness.ok(secondMoved.accepted);
+  if (!secondMoved.accepted) return;
+  const secondSalmon = secondMoved.state.players[0]!.battlefield.filter(function (object): boolean {
+    return object.cardId === 'or_001' && object.instanceId !== firstSalmon.instanceId;
+  })[0]!;
+  TestHarness.equal(secondSalmon.slotIndex, 1);
+  TestHarness.equal(secondSalmon.attack, 2);
+  TestHarness.equal(secondMoved.batch.events.length, 3);
+  const ended = BiomeRivalsRules.applyCommand(secondMoved.state, 'alice', command('guide-turn-end', 5, 'END_TURN'));
+  TestHarness.ok(ended.accepted);
+  if (!ended.accepted) return;
+  TestHarness.equal(ended.state.players[0]!.triggeredEffectKeysThisTurn.length, 0);
 });
 
 TestHarness.test('rejects stale revisions', function (): void {

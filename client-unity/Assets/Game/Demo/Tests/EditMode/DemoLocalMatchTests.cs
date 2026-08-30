@@ -1095,6 +1095,10 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(strayTexture, Is.EqualTo("entity_stray"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("tk_014", out var smallMagmaTexture), Is.True);
                 Assert.That(smallMagmaTexture, Is.EqualTo("entity_magma_cube"));
+                Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("or_001", out var salmonTexture), Is.True);
+                Assert.That(salmonTexture, Is.EqualTo("entity_salmon"));
+                Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("or_002", out var dolphinTexture), Is.True);
+                Assert.That(dolphinTexture, Is.EqualTo("entity_dolphin"));
 
                 var piecesRoot = root.transform.Find("BattlefieldPieces");
                 battlefield.SyncPieces(new[]
@@ -1320,6 +1324,37 @@ namespace BiomeRivals.Demo.Tests
             match.EndPlayerTurn();
             Assert.That(unit.Attack, Is.EqualTo(1));
             Assert.That(unit.TemporaryAttackModifier, Is.Zero);
+        }
+
+        [Test]
+        public void DolphinGuideBuffsOnlyTheFirstOtherFriendlyUnitMovedEachTurn()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { "or_002", "or_001", "or_001" });
+            Assert.That(registry.TryGetDefinition("or_002", out var guide), Is.True);
+            Assert.That(registry.TryGetDefinition("or_001", out var salmon), Is.True);
+            Assert.That(guide.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+
+            Assert.That(match.ApplyDeploy(guide, match.CreateDeployCommand("or_002", DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            Assert.That(match.ApplyDeploy(salmon, match.CreateDeployCommand("or_001", DemoSlotKind.Unit, 2)).Accepted, Is.True);
+            var firstMove = match.ApplyResolveChoice(match.CreateResolveChoiceCommand(match.PendingChoice.choiceId, 1));
+            Assert.That(firstMove.Accepted, Is.True);
+            Assert.That(firstMove.Message, Does.Contain("海豚向导"));
+            var firstSalmon = match.GetObject(true, DemoSlotKind.Unit, 3);
+            Assert.That(firstSalmon.Attack, Is.EqualTo(3));
+            Assert.That(firstSalmon.TemporaryAttackModifier, Is.EqualTo(2));
+
+            Assert.That(match.ApplyDeploy(salmon, match.CreateDeployCommand("or_001", DemoSlotKind.Unit, 2)).Accepted, Is.True);
+            var secondMove = match.ApplyResolveChoice(match.CreateResolveChoiceCommand(match.PendingChoice.choiceId, 0));
+            Assert.That(secondMove.Accepted, Is.True);
+            Assert.That(secondMove.Message, Does.Not.Contain("海豚向导触发"));
+            var secondSalmon = match.GetObject(true, DemoSlotKind.Unit, 1);
+            Assert.That(secondSalmon.Attack, Is.EqualTo(2));
+
+            match.EndPlayerTurn();
+            Assert.That(firstSalmon.Attack, Is.EqualTo(1));
+            Assert.That(secondSalmon.Attack, Is.EqualTo(1));
         }
 
         private static float ProjectedWidth(Camera camera, Transform surface, Vector3[] vertices)

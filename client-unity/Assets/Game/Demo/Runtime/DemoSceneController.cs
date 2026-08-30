@@ -161,6 +161,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewDungeonSkeleton")) SetupDungeonSkeletonPreview();
             else if (HasCommandLineFlag("-previewStray")) SetupStrayPreview();
             else if (HasCommandLineFlag("-previewEquipment")) SetupEquipmentPreview();
+            else if (HasCommandLineFlag("-previewDolphinCurrent")) SetupDolphinCurrentPreview();
             else if (HasCommandLineFlag("-previewWaterCurrent")) SetupWaterCurrentPreview();
             else if (HasCommandLineFlag("-previewSlow")) SetupSlowPreview();
             else if (HasCommandLineFlag("-previewCombat")) OnEndTurn();
@@ -701,6 +702,15 @@ namespace BiomeRivals.Demo
                             : "地牢骷髅亡语：随机命中一个敌方生物并造成 1 点伤害。", false);
                         yield return ShowTurnBanner("亡语", Ember);
                     }
+                    else if (matchEvent.payload?.effectId == "effect.or_002.01")
+                    {
+                        var guideViewerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
+                        var guidedFriendly = matchEvent.payload?.playerId == guideViewerId;
+                        ShowStatus(guidedFriendly
+                            ? "海豚向导：本回合第一次移动的其他己方生物额外获得 +1 攻击力。"
+                            : "敌方海豚向导强化了本回合第一次移动的友军。", false);
+                        yield return ShowTurnBanner("海豚引航", guidedFriendly ? Cyan : Ember);
+                    }
                     yield return PulseBattlefieldObject(matchEvent.payload?.instanceId);
                     break;
                 case MatchEventTypes.ObjectStatusApplied:
@@ -1084,6 +1094,28 @@ namespace BiomeRivals.Demo
                 : deployed.Message, !deployed.Accepted);
             var salmon = _match.GetObject(true, DemoSlotKind.Unit, 1);
             if (deployed.Accepted && salmon != null) StartCoroutine(PulseBattlefieldObject(salmon.InstanceId));
+        }
+
+        private void SetupDolphinCurrentPreview()
+        {
+            SelectFaction("ocean_river");
+            SelectOpponentFaction("plains_forest");
+            if (!_registry.TryGetDefinition("or_002", out var dolphinDefinition) ||
+                !_registry.TryGetDefinition("or_001", out var salmonDefinition)) return;
+            _match.ResetDeckAndHand(new[] { dolphinDefinition.id, salmonDefinition.id }, Array.Empty<string>());
+            var dolphinDeployed = _match.ApplyDeploy(dolphinDefinition,
+                _match.CreateDeployCommand(dolphinDefinition.id, DemoSlotKind.Unit, 0));
+            var salmonDeployed = _match.ApplyDeploy(salmonDefinition,
+                _match.CreateDeployCommand(salmonDefinition.id, DemoSlotKind.Unit, 2));
+            _selectedCardId = null;
+            RefreshAll();
+            ShowStatus(dolphinDeployed.Accepted && salmonDeployed.Accepted
+                ? "海豚向导已就位：移动鲑鱼群会同时触发水流 +1 与本回合首次引航 +1。"
+                : !dolphinDeployed.Accepted ? dolphinDeployed.Message : salmonDeployed.Message,
+                !dolphinDeployed.Accepted || !salmonDeployed.Accepted);
+            var dolphin = _match.GetObject(true, DemoSlotKind.Unit, 0);
+            var salmon = _match.GetObject(true, DemoSlotKind.Unit, 2);
+            if (dolphin == null || salmon == null) ShowStatus("海洋单位模型初始化失败。", true);
         }
 
         private void SetupStructureDeployedPreview()
@@ -1564,10 +1596,14 @@ namespace BiomeRivals.Demo
             {
                 _cardDetailsView.Clear();
                 var waterCurrent = match.PendingChoice.effectId == "effect.or_001.01";
+                var guideReady = waterCurrent && match.PlayerBattlefield.Any(value => value != null &&
+                    value.CardId == "or_002" && value.InstanceId != match.PendingChoice.targetInstanceId);
                 CreateText(_inspectorRoot, "CombatTitle", new Vector2(0, 105), new Vector2(245, 120),
                     waterCurrent ? "鲑鱼群 · 水流\n选择发光的相邻地块" : "激流三叉戟\n选择发光的相邻地块", 19, Gold, TextAnchor.MiddleCenter, FontStyle.Bold);
                 CreateText(_inspectorRoot, "CombatHint", new Vector2(0, -5), new Vector2(245, 100),
-                    match.IsChoiceOwner ? "直接点击目标旁的发光地块，\n或保持目标原位。" : "等待对手决定目标单位的位置。",
+                    match.IsChoiceOwner
+                        ? guideReady ? "点击发光地块移动。\n海豚向导将追加 +1 攻击。" : "直接点击目标旁的发光地块，\n或保持目标原位。"
+                        : "等待对手决定目标单位的位置。",
                     15, Pale, TextAnchor.MiddleCenter, FontStyle.Normal);
                 if (match.IsChoiceOwner)
                 {

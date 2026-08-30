@@ -376,6 +376,7 @@
                     "playerId": { "type": "string", "minLength": 1 },
                     "instanceId": { "type": "string", "pattern": "^object-[0-9]+$" },
                     "sourceCardId": { "type": ["string", "null"], "pattern": "^[a-z0-9_]+$" },
+                    "sourceInstanceId": { "type": ["string", "null"], "pattern": "^(object|equipment)-[0-9]+$" },
                     "effectId": { "type": ["string", "null"], "pattern": "^effect\\.[a-z0-9_]+\\.[0-9]{2}$" },
                     "reason": { "enum": ["TEMPORARY_ATTACK_MODIFIER", "TEMPORARY_EXPIRED", "DAMAGE", "HEAL"] },
                     "attack": { "type": "integer", "minimum": 0 },

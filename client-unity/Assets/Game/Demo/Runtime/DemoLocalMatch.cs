@@ -21,6 +21,7 @@ namespace BiomeRivals.Demo
         private readonly List<DemoBattlefieldObject> _playerBattlefield = new List<DemoBattlefieldObject>();
         private readonly List<DemoBattlefieldObject> _opponentBattlefield = new List<DemoBattlefieldObject>();
         private readonly HashSet<string> _processedCommandIds = new HashSet<string>(StringComparer.Ordinal);
+        private readonly HashSet<string> _triggeredEffectKeysThisTurn = new HashSet<string>(StringComparer.Ordinal);
         private int _nextLocalCommandId = 1;
         private int _nextBattlefieldInstanceId = 1;
         private int _opponentHandCount = 5;
@@ -280,13 +281,15 @@ namespace BiomeRivals.Demo
                     {
                         target.Attack += 1;
                         target.TemporaryAttackModifier += 1;
-                        target.TemporaryAttackModifierExpiresOnRound = Round;
+                        target.TemporaryAttackModifierExpiresOnRound = target.TemporaryAttackModifier == 0 ? 0 : Round;
                     }
                 }
                 PendingChoice = null;
+                var triggeredGuides = move == null ? 0 : TriggerSuccessfulMovement(targetBattlefield, target);
                 AcceptCommand(command);
                 var sourceName = moveEffectId == "effect.or_001.01" ? "鲑鱼群水流" : "激流三叉戟";
-                return DemoCommandResult.Accept(move == null ? $"{sourceName}：目标保持原位。" : $"{sourceName}：移动成功。", Revision);
+                var guideMessage = triggeredGuides > 0 ? $" 海豚向导触发 {triggeredGuides} 次，目标额外获得 +{triggeredGuides} 攻击。" : string.Empty;
+                return DemoCommandResult.Accept(move == null ? $"{sourceName}：目标保持原位。" : $"{sourceName}：移动成功。{guideMessage}", Revision);
             }
             var selectable = (PendingChoice.options ?? Array.Empty<PendingChoiceOptionDto>()).Where(option => option != null && option.selectable).ToArray();
             PendingChoiceOptionDto selected = null;
@@ -638,6 +641,7 @@ namespace BiomeRivals.Demo
             if (!IsPlayerTurn) return Reject(DemoCommandRejectionCode.NotActivePlayer, "当前不是你的回合。");
             RestoreExpiredAttackModifiers(_playerBattlefield);
             RestoreExpiredAttackModifiers(_opponentBattlefield);
+            _triggeredEffectKeysThisTurn.Clear();
             ExcavatedThisTurn = false;
             IsPlayerTurn = false;
             AcceptCommand(command);
@@ -920,6 +924,24 @@ namespace BiomeRivals.Demo
                 value.TemporaryAttackModifier = 0;
                 value.TemporaryAttackModifierExpiresOnRound = 0;
             }
+        }
+
+        private int TriggerSuccessfulMovement(List<DemoBattlefieldObject> battlefield, DemoBattlefieldObject movedUnit)
+        {
+            var triggered = 0;
+            foreach (var guide in battlefield
+                .Where(value => value.CardId == "or_002" && value.InstanceId != movedUnit.InstanceId)
+                .OrderBy(value => value.SlotIndex)
+                .ThenBy(value => value.InstanceId, StringComparer.Ordinal))
+            {
+                var triggerKey = $"{guide.InstanceId}:effect.or_002.01";
+                if (!_triggeredEffectKeysThisTurn.Add(triggerKey)) continue;
+                movedUnit.Attack += 1;
+                movedUnit.TemporaryAttackModifier += 1;
+                movedUnit.TemporaryAttackModifierExpiresOnRound = movedUnit.TemporaryAttackModifier == 0 ? 0 : Round;
+                triggered++;
+            }
+            return triggered;
         }
 
         private static void ApplySlow(
