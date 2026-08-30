@@ -44,7 +44,9 @@ namespace BiomeRivals.Networking
                 case MatchCommandTypes.Mulligan:
                     return JsonUtility.ToJson(new MulliganCommandWire(command));
                 case MatchCommandTypes.DeployCard:
-                    return JsonUtility.ToJson(new DeployCommandWire(command));
+                    return string.IsNullOrEmpty(command.payload.targetType)
+                        ? JsonUtility.ToJson(new DeployCommandWire(command))
+                        : JsonUtility.ToJson(new TargetedDeployCommandWire(command));
                 case MatchCommandTypes.PlayCard:
                     return string.IsNullOrEmpty(command.payload.targetType)
                         ? JsonUtility.ToJson(new PlayCardCommandWire(command))
@@ -141,6 +143,17 @@ namespace BiomeRivals.Networking
         }
 
         [Serializable]
+        private sealed class TargetedDeployWirePayload
+        {
+            public string cardId;
+            public string slotKind;
+            public int slotIndex;
+            public string paymentMethod;
+            public string targetType;
+            public string targetInstanceId;
+        }
+
+        [Serializable]
         private sealed class PlayWirePayload
         {
             public string cardId;
@@ -226,6 +239,25 @@ namespace BiomeRivals.Networking
                     slotKind = command.payload.slotKind,
                     slotIndex = command.payload.slotIndex,
                     paymentMethod = command.payload.paymentMethod
+                };
+            }
+        }
+
+        [Serializable]
+        private sealed class TargetedDeployCommandWire : CommandWireBase
+        {
+            public TargetedDeployWirePayload payload;
+
+            public TargetedDeployCommandWire(MatchCommandDto command) : base(command)
+            {
+                payload = new TargetedDeployWirePayload
+                {
+                    cardId = command.payload.cardId,
+                    slotKind = command.payload.slotKind,
+                    slotIndex = command.payload.slotIndex,
+                    paymentMethod = command.payload.paymentMethod,
+                    targetType = command.payload.targetType,
+                    targetInstanceId = command.payload.targetInstanceId
                 };
             }
         }

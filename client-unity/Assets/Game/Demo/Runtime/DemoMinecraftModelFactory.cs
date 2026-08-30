@@ -13,7 +13,8 @@ namespace BiomeRivals.Demo
             { "pf_004", "entity_villager" },
             { "nt_001", "entity_magma_cube" },
             { "tk_014", "entity_magma_cube" },
-            { "nt_003", "entity_blaze" }
+            { "nt_003", "entity_blaze" },
+            { "si_003", "entity_stray" }
         };
 
         public static bool TryGetTextureKey(string cardId, out string textureKey) =>
@@ -36,6 +37,7 @@ namespace BiomeRivals.Demo
                     BuildMagmaCube(root, material);
                     break;
                 case "nt_003": BuildBlaze(root, material); break;
+                case "si_003": BuildStray(root, material); break;
                 default: return false;
             }
             return true;
@@ -106,6 +108,16 @@ namespace BiomeRivals.Demo
                 var position = new Vector3(Mathf.Cos(angle) * radius, y, Mathf.Sin(angle) * radius);
                 Cuboid(root, "Rod_" + rod, position, new Vector3(0.16f, 0.72f, 0.16f), material, 0, 16, 2, 8, 2, 64, 32);
             }
+        }
+
+        private static void BuildStray(Transform root, Material material)
+        {
+            Cuboid(root, "Head", new Vector3(0f, 1.72f, 0f), new Vector3(0.64f, 0.64f, 0.64f), material, 0, 0, 8, 8, 8, 64, 32);
+            Cuboid(root, "Body", new Vector3(0f, 1.05f, 0f), new Vector3(0.52f, 0.84f, 0.30f), material, 16, 16, 8, 12, 4, 64, 32);
+            Cuboid(root, "LeftArm", new Vector3(-0.39f, 1.08f, 0f), new Vector3(0.18f, 0.86f, 0.18f), material, 40, 16, 2, 12, 2, 64, 32, Quaternion.Euler(0f, 0f, 8f));
+            Cuboid(root, "RightArm", new Vector3(0.39f, 1.08f, 0f), new Vector3(0.18f, 0.86f, 0.18f), material, 40, 16, 2, 12, 2, 64, 32, Quaternion.Euler(0f, 0f, -8f));
+            Cuboid(root, "LeftLeg", new Vector3(-0.14f, 0.38f, 0f), new Vector3(0.19f, 0.86f, 0.19f), material, 0, 16, 2, 12, 2, 64, 32);
+            Cuboid(root, "RightLeg", new Vector3(0.14f, 0.38f, 0f), new Vector3(0.19f, 0.86f, 0.19f), material, 0, 16, 2, 12, 2, 64, 32);
         }
 
         private static void Leg(Transform root, string name, float x, float z, Material material, int u, int v, int textureWidth, int textureHeight)

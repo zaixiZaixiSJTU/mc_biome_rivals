@@ -104,7 +104,9 @@ namespace BiomeRivals.Core
             string cardId,
             string slotKind,
             int slotIndex,
-            string paymentMethod = MatchPaymentMethods.Redstone) =>
+            string paymentMethod = MatchPaymentMethods.Redstone,
+            string targetType = "",
+            string targetInstanceId = "") =>
             new MatchCommandDto
             {
                 protocolVersion = GameVersions.Protocol,
@@ -117,7 +119,9 @@ namespace BiomeRivals.Core
                     cardId = cardId,
                     slotKind = slotKind,
                     slotIndex = slotIndex,
-                    paymentMethod = paymentMethod
+                    paymentMethod = paymentMethod,
+                    targetType = targetType,
+                    targetInstanceId = targetInstanceId
                 }
             };
 
@@ -285,6 +289,7 @@ namespace BiomeRivals.Core
         public int remainingDuration;
         public string sourcePlayerId = string.Empty;
         public int statusAttackModifier;
+        public int boundAttackModifier;
         public string craftedCardId = string.Empty;
         public string recipeId = string.Empty;
         public CraftingMaterialDto[] materials = Array.Empty<CraftingMaterialDto>();

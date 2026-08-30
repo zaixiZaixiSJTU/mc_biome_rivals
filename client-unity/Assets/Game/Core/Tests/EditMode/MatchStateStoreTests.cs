@@ -1146,7 +1146,7 @@ namespace BiomeRivals.Core.Tests
                         {
                             playerId = "bob", instanceId = "object-7", statusId = "SLOW", remainingDuration = 1,
                             sourcePlayerId = "alice", sourceCardId = "si_006", effectId = "effect.si_006.01",
-                            statusAttackModifier = -2, attack = 1, health = 3
+                            statusAttackModifier = -2, boundAttackModifier = -2, attack = 1, health = 3
                         }
                     }
                 }
@@ -1154,6 +1154,7 @@ namespace BiomeRivals.Core.Tests
             Assert.That(target.attack, Is.EqualTo(1));
             Assert.That(target.statuses.Single().statusId, Is.EqualTo("SLOW"));
             Assert.That(target.statuses.Single().sourcePlayerId, Is.EqualTo("alice"));
+            Assert.That(target.statuses.Single().boundAttackModifier, Is.EqualTo(-2));
 
             store.Apply(new MatchEventBatchDto
             {

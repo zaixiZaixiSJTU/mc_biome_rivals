@@ -144,7 +144,8 @@ namespace BiomeRivalsRules {
                   sourceCardId: status.sourceCardId,
                   sourceInstanceId: status.sourceInstanceId,
                   effectId: status.effectId,
-                  attackModifier: status.attackModifier
+                  attackModifier: status.attackModifier,
+                  boundAttackModifier: status.boundAttackModifier
                 };
               })
             };
@@ -248,7 +249,8 @@ namespace BiomeRivalsRules {
                   sourceCardId: status.sourceCardId,
                   sourceInstanceId: status.sourceInstanceId,
                   effectId: status.effectId,
-                  attackModifier: status.attackModifier
+                  attackModifier: status.attackModifier,
+                  boundAttackModifier: status.boundAttackModifier
                 };
               })
             };
@@ -371,6 +373,19 @@ namespace BiomeRivalsRules {
       const player = next.players[actorIndex]!;
       const handIndex = player.hand.indexOf(cardId);
       if (handIndex < 0) return reject(state, 'CARD_NOT_IN_HAND', 'card is not in the actor hand');
+      let battlecryTargetPlayer: PlayerState | null = null;
+      let battlecryTarget: BattlefieldObjectState | null = null;
+      if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
+          definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.si_003.01') {
+        if (command.payload.targetType !== 'UNIT' || typeof command.payload.targetInstanceId !== 'string') {
+          return reject(state, 'INVALID_TARGET', 'stray requires an enemy unit battlecry target');
+        }
+        battlecryTargetPlayer = next.players[actorIndex === 0 ? 1 : 0]!;
+        battlecryTarget = findObject(battlecryTargetPlayer, command.payload.targetInstanceId);
+        if (battlecryTarget === null || battlecryTarget.cardType !== 'UNIT') {
+          return reject(state, 'INVALID_TARGET', 'stray battlecry target must be a living enemy unit');
+        }
+      }
 
       let occupiedSlots = 1;
       let objectCardType: 'UNIT' | 'BUILDING' | 'STRUCTURE';
@@ -494,6 +509,18 @@ namespace BiomeRivalsRules {
       } else if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
           definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.db_003.01') {
         offerArchaeologyChoice(player, battlefieldObject, definition.effectIds[0]);
+      } else if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
+          definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.si_003.01') {
+        if (battlecryTargetPlayer === null || battlecryTarget === null) throw new Error('validated stray target was not resolved');
+        applySlow(
+          battlecryTargetPlayer,
+          battlecryTarget,
+          player,
+          cardId,
+          battlefieldObject.instanceId,
+          definition.effectIds[0],
+          0
+        );
       }
       return null;
     }
@@ -520,6 +547,7 @@ namespace BiomeRivalsRules {
       target: BattlefieldObjectState,
       sourcePlayer: PlayerState,
       sourceCardId: string,
+      sourceInstanceId: string,
       effectId: string,
       attackModifier: number
     ): void {
@@ -534,19 +562,34 @@ namespace BiomeRivalsRules {
           remainingDuration: 1,
           sourcePlayerId: sourcePlayer.playerId,
           sourceCardId: sourceCardId,
-          sourceInstanceId: '',
+          sourceInstanceId: sourceInstanceId,
           effectId: effectId,
-          attackModifier: 0
+          attackModifier: 0,
+          boundAttackModifier: Math.min(0, attackModifier)
         };
         target.statuses.push(status);
         target.attack = Math.max(0, target.attack + Math.min(0, attackModifier));
         status.attackModifier = target.attack - attackBefore;
       } else {
-        status.remainingDuration = Math.max(status.remainingDuration, 1);
-        status.sourcePlayerId = sourcePlayer.playerId;
-        status.sourceCardId = sourceCardId;
-        status.sourceInstanceId = '';
-        status.effectId = effectId;
+        let replacesSource = false;
+        if (status.remainingDuration < 1) {
+          status.remainingDuration = 1;
+          replacesSource = true;
+        }
+        const requestedModifier = Math.min(0, attackModifier);
+        if (requestedModifier < status.boundAttackModifier) {
+          const attackBefore = target.attack;
+          target.attack = Math.max(0, target.attack + requestedModifier - status.boundAttackModifier);
+          status.attackModifier += target.attack - attackBefore;
+          status.boundAttackModifier = requestedModifier;
+          replacesSource = true;
+        }
+        if (replacesSource) {
+          status.sourcePlayerId = sourcePlayer.playerId;
+          status.sourceCardId = sourceCardId;
+          status.sourceInstanceId = sourceInstanceId;
+          status.effectId = effectId;
+        }
       }
       emit('OBJECT_STATUS_APPLIED', {
         playerId: targetPlayer.playerId,
@@ -558,6 +601,7 @@ namespace BiomeRivalsRules {
         sourceInstanceId: status.sourceInstanceId,
         effectId: status.effectId,
         statusAttackModifier: status.attackModifier,
+        boundAttackModifier: status.boundAttackModifier,
         attack: target.attack,
         health: target.health
       });
@@ -703,6 +747,7 @@ namespace BiomeRivalsRules {
       if (definition.effectIds.indexOf('effect.db_001.01') >= 0) dropCardId = 'tk_005';
       else if (definition.effectIds.indexOf('effect.pf_002.01') >= 0) dropCardId = 'tk_001';
       else if (definition.effectIds.indexOf('effect.cd_003.01') >= 0) dropCardId = 'tk_009';
+      else if (definition.effectIds.indexOf('effect.si_003.01') >= 0) dropCardId = 'tk_009';
       if (dropCardId === null) return;
       const killer = next.players.filter(function (candidate): boolean {
         return candidate.playerId === killerPlayerId;
@@ -1053,7 +1098,7 @@ namespace BiomeRivalsRules {
         }
         case 'effect.si_006.01': {
           if (targetedObject === null || targetedPlayer === null) throw new Error('validated powder snow target was not resolved');
-          applySlow(targetedPlayer, targetedObject, player, cardId, effectId, -2);
+          applySlow(targetedPlayer, targetedObject, player, cardId, '', effectId, -2);
           return null;
         }
         case 'effect.tk_005.01': {

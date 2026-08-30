@@ -1,6 +1,6 @@
 namespace BiomeRivalsRules {
-  export const PROTOCOL_VERSION = 15;
-  export const RULESET_VERSION = 'prototype-0.18';
+  export const PROTOCOL_VERSION = 16;
+  export const RULESET_VERSION = 'prototype-0.19';
 
   export type MatchStatus = 'WAITING' | 'MULLIGAN' | 'ACTIVE' | 'FINISHED';
   export type CommandType = 'MULLIGAN' | 'DEPLOY_CARD' | 'PLAY_CARD' | 'RESOLVE_CHOICE' | 'ENTER_COMBAT' | 'ATTACK' | 'END_TURN' | 'CONCEDE';
@@ -54,6 +54,7 @@ namespace BiomeRivalsRules {
     sourceInstanceId: string;
     effectId: string;
     attackModifier: number;
+    boundAttackModifier: number;
   }
 
   export interface BattlefieldObjectState {

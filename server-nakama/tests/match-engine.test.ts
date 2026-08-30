@@ -15,10 +15,14 @@ function deployCommand(
   cardId: string,
   slotKind: BiomeRivalsRules.DeploySlotKind,
   slotIndex: number,
-  paymentMethod: BiomeRivalsRules.PaymentMethod = 'REDSTONE'
+  paymentMethod: BiomeRivalsRules.PaymentMethod = 'REDSTONE',
+  targetType?: BiomeRivalsRules.AttackTargetType,
+  targetInstanceId?: string
 ): BiomeRivalsRules.MatchCommand {
   const result = command(id, revision, 'DEPLOY_CARD');
   result.payload = { cardId: cardId, slotKind: slotKind, slotIndex: slotIndex, paymentMethod: paymentMethod };
+  if (targetType !== undefined) result.payload.targetType = targetType;
+  if (targetInstanceId !== undefined) result.payload.targetInstanceId = targetInstanceId;
   return result;
 }
 
@@ -735,6 +739,7 @@ TestHarness.test('powder snow applies one replayable slow with a bound attack pe
   TestHarness.equal(target.statuses[0]!.statusId, 'SLOW');
   TestHarness.equal(target.statuses[0]!.remainingDuration, 1);
   TestHarness.equal(target.statuses[0]!.attackModifier, -1);
+  TestHarness.equal(target.statuses[0]!.boundAttackModifier, -2);
   TestHarness.equal(first.batch.events[1]!.type, 'OBJECT_STATUS_APPLIED');
   TestHarness.equal(first.batch.events[1]!.payload.sourcePlayerId, 'alice');
   TestHarness.equal(BiomeRivalsRules.createClientSnapshot(first.state, 'alice').players[1]!.battlefield[0]!.statuses[0]!.statusId, 'SLOW');
@@ -745,6 +750,76 @@ TestHarness.test('powder snow applies one replayable slow with a bound attack pe
   TestHarness.equal(reapplied.state.players[1]!.battlefield[0]!.attack, 0);
   TestHarness.equal(reapplied.state.players[1]!.battlefield[0]!.statuses.length, 1);
   TestHarness.equal(reapplied.state.players[1]!.battlefield[0]!.statuses[0]!.attackModifier, -1);
+});
+
+TestHarness.test('stray validates its battlecry target before deployment and applies slow without an attack penalty', function (): void {
+  const state = activeState('match-stray', ['alice', 'bob']);
+  state.players[0]!.hand = ['si_003'];
+  state.players[0]!.redstone = 3;
+  state.players[0]!.redstoneCapacity = 3;
+  placeUnit(state, 1, 'nt_003', 1, 'object-1', 1);
+  state.nextInstanceId = 2;
+
+  const missing = BiomeRivalsRules.applyCommand(state, 'alice', deployCommand('stray-missing', 0, 'si_003', 'UNIT', 0));
+  TestHarness.equal(missing.accepted, false);
+  if (!missing.accepted) TestHarness.equal(missing.code, 'INVALID_TARGET');
+  TestHarness.equal(state.players[0]!.hand[0], 'si_003');
+  TestHarness.equal(state.players[0]!.redstone, 3);
+  TestHarness.equal(state.players[0]!.unitSlots[0], null);
+
+  const deployed = BiomeRivalsRules.applyCommand(
+    state,
+    'alice',
+    deployCommand('stray-deploy', 0, 'si_003', 'UNIT', 0, 'REDSTONE', 'UNIT', 'object-1')
+  );
+  TestHarness.ok(deployed.accepted);
+  if (!deployed.accepted) return;
+  TestHarness.equal(deployed.state.players[0]!.battlefield[0]!.cardId, 'si_003');
+  const slow = deployed.state.players[1]!.battlefield[0]!.statuses[0]!;
+  TestHarness.equal(slow.statusId, 'SLOW');
+  TestHarness.equal(slow.attackModifier, 0);
+  TestHarness.equal(slow.boundAttackModifier, 0);
+  TestHarness.equal(slow.sourceInstanceId, 'object-2');
+  TestHarness.equal(deployed.batch.events[0]!.type, 'CARD_DEPLOYED');
+  TestHarness.equal(deployed.batch.events[1]!.type, 'OBJECT_STATUS_APPLIED');
+});
+
+TestHarness.test('powder snow strengthens an existing stray slow exactly once and restores clamped attack', function (): void {
+  const state = activeState('match-1', ['alice', 'bob']);
+  state.players[0]!.hand = ['si_003', 'si_006', 'si_006'];
+  state.players[0]!.redstone = 7;
+  state.players[0]!.redstoneCapacity = 7;
+  placeUnit(state, 1, 'pf_001', 1, 'object-1', 1);
+  state.nextInstanceId = 2;
+
+  const stray = BiomeRivalsRules.applyCommand(
+    state,
+    'alice',
+    deployCommand('stray-first', 0, 'si_003', 'UNIT', 0, 'REDSTONE', 'UNIT', 'object-1')
+  );
+  TestHarness.ok(stray.accepted, !stray.accepted ? stray.code + ': ' + stray.message : 'stray deployment failed');
+  if (!stray.accepted) return;
+  const bucket = BiomeRivalsRules.applyCommand(stray.state, 'alice', playCommand('bucket-second', 1, 'si_006', 'UNIT', 'object-1'));
+  TestHarness.ok(bucket.accepted, !bucket.accepted ? bucket.code + ': ' + bucket.message : 'first powder snow failed');
+  if (!bucket.accepted) return;
+  const repeated = BiomeRivalsRules.applyCommand(bucket.state, 'alice', playCommand('bucket-third', 2, 'si_006', 'UNIT', 'object-1'));
+  TestHarness.ok(repeated.accepted, !repeated.accepted ? repeated.code + ': ' + repeated.message : 'repeated powder snow failed');
+  if (!repeated.accepted) return;
+  const slowed = repeated.state.players[1]!.battlefield[0]!;
+  TestHarness.equal(slowed.attack, 0);
+  TestHarness.equal(slowed.statuses[0]!.attackModifier, -1);
+  TestHarness.equal(slowed.statuses[0]!.boundAttackModifier, -2);
+  TestHarness.equal(slowed.statuses[0]!.sourceCardId, 'si_006');
+  TestHarness.equal(slowed.statuses[0]!.sourceInstanceId, '');
+
+  const bobTurn = BiomeRivalsRules.applyCommand(repeated.state, 'alice', command('stray-bucket-pass', 3, 'END_TURN'));
+  TestHarness.ok(bobTurn.accepted, !bobTurn.accepted ? bobTurn.code + ': ' + bobTurn.message : 'turn handoff failed');
+  if (!bobTurn.accepted) return;
+  const expired = BiomeRivalsRules.applyCommand(bobTurn.state, 'bob', command('stray-bucket-expire', 4, 'END_TURN'));
+  TestHarness.ok(expired.accepted, !expired.accepted ? expired.code + ': ' + expired.message : 'status expiry failed');
+  if (!expired.accepted) return;
+  TestHarness.equal(expired.state.players[1]!.battlefield[0]!.attack, 1);
+  TestHarness.equal(expired.state.players[1]!.battlefield[0]!.statuses.length, 0);
 });
 
 TestHarness.test('slow blocks its controllers attack and expires at that controllers end phase', function (): void {
@@ -1109,6 +1184,25 @@ TestHarness.test('awards Wool when an enemy kills a Grazing Sheep', function ():
   TestHarness.equal(generated.payload.sourceCardId, 'pf_002');
   TestHarness.equal(generated.payload.effectId, 'effect.pf_002.01');
   TestHarness.equal(generated.payload.cardId, 'tk_001');
+});
+
+TestHarness.test('awards Bone when an enemy kills a Stray', function (): void {
+  const state = activeState('match-stray-drop', ['alice', 'bob']);
+  state.turn = 2;
+  state.phase = 'COMBAT';
+  state.nextInstanceId = 3;
+  state.players[0]!.hand = [];
+  placeUnit(state, 0, 'pf_008', 0, 'object-1', 1);
+  placeUnit(state, 1, 'si_003', 0, 'object-2', 1);
+
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', attackCommand('stray-drop', 0, 'object-1', 'UNIT', 'object-2'));
+  TestHarness.ok(result.accepted);
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[0]!.hand[0], 'tk_009');
+  const generated = result.batch.events.filter(function (event): boolean { return event.type === 'CARD_GENERATED'; })[0]!;
+  TestHarness.equal(generated.payload.sourceCardId, 'si_003');
+  TestHarness.equal(generated.payload.effectId, 'effect.si_003.01');
+  TestHarness.equal(generated.payload.cardId, 'tk_009');
 });
 
 TestHarness.test('rejects summoning sickness and duplicate attacks', function (): void {

@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["protocolVersion", "rulesetVersion", "revision", "acknowledgedCommandId", "events"],
   "properties": {
-    "protocolVersion": { "const": 15 },
+    "protocolVersion": { "const": 16 },
     "rulesetVersion": { "type": "string" },
     "revision": { "type": "integer", "minimum": 0 },
     "acknowledgedCommandId": { "type": "string" },
@@ -352,6 +352,7 @@
                     "sourceInstanceId": { "type": "string" },
                     "effectId": { "type": "string", "pattern": "^effect\\.[a-z0-9_]+\\.[0-9]{2}$" },
                     "statusAttackModifier": { "type": "integer", "maximum": 0 },
+                    "boundAttackModifier": { "type": "integer", "maximum": 0 },
                     "reason": { "const": "DURATION_EXPIRED" },
                     "attack": { "type": "integer", "minimum": 0 },
                     "health": { "type": "integer", "minimum": 1 }
@@ -359,7 +360,7 @@
                   "allOf": [
                     {
                       "if": { "required": ["remainingDuration"] },
-                      "then": { "required": ["statusAttackModifier"] },
+                      "then": { "required": ["statusAttackModifier", "boundAttackModifier"] },
                       "else": { "required": ["reason"] }
                     }
                   ]

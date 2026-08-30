@@ -147,6 +147,9 @@ namespace BiomeRivalsRules {
               violations.push('battlefield status source card or effect is invalid');
             }
             if (status.attackModifier > 0) violations.push('battlefield status attack modifier is invalid');
+            if (status.boundAttackModifier > 0 || status.attackModifier < status.boundAttackModifier) {
+              violations.push('battlefield status bound attack modifier is invalid');
+            }
           }
         }
         if (object.occupiedSlots < 1) violations.push('battlefield object must occupy at least one slot');

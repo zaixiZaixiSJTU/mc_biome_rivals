@@ -42,9 +42,12 @@ namespace BiomeRivals.Demo
             string cardId,
             DemoSlotKind kind,
             int slotIndex,
-            string paymentMethod = MatchPaymentMethods.Redstone) =>
+            string paymentMethod = MatchPaymentMethods.Redstone,
+            string targetType = "",
+            string targetInstanceId = "") =>
             Send(MatchCommandFactory.DeployCard(
-                NewCommandId(), Revision, cardId, kind == DemoSlotKind.Unit ? "UNIT" : "BUILDING", slotIndex, paymentMethod));
+                NewCommandId(), Revision, cardId, kind == DemoSlotKind.Unit ? "UNIT" : "BUILDING", slotIndex,
+                paymentMethod, targetType, targetInstanceId));
 
         public Task<MatchCommandDispatchResult> MulliganAsync(int[] cardIndices) =>
             Send(MatchCommandFactory.Mulligan(NewCommandId(), Revision, cardIndices));

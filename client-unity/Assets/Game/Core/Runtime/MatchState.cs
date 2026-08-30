@@ -14,6 +14,7 @@ namespace BiomeRivals.Core
         public string sourceInstanceId = string.Empty;
         public string effectId = string.Empty;
         public int attackModifier;
+        public int boundAttackModifier;
     }
 
     [Serializable]
@@ -102,7 +103,9 @@ namespace BiomeRivals.Core
                     {
                         if (status == null || status.statusId != "SLOW" || status.remainingDuration < 1 ||
                             string.IsNullOrWhiteSpace(status.sourcePlayerId) || string.IsNullOrWhiteSpace(status.sourceCardId) ||
-                            string.IsNullOrWhiteSpace(status.effectId) || status.attackModifier > 0 || !seenStatuses.Add(status.statusId))
+                            string.IsNullOrWhiteSpace(status.effectId) || status.attackModifier > 0 ||
+                            status.boundAttackModifier > 0 || status.attackModifier < status.boundAttackModifier ||
+                            !seenStatuses.Add(status.statusId))
                             throw new InvalidOperationException("Snapshot contains an invalid battlefield status.");
                     }
                 }
@@ -325,7 +328,8 @@ namespace BiomeRivals.Core
                         sourceCardId = payload.sourceCardId,
                         sourceInstanceId = payload.sourceInstanceId,
                         effectId = payload.effectId,
-                        attackModifier = payload.statusAttackModifier
+                        attackModifier = payload.statusAttackModifier,
+                        boundAttackModifier = payload.boundAttackModifier
                     });
                     statusObject.statuses = statuses.ToArray();
                     statusObject.attack = payload.attack;

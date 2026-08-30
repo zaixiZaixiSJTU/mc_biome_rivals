@@ -1091,6 +1091,8 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(beeTexture, Is.EqualTo("entity_bee"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("nt_003", out var blazeTexture), Is.True);
                 Assert.That(blazeTexture, Is.EqualTo("entity_blaze"));
+                Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("si_003", out var strayTexture), Is.True);
+                Assert.That(strayTexture, Is.EqualTo("entity_stray"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("tk_014", out var smallMagmaTexture), Is.True);
                 Assert.That(smallMagmaTexture, Is.EqualTo("entity_magma_cube"));
 
@@ -1217,6 +1219,48 @@ namespace BiomeRivals.Demo.Tests
             match.BeginNextPlayerTurn();
             Assert.That(target.HasStatus("SLOW"), Is.False);
             Assert.That(target.Attack, Is.EqualTo(3));
+        }
+
+        [Test]
+        public void StrayRequiresADeploymentTargetAndSharesSlowWithoutStackingTheBucketPenalty()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { "si_003", "si_006" });
+            Assert.That(registry.TryGetDefinition("si_003", out var stray), Is.True);
+            Assert.That(stray.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+            Assert.That(registry.TryGetDefinition("si_006", out var powderSnow), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_001", out var bee), Is.True);
+            match.ResetOpponent(new[] { bee });
+            var target = match.GetObject(false, DemoSlotKind.Unit, 0);
+
+            var missing = match.ApplyDeploy(stray, match.CreateDeployCommand("si_003", DemoSlotKind.Unit, 0));
+            Assert.That(missing.Accepted, Is.False);
+            Assert.That(missing.Code, Is.EqualTo(DemoCommandRejectionCode.InvalidTarget));
+            Assert.That(match.UnitSlots[0], Is.Null.Or.Empty);
+            Assert.That(match.Hand, Does.Contain("si_003"));
+
+            var deployed = match.ApplyDeploy(stray,
+                match.CreateDeployCommand("si_003", DemoSlotKind.Unit, 0, MatchPaymentMethods.Redstone, "UNIT", target.InstanceId));
+            Assert.That(deployed.Accepted, Is.True);
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 0).CardId, Is.EqualTo("si_003"));
+            Assert.That(target.HasStatus("SLOW"), Is.True);
+            Assert.That(target.Statuses.Single().sourceInstanceId, Is.EqualTo(match.GetObject(true, DemoSlotKind.Unit, 0).InstanceId));
+            Assert.That(target.Statuses.Single().attackModifier, Is.Zero);
+
+            var bucket = match.ApplyPlayCard(powderSnow,
+                match.CreatePlayCardCommand("si_006", "UNIT", target.InstanceId));
+            Assert.That(bucket.Accepted, Is.True);
+            Assert.That(target.Attack, Is.Zero);
+            Assert.That(target.Statuses.Single().attackModifier, Is.EqualTo(-1));
+            Assert.That(target.Statuses.Single().boundAttackModifier, Is.EqualTo(-2));
+            Assert.That(target.Statuses.Single().sourceCardId, Is.EqualTo("si_006"));
+            Assert.That(target.Statuses.Single().sourceInstanceId, Is.Empty);
+
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            Assert.That(target.Attack, Is.EqualTo(1));
+            Assert.That(target.Statuses, Is.Empty);
         }
 
         private static float ProjectedWidth(Camera camera, Transform surface, Vector3[] vertices)

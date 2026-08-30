@@ -117,10 +117,12 @@ namespace BiomeRivals.Demo
             DemoSlotKind slotKind,
             int slotIndex,
             out string message,
-            string paymentMethod = MatchPaymentMethods.Redstone)
+            string paymentMethod = MatchPaymentMethods.Redstone,
+            string targetType = "",
+            string targetInstanceId = "")
         {
             var cardId = definition == null ? string.Empty : definition.id;
-            var command = CreateDeployCommand(cardId, slotKind, slotIndex, paymentMethod);
+            var command = CreateDeployCommand(cardId, slotKind, slotIndex, paymentMethod, targetType, targetInstanceId);
             var result = ApplyDeploy(definition, command);
             message = result.Message;
             return result.Accepted;
@@ -130,9 +132,12 @@ namespace BiomeRivals.Demo
             string cardId,
             DemoSlotKind slotKind,
             int slotIndex,
-            string paymentMethod = MatchPaymentMethods.Redstone) =>
+            string paymentMethod = MatchPaymentMethods.Redstone,
+            string targetType = "",
+            string targetInstanceId = "") =>
             MatchCommandFactory.DeployCard(
-                NextCommandId(), Revision, cardId, slotKind == DemoSlotKind.Unit ? "UNIT" : "BUILDING", slotIndex, paymentMethod);
+                NextCommandId(), Revision, cardId, slotKind == DemoSlotKind.Unit ? "UNIT" : "BUILDING", slotIndex,
+                paymentMethod, targetType, targetInstanceId);
 
         public DemoCommandResult ApplyDeploy(CardDefinitionEntry definition, MatchCommandDto command)
         {
@@ -164,6 +169,18 @@ namespace BiomeRivals.Demo
             else
             {
                 return Reject(DemoCommandRejectionCode.InvalidTarget, "这张牌不是部署牌，请使用右侧的“释放”按钮。");
+            }
+
+            DemoBattlefieldObject battlecryTarget = null;
+            if (DemoCardTargeting.TryGetRule(definition, out var targetRule))
+            {
+                if (command.payload == null || command.payload.targetType != targetRule.TargetType)
+                    return Reject(DemoCommandRejectionCode.InvalidTarget, targetRule.MissingTargetMessage);
+                var playerTarget = targetRule.Owner == DemoTargetOwner.Friendly;
+                var targetBattlefield = playerTarget ? _playerBattlefield : _opponentBattlefield;
+                battlecryTarget = targetBattlefield.Find(value => value.InstanceId == command.payload.targetInstanceId);
+                if (!targetRule.IsLegal(playerTarget, targetRule.SlotKind, battlecryTarget))
+                    return Reject(DemoCommandRejectionCode.InvalidTarget, targetRule.MissingTargetMessage);
             }
 
             ConsumeDeployment(definition, command.payload.paymentMethod);
@@ -206,6 +223,12 @@ namespace BiomeRivals.Demo
             {
                 OfferArchaeologyChoice(deployedObject);
                 deployMessage += "；查看牌库顶 3 张并选择其中的掩埋牌。";
+            }
+            else if (definition.effectImplementationStatus == "IMPLEMENTED" &&
+                definition.effectIds != null && definition.effectIds.Contains("effect.si_003.01"))
+            {
+                ApplySlow(battlecryTarget, definition.id, deployedObject.InstanceId, "effect.si_003.01", 0);
+                deployMessage += $"；战吼使 {battlecryTarget.CardId} 获得缓慢。";
             }
             AcceptCommand(command);
             return DemoCommandResult.Accept(deployMessage, Revision);
@@ -352,7 +375,7 @@ namespace BiomeRivals.Demo
                         : $"雪球命中 {targetedObject.CardId}，但其攻击力已经为 0。";
                     break;
                 case "effect.si_006.01":
-                    ApplySlow(targetedObject, definition.id, effectId, -2);
+                    ApplySlow(targetedObject, definition.id, string.Empty, effectId, -2);
                     message = $"粉雪桶：{targetedObject.CardId} 获得缓慢与 -2 攻击，直到其控制者的结束阶段。";
                     break;
                 case "effect.tk_005.01":
@@ -769,7 +792,12 @@ namespace BiomeRivals.Demo
             }
         }
 
-        private static void ApplySlow(DemoBattlefieldObject target, string sourceCardId, string effectId, int attackModifier)
+        private static void ApplySlow(
+            DemoBattlefieldObject target,
+            string sourceCardId,
+            string sourceInstanceId,
+            string effectId,
+            int attackModifier)
         {
             if (target == null) throw new ArgumentNullException(nameof(target));
             var statuses = new List<BattlefieldStatusStateDto>(target.Statuses ?? Array.Empty<BattlefieldStatusStateDto>());
@@ -784,16 +812,36 @@ namespace BiomeRivals.Demo
                     remainingDuration = 1,
                     sourcePlayerId = "local-player",
                     sourceCardId = sourceCardId,
+                    sourceInstanceId = sourceInstanceId,
                     effectId = effectId,
-                    attackModifier = target.Attack - attackBefore
+                    attackModifier = target.Attack - attackBefore,
+                    boundAttackModifier = Math.Min(0, attackModifier)
                 };
                 statuses.Add(status);
             }
             else
             {
-                status.remainingDuration = Math.Max(status.remainingDuration, 1);
-                status.sourceCardId = sourceCardId;
-                status.effectId = effectId;
+                var replacesSource = false;
+                if (status.remainingDuration < 1)
+                {
+                    status.remainingDuration = 1;
+                    replacesSource = true;
+                }
+                var requestedModifier = Math.Min(0, attackModifier);
+                if (requestedModifier < status.boundAttackModifier)
+                {
+                    var attackBefore = target.Attack;
+                    target.Attack = Math.Max(0, target.Attack + requestedModifier - status.boundAttackModifier);
+                    status.attackModifier += target.Attack - attackBefore;
+                    status.boundAttackModifier = requestedModifier;
+                    replacesSource = true;
+                }
+                if (replacesSource)
+                {
+                    status.sourceCardId = sourceCardId;
+                    status.sourceInstanceId = sourceInstanceId;
+                    status.effectId = effectId;
+                }
             }
             target.Statuses = statuses.ToArray();
         }
@@ -875,6 +923,7 @@ namespace BiomeRivals.Demo
                 case "db_001": dropCardId = "tk_005"; sourceName = "尸壳"; dropName = "腐肉"; break;
                 case "pf_002": dropCardId = "tk_001"; sourceName = "放牧绵羊"; dropName = "羊毛"; break;
                 case "cd_003": dropCardId = "tk_009"; sourceName = "地牢骷髅"; dropName = "骨头"; break;
+                case "si_003": dropCardId = "tk_009"; sourceName = "流浪者"; dropName = "骨头"; break;
                 default: return string.Empty;
             }
             if (killerIsPlayer)

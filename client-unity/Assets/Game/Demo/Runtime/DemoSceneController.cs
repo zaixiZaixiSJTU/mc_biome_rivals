@@ -89,6 +89,7 @@ namespace BiomeRivals.Demo
         private string _selectedPaymentMethod = MatchPaymentMethods.Redstone;
         private string _selectedAttackerInstanceId;
         private string _pendingTargetCardId;
+        private string _selectedDeploymentTargetInstanceId;
         private string _activeFaction = "plains_forest";
         private string _opponentFaction = "nether";
         private bool _built;
@@ -155,6 +156,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewArchaeology")) SetupArchaeologyPreview();
             else if (HasCommandLineFlag("-previewLoot")) SetupLootPreview();
             else if (HasCommandLineFlag("-previewDungeonSkeleton")) SetupDungeonSkeletonPreview();
+            else if (HasCommandLineFlag("-previewStray")) SetupStrayPreview();
             else if (HasCommandLineFlag("-previewSlow")) SetupSlowPreview();
             else if (HasCommandLineFlag("-previewCombat")) OnEndTurn();
             if (HasCommandLineFlag("-previewGroundHover")) _battlefield.SetSlotHovered(true, DemoSlotKind.Unit, 0, true);
@@ -786,6 +788,7 @@ namespace BiomeRivals.Demo
                 return;
             }
             _pendingTargetCardId = null;
+            _selectedDeploymentTargetInstanceId = null;
             _activeFaction = factionId;
             _match.SetPlayerFaction(factionId);
             var spec = Factions.First(item => item.Id == factionId);
@@ -970,6 +973,29 @@ namespace BiomeRivals.Demo
             if (result.Accepted) StartCoroutine(PulseBattlefieldObject(target.InstanceId));
         }
 
+        private void SetupStrayPreview()
+        {
+            SelectFaction("snow_ice");
+            SelectOpponentFaction("nether");
+            if (!_registry.TryGetDefinition("si_003", out var strayDefinition) ||
+                !_registry.TryGetDefinition("nt_003", out var blazeDefinition)) return;
+            _match.ResetDeckAndHand(new[] { strayDefinition.id, strayDefinition.id }, Array.Empty<string>());
+            _match.ResetOpponent(new[] { blazeDefinition });
+            var target = _match.GetObject(false, DemoSlotKind.Unit, 0);
+            if (target == null) return;
+            var result = _match.ApplyDeploy(
+                strayDefinition,
+                _match.CreateDeployCommand(
+                    strayDefinition.id, DemoSlotKind.Unit, 0, MatchPaymentMethods.Redstone, "UNIT", target.InstanceId));
+            _selectedCardId = result.Accepted ? strayDefinition.id : null;
+            _selectedDeploymentTargetInstanceId = result.Accepted ? target.InstanceId : null;
+            RefreshAll();
+            ShowStatus(result.Accepted
+                ? "已锁定战吼目标：烈焰人。选择一个发光单位格部署下一张流浪者。"
+                : result.Message, !result.Accepted);
+            if (result.Accepted) StartCoroutine(PulseBattlefieldObject(target.InstanceId));
+        }
+
         private void SetupStructureDeployedPreview()
         {
             SelectFaction("desert_badlands");
@@ -1049,6 +1075,7 @@ namespace BiomeRivals.Demo
             _opponentFaction = factionId;
             _match.SetOpponentFaction(factionId);
             _pendingTargetCardId = null;
+            _selectedDeploymentTargetInstanceId = null;
             _selectedAttackerInstanceId = null;
             _match.ResetOpponent(GetOpponentDefinitions(factionId));
             ApplyOpponentFactionVisuals(spec);
@@ -1434,7 +1461,29 @@ namespace BiomeRivals.Demo
             if (deployType)
             {
                 var target = definition.cardType == "UNIT" ? "单位格" : $"建筑格（占 {Mathf.Max(1, definition.buildingSlots)} 格）";
-                if (definition.hasCraftingRecipe)
+                var requiresBattlecryTarget = DemoCardTargeting.TryGetRule(definition, out var battlecryTargetRule);
+                var selectedBattlecryTarget = requiresBattlecryTarget ? FindSelectedDeploymentTarget() : null;
+                if (requiresBattlecryTarget)
+                {
+                    var targeting = _pendingTargetCardId == definition.id;
+                    var hasLegalTarget = DemoCardTargeting.HasLegalTarget(match, battlecryTargetRule);
+                    var actionLabel = targeting
+                        ? "取消目标选择"
+                        : selectedBattlecryTarget != null
+                            ? $"战吼目标：{GetCardName(selectedBattlecryTarget.CardId)}"
+                            : hasLegalTarget ? battlecryTargetRule.ActionLabel : "没有合法目标";
+                    var targetButton = CreateSecondaryButton(_inspectorRoot, "BattlecryTarget", new Vector2(0, -118), new Vector2(235, 54), actionLabel, 15);
+                    targetButton.interactable = targeting || (hasLegalTarget && match.IsPlayerTurn && match.Hand.Contains(definition.id) &&
+                        (!IsOnlineBoard || _onlineSession.CanIssueCommand));
+                    targetButton.onClick.AddListener(targeting ? (UnityEngine.Events.UnityAction)CancelTargetSelection : CastSelectedCard);
+                    targetButton.gameObject.AddComponent<DemoHoverScale>().Configure(1.04f, 16f);
+                    var targetHint = selectedBattlecryTarget == null
+                        ? "先锁定敌方战吼目标，再选择己方单位格。"
+                        : $"已锁定 {GetCardName(selectedBattlecryTarget.CardId)} · 选择发光的{target}部署";
+                    CreateText(_inspectorRoot, "DeployHint", new Vector2(0, -174), new Vector2(246, 48), targetHint, 13,
+                        selectedBattlecryTarget == null ? Gold : Cyan, TextAnchor.MiddleCenter, FontStyle.Bold);
+                }
+                else if (definition.hasCraftingRecipe)
                 {
                     var canInteract = match.IsPlayerTurn && match.Phase == DemoTurnPhase.Main && match.Hand.Contains(definition.id) &&
                                       (!IsOnlineBoard || _onlineSession.CanIssueCommand);
@@ -1479,7 +1528,8 @@ namespace BiomeRivals.Demo
                 cast.gameObject.AddComponent<DemoHoverScale>().Configure(1.04f, 16f);
             }
             var implementationLabel = definition.effectImplementationStatus == "IMPLEMENTED" ? "已接入" : definition.effectImplementationStatus == "NONE" ? "无额外效果" : "待接入";
-            var implementationY = deployType && definition.hasCraftingRecipe ? -236 : -190;
+            var targetedDeployment = deployType && DemoCardTargeting.TryGetRule(definition, out _);
+            var implementationY = deployType && (definition.hasCraftingRecipe || targetedDeployment) ? -236 : -190;
             var implementationText = isDiscounted
                 ? $"考古联动：本回合费用 -1（{definition.cost} → {effectiveCost}）\n稳定效果槽：{string.Join(", ", definition.effectIds ?? Array.Empty<string>())}"
                 : definition.hasCraftingRecipe
@@ -1502,6 +1552,7 @@ namespace BiomeRivals.Demo
             if (!player || !string.IsNullOrEmpty(_pendingTargetCardId) || MatchView.Phase != DemoTurnPhase.Main ||
                 string.IsNullOrEmpty(_selectedCardId) || !_registry.TryGetDefinition(_selectedCardId, out var definition)) return false;
             if (definition.cardType != "UNIT" && definition.cardType != "BUILDING" && definition.cardType != "STRUCTURE") return false;
+            if (DemoCardTargeting.TryGetRule(definition, out _) && FindSelectedDeploymentTarget() == null) return false;
             occupiedSlots = definition.cardType == "UNIT" ? 1 : Mathf.Max(1, definition.buildingSlots);
             return true;
         }
@@ -1528,6 +1579,7 @@ namespace BiomeRivals.Demo
         {
             if (MatchView.PendingChoice != null) return;
             _pendingTargetCardId = null;
+            _selectedDeploymentTargetInstanceId = null;
             _selectedCardId = cardId;
             _selectedPaymentMethod = MatchPaymentMethods.Redstone;
             RefreshAll();
@@ -1557,6 +1609,11 @@ namespace BiomeRivals.Demo
                 ShowStatus("请先选择一张手牌。", true);
                 return;
             }
+            if (DemoCardTargeting.TryGetRule(definition, out var deploymentTargetRule) && FindSelectedDeploymentTarget() == null)
+            {
+                CastSelectedCard();
+                return;
+            }
             var deploymentPreview = DemoDeploymentRules.Evaluate(MatchView, definition, kind, index, _selectedPaymentMethod);
             if (!deploymentPreview.IsLegal)
             {
@@ -1566,22 +1623,30 @@ namespace BiomeRivals.Demo
             }
             if (IsOnlineBoard)
             {
-                var onlineResult = await SendOnline(() => _onlineSession.DeployAsync(_selectedCardId, kind, index, _selectedPaymentMethod));
+                var onlineResult = await SendOnline(() => _onlineSession.DeployAsync(
+                    _selectedCardId, kind, index, _selectedPaymentMethod,
+                    deploymentTargetRule?.TargetType ?? string.Empty,
+                    _selectedDeploymentTargetInstanceId ?? string.Empty));
                 if (onlineResult?.Outcome == MatchCommandOutcome.Accepted)
                 {
                     _selectedCardId = MatchView.Hand.FirstOrDefault();
                     _selectedPaymentMethod = MatchPaymentMethods.Redstone;
+                    _selectedDeploymentTargetInstanceId = null;
                 }
                 RefreshAll();
                 return;
             }
             var crafted = _selectedPaymentMethod == MatchPaymentMethods.Crafting;
-            var command = _match.CreateDeployCommand(_selectedCardId, kind, index, _selectedPaymentMethod);
+            var command = _match.CreateDeployCommand(
+                _selectedCardId, kind, index, _selectedPaymentMethod,
+                deploymentTargetRule?.TargetType ?? string.Empty,
+                _selectedDeploymentTargetInstanceId ?? string.Empty);
             var result = _match.ApplyDeploy(definition, command);
             if (result.Accepted)
             {
                 _selectedCardId = MatchView.Hand.FirstOrDefault();
                 _selectedPaymentMethod = MatchPaymentMethods.Redstone;
+                _selectedDeploymentTargetInstanceId = null;
                 if (crafted) StartCoroutine(ShowTurnBanner("合成完成", Cyan));
             }
             ShowStatus(result.Accepted ? $"{result.Message} · 状态 r{result.Revision}" : result.Message, !result.Accepted);
@@ -1780,6 +1845,15 @@ namespace BiomeRivals.Demo
                 ShowStatus(targetRule.SelectionPrompt, true);
                 return;
             }
+            var deployType = definition.cardType == "UNIT" || definition.cardType == "BUILDING" || definition.cardType == "STRUCTURE";
+            if (deployType)
+            {
+                _selectedDeploymentTargetInstanceId = target.InstanceId;
+                _pendingTargetCardId = null;
+                ShowStatus($"战吼目标已锁定：{GetCardName(target.CardId)}。现在选择一个发光的己方部署格。", false);
+                RefreshAll();
+                return;
+            }
             if (IsOnlineBoard)
             {
                 var onlineResult = await SendOnline(() => _onlineSession.PlayCardAsync(definition.id, targetRule.TargetType, target.InstanceId));
@@ -1816,6 +1890,13 @@ namespace BiomeRivals.Demo
             if (!_registry.TryGetDefinition(_pendingTargetCardId, out var definition) ||
                 !DemoCardTargeting.TryGetRule(definition, out var targetRule)) return false;
             return targetRule.IsLegal(player, kind, target);
+        }
+
+        private DemoBattlefieldObject FindSelectedDeploymentTarget()
+        {
+            if (string.IsNullOrEmpty(_selectedDeploymentTargetInstanceId)) return null;
+            return MatchView.PlayerBattlefield.Concat(MatchView.OpponentBattlefield)
+                .FirstOrDefault(value => value != null && value.InstanceId == _selectedDeploymentTargetInstanceId && value.Health > 0);
         }
 
         private async Task<MatchCommandDispatchResult?> SendOnline(Func<Task<MatchCommandDispatchResult>> send)

@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["protocolVersion", "rulesetVersion", "commandId", "expectedRevision", "type", "payload"],
   "properties": {
-    "protocolVersion": { "const": 15 },
+    "protocolVersion": { "const": 16 },
     "rulesetVersion": { "type": "string", "minLength": 1 },
     "commandId": { "type": "string", "minLength": 1, "maxLength": 80 },
     "expectedRevision": { "type": "integer", "minimum": 0 },
@@ -44,7 +44,9 @@
               "cardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
               "slotKind": { "enum": ["UNIT", "BUILDING"] },
               "slotIndex": { "type": "integer", "minimum": 0 },
-              "paymentMethod": { "enum": ["REDSTONE", "CRAFTING"] }
+              "paymentMethod": { "enum": ["REDSTONE", "CRAFTING"] },
+              "targetType": { "enum": ["UNIT", "BUILDING"] },
+              "targetInstanceId": { "type": "string", "pattern": "^object-[0-9]+$" }
             }
           }
         }
