@@ -194,7 +194,7 @@ namespace BiomeRivals.Demo
                     var playerTarget = targetRule.Owner == DemoTargetOwner.Friendly;
                     var targetBattlefield = playerTarget ? _playerBattlefield : _opponentBattlefield;
                     battlecryTarget = targetBattlefield.Find(value => value.InstanceId == command.payload.targetInstanceId);
-                    if (!targetRule.IsLegal(playerTarget, targetRule.SlotKind, battlecryTarget))
+                    if (!targetRule.IsLegal(this, playerTarget, targetRule.SlotKind, battlecryTarget))
                         return Reject(DemoCommandRejectionCode.InvalidTarget, targetRule.MissingTargetMessage);
                 }
             }
@@ -284,6 +284,9 @@ namespace BiomeRivals.Demo
                 return Reject(DemoCommandRejectionCode.InvalidChoice, "选择请求已经过期，请按当前界面重新选择。");
             if (PendingChoice.kind == "MOVE_UNIT")
             {
+                var prismarineMovement = PendingChoice.effectId == "effect.tk_012.01";
+                if (prismarineMovement && command.payload.selectedOptionIndex == -1)
+                    return Reject(DemoCommandRejectionCode.InvalidChoice, "海晶碎片必须将目标移动到一个相邻空格。");
                 PendingChoiceOptionDto move = null;
                 if (command.payload.selectedOptionIndex != -1)
                 {
@@ -314,6 +317,13 @@ namespace BiomeRivals.Demo
                     }
                 }
                 PendingChoice = null;
+                var shardHealing = 0;
+                if (move != null && prismarineMovement)
+                {
+                    var healthBeforeShard = target.Health;
+                    target.Health = Math.Min(target.MaxHealth, target.Health + 1);
+                    shardHealing = target.Health - healthBeforeShard;
+                }
                 var triggeredGuides = 0;
                 var triggeredGuardians = 0;
                 var movementDeathMessages = new List<string>();
@@ -321,6 +331,8 @@ namespace BiomeRivals.Demo
                     triggeredGuides = TriggerSuccessfulMovement(targetBattlefield, target, out triggeredGuardians, movementDeathMessages);
                 AcceptCommand(command);
                 var sourceName = moveEffectId == "effect.or_001.01" ? "鲑鱼群水流" : "激流三叉戟";
+                if (prismarineMovement) sourceName = "海晶碎片";
+                var healingMessage = prismarineMovement ? $" 目标恢复 {shardHealing} 点生命。" : string.Empty;
                 var guideMessage = triggeredGuides > 0 ? $" 海豚向导触发 {triggeredGuides} 次，目标额外获得 +{triggeredGuides} 攻击。" : string.Empty;
                 var guardianMessage = triggeredGuardians > 0
                     ? $" 守卫者射线触发 {triggeredGuardians} 次，目标受到 {triggeredGuardians} 点伤害。"
@@ -328,7 +340,7 @@ namespace BiomeRivals.Demo
                 var deathMessage = movementDeathMessages.Count > 0 ? " " + string.Join(" ", movementDeathMessages) : string.Empty;
                 return DemoCommandResult.Accept(move == null
                     ? $"{sourceName}：目标保持原位，未触发移动反应。"
-                    : $"{sourceName}：移动成功。{guideMessage}{guardianMessage}{deathMessage}", Revision);
+                    : $"{sourceName}：移动成功。{healingMessage}{guideMessage}{guardianMessage}{deathMessage}", Revision);
             }
             var selectable = (PendingChoice.options ?? Array.Empty<PendingChoiceOptionDto>()).Where(option => option != null && option.selectable).ToArray();
             PendingChoiceOptionDto selected = null;
@@ -386,7 +398,7 @@ namespace BiomeRivals.Demo
             if (effectId != "effect.db_002.01" && effectId != "effect.db_006.01" && effectId != "effect.nt_006.01" &&
                 effectId != "effect.si_001.01" && effectId != "effect.si_006.01" && effectId != "effect.tk_005.01" &&
                 effectId != "effect.tk_009.01" && effectId != "effect.tk_010.01" && effectId != "effect.or_006.01" &&
-                effectId != "effect.tk_016.01")
+                effectId != "effect.tk_012.01" && effectId != "effect.tk_016.01")
                 return Reject(DemoCommandRejectionCode.EffectNotImplemented, "找不到该 effectId 的规则处理器。");
             DemoBattlefieldObject targetedObject = null;
             if (DemoCardTargeting.TryGetRule(definition, out var targetRule))
@@ -396,7 +408,7 @@ namespace BiomeRivals.Demo
                 var playerTarget = targetRule.Owner == DemoTargetOwner.Friendly;
                 var battlefield = playerTarget ? _playerBattlefield : _opponentBattlefield;
                 targetedObject = battlefield.Find(value => value.InstanceId == command.payload.targetInstanceId);
-                if (!targetRule.IsLegal(playerTarget, targetRule.SlotKind, targetedObject))
+                if (!targetRule.IsLegal(this, playerTarget, targetRule.SlotKind, targetedObject))
                     return Reject(DemoCommandRejectionCode.InvalidTarget, targetRule.MissingTargetMessage);
             }
             Consume(definition);
@@ -491,6 +503,12 @@ namespace BiomeRivals.Demo
                     var healthBefore = targetedObject.Health;
                     targetedObject.Health = Math.Min(targetedObject.MaxHealth, targetedObject.Health + 2);
                     message = $"圆石：{targetedObject.CardId} 恢复 {targetedObject.Health - healthBefore} 点生命。";
+                    break;
+                case "effect.tk_012.01":
+                    OfferUnitMove(targetedObject, true, definition.id, $"effect-{Revision + 1}", effectId);
+                    if (PendingChoice == null)
+                        throw new InvalidOperationException("Validated Prismarine Shard target has no legal movement option.");
+                    message = "海晶碎片：请选择目标旁的发光地块；移动后恢复 1 点生命值。";
                     break;
                 case "effect.tk_016.01":
                     PlayerArmor += 2;

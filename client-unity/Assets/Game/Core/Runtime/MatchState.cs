@@ -508,17 +508,25 @@ namespace BiomeRivals.Core
                 choice.effectId == "effect.or_006.01" && choice.sourceCardId == "or_006";
             var salmonMovement = choice != null && choice.kind == "MOVE_UNIT" &&
                 choice.effectId == "effect.or_001.01" && choice.sourceCardId == "or_001";
-            var movement = riptideMovement || salmonMovement;
+            var prismarineMovement = choice != null && choice.kind == "MOVE_UNIT" &&
+                choice.effectId == "effect.tk_012.01" && choice.sourceCardId == "tk_012";
+            var movement = riptideMovement || salmonMovement || prismarineMovement;
             if (choice == null || (!archaeology && !movement) || string.IsNullOrWhiteSpace(choice.choiceId) ||
                 string.IsNullOrWhiteSpace(choice.sourceInstanceId) || choice.options == null ||
                 choice.options.Length > (movement ? 2 : 3) || state.status != "ACTIVE" ||
                 (archaeology && state.phase != "MAIN") || (riptideMovement && state.phase != "COMBAT") ||
-                (salmonMovement && state.phase != "MAIN"))
+                ((salmonMovement || prismarineMovement) && state.phase != "MAIN"))
                 throw new InvalidOperationException($"{source} contains an invalid pending card choice.");
             var owner = FindPlayer(state, choice.playerId);
             var sourceValid = archaeology
                 ? (owner?.battlefield ?? Array.Empty<BattlefieldObjectStateDto>()).Any(value =>
                     value != null && value.instanceId == choice.sourceInstanceId && value.cardId == choice.sourceCardId)
+                : prismarineMovement
+                    ? owner != null && choice.targetPlayerId == owner.playerId &&
+                        choice.sourceInstanceId.StartsWith("effect-", StringComparison.Ordinal) &&
+                        int.TryParse(choice.sourceInstanceId.Substring("effect-".Length), out _) &&
+                        (owner.battlefield ?? Array.Empty<BattlefieldObjectStateDto>()).Any(value =>
+                            value != null && value.instanceId == choice.targetInstanceId && value.health > 0)
                 : !string.IsNullOrWhiteSpace(choice.targetPlayerId) && !string.IsNullOrWhiteSpace(choice.targetInstanceId) &&
                     (!salmonMovement || (owner?.battlefield ?? Array.Empty<BattlefieldObjectStateDto>()).Any(value =>
                         value != null && value.instanceId == choice.sourceInstanceId && value.cardId == choice.sourceCardId &&

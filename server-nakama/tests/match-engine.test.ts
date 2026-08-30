@@ -1830,6 +1830,84 @@ TestHarness.test('Guardian reactions stop after lethal damage without creating h
   TestHarness.equal(moved.state.players[0]!.battlefield.length, 0);
 });
 
+TestHarness.test('Prismarine Shard validates an aquatic unit with movement space before payment', function (): void {
+  const state = activeState('match-prismarine-invalid', ['alice', 'bob'], ['ocean_river', 'nether']);
+  const actorIndex = state.players[0]!.playerId === 'alice' ? 0 : 1;
+  state.activePlayerIndex = actorIndex;
+  state.players[actorIndex]!.hand = ['tk_012'];
+  state.players[actorIndex]!.redstone = 0;
+  state.players[actorIndex]!.redstoneCapacity = 1;
+  placeUnit(state, actorIndex, 'pf_001', 0, 'object-10', 1);
+  const wrongTag = BiomeRivalsRules.applyCommand(state, 'alice',
+    playCommand('prismarine-wrong-tag', 0, 'tk_012', 'UNIT', 'object-10'));
+  TestHarness.equal(wrongTag.accepted, false);
+  if (!wrongTag.accepted) TestHarness.equal(wrongTag.code, 'INVALID_TARGET');
+  TestHarness.equal(state.players[actorIndex]!.hand[0], 'tk_012');
+  TestHarness.equal(state.players[actorIndex]!.discardPile.length, 0);
+
+  const blocked = activeState('match-prismarine-blocked', ['alice', 'bob'], ['ocean_river', 'nether']);
+  const blockedActorIndex = blocked.players[0]!.playerId === 'alice' ? 0 : 1;
+  blocked.activePlayerIndex = blockedActorIndex;
+  blocked.players[blockedActorIndex]!.hand = ['tk_012'];
+  placeUnit(blocked, blockedActorIndex, 'pf_001', 0, 'object-20', 1);
+  placeUnit(blocked, blockedActorIndex, 'or_001', 1, 'object-21', 1);
+  placeUnit(blocked, blockedActorIndex, 'pf_001', 2, 'object-22', 1);
+  const noSpace = BiomeRivalsRules.applyCommand(blocked, 'alice',
+    playCommand('prismarine-no-space', 0, 'tk_012', 'UNIT', 'object-21'));
+  TestHarness.equal(noSpace.accepted, false);
+  if (!noSpace.accepted) TestHarness.equal(noSpace.code, 'INVALID_TARGET');
+  TestHarness.equal(blocked.players[blockedActorIndex]!.hand[0], 'tk_012');
+  TestHarness.equal(blocked.players[blockedActorIndex]!.discardPile.length, 0);
+});
+
+TestHarness.test('Prismarine Shard forces movement then heals before Dolphin and Guardian reactions', function (): void {
+  const state = activeState('match-prismarine-order', ['alice', 'bob'], ['ocean_river', 'ocean_river']);
+  state.players[0]!.hand = ['tk_012'];
+  state.players[0]!.redstone = 0;
+  state.players[0]!.redstoneCapacity = 1;
+  placeUnit(state, 0, 'or_002', 0, 'object-10', 1);
+  placeUnit(state, 0, 'or_001', 1, 'object-11', 1);
+  state.players[0]!.battlefield[1]!.health = 1;
+  placeUnit(state, 1, 'or_004', 0, 'object-20', 1);
+
+  const played = BiomeRivalsRules.applyCommand(state, 'alice',
+    playCommand('prismarine-play', 0, 'tk_012', 'UNIT', 'object-11'));
+  TestHarness.ok(played.accepted);
+  if (!played.accepted) return;
+  TestHarness.equal(played.batch.events[0]!.type, 'CARD_PLAYED');
+  TestHarness.equal(played.batch.events[1]!.type, 'CHOICE_OFFERED');
+  TestHarness.equal(played.state.pendingChoice!.sourceCardId, 'tk_012');
+  TestHarness.equal(played.state.pendingChoice!.sourceInstanceId, 'effect-1');
+  TestHarness.equal(played.state.pendingChoice!.effectId, 'effect.tk_012.01');
+  TestHarness.equal(played.state.pendingChoice!.options.length, 1);
+  TestHarness.equal(played.state.pendingChoice!.options[0]!.slotIndex, 2);
+  TestHarness.equal(played.state.players[0]!.discardPile[0], 'tk_012');
+
+  const stayed = BiomeRivalsRules.applyCommand(played.state, 'alice',
+    resolveChoiceCommand('prismarine-stay', 1, played.state.pendingChoice!.choiceId, -1));
+  TestHarness.equal(stayed.accepted, false);
+  if (!stayed.accepted) TestHarness.equal(stayed.code, 'INVALID_CHOICE');
+  TestHarness.equal(played.state.pendingChoice!.targetInstanceId, 'object-11');
+
+  const moved = BiomeRivalsRules.applyCommand(played.state, 'alice',
+    resolveChoiceCommand('prismarine-move', 1, played.state.pendingChoice!.choiceId, 0));
+  TestHarness.ok(moved.accepted);
+  if (!moved.accepted) return;
+  TestHarness.equal(moved.batch.events[0]!.type, 'CHOICE_RESOLVED');
+  TestHarness.equal(moved.batch.events[1]!.type, 'OBJECT_MOVED');
+  TestHarness.equal(moved.batch.events[2]!.payload.effectId, 'effect.tk_012.01');
+  TestHarness.equal(moved.batch.events[2]!.payload.reason, 'HEAL');
+  TestHarness.equal(moved.batch.events[2]!.payload.health, 2);
+  TestHarness.equal(moved.batch.events[3]!.payload.effectId, 'effect.or_002.01');
+  TestHarness.equal(moved.batch.events[4]!.payload.effectId, 'effect.or_004.01');
+  const salmon = moved.state.players[0]!.battlefield.filter(function (object): boolean {
+    return object.instanceId === 'object-11';
+  })[0]!;
+  TestHarness.equal(salmon.slotIndex, 2);
+  TestHarness.equal(salmon.health, 1);
+  TestHarness.equal(salmon.attack, 2);
+});
+
 TestHarness.test('rejects stale revisions', function (): void {
   const state = activeState('match-1', ['alice', 'bob']);
   const result = BiomeRivalsRules.applyCommand(state, 'alice', command('cmd-1', 99, 'END_TURN'));

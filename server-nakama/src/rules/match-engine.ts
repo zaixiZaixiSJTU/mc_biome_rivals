@@ -1171,7 +1171,7 @@ namespace BiomeRivalsRules {
       const effectId = definition.effectIds[0]!;
       if (effectId !== 'effect.db_002.01' && effectId !== 'effect.db_006.01' && effectId !== 'effect.nt_006.01' &&
           effectId !== 'effect.si_001.01' && effectId !== 'effect.si_006.01' && effectId !== 'effect.tk_005.01' &&
-          effectId !== 'effect.tk_009.01' && effectId !== 'effect.tk_010.01' && effectId !== 'effect.or_006.01' &&
+          effectId !== 'effect.tk_009.01' && effectId !== 'effect.tk_010.01' && effectId !== 'effect.tk_012.01' && effectId !== 'effect.or_006.01' &&
           effectId !== 'effect.tk_016.01') {
         return reject(state, 'EFFECT_NOT_IMPLEMENTED', 'effect handler is not registered');
       }
@@ -1179,18 +1179,27 @@ namespace BiomeRivalsRules {
       const opponent = next.players[actorIndex === 0 ? 1 : 0]!;
       let targetedObject: BattlefieldObjectState | null = null;
       let targetedPlayer: PlayerState | null = null;
-      if (effectId === 'effect.si_001.01' || effectId === 'effect.si_006.01' || effectId === 'effect.tk_009.01') {
+      if (effectId === 'effect.si_001.01' || effectId === 'effect.si_006.01' ||
+          effectId === 'effect.tk_009.01' || effectId === 'effect.tk_012.01') {
         if (command.payload.targetType !== 'UNIT' || typeof command.payload.targetInstanceId !== 'string') {
-          return reject(state, 'INVALID_TARGET', effectId === 'effect.tk_009.01'
-            ? 'bone requires a friendly unit target'
+          return reject(state, 'INVALID_TARGET', effectId === 'effect.tk_009.01' || effectId === 'effect.tk_012.01'
+            ? 'material requires a friendly unit target'
             : 'snow spell requires an enemy unit target');
         }
-        targetedPlayer = effectId === 'effect.tk_009.01' ? player : opponent;
+        targetedPlayer = effectId === 'effect.tk_009.01' || effectId === 'effect.tk_012.01' ? player : opponent;
         targetedObject = findObject(targetedPlayer, command.payload.targetInstanceId);
         if (targetedObject === null || targetedObject.cardType !== 'UNIT') {
-          return reject(state, 'INVALID_TARGET', effectId === 'effect.tk_009.01'
-            ? 'bone target must be a living friendly unit'
+          return reject(state, 'INVALID_TARGET', effectId === 'effect.tk_009.01' || effectId === 'effect.tk_012.01'
+            ? 'material target must be a living friendly unit'
             : 'snow spell target must be a living enemy unit');
+        }
+        if (effectId === 'effect.tk_012.01') {
+          const hasAdjacentEmptySlot = [targetedObject.slotIndex - 1, targetedObject.slotIndex + 1].some(function (slotIndex): boolean {
+            return slotIndex >= 0 && slotIndex < player.unitSlots.length && player.unitSlots[slotIndex] === null;
+          });
+          if (!cardHasTag(targetedObject.cardId, 'aquatic') || !hasAdjacentEmptySlot) {
+            return reject(state, 'INVALID_TARGET', 'prismarine shard requires a friendly aquatic unit with an adjacent empty slot');
+          }
         }
       } else if (effectId === 'effect.tk_010.01') {
         if (command.payload.targetType !== 'BUILDING' || typeof command.payload.targetInstanceId !== 'string') {
@@ -1363,6 +1372,12 @@ namespace BiomeRivalsRules {
           });
           return null;
         }
+        case 'effect.tk_012.01': {
+          if (targetedObject === null || targetedPlayer === null) throw new Error('validated prismarine shard target was not resolved');
+          offerMoveChoice(player, cardId, 'effect-' + String(next.lastEventId), targetedPlayer, targetedObject, effectId);
+          if (next.pendingChoice === null) throw new Error('validated prismarine movement did not create a choice');
+          return null;
+        }
         case 'effect.tk_016.01':
           player.armor += 2;
           emit('ARMOR_GAINED', {
@@ -1387,6 +1402,9 @@ namespace BiomeRivalsRules {
       }
       if (pendingChoice.kind === 'MOVE_UNIT') {
         let moveOption: PendingChoiceOptionState | null = null;
+        if (selectedOptionIndex === -1 && pendingChoice.effectId === 'effect.tk_012.01') {
+          return reject(state, 'INVALID_CHOICE', 'prismarine shard movement requires a destination');
+        }
         if (selectedOptionIndex !== -1) {
           for (let index = 0; index < pendingChoice.options.length; index += 1) {
             const option = pendingChoice.options[index]!;
@@ -1430,6 +1448,16 @@ namespace BiomeRivalsRules {
               playerId: targetPlayer.playerId, instanceId: target.instanceId,
               sourceCardId: pendingChoice.sourceCardId, sourceInstanceId: pendingChoice.sourceInstanceId,
               effectId: pendingChoice.effectId, reason: 'TEMPORARY_ATTACK_MODIFIER',
+              attack: target.attack, health: target.health,
+              temporaryAttackModifier: target.temporaryAttackModifier,
+              temporaryAttackModifierExpiresOnTurn: target.temporaryAttackModifierExpiresOnTurn
+            });
+          } else if (pendingChoice.effectId === 'effect.tk_012.01') {
+            target.health = Math.min(target.maxHealth, target.health + 1);
+            emit('OBJECT_STATS_CHANGED', {
+              playerId: targetPlayer.playerId, instanceId: target.instanceId,
+              sourceCardId: pendingChoice.sourceCardId, sourceInstanceId: pendingChoice.sourceInstanceId,
+              effectId: pendingChoice.effectId, reason: 'HEAL',
               attack: target.attack, health: target.health,
               temporaryAttackModifier: target.temporaryAttackModifier,
               temporaryAttackModifierExpiresOnTurn: target.temporaryAttackModifierExpiresOnTurn

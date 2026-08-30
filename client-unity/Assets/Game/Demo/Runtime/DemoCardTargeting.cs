@@ -18,7 +18,8 @@ namespace BiomeRivals.Demo
             string targetType,
             string actionLabel,
             string selectionPrompt,
-            string missingTargetMessage)
+            string missingTargetMessage,
+            Func<IDemoMatchView, DemoBattlefieldObject, bool> additionalValidation = null)
         {
             EffectId = effectId ?? throw new ArgumentNullException(nameof(effectId));
             Owner = owner;
@@ -27,6 +28,7 @@ namespace BiomeRivals.Demo
             ActionLabel = actionLabel ?? throw new ArgumentNullException(nameof(actionLabel));
             SelectionPrompt = selectionPrompt ?? throw new ArgumentNullException(nameof(selectionPrompt));
             MissingTargetMessage = missingTargetMessage ?? throw new ArgumentNullException(nameof(missingTargetMessage));
+            AdditionalValidation = additionalValidation;
         }
 
         public string EffectId { get; }
@@ -36,10 +38,12 @@ namespace BiomeRivals.Demo
         public string ActionLabel { get; }
         public string SelectionPrompt { get; }
         public string MissingTargetMessage { get; }
+        private Func<IDemoMatchView, DemoBattlefieldObject, bool> AdditionalValidation { get; }
 
-        public bool IsLegal(bool player, DemoSlotKind kind, DemoBattlefieldObject target) =>
+        public bool IsLegal(IDemoMatchView match, bool player, DemoSlotKind kind, DemoBattlefieldObject target) =>
             target != null && target.Health > 0 && kind == SlotKind && target.SlotKind == SlotKind &&
-            player == (Owner == DemoTargetOwner.Friendly);
+            player == (Owner == DemoTargetOwner.Friendly) &&
+            (AdditionalValidation == null || AdditionalValidation(match, target));
     }
 
     public static class DemoCardTargeting
@@ -68,6 +72,11 @@ namespace BiomeRivals.Demo
             "effect.tk_010.01", DemoTargetOwner.Friendly, DemoSlotKind.Building, "BUILDING",
             "选择己方建筑", "请选择一个发光的己方建筑或结构；右键或 Esc 取消。", "当前没有可选择的己方建筑或结构。");
 
+        private static readonly DemoCardTargetRule PrismarineShard = new DemoCardTargetRule(
+            "effect.tk_012.01", DemoTargetOwner.Friendly, DemoSlotKind.Unit, "UNIT",
+            "选择水生目标", "请选择一个拥有相邻空格的己方水生生物；右键或 Esc 取消。", "当前没有可移动的己方水生生物。",
+            (match, target) => HasRegisteredTag(target, "aquatic") && HasAdjacentEmptyUnitSlot(match, target));
+
         public static bool TryGetRule(CardDefinitionEntry definition, out DemoCardTargetRule rule)
         {
             rule = null;
@@ -82,6 +91,7 @@ namespace BiomeRivals.Demo
                     case "effect.or_003.01": rule = Drowned; return true;
                     case "effect.tk_009.01": rule = Bone; return true;
                     case "effect.tk_010.01": rule = Cobblestone; return true;
+                    case "effect.tk_012.01": rule = PrismarineShard; return true;
                 }
             }
             return false;
@@ -93,7 +103,23 @@ namespace BiomeRivals.Demo
             if (rule == null) return true;
             var battlefield = rule.Owner == DemoTargetOwner.Friendly ? match.PlayerBattlefield : match.OpponentBattlefield;
             foreach (var target in battlefield)
-                if (target != null && target.Health > 0 && target.SlotKind == rule.SlotKind) return true;
+                if (rule.IsLegal(match, rule.Owner == DemoTargetOwner.Friendly, rule.SlotKind, target)) return true;
+            return false;
+        }
+
+        private static bool HasRegisteredTag(DemoBattlefieldObject target, string tag)
+        {
+            if (target?.HasTag(tag) == true) return true;
+            return target != null && CardContentLoader.Current.TryGetDefinition(target.CardId, out var definition) &&
+                Array.IndexOf(definition.tags ?? Array.Empty<string>(), tag) >= 0;
+        }
+
+        private static bool HasAdjacentEmptyUnitSlot(IDemoMatchView match, DemoBattlefieldObject target)
+        {
+            if (match == null || target == null) return false;
+            var slots = target.Player ? match.UnitSlots : match.OpponentUnitSlots;
+            foreach (var index in new[] { target.SlotIndex - 1, target.SlotIndex + 1 })
+                if (index >= 0 && index < slots.Length && string.IsNullOrEmpty(slots[index])) return true;
             return false;
         }
     }

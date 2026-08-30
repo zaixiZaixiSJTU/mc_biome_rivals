@@ -8,7 +8,7 @@
   "properties": {
     "matchId": { "type": "string", "minLength": 1 },
     "viewerPlayerId": { "type": "string", "minLength": 1 },
-    "protocolVersion": { "const": 18 },
+    "protocolVersion": { "const": 19 },
     "rulesetVersion": { "type": "string", "minLength": 1 },
     "revision": { "type": "integer", "minimum": 0 },
     "lastEventId": { "type": "integer", "minimum": 0 },
@@ -109,9 +109,9 @@
       "properties": {
         "choiceId": { "type": "string", "pattern": "^choice-[0-9]+$" },
         "playerId": { "type": "string", "minLength": 1 },
-        "sourceCardId": { "enum": ["db_003", "or_001", "or_006"] },
-        "sourceInstanceId": { "type": "string", "pattern": "^(object|equipment)-[0-9]+$" },
-        "effectId": { "enum": ["effect.db_003.01", "effect.or_001.01", "effect.or_006.01"] },
+        "sourceCardId": { "enum": ["db_003", "or_001", "or_006", "tk_012"] },
+        "sourceInstanceId": { "type": "string", "pattern": "^(object|equipment|effect)-[0-9]+$" },
+        "effectId": { "enum": ["effect.db_003.01", "effect.or_001.01", "effect.or_006.01", "effect.tk_012.01"] },
         "kind": { "enum": ["ARCHAEOLOGY_TOP_3", "MOVE_UNIT"] },
         "targetPlayerId": { "type": "string" },
         "targetInstanceId": { "type": "string" },

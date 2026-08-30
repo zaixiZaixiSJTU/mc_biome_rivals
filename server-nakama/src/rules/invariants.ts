@@ -25,12 +25,13 @@ namespace BiomeRivalsRules {
       const choicePlayerIndex = state.players.map(function (player): string { return player.playerId; }).indexOf(choice.playerId);
       const riptideMove = choice.kind === 'MOVE_UNIT' && choice.effectId === 'effect.or_006.01' && choice.sourceCardId === 'or_006';
       const salmonMove = choice.kind === 'MOVE_UNIT' && choice.effectId === 'effect.or_001.01' && choice.sourceCardId === 'or_001';
+      const prismarineMove = choice.kind === 'MOVE_UNIT' && choice.effectId === 'effect.tk_012.01' && choice.sourceCardId === 'tk_012';
       if (state.status !== 'ACTIVE' || (choice.kind === 'ARCHAEOLOGY_TOP_3' && state.phase !== 'MAIN') ||
-          (riptideMove && state.phase !== 'COMBAT') || (salmonMove && state.phase !== 'MAIN')) violations.push('pending choice phase is invalid');
+          (riptideMove && state.phase !== 'COMBAT') || ((salmonMove || prismarineMove) && state.phase !== 'MAIN')) violations.push('pending choice phase is invalid');
       if (choicePlayerIndex < 0 || choicePlayerIndex !== state.activePlayerIndex) violations.push('pending choice owner must be the active player');
       if (!/^choice-[0-9]+$/.test(choice.choiceId)) violations.push('pending choice id is invalid');
       const archaeologyChoice = choice.kind === 'ARCHAEOLOGY_TOP_3' && choice.effectId === 'effect.db_003.01' && choice.sourceCardId === 'db_003';
-      const moveChoice = riptideMove || salmonMove;
+      const moveChoice = riptideMove || salmonMove || prismarineMove;
       if (!archaeologyChoice && !moveChoice) violations.push('pending choice kind or source is unsupported');
       if (!Array.isArray(choice.options) || choice.options.length > (moveChoice ? 2 : 3)) violations.push('pending choice options are invalid');
       if (choicePlayerIndex >= 0) {
@@ -74,6 +75,13 @@ namespace BiomeRivalsRules {
             }
             if (salmonMove && (targetPlayer!.playerId !== choice.playerId || target.instanceId !== choice.sourceInstanceId)) {
               violations.push('salmon movement must target its own source unit');
+            }
+            if (prismarineMove) {
+              const targetDefinition = getCardDefinition(target.cardId);
+              if (targetPlayer!.playerId !== choice.playerId || !/^effect-[0-9]+$/.test(choice.sourceInstanceId) ||
+                  targetDefinition === null || targetDefinition.tags.indexOf('aquatic') < 0) {
+                violations.push('prismarine movement source or target is invalid');
+              }
             }
           }
         }

@@ -1451,6 +1451,62 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(loot.Hand, Does.Contain("tk_012"));
         }
 
+        [Test]
+        public void PrismarineShardRequiresMovableAquaticTargetThenHealsBeforeMovementReactions()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("or_001", out var salmon), Is.True);
+            Assert.That(registry.TryGetDefinition("or_002", out var dolphin), Is.True);
+            Assert.That(registry.TryGetDefinition("or_004", out var guardian), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_001", out var bee), Is.True);
+            Assert.That(registry.TryGetDefinition("tk_012", out var shard), Is.True);
+            Assert.That(shard.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+
+            var invalid = new DemoLocalMatch();
+            invalid.ResetHand(new[] { bee.id, shard.id });
+            Assert.That(invalid.ApplyDeploy(bee,
+                invalid.CreateDeployCommand(bee.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            var handBefore = invalid.Hand.Count;
+            var rejected = invalid.ApplyPlayCard(shard,
+                invalid.CreatePlayCardCommand(shard.id, "UNIT", invalid.GetObject(true, DemoSlotKind.Unit, 0).InstanceId));
+            Assert.That(rejected.Accepted, Is.False);
+            Assert.That(rejected.Code, Is.EqualTo(DemoCommandRejectionCode.InvalidTarget));
+            Assert.That(invalid.Hand.Count, Is.EqualTo(handBefore));
+            Assert.That(invalid.DiscardPile, Does.Not.Contain(shard.id));
+
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { dolphin.id, salmon.id });
+            match.ResetOpponent(new[] { guardian });
+            Assert.That(match.ApplyDeploy(dolphin,
+                match.CreateDeployCommand(dolphin.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            Assert.That(match.ApplyDeploy(salmon,
+                match.CreateDeployCommand(salmon.id, DemoSlotKind.Unit, 1)).Accepted, Is.True);
+            Assert.That(match.ApplyResolveChoice(
+                match.CreateResolveChoiceCommand(match.PendingChoice.choiceId, -1)).Accepted, Is.True);
+            var target = match.GetObject(true, DemoSlotKind.Unit, 1);
+            target.Health = 1;
+            match.ResetHand(new[] { shard.id });
+
+            var played = match.ApplyPlayCard(shard,
+                match.CreatePlayCardCommand(shard.id, "UNIT", target.InstanceId));
+            Assert.That(played.Accepted, Is.True);
+            Assert.That(match.PendingChoice.effectId, Is.EqualTo("effect.tk_012.01"));
+            Assert.That(match.PendingChoice.sourceInstanceId, Does.StartWith("effect-"));
+            Assert.That(match.PendingChoice.options.Select(value => value.slotIndex), Is.EqualTo(new[] { 2 }));
+            var stay = match.ApplyResolveChoice(match.CreateResolveChoiceCommand(match.PendingChoice.choiceId, -1));
+            Assert.That(stay.Accepted, Is.False);
+            Assert.That(match.PendingChoice, Is.Not.Null);
+
+            var moved = match.ApplyResolveChoice(match.CreateResolveChoiceCommand(match.PendingChoice.choiceId, 0));
+            Assert.That(moved.Accepted, Is.True);
+            Assert.That(moved.Message, Does.Contain("恢复 1 点生命"));
+            Assert.That(moved.Message, Does.Contain("海豚向导"));
+            Assert.That(moved.Message, Does.Contain("守卫者射线"));
+            Assert.That(target.SlotIndex, Is.EqualTo(2));
+            Assert.That(target.Attack, Is.EqualTo(2));
+            Assert.That(target.Health, Is.EqualTo(1));
+        }
+
         private static float ProjectedWidth(Camera camera, Transform surface, Vector3[] vertices)
         {
             var min = vertices.Min(vertex => camera.WorldToViewportPoint(surface.TransformPoint(vertex)).x);

@@ -1259,6 +1259,82 @@ namespace BiomeRivals.Core.Tests
         }
 
         [Test]
+        public void Apply_ReplaysPrismarineShardEffectChoiceMovementAndHealing()
+        {
+            var salmon = new BattlefieldObjectStateDto
+            {
+                instanceId = "object-1", cardId = "or_001", cardType = "UNIT", attack = 1,
+                health = 1, maxHealth = 2, slotKind = "UNIT", slotIndex = 1, occupiedSlots = 1, summonedTurn = 1
+            };
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "prismarine-replay", viewerPlayerId = "alice", protocolVersion = GameVersions.Protocol,
+                rulesetVersion = GameVersions.Ruleset, status = "ACTIVE", phase = "MAIN", turn = 1, activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto
+                    {
+                        playerId = "alice", life = 30, redstone = 0, hand = new[] { "tk_012" },
+                        discardPile = Array.Empty<string>(), unitSlots = new[] { null, "object-1", null, null },
+                        battlefield = new[] { salmon }
+                    },
+                    new PlayerStateDto { playerId = "bob", life = 30 }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 1, type = MatchEventTypes.CardPlayed, payload = new MatchEventPayloadDto
+                    {
+                        playerId = "alice", cardId = "tk_012", effectId = "effect.tk_012.01",
+                        redstone = 0, handCount = 0, discardCount = 1
+                    }},
+                    new MatchEventDto { eventId = 2, type = MatchEventTypes.ChoiceOffered, payload = new MatchEventPayloadDto
+                    {
+                        choiceId = "choice-2", playerId = "alice", sourceCardId = "tk_012", sourceInstanceId = "effect-1",
+                        effectId = "effect.tk_012.01", kind = "MOVE_UNIT", targetPlayerId = "alice", targetInstanceId = "object-1",
+                        options = new[]
+                        {
+                            new PendingChoiceOptionDto { optionIndex = 0, cardId = "or_001", slotIndex = 0, selectable = true },
+                            new PendingChoiceOptionDto { optionIndex = 1, cardId = "or_001", slotIndex = 2, selectable = true }
+                        }
+                    }}
+                }
+            });
+            Assert.That(store.Current.pendingChoice.sourceInstanceId, Is.EqualTo("effect-1"));
+            Assert.That(store.Current.players[0].discardPile, Is.EqualTo(new[] { "tk_012" }));
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 2,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 3, type = MatchEventTypes.ChoiceResolved,
+                        payload = new MatchEventPayloadDto { choiceId = "choice-2", playerId = "alice" } },
+                    new MatchEventDto { eventId = 4, type = MatchEventTypes.ObjectMoved, payload = new MatchEventPayloadDto
+                    {
+                        playerId = "alice", instanceId = "object-1", cardId = "or_001",
+                        sourceCardId = "tk_012", sourceInstanceId = "effect-1", effectId = "effect.tk_012.01",
+                        fromSlotIndex = 1, toSlotIndex = 2
+                    }},
+                    new MatchEventDto { eventId = 5, type = MatchEventTypes.ObjectStatsChanged, payload = new MatchEventPayloadDto
+                    {
+                        playerId = "alice", instanceId = "object-1", sourceCardId = "tk_012",
+                        sourceInstanceId = "effect-1", effectId = "effect.tk_012.01",
+                        attack = 1, health = 2, temporaryAttackModifier = 0, temporaryAttackModifierExpiresOnTurn = 0
+                    }}
+                }
+            });
+            Assert.That(store.Current.pendingChoice, Is.Null);
+            Assert.That(salmon.slotIndex, Is.EqualTo(2));
+            Assert.That(salmon.health, Is.EqualTo(2));
+        }
+
+        [Test]
         public void Apply_TracksAndClearsGuardianOncePerTurnReactionMarker()
         {
             var guardian = new BattlefieldObjectStateDto

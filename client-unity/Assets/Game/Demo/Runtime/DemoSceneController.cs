@@ -161,6 +161,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewDungeonSkeleton")) SetupDungeonSkeletonPreview();
             else if (HasCommandLineFlag("-previewStray")) SetupStrayPreview();
             else if (HasCommandLineFlag("-previewEquipment")) SetupEquipmentPreview();
+            else if (HasCommandLineFlag("-previewPrismarineShard")) SetupPrismarineShardPreview();
             else if (HasCommandLineFlag("-previewGuardianReaction")) SetupGuardianReactionPreview();
             else if (HasCommandLineFlag("-previewDrownedAdjacency")) SetupDrownedAdjacencyPreview();
             else if (HasCommandLineFlag("-previewDolphinCurrent")) SetupDolphinCurrentPreview();
@@ -611,10 +612,15 @@ namespace BiomeRivals.Demo
                     if (matchEvent.payload?.kind == "MOVE_UNIT")
                     {
                         var salmonCurrent = matchEvent.payload.effectId == "effect.or_001.01";
-                        ShowStatus(ownChoice
-                            ? salmonCurrent ? "鲑鱼群水流：选择己方相邻发光地块，或保持原位。" : "激流三叉戟：选择目标旁的发光地块，或保持原位。"
-                            : salmonCurrent ? "对手正在决定鲑鱼群的位置。" : "对手正在决定三叉戟目标的位置。", false);
-                        yield return ShowTurnBanner(salmonCurrent ? "水流" : "激流位移", ownChoice ? Gold : Ember);
+                        var prismarineShard = matchEvent.payload.effectId == "effect.tk_012.01";
+                        var ownMessage = prismarineShard
+                            ? "海晶碎片：必须将选中的水生生物移动到一个相邻发光地块；移动后恢复 1 点生命。"
+                            : salmonCurrent ? "鲑鱼群水流：选择己方相邻发光地块，或保持原位。" : "激流三叉戟：选择目标旁的发光地块，或保持原位。";
+                        var opponentMessage = prismarineShard
+                            ? "对手正在用海晶碎片移动一个水生生物。"
+                            : salmonCurrent ? "对手正在决定鲑鱼群的位置。" : "对手正在决定三叉戟目标的位置。";
+                        ShowStatus(ownChoice ? ownMessage : opponentMessage, false);
+                        yield return ShowTurnBanner(prismarineShard ? "碎片涌流" : salmonCurrent ? "水流" : "激流位移", ownChoice ? Gold : Ember);
                         break;
                     }
                     ShowStatus(ownChoice
@@ -725,6 +731,11 @@ namespace BiomeRivals.Demo
                         ShowStatus("守卫者射线：敌方本回合第一次实际移动的生物受到 1 点伤害。", false);
                         yield return PulseBattlefieldObject(matchEvent.payload?.sourceInstanceId);
                         yield return ShowTurnBanner("守卫射线", Ember);
+                    }
+                    else if (matchEvent.payload?.effectId == "effect.tk_012.01")
+                    {
+                        ShowStatus("海晶碎片：目标在移动后恢复 1 点生命值。", false);
+                        yield return ShowTurnBanner("海晶愈合", Cyan);
                     }
                     yield return PulseBattlefieldObject(matchEvent.payload?.instanceId);
                     break;
@@ -1181,6 +1192,33 @@ namespace BiomeRivals.Demo
             if (guardian != null) StartCoroutine(PulseBattlefieldObject(guardian.InstanceId));
         }
 
+        private void SetupPrismarineShardPreview()
+        {
+            SelectFaction("ocean_river");
+            SelectOpponentFaction("ocean_river");
+            if (!_registry.TryGetDefinition("or_001", out var salmonDefinition) ||
+                !_registry.TryGetDefinition("or_004", out var guardianDefinition) ||
+                !_registry.TryGetDefinition("tk_012", out var shardDefinition)) return;
+            _match.ResetDeckAndHand(new[] { salmonDefinition.id }, Array.Empty<string>());
+            _match.ResetOpponent(new[] { guardianDefinition });
+            var deployed = _match.ApplyDeploy(salmonDefinition,
+                _match.CreateDeployCommand(salmonDefinition.id, DemoSlotKind.Unit, 1));
+            if (deployed.Accepted && _match.PendingChoice != null)
+                _match.ApplyResolveChoice(_match.CreateResolveChoiceCommand(_match.PendingChoice.choiceId, -1));
+            var salmon = _match.GetObject(true, DemoSlotKind.Unit, 1);
+            if (salmon == null) return;
+            salmon.Health = 1;
+            _match.ResetHand(new[] { shardDefinition.id });
+            var played = _match.ApplyPlayCard(shardDefinition,
+                _match.CreatePlayCardCommand(shardDefinition.id, "UNIT", salmon.InstanceId));
+            _selectedCardId = null;
+            RefreshAll();
+            ShowStatus(played.Accepted
+                ? "海晶碎片已锁定受伤的鲑鱼群：必须点击相邻发光地块；落位后先治疗，再结算守卫者射线。"
+                : played.Message, !played.Accepted);
+            if (played.Accepted) StartCoroutine(PulseBattlefieldObject(salmon.InstanceId));
+        }
+
         private void SetupStructureDeployedPreview()
         {
             SelectFaction("desert_badlands");
@@ -1470,6 +1508,7 @@ namespace BiomeRivals.Demo
         {
             var choice = MatchView.PendingChoice;
             if (choice == null || choice.kind != "MOVE_UNIT" || !MatchView.IsChoiceOwner) return;
+            if (choice.effectId == "effect.tk_012.01" && optionIndex < 0) return;
             if (IsOnlineBoard)
             {
                 if (!_onlineSession.CanIssueCommand) return;
@@ -1478,9 +1517,10 @@ namespace BiomeRivals.Demo
                 return;
             }
             var waterCurrent = choice.effectId == "effect.or_001.01";
+            var prismarineShard = choice.effectId == "effect.tk_012.01";
             var result = _match.ApplyResolveChoice(_match.CreateResolveChoiceCommand(choice.choiceId, optionIndex));
             ShowStatus(result.Accepted ? $"{result.Message} · 状态 r{result.Revision}" : result.Message, !result.Accepted);
-            if (result.Accepted) StartCoroutine(ShowTurnBanner(optionIndex < 0 ? "保持原位" : waterCurrent ? "水流移动" : "激流位移", Gold));
+            if (result.Accepted) StartCoroutine(ShowTurnBanner(optionIndex < 0 ? "保持原位" : prismarineShard ? "碎片涌流" : waterCurrent ? "水流移动" : "激流位移", Gold));
             RefreshAll();
         }
 
@@ -1663,7 +1703,8 @@ namespace BiomeRivals.Demo
             {
                 _cardDetailsView.Clear();
                 var waterCurrent = match.PendingChoice.effectId == "effect.or_001.01";
-                var guideReady = waterCurrent && match.PlayerBattlefield.Any(value => value != null &&
+                var prismarineShard = match.PendingChoice.effectId == "effect.tk_012.01";
+                var guideReady = (waterCurrent || prismarineShard) && match.PlayerBattlefield.Any(value => value != null &&
                     value.CardId == "or_002" && value.InstanceId != match.PendingChoice.targetInstanceId &&
                     !match.HasTriggeredEffect(true, value.InstanceId, "effect.or_002.01"));
                 var movementTargetIsPlayer = match.PlayerBattlefield.Any(value => value != null &&
@@ -1674,14 +1715,19 @@ namespace BiomeRivals.Demo
                     value.CardId == "or_004" && !match.HasTriggeredEffect(
                         guardianOwnerIsPlayer, value.InstanceId, "effect.or_004.01"));
                 CreateText(_inspectorRoot, "CombatTitle", new Vector2(0, 105), new Vector2(245, 120),
+                    prismarineShard ? "海晶碎片 · 涌流\n选择发光的相邻地块" :
                     waterCurrent ? "鲑鱼群 · 水流\n选择发光的相邻地块" : "激流三叉戟\n选择发光的相邻地块", 19, Gold, TextAnchor.MiddleCenter, FontStyle.Bold);
-                var movementHint = "直接点击目标旁的发光地块，\n或保持目标原位。";
-                if (guideReady) movementHint = "移动后：海豚向导追加 +1 攻击。";
-                if (guardianThreats > 0) movementHint += $"\n警告：移动后承受 {guardianThreats} 点守卫者伤害；保持原位不触发。";
+                var movementHint = prismarineShard
+                    ? "必须移动；落位后恢复 1 点生命。"
+                    : "直接点击目标旁的发光地块，\n或保持目标原位。";
+                if (guideReady) movementHint += "\n海豚向导将追加 +1 攻击。";
+                if (guardianThreats > 0) movementHint += prismarineShard
+                    ? $"\n警告：治疗后承受 {guardianThreats} 点守卫者伤害。"
+                    : $"\n警告：移动后承受 {guardianThreats} 点守卫者伤害；保持原位不触发。";
                 CreateText(_inspectorRoot, "CombatHint", new Vector2(0, -5), new Vector2(245, 100),
                     match.IsChoiceOwner ? movementHint : "等待对手决定目标单位的位置。",
                     guardianThreats > 0 ? 14 : 15, guardianThreats > 0 ? Gold : Pale, TextAnchor.MiddleCenter, FontStyle.Normal);
-                if (match.IsChoiceOwner)
+                if (match.IsChoiceOwner && !prismarineShard)
                 {
                     var stay = CreateSecondaryButton(_inspectorRoot, "KeepPosition", new Vector2(0, -105), new Vector2(220, 52), "保持原位", 16);
                     stay.interactable = !IsOnlineBoard || _onlineSession.CanIssueCommand;
@@ -2153,7 +2199,7 @@ namespace BiomeRivals.Demo
                 return;
             }
             var target = MatchView.GetObject(player, kind, index);
-            if (!targetRule.IsLegal(player, kind, target))
+            if (!targetRule.IsLegal(MatchView, player, kind, target))
             {
                 ShowStatus(targetRule.SelectionPrompt, true);
                 return;
@@ -2202,7 +2248,7 @@ namespace BiomeRivals.Demo
         {
             if (!_registry.TryGetDefinition(_pendingTargetCardId, out var definition) ||
                 !DemoCardTargeting.TryGetRule(definition, out var targetRule)) return false;
-            return targetRule.IsLegal(player, kind, target);
+            return targetRule.IsLegal(MatchView, player, kind, target);
         }
 
         private DemoBattlefieldObject FindSelectedDeploymentTarget()
