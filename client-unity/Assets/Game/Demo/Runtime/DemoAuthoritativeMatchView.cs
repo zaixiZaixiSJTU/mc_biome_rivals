@@ -44,6 +44,9 @@ namespace BiomeRivals.Demo
         public DemoTurnPhase Phase => Current?.phase == "COMBAT" ? DemoTurnPhase.Combat : DemoTurnPhase.Main;
         public int PlayerLife => Player?.life ?? 0;
         public int PlayerArmor => Player?.armor ?? 0;
+        public DemoEquipment PlayerEquipment => MapEquipment(Player?.equipment);
+        public DemoEquipment OpponentEquipment => MapEquipment(Opponent?.equipment);
+        public bool PlayerHeroHasAttacked => Player?.heroHasAttacked == true;
         public int OpponentLife => Opponent?.life ?? 0;
         public bool IsFinished => Current?.status == "FINISHED";
         public int Revision => Current?.revision ?? 0;
@@ -96,6 +99,17 @@ namespace BiomeRivals.Demo
             if (attacker.Attack <= 0) return Fail("该生物当前没有攻击力。", out message);
             if (attacker.SummonedRound >= Round && !attacker.HasKeyword("CHARGE")) return Fail("该生物本回合刚被召唤，且不具有冲锋。", out message);
             if (attacker.HasAttacked) return Fail("该生物本回合已经攻击过。", out message);
+            message = string.Empty;
+            return true;
+        }
+
+        public bool CanAttackWithHero(out string message)
+        {
+            if (PendingChoice != null) return Fail("请先完成当前战场选择。", out message);
+            if (!IsPlayerTurn || Phase != DemoTurnPhase.Combat) return Fail("请先进入战斗阶段。", out message);
+            if (PlayerEquipment == null || PlayerEquipment.Attack <= 0 || PlayerEquipment.Durability <= 0)
+                return Fail("英雄需要装备可用武器才能攻击。", out message);
+            if (PlayerHeroHasAttacked) return Fail("英雄本回合已经攻击过。", out message);
             message = string.Empty;
             return true;
         }
@@ -162,6 +176,15 @@ namespace BiomeRivals.Demo
                 TemporaryAttackModifierExpiresOnRound = value.temporaryAttackModifierExpiresOnTurn,
                 Statuses = value.statuses ?? Array.Empty<BattlefieldStatusStateDto>()
             };
+
+        private static DemoEquipment MapEquipment(EquipmentStateDto value) => value == null ? null : new DemoEquipment
+        {
+            InstanceId = value.instanceId,
+            CardId = value.cardId,
+            Attack = value.attack,
+            Durability = value.durability,
+            MaxDurability = value.maxDurability
+        };
 
         private static bool Fail(string value, out string message)
         {

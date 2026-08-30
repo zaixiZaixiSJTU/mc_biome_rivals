@@ -30,6 +30,9 @@ namespace BiomeRivals.Core
         public const string CardDeployed = "CARD_DEPLOYED";
         public const string ObjectSummoned = "OBJECT_SUMMONED";
         public const string CardPlayed = "CARD_PLAYED";
+        public const string CardEquipped = "CARD_EQUIPPED";
+        public const string EquipmentDurabilityChanged = "EQUIPMENT_DURABILITY_CHANGED";
+        public const string EquipmentDestroyed = "EQUIPMENT_DESTROYED";
         public const string CardBuried = "CARD_BURIED";
         public const string ChoiceOffered = "CHOICE_OFFERED";
         public const string ChoiceResolved = "CHOICE_RESOLVED";
@@ -44,6 +47,7 @@ namespace BiomeRivals.Core
         public const string ObjectStatsChanged = "OBJECT_STATS_CHANGED";
         public const string ObjectStatusApplied = "OBJECT_STATUS_APPLIED";
         public const string ObjectStatusRemoved = "OBJECT_STATUS_REMOVED";
+        public const string ObjectMoved = "OBJECT_MOVED";
         public const string PhaseChanged = "PHASE_CHANGED";
         public const string AttackResolved = "ATTACK_RESOLVED";
         public const string ObjectDied = "OBJECT_DIED";
@@ -51,6 +55,11 @@ namespace BiomeRivals.Core
         public const string TurnStarted = "TURN_STARTED";
         public const string PlayerConceded = "PLAYER_CONCEDED";
         public const string MatchEnded = "MATCH_ENDED";
+    }
+
+    public static class MatchAttackerIds
+    {
+        public const string Hero = "HERO";
     }
 
     public static class MatchPaymentMethods
@@ -212,6 +221,7 @@ namespace BiomeRivals.Core
     {
         public int optionIndex;
         public string cardId = string.Empty;
+        public int slotIndex = -1;
         public bool selectable;
     }
 
@@ -224,6 +234,8 @@ namespace BiomeRivals.Core
         public string sourceInstanceId = string.Empty;
         public string effectId = string.Empty;
         public string kind = string.Empty;
+        public string targetPlayerId = string.Empty;
+        public string targetInstanceId = string.Empty;
         public PendingChoiceOptionDto[] options = Array.Empty<PendingChoiceOptionDto>();
     }
 
@@ -260,6 +272,7 @@ namespace BiomeRivals.Core
         public int damageToTarget;
         public int damageToAttacker;
         public int attackerHealth;
+        public int attackerArmor;
         public int targetHealth;
         public int targetArmor;
         public int handCount;
@@ -271,6 +284,7 @@ namespace BiomeRivals.Core
         public PendingChoiceOptionDto[] options = Array.Empty<PendingChoiceOptionDto>();
         public int selectedOptionIndex = -1;
         public string selectedCardId = string.Empty;
+        public int selectedSlotIndex = -1;
         public int discardCount;
         public int fatigueCount;
         public int damage;
@@ -290,6 +304,10 @@ namespace BiomeRivals.Core
         public string sourcePlayerId = string.Empty;
         public int statusAttackModifier;
         public int boundAttackModifier;
+        public int durability;
+        public int maxDurability;
+        public int fromSlotIndex = -1;
+        public int toSlotIndex = -1;
         public string craftedCardId = string.Empty;
         public string recipeId = string.Empty;
         public CraftingMaterialDto[] materials = Array.Empty<CraftingMaterialDto>();

@@ -1176,5 +1176,86 @@ namespace BiomeRivals.Core.Tests
             Assert.That(target.attack, Is.EqualTo(3));
             Assert.That(target.statuses, Is.Empty);
         }
+
+        [Test]
+        public void Apply_ReplaysHeroEquipmentAttackAndTridentMovementChoice()
+        {
+            var target = new BattlefieldObjectStateDto
+            {
+                instanceId = "object-7", cardId = "si_005", cardType = "UNIT", attack = 3,
+                health = 6, maxHealth = 6, slotKind = "UNIT", slotIndex = 2, occupiedSlots = 1, summonedTurn = 1
+            };
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "equipment-replay", viewerPlayerId = "alice", protocolVersion = GameVersions.Protocol,
+                rulesetVersion = GameVersions.Ruleset, status = "ACTIVE", phase = "MAIN", turn = 1, activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice", life = 30, redstone = 6, redstoneCapacity = 6, hand = new[] { "or_006" } },
+                    new PlayerStateDto
+                    {
+                        playerId = "bob", life = 30, unitSlots = new[] { null, null, "object-7", null },
+                        battlefield = new[] { target }
+                    }
+                }
+            });
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 1, type = MatchEventTypes.CardEquipped, payload = new MatchEventPayloadDto
+                    {
+                        playerId = "alice", instanceId = "equipment-1", cardId = "or_006", attack = 2,
+                        durability = 3, maxDurability = 3, redstone = 3, handCount = 0, nextInstanceId = 2
+                    }},
+                    new MatchEventDto { eventId = 2, type = MatchEventTypes.PhaseChanged, payload = new MatchEventPayloadDto { phase = "COMBAT" } },
+                    new MatchEventDto { eventId = 3, type = MatchEventTypes.AttackResolved, payload = new MatchEventPayloadDto
+                    {
+                        attackerPlayerId = "alice", attackerInstanceId = MatchAttackerIds.Hero,
+                        targetPlayerId = "bob", targetType = "UNIT", targetInstanceId = "object-7",
+                        attackerHealth = 27, attackerArmor = 0, targetHealth = 4
+                    }},
+                    new MatchEventDto { eventId = 4, type = MatchEventTypes.EquipmentDurabilityChanged, payload = new MatchEventPayloadDto
+                    {
+                        playerId = "alice", instanceId = "equipment-1", cardId = "or_006", durability = 2, maxDurability = 3
+                    }},
+                    new MatchEventDto { eventId = 5, type = MatchEventTypes.ChoiceOffered, payload = new MatchEventPayloadDto
+                    {
+                        choiceId = "choice-5", playerId = "alice", sourceCardId = "or_006", sourceInstanceId = "equipment-1",
+                        effectId = "effect.or_006.01", kind = "MOVE_UNIT", targetPlayerId = "bob", targetInstanceId = "object-7",
+                        options = new[]
+                        {
+                            new PendingChoiceOptionDto { optionIndex = 0, cardId = "si_005", slotIndex = 1, selectable = true },
+                            new PendingChoiceOptionDto { optionIndex = 1, cardId = "si_005", slotIndex = 3, selectable = true }
+                        }
+                    }}
+                }
+            });
+            Assert.That(store.Current.players[0].equipment.durability, Is.EqualTo(2));
+            Assert.That(store.Current.players[0].heroHasAttacked, Is.True);
+            Assert.That(store.Current.players[0].life, Is.EqualTo(27));
+            Assert.That(store.Current.pendingChoice.kind, Is.EqualTo("MOVE_UNIT"));
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 2,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 6, type = MatchEventTypes.ChoiceResolved, payload = new MatchEventPayloadDto
+                    {
+                        choiceId = "choice-5", playerId = "alice"
+                    }},
+                    new MatchEventDto { eventId = 7, type = MatchEventTypes.ObjectMoved, payload = new MatchEventPayloadDto
+                    {
+                        playerId = "bob", instanceId = "object-7", fromSlotIndex = 2, toSlotIndex = 1
+                    }}
+                }
+            });
+            Assert.That(target.slotIndex, Is.EqualTo(1));
+            Assert.That(store.Current.players[1].unitSlots[1], Is.EqualTo("object-7"));
+            Assert.That(store.Current.pendingChoice, Is.Null);
+        }
     }
 }

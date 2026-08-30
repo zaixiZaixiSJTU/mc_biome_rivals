@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["protocolVersion", "rulesetVersion", "commandId", "expectedRevision", "type", "payload"],
   "properties": {
-    "protocolVersion": { "const": 16 },
+    "protocolVersion": { "const": 17 },
     "rulesetVersion": { "type": "string", "minLength": 1 },
     "commandId": { "type": "string", "minLength": 1, "maxLength": 80 },
     "expectedRevision": { "type": "integer", "minimum": 0 },
@@ -92,7 +92,7 @@
             "additionalProperties": false,
             "required": ["attackerInstanceId", "targetType"],
             "properties": {
-              "attackerInstanceId": { "type": "string", "pattern": "^object-[0-9]+$" },
+              "attackerInstanceId": { "type": "string", "pattern": "^(object-[0-9]+|HERO)$" },
               "targetType": { "enum": ["HERO", "UNIT", "BUILDING"] },
               "targetInstanceId": { "type": "string", "pattern": "^object-[0-9]+$" }
             },

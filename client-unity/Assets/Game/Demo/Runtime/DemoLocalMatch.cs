@@ -55,6 +55,9 @@ namespace BiomeRivals.Demo
         public DemoTurnPhase Phase { get; private set; } = DemoTurnPhase.Main;
         public int PlayerLife { get; private set; } = 30;
         public int PlayerArmor { get; private set; }
+        public DemoEquipment PlayerEquipment { get; private set; }
+        public DemoEquipment OpponentEquipment { get; private set; }
+        public bool PlayerHeroHasAttacked { get; private set; }
         public int FatigueCount { get; private set; }
         public DemoDrawResult LastDrawResult { get; private set; }
         public int OpponentLife { get; private set; } = 30;
@@ -243,6 +246,31 @@ namespace BiomeRivals.Demo
             if (PendingChoice == null) return Reject(DemoCommandRejectionCode.InvalidChoice, "当前没有待处理的卡牌选择。");
             if (command.payload == null || command.payload.choiceId != PendingChoice.choiceId)
                 return Reject(DemoCommandRejectionCode.InvalidChoice, "选择请求已经过期，请按当前界面重新选择。");
+            if (PendingChoice.kind == "MOVE_UNIT")
+            {
+                PendingChoiceOptionDto move = null;
+                if (command.payload.selectedOptionIndex != -1)
+                {
+                    move = (PendingChoice.options ?? Array.Empty<PendingChoiceOptionDto>())
+                        .FirstOrDefault(option => option != null && option.selectable && option.optionIndex == command.payload.selectedOptionIndex);
+                    if (move == null) return Reject(DemoCommandRejectionCode.InvalidChoice, "该移动目的地已经不可用。");
+                }
+                var target = _opponentBattlefield.Find(value => value.InstanceId == PendingChoice.targetInstanceId);
+                if (target == null || target.SlotKind != DemoSlotKind.Unit)
+                    return Reject(DemoCommandRejectionCode.InvalidChoice, "待移动单位已经离场。");
+                if (move != null)
+                {
+                    if (move.slotIndex < 0 || move.slotIndex >= OpponentUnitSlots.Length ||
+                        Math.Abs(move.slotIndex - target.SlotIndex) != 1 || !string.IsNullOrEmpty(OpponentUnitSlots[move.slotIndex]))
+                        return Reject(DemoCommandRejectionCode.InvalidChoice, "该相邻地块已经被占用。");
+                    OpponentUnitSlots[target.SlotIndex] = null;
+                    OpponentUnitSlots[move.slotIndex] = target.CardId;
+                    target.SlotIndex = move.slotIndex;
+                }
+                PendingChoice = null;
+                AcceptCommand(command);
+                return DemoCommandResult.Accept(move == null ? "激流三叉戟：目标保持原位。" : "激流三叉戟：目标被推向相邻地块。", Revision);
+            }
             var selectable = (PendingChoice.options ?? Array.Empty<PendingChoiceOptionDto>()).Where(option => option != null && option.selectable).ToArray();
             PendingChoiceOptionDto selected = null;
             if (selectable.Length == 0)
@@ -290,7 +318,7 @@ namespace BiomeRivals.Demo
         {
             if (!ValidateCommand(command, MatchCommandTypes.PlayCard, out var rejection)) return rejection;
             if (!CanPlay(definition, out var message)) return RejectFromMessage(message, definition);
-            if (definition.cardType == "UNIT" || definition.cardType == "BUILDING" || definition.cardType == "STRUCTURE" || definition.cardType == "EQUIPMENT")
+            if (definition.cardType == "UNIT" || definition.cardType == "BUILDING" || definition.cardType == "STRUCTURE")
                 return Reject(DemoCommandRejectionCode.InvalidTarget, "该卡牌需要对应的部署或装备目标。");
             if (definition.effectImplementationStatus != "IMPLEMENTED" || definition.effectIds == null || definition.effectIds.Length != 1)
                 return Reject(DemoCommandRejectionCode.EffectNotImplemented, "该卡牌效果已注册，但尚未接入规则执行器。");
@@ -298,7 +326,7 @@ namespace BiomeRivals.Demo
             var effectId = definition.effectIds[0];
             if (effectId != "effect.db_002.01" && effectId != "effect.db_006.01" && effectId != "effect.nt_006.01" &&
                 effectId != "effect.si_001.01" && effectId != "effect.si_006.01" && effectId != "effect.tk_005.01" &&
-                effectId != "effect.tk_009.01" && effectId != "effect.tk_010.01" &&
+                effectId != "effect.tk_009.01" && effectId != "effect.tk_010.01" && effectId != "effect.or_006.01" &&
                 effectId != "effect.tk_016.01")
                 return Reject(DemoCommandRejectionCode.EffectNotImplemented, "找不到该 effectId 的规则处理器。");
             DemoBattlefieldObject targetedObject = null;
@@ -313,6 +341,17 @@ namespace BiomeRivals.Demo
                     return Reject(DemoCommandRejectionCode.InvalidTarget, targetRule.MissingTargetMessage);
             }
             Consume(definition);
+            if (definition.cardType == "EQUIPMENT")
+            {
+                if (PlayerEquipment != null) _discardPile.Add(PlayerEquipment.CardId);
+                PlayerEquipment = new DemoEquipment
+                {
+                    InstanceId = $"equipment-{_nextBattlefieldInstanceId++}", CardId = definition.id,
+                    Attack = definition.attack, Durability = definition.durability, MaxDurability = definition.durability
+                };
+                AcceptCommand(command);
+                return DemoCommandResult.Accept($"已装备：{definition.designId}（{definition.attack} 攻击 / {definition.durability} 耐久）。", Revision);
+            }
             _discardPile.Add(definition.id);
             switch (effectId)
             {
@@ -454,6 +493,18 @@ namespace BiomeRivals.Demo
             return true;
         }
 
+        public bool CanAttackWithHero(out string message)
+        {
+            if (IsFinished) return Fail("对局已经结束。", out message);
+            if (PendingChoice != null) return Fail("请先完成当前战场选择。", out message);
+            if (!IsPlayerTurn || Phase != DemoTurnPhase.Combat) return Fail("请先进入战斗阶段。", out message);
+            if (PlayerEquipment == null || PlayerEquipment.Attack <= 0 || PlayerEquipment.Durability <= 0)
+                return Fail("英雄需要装备可用武器才能攻击。", out message);
+            if (PlayerHeroHasAttacked) return Fail("英雄本回合已经攻击过。", out message);
+            message = string.Empty;
+            return true;
+        }
+
         public bool CanAttackTarget(DemoBattlefieldObject target, string targetType, out string message)
         {
             if (PendingChoice != null) return Fail("请先完成考古学家的牌库选择。", out message);
@@ -491,8 +542,14 @@ namespace BiomeRivals.Demo
             if (command.payload == null) return Reject(DemoCommandRejectionCode.InvalidCommand, "攻击命令缺少目标。");
             if (command.payload.targetType != "HERO" && command.payload.targetType != "UNIT" && command.payload.targetType != "BUILDING")
                 return Reject(DemoCommandRejectionCode.InvalidTarget, "攻击目标类型无效。");
-            var attacker = _playerBattlefield.Find(value => value.InstanceId == command.payload.attackerInstanceId);
-            if (!CanAttackWith(attacker, out var message)) return Reject(DemoCommandRejectionCode.AttackerNotReady, message);
+            var heroAttack = command.payload.attackerInstanceId == MatchAttackerIds.Hero;
+            var attacker = heroAttack ? null : _playerBattlefield.Find(value => value.InstanceId == command.payload.attackerInstanceId);
+            string message;
+            if (heroAttack)
+            {
+                if (!CanAttackWithHero(out message)) return Reject(DemoCommandRejectionCode.AttackerNotReady, message);
+            }
+            else if (!CanAttackWith(attacker, out message)) return Reject(DemoCommandRejectionCode.AttackerNotReady, message);
 
             var target = command.payload.targetType == "HERO"
                 ? null
@@ -500,32 +557,54 @@ namespace BiomeRivals.Demo
             if (!CanAttackTarget(target, command.payload.targetType, out message))
                 return Reject(HasLivingOpponentTaunt() ? DemoCommandRejectionCode.TauntTargetRequired : DemoCommandRejectionCode.InvalidTarget, message);
 
-            attacker.HasAttacked = true;
+            var attackValue = heroAttack ? PlayerEquipment.Attack : attacker.Attack;
+            if (heroAttack) PlayerHeroHasAttacked = true;
+            else attacker.HasAttacked = true;
             if (command.payload.targetType == "HERO")
             {
-                OpponentLife = Math.Max(0, OpponentLife - attacker.Attack);
+                OpponentLife = Math.Max(0, OpponentLife - attackValue);
+                if (heroAttack) ConsumeEquipmentDurability();
                 if (OpponentLife == 0) IsFinished = true;
                 AcceptCommand(command);
-                return DemoCommandResult.Accept(IsFinished ? "敌方英雄生命归零，你获得胜利！" : $"对敌方英雄造成 {attacker.Attack} 点伤害。", Revision);
+                return DemoCommandResult.Accept(IsFinished ? "敌方英雄生命归零，你获得胜利！" : $"对敌方英雄造成 {attackValue} 点伤害。", Revision);
             }
 
             var expectedKind = command.payload.targetType == "UNIT" ? DemoSlotKind.Unit : DemoSlotKind.Building;
             if (target == null || target.SlotKind != expectedKind)
             {
-                attacker.HasAttacked = false;
+                if (heroAttack) PlayerHeroHasAttacked = false;
+                else attacker.HasAttacked = false;
                 return Reject(DemoCommandRejectionCode.InvalidTarget, "攻击目标无效或已经离场。");
             }
             var retaliation = target.SlotKind == DemoSlotKind.Unit ? target.Attack : 0;
-            target.Health = Math.Max(0, target.Health - attacker.Attack);
-            attacker.Health = Math.Max(0, attacker.Health - retaliation);
+            target.Health = Math.Max(0, target.Health - attackValue);
+            if (heroAttack)
+            {
+                var armorDamage = Math.Min(PlayerArmor, retaliation);
+                PlayerArmor -= armorDamage;
+                PlayerLife = Math.Max(0, PlayerLife - (retaliation - armorDamage));
+            }
+            else attacker.Health = Math.Max(0, attacker.Health - retaliation);
             var targetDied = target.Health == 0;
             var combatKillCredits = new Dictionary<string, bool>(StringComparer.Ordinal);
             if (targetDied) combatKillCredits[target.InstanceId] = true;
-            if (attacker.Health == 0 && retaliation > 0) combatKillCredits[attacker.InstanceId] = false;
+            if (!heroAttack && attacker.Health == 0 && retaliation > 0) combatKillCredits[attacker.InstanceId] = false;
             var deathrattleMessages = SettleDeaths(combatKillCredits);
+            if (heroAttack)
+            {
+                var equipment = PlayerEquipment;
+                ConsumeEquipmentDurability();
+                if (!targetDied && target.SlotKind == DemoSlotKind.Unit && equipment != null && equipment.CardId == "or_006")
+                    OfferRiptideMove(equipment, target);
+                if (PlayerLife == 0)
+                {
+                    PendingChoice = null;
+                    IsFinished = true;
+                }
+            }
             AcceptCommand(command);
             return DemoCommandResult.Accept(
-                $"造成 {attacker.Attack} 点伤害，受到 {retaliation} 点反击" + (targetDied ? "；目标死亡。" : "。") +
+                $"造成 {attackValue} 点伤害，受到 {retaliation} 点反击" + (targetDied ? "；目标死亡。" : "。") +
                 (deathrattleMessages.Count > 0 ? " " + string.Join(" ", deathrattleMessages) : string.Empty),
                 Revision);
         }
@@ -557,6 +636,7 @@ namespace BiomeRivals.Demo
             ExcavatedThisTurn = false;
             IsPlayerTurn = true;
             Phase = DemoTurnPhase.Main;
+            PlayerHeroHasAttacked = false;
             foreach (var battlefieldObject in _playerBattlefield) battlefieldObject.HasAttacked = false;
             return DrawCard();
         }
@@ -779,6 +859,37 @@ namespace BiomeRivals.Demo
             };
             _opponentBattlefield.Add(instance);
             for (var index = slotIndex; index < slotIndex + occupiedSlots; index++) slots[index] = definition.id;
+        }
+
+        private void ConsumeEquipmentDurability()
+        {
+            if (PlayerEquipment == null) throw new InvalidOperationException("Hero attack lost its equipment state.");
+            PlayerEquipment.Durability--;
+            if (PlayerEquipment.Durability > 0) return;
+            _discardPile.Add(PlayerEquipment.CardId);
+            PlayerEquipment = null;
+        }
+
+        private void OfferRiptideMove(DemoEquipment equipment, DemoBattlefieldObject target)
+        {
+            var options = new List<PendingChoiceOptionDto>();
+            foreach (var slotIndex in new[] { target.SlotIndex - 1, target.SlotIndex + 1 })
+            {
+                if (slotIndex < 0 || slotIndex >= OpponentUnitSlots.Length || !string.IsNullOrEmpty(OpponentUnitSlots[slotIndex])) continue;
+                options.Add(new PendingChoiceOptionDto
+                {
+                    optionIndex = options.Count, cardId = target.CardId, slotIndex = slotIndex, selectable = true
+                });
+            }
+            if (options.Count == 0) return;
+            PendingChoice = new PendingChoiceDto
+            {
+                choiceId = $"choice-local-{Revision + 1}", playerId = "local-player",
+                sourceCardId = equipment.CardId, sourceInstanceId = equipment.InstanceId,
+                effectId = "effect.or_006.01", kind = "MOVE_UNIT",
+                targetPlayerId = "local-opponent", targetInstanceId = target.InstanceId,
+                options = options.ToArray()
+            };
         }
 
         private void RestoreExpiredAttackModifiers(List<DemoBattlefieldObject> battlefield)

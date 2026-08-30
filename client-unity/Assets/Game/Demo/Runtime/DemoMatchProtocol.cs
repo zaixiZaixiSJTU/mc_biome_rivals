@@ -59,6 +59,15 @@ namespace BiomeRivals.Demo
                 value => value != null && value.statusId == statusId);
     }
 
+    public sealed class DemoEquipment
+    {
+        public string InstanceId { get; set; }
+        public string CardId { get; set; }
+        public int Attack { get; set; }
+        public int Durability { get; set; }
+        public int MaxDurability { get; set; }
+    }
+
     public interface IDemoMatchView
     {
         bool IsAuthoritative { get; }
@@ -89,12 +98,16 @@ namespace BiomeRivals.Demo
         DemoTurnPhase Phase { get; }
         int PlayerLife { get; }
         int PlayerArmor { get; }
+        DemoEquipment PlayerEquipment { get; }
+        DemoEquipment OpponentEquipment { get; }
+        bool PlayerHeroHasAttacked { get; }
         int OpponentLife { get; }
         bool IsFinished { get; }
         int Revision { get; }
         int GetEffectiveCost(CardDefinitionEntry definition);
         DemoBattlefieldObject GetObject(bool player, DemoSlotKind kind, int slotIndex);
         bool CanAttackWith(DemoBattlefieldObject attacker, out string message);
+        bool CanAttackWithHero(out string message);
         bool CanAttackTarget(DemoBattlefieldObject target, string targetType, out string message);
     }
 

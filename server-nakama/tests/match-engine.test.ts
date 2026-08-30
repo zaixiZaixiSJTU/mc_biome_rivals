@@ -306,9 +306,9 @@ TestHarness.test('offers the archaeologists top-three choice privately after dep
   TestHarness.equal(result.state.pendingChoice!.kind, 'ARCHAEOLOGY_TOP_3');
   TestHarness.equal(result.state.pendingChoice!.options.length, 3);
   TestHarness.equal(JSON.stringify(result.state.pendingChoice!.options), JSON.stringify([
-    { optionIndex: 0, cardId: 'db_004', selectable: false },
-    { optionIndex: 1, cardId: 'tk_006', selectable: true },
-    { optionIndex: 2, cardId: 'db_002', selectable: false }
+    { optionIndex: 0, cardId: 'db_004', slotIndex: -1, selectable: false },
+    { optionIndex: 1, cardId: 'tk_006', slotIndex: -1, selectable: true },
+    { optionIndex: 2, cardId: 'db_002', slotIndex: -1, selectable: false }
   ]));
   const ownerSnapshot = BiomeRivalsRules.createClientSnapshot(result.state, 'alice');
   const opponentSnapshot = BiomeRivalsRules.createClientSnapshot(result.state, 'bob');
@@ -1526,6 +1526,62 @@ TestHarness.test('increases each players redstone from their second personal tur
   TestHarness.ok(bobSecond.accepted);
   if (!bobSecond.accepted) return;
   TestHarness.equal(bobSecond.state.players[1]!.redstoneCapacity, 2);
+});
+
+TestHarness.test('equips and replaces Riptide Trident through the public equipment slot', function (): void {
+  const state = activeState('match-1', ['alice', 'bob'], ['ocean_river', 'nether']);
+  state.players[0]!.hand = ['or_006', 'or_006'];
+  state.players[0]!.redstone = 6;
+  state.players[0]!.redstoneCapacity = 6;
+  const first = BiomeRivalsRules.applyCommand(state, 'alice', playCommand('equip-1', 0, 'or_006'));
+  TestHarness.ok(first.accepted);
+  if (!first.accepted) return;
+  TestHarness.equal(first.batch.events[0]!.type, 'CARD_EQUIPPED');
+  TestHarness.equal(first.state.players[0]!.equipment!.durability, 3);
+  const second = BiomeRivalsRules.applyCommand(first.state, 'alice', playCommand('equip-2', 1, 'or_006'));
+  TestHarness.ok(second.accepted);
+  if (!second.accepted) return;
+  TestHarness.equal(second.batch.events[0]!.type, 'EQUIPMENT_DESTROYED');
+  TestHarness.equal(second.batch.events[1]!.type, 'CARD_EQUIPPED');
+  TestHarness.equal(second.state.players[0]!.discardPile[0], 'or_006');
+  TestHarness.equal(second.state.players[0]!.equipment!.instanceId, 'equipment-2');
+});
+
+TestHarness.test('hero attack consumes durability, takes retaliation, and offers Trident movement in-world', function (): void {
+  const state = activeState('match-1', ['alice', 'bob'], ['ocean_river', 'snow_ice']);
+  state.players[0]!.hand = ['or_006'];
+  state.players[0]!.redstone = 6;
+  state.players[0]!.redstoneCapacity = 6;
+  state.players[0]!.armor = 1;
+  placeUnit(state, 1, 'si_005', 2, 'object-20', 1);
+  const equipped = BiomeRivalsRules.applyCommand(state, 'alice', playCommand('equip', 0, 'or_006'));
+  TestHarness.ok(equipped.accepted);
+  if (!equipped.accepted) return;
+  const combat = BiomeRivalsRules.applyCommand(equipped.state, 'alice', enterCombatCommand('combat', 1));
+  TestHarness.ok(combat.accepted);
+  if (!combat.accepted) return;
+  const attacked = BiomeRivalsRules.applyCommand(combat.state, 'alice', attackCommand('hero-hit', 2, 'HERO', 'UNIT', 'object-20'));
+  TestHarness.ok(attacked.accepted);
+  if (!attacked.accepted) return;
+  TestHarness.equal(attacked.state.players[0]!.heroHasAttacked, true);
+  TestHarness.equal(attacked.state.players[0]!.equipment!.durability, 2);
+  TestHarness.equal(attacked.state.players[0]!.armor, 0);
+  TestHarness.equal(attacked.state.players[0]!.life, 28);
+  TestHarness.equal(attacked.state.pendingChoice!.kind, 'MOVE_UNIT');
+  TestHarness.equal(attacked.state.pendingChoice!.options.length, 2);
+  TestHarness.equal(attacked.state.pendingChoice!.options[0]!.slotIndex, 1);
+  TestHarness.equal(attacked.state.pendingChoice!.options[1]!.slotIndex, 3);
+  const opponentSnapshot = BiomeRivalsRules.createClientSnapshot(attacked.state, 'bob');
+  TestHarness.equal(opponentSnapshot.pendingChoice!.targetInstanceId, 'object-20');
+  TestHarness.equal(opponentSnapshot.pendingChoice!.options[0]!.cardId, 'si_005');
+  TestHarness.equal(opponentSnapshot.pendingChoice!.options[0]!.selectable, false);
+  const moved = BiomeRivalsRules.applyCommand(attacked.state, 'alice',
+    resolveChoiceCommand('move', 3, attacked.state.pendingChoice!.choiceId, 0));
+  TestHarness.ok(moved.accepted);
+  if (!moved.accepted) return;
+  TestHarness.equal(moved.state.players[1]!.unitSlots[1], 'object-20');
+  TestHarness.equal(moved.state.players[1]!.unitSlots[2], null);
+  TestHarness.equal(moved.batch.events[1]!.type, 'OBJECT_MOVED');
 });
 
 TestHarness.test('rejects stale revisions', function (): void {

@@ -8,7 +8,7 @@
   "properties": {
     "matchId": { "type": "string", "minLength": 1 },
     "viewerPlayerId": { "type": "string", "minLength": 1 },
-    "protocolVersion": { "const": 16 },
+    "protocolVersion": { "const": 17 },
     "rulesetVersion": { "type": "string", "minLength": 1 },
     "revision": { "type": "integer", "minimum": 0 },
     "lastEventId": { "type": "integer", "minimum": 0 },
@@ -24,7 +24,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["playerId", "factionId", "mulliganCompleted", "life", "armor", "redstone", "redstoneCapacity", "hand", "deckCount", "buriedCount", "excavatedThisTurn", "discardPile", "fatigueCount", "unitSlots", "buildingSlots", "battlefield"],
+        "required": ["playerId", "factionId", "mulliganCompleted", "life", "armor", "redstone", "redstoneCapacity", "hand", "deckCount", "buriedCount", "excavatedThisTurn", "discardPile", "fatigueCount", "equipment", "heroHasAttacked", "unitSlots", "buildingSlots", "battlefield"],
         "properties": {
           "playerId": { "type": "string", "minLength": 1 },
           "factionId": { "enum": ["plains_forest", "desert_badlands", "snow_ice", "cave_dark_forest", "ocean_river", "nether", "end"] },
@@ -39,6 +39,18 @@
           "excavatedThisTurn": { "type": "boolean" },
           "discardPile": { "type": "array", "items": { "type": "string", "pattern": "^[a-z0-9_]+$" } },
           "fatigueCount": { "type": "integer", "minimum": 0 },
+          "equipment": {
+            "type": ["object", "null"], "additionalProperties": false,
+            "required": ["instanceId", "cardId", "attack", "durability", "maxDurability"],
+            "properties": {
+              "instanceId": { "type": "string", "pattern": "^equipment-[0-9]+$" },
+              "cardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+              "attack": { "type": "integer", "minimum": 1 },
+              "durability": { "type": "integer", "minimum": 1 },
+              "maxDurability": { "type": "integer", "minimum": 1 }
+            }
+          },
+          "heroHasAttacked": { "type": "boolean" },
           "unitSlots": {
             "type": "array", "minItems": 4, "maxItems": 4,
             "items": { "type": ["string", "null"], "pattern": "^[a-z0-9_]+$" }
@@ -93,22 +105,25 @@
     "pendingChoice": {
       "type": ["object", "null"],
       "additionalProperties": false,
-      "required": ["choiceId", "playerId", "sourceCardId", "sourceInstanceId", "effectId", "kind", "options"],
+      "required": ["choiceId", "playerId", "sourceCardId", "sourceInstanceId", "effectId", "kind", "targetPlayerId", "targetInstanceId", "options"],
       "properties": {
         "choiceId": { "type": "string", "pattern": "^choice-[0-9]+$" },
         "playerId": { "type": "string", "minLength": 1 },
-        "sourceCardId": { "const": "db_003" },
-        "sourceInstanceId": { "type": "string", "pattern": "^object-[0-9]+$" },
-        "effectId": { "const": "effect.db_003.01" },
-        "kind": { "const": "ARCHAEOLOGY_TOP_3" },
+        "sourceCardId": { "enum": ["db_003", "or_006"] },
+        "sourceInstanceId": { "type": "string", "pattern": "^(object|equipment)-[0-9]+$" },
+        "effectId": { "enum": ["effect.db_003.01", "effect.or_006.01"] },
+        "kind": { "enum": ["ARCHAEOLOGY_TOP_3", "MOVE_UNIT"] },
+        "targetPlayerId": { "type": "string" },
+        "targetInstanceId": { "type": "string" },
         "options": {
           "type": "array", "maxItems": 3,
           "items": {
             "type": "object", "additionalProperties": false,
-            "required": ["optionIndex", "cardId", "selectable"],
+            "required": ["optionIndex", "cardId", "slotIndex", "selectable"],
             "properties": {
               "optionIndex": { "type": "integer", "minimum": 0, "maximum": 2 },
               "cardId": { "type": ["string", "null"], "pattern": "^[a-z0-9_]+$" },
+              "slotIndex": { "type": "integer", "minimum": -1, "maximum": 3 },
               "selectable": { "type": "boolean" }
             }
           }

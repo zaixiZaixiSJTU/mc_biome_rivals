@@ -1,10 +1,10 @@
 namespace BiomeRivalsRules {
-  export const PROTOCOL_VERSION = 16;
-  export const RULESET_VERSION = 'prototype-0.19';
+  export const PROTOCOL_VERSION = 17;
+  export const RULESET_VERSION = 'prototype-0.20';
 
   export type MatchStatus = 'WAITING' | 'MULLIGAN' | 'ACTIVE' | 'FINISHED';
   export type CommandType = 'MULLIGAN' | 'DEPLOY_CARD' | 'PLAY_CARD' | 'RESOLVE_CHOICE' | 'ENTER_COMBAT' | 'ATTACK' | 'END_TURN' | 'CONCEDE';
-  export type EventType = 'MULLIGAN_COMPLETED' | 'MATCH_STARTED' | 'MATERIALS_CONSUMED' | 'CARD_DEPLOYED' | 'OBJECT_SUMMONED' | 'CARD_PLAYED' | 'CARD_BURIED' | 'CHOICE_OFFERED' | 'CHOICE_RESOLVED' | 'CARD_EXCAVATED' | 'CARD_DRAWN' | 'CARD_BURNED' | 'CARD_GENERATED' | 'FATIGUE_DAMAGE' | 'HERO_DAMAGED' | 'HERO_HEALED' | 'ARMOR_GAINED' | 'OBJECT_STATS_CHANGED' | 'OBJECT_STATUS_APPLIED' | 'OBJECT_STATUS_REMOVED' | 'PHASE_CHANGED' | 'ATTACK_RESOLVED' | 'OBJECT_DIED' | 'TURN_ENDED' | 'TURN_STARTED' | 'PLAYER_CONCEDED' | 'MATCH_ENDED';
+  export type EventType = 'MULLIGAN_COMPLETED' | 'MATCH_STARTED' | 'MATERIALS_CONSUMED' | 'CARD_DEPLOYED' | 'OBJECT_SUMMONED' | 'CARD_PLAYED' | 'CARD_EQUIPPED' | 'EQUIPMENT_DURABILITY_CHANGED' | 'EQUIPMENT_DESTROYED' | 'CARD_BURIED' | 'CHOICE_OFFERED' | 'CHOICE_RESOLVED' | 'CARD_EXCAVATED' | 'CARD_DRAWN' | 'CARD_BURNED' | 'CARD_GENERATED' | 'FATIGUE_DAMAGE' | 'HERO_DAMAGED' | 'HERO_HEALED' | 'ARMOR_GAINED' | 'OBJECT_STATS_CHANGED' | 'OBJECT_STATUS_APPLIED' | 'OBJECT_STATUS_REMOVED' | 'OBJECT_MOVED' | 'PHASE_CHANGED' | 'ATTACK_RESOLVED' | 'OBJECT_DIED' | 'TURN_ENDED' | 'TURN_STARTED' | 'PLAYER_CONCEDED' | 'MATCH_ENDED';
   export type DeploySlotKind = 'UNIT' | 'BUILDING';
   export type PaymentMethod = 'REDSTONE' | 'CRAFTING';
   export type TurnPhase = 'MAIN' | 'COMBAT';
@@ -35,6 +35,7 @@ namespace BiomeRivalsRules {
     buildingSlots: number;
     attack: number;
     health: number;
+    durability: number;
     keywords: CardKeyword[];
     hasCraftingRecipe: boolean;
     recipeId: string;
@@ -78,6 +79,7 @@ namespace BiomeRivalsRules {
   export interface PendingChoiceOptionState {
     optionIndex: number;
     cardId: string;
+    slotIndex: number;
     selectable: boolean;
   }
 
@@ -87,13 +89,16 @@ namespace BiomeRivalsRules {
     sourceCardId: string;
     sourceInstanceId: string;
     effectId: string;
-    kind: 'ARCHAEOLOGY_TOP_3';
+    kind: 'ARCHAEOLOGY_TOP_3' | 'MOVE_UNIT';
+    targetPlayerId: string;
+    targetInstanceId: string;
     options: PendingChoiceOptionState[];
   }
 
   export interface PendingChoiceOptionSnapshot {
     optionIndex: number;
     cardId: string | null;
+    slotIndex: number;
     selectable: boolean;
   }
 
@@ -103,7 +108,9 @@ namespace BiomeRivalsRules {
     sourceCardId: string;
     sourceInstanceId: string;
     effectId: string;
-    kind: 'ARCHAEOLOGY_TOP_3';
+    kind: 'ARCHAEOLOGY_TOP_3' | 'MOVE_UNIT';
+    targetPlayerId: string;
+    targetInstanceId: string;
     options: PendingChoiceOptionSnapshot[];
   }
 
@@ -121,9 +128,19 @@ namespace BiomeRivalsRules {
     excavatedThisTurn: boolean;
     discardPile: string[];
     fatigueCount: number;
+    equipment: EquipmentState | null;
+    heroHasAttacked: boolean;
     unitSlots: Array<string | null>;
     buildingSlots: Array<string | null>;
     battlefield: BattlefieldObjectState[];
+  }
+
+  export interface EquipmentState {
+    instanceId: string;
+    cardId: string;
+    attack: number;
+    durability: number;
+    maxDurability: number;
   }
 
   export interface MatchState {
@@ -157,6 +174,8 @@ namespace BiomeRivalsRules {
     excavatedThisTurn: boolean;
     discardPile: string[];
     fatigueCount: number;
+    equipment: EquipmentState | null;
+    heroHasAttacked: boolean;
     unitSlots: Array<string | null>;
     buildingSlots: Array<string | null>;
     battlefield: BattlefieldObjectState[];

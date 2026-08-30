@@ -1263,6 +1263,38 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(target.Statuses, Is.Empty);
         }
 
+        [Test]
+        public void RiptideTridentEquipsHeroAndMovesASurvivingTargetToAnAdjacentWorldSlot()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { "or_006" });
+            Assert.That(registry.TryGetDefinition("or_006", out var trident), Is.True);
+            Assert.That(trident.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+            Assert.That(registry.TryGetDefinition("si_005", out var polarBear), Is.True);
+            match.ResetOpponent(new[] { polarBear, polarBear });
+
+            var equipped = match.ApplyPlayCard(trident, match.CreatePlayCardCommand("or_006"));
+            Assert.That(equipped.Accepted, Is.True);
+            Assert.That(match.PlayerEquipment.CardId, Is.EqualTo("or_006"));
+            Assert.That(match.PlayerEquipment.Durability, Is.EqualTo(3));
+            Assert.That(match.ApplyEnterCombat(match.CreateEnterCombatCommand()).Accepted, Is.True);
+
+            var target = match.GetObject(false, DemoSlotKind.Unit, 2);
+            var attacked = match.ApplyAttack(match.CreateAttackCommand(MatchAttackerIds.Hero, "UNIT", target.InstanceId));
+            Assert.That(attacked.Accepted, Is.True);
+            Assert.That(match.PlayerHeroHasAttacked, Is.True);
+            Assert.That(match.PlayerEquipment.Durability, Is.EqualTo(2));
+            Assert.That(match.PlayerLife, Is.EqualTo(27));
+            Assert.That(match.PendingChoice.kind, Is.EqualTo("MOVE_UNIT"));
+            Assert.That(match.PendingChoice.options.Select(value => value.slotIndex), Is.EquivalentTo(new[] { 1, 3 }));
+
+            var moved = match.ApplyResolveChoice(match.CreateResolveChoiceCommand(match.PendingChoice.choiceId, 0));
+            Assert.That(moved.Accepted, Is.True);
+            Assert.That(match.GetObject(false, DemoSlotKind.Unit, 1).InstanceId, Is.EqualTo(target.InstanceId));
+            Assert.That(match.OpponentUnitSlots[2], Is.Null.Or.Empty);
+        }
+
         private static float ProjectedWidth(Camera camera, Transform surface, Vector3[] vertices)
         {
             var min = vertices.Min(vertex => camera.WorldToViewportPoint(surface.TransformPoint(vertex)).x);

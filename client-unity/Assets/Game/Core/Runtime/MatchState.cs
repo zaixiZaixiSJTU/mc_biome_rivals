@@ -38,6 +38,16 @@ namespace BiomeRivals.Core
     }
 
     [Serializable]
+    public sealed class EquipmentStateDto
+    {
+        public string instanceId = string.Empty;
+        public string cardId = string.Empty;
+        public int attack;
+        public int durability;
+        public int maxDurability;
+    }
+
+    [Serializable]
     public sealed class PlayerStateDto
     {
         public string playerId = string.Empty;
@@ -53,6 +63,8 @@ namespace BiomeRivals.Core
         public bool excavatedThisTurn;
         public string[] discardPile = Array.Empty<string>();
         public int fatigueCount;
+        public EquipmentStateDto equipment;
+        public bool heroHasAttacked;
         public string[] unitSlots = Array.Empty<string>();
         public string[] buildingSlots = Array.Empty<string>();
         public BattlefieldObjectStateDto[] battlefield = Array.Empty<BattlefieldObjectStateDto>();
@@ -95,6 +107,14 @@ namespace BiomeRivals.Core
                     throw new InvalidOperationException("Snapshot contains an unsupported player faction.");
                 else if (player.buriedCount < 0 || player.buriedCount > player.deckCount)
                     throw new InvalidOperationException("Snapshot contains an invalid buried card count.");
+                if (player.equipment != null && string.IsNullOrEmpty(player.equipment.instanceId) &&
+                    string.IsNullOrEmpty(player.equipment.cardId) && player.equipment.attack == 0 &&
+                    player.equipment.durability == 0 && player.equipment.maxDurability == 0)
+                    player.equipment = null;
+                if (player.equipment != null && (string.IsNullOrWhiteSpace(player.equipment.instanceId) ||
+                    string.IsNullOrWhiteSpace(player.equipment.cardId) || player.equipment.attack <= 0 ||
+                    player.equipment.durability <= 0 || player.equipment.durability > player.equipment.maxDurability))
+                    throw new InvalidOperationException("Snapshot contains invalid equipment.");
                 foreach (var battlefieldObject in player.battlefield ?? Array.Empty<BattlefieldObjectStateDto>())
                 {
                     if (battlefieldObject == null) throw new InvalidOperationException("Snapshot contains a missing battlefield object.");
@@ -208,6 +228,36 @@ namespace BiomeRivals.Core
                     if (playedDiscard.Count != payload.discardCount) throw new InvalidOperationException("Play event discard count does not match projected discard pile.");
                     playingPlayer.discardPile = playedDiscard.ToArray();
                     break;
+                case MatchEventTypes.CardEquipped:
+                    var equippingPlayer = FindPlayer(payload.playerId);
+                    equippingPlayer.hand = RemoveFirst(equippingPlayer.hand, payload.cardId);
+                    if (equippingPlayer.hand.Length != payload.handCount)
+                        throw new InvalidOperationException("Equipment event hand count does not match projected hand.");
+                    equippingPlayer.redstone = payload.redstone;
+                    equippingPlayer.equipment = new EquipmentStateDto
+                    {
+                        instanceId = payload.instanceId, cardId = payload.cardId, attack = payload.attack,
+                        durability = payload.durability, maxDurability = payload.maxDurability
+                    };
+                    Current.nextInstanceId = payload.nextInstanceId;
+                    break;
+                case MatchEventTypes.EquipmentDurabilityChanged:
+                    var durabilityPlayer = FindPlayer(payload.playerId);
+                    if (durabilityPlayer.equipment == null || durabilityPlayer.equipment.instanceId != payload.instanceId)
+                        throw new InvalidOperationException("Durability event references unknown equipment.");
+                    durabilityPlayer.equipment.durability = payload.durability;
+                    durabilityPlayer.equipment.maxDurability = payload.maxDurability;
+                    break;
+                case MatchEventTypes.EquipmentDestroyed:
+                    var destroyedEquipmentPlayer = FindPlayer(payload.playerId);
+                    if (destroyedEquipmentPlayer.equipment == null || destroyedEquipmentPlayer.equipment.instanceId != payload.instanceId)
+                        throw new InvalidOperationException("Destroy event references unknown equipment.");
+                    destroyedEquipmentPlayer.equipment = null;
+                    var equipmentDiscard = new List<string>(destroyedEquipmentPlayer.discardPile ?? Array.Empty<string>()) { payload.cardId };
+                    if (equipmentDiscard.Count != payload.discardCount)
+                        throw new InvalidOperationException("Equipment destroy discard count does not match projection.");
+                    destroyedEquipmentPlayer.discardPile = equipmentDiscard.ToArray();
+                    break;
                 case MatchEventTypes.CardBuried:
                     var buryingPlayer = FindPlayer(payload.playerId);
                     if (payload.deckCount != buryingPlayer.deckCount + 1 || payload.buriedCount != buryingPlayer.buriedCount + 1)
@@ -225,6 +275,8 @@ namespace BiomeRivals.Core
                         sourceInstanceId = payload.sourceInstanceId,
                         effectId = payload.effectId,
                         kind = payload.kind,
+                        targetPlayerId = payload.targetPlayerId,
+                        targetInstanceId = payload.targetInstanceId,
                         options = CloneChoiceOptions(payload.options)
                     };
                     ValidatePendingChoice(Current, offeredChoice, "Choice event");
@@ -344,14 +396,34 @@ namespace BiomeRivals.Core
                     clearedObject.attack = payload.attack;
                     clearedObject.health = payload.health;
                     break;
+                case MatchEventTypes.ObjectMoved:
+                    var movedPlayer = FindPlayer(payload.playerId);
+                    var movedObject = FindObject(movedPlayer, payload.instanceId);
+                    if (movedObject.cardType != "UNIT" || movedObject.slotIndex != payload.fromSlotIndex ||
+                        payload.toSlotIndex < 0 || payload.toSlotIndex >= movedPlayer.unitSlots.Length ||
+                        !string.IsNullOrEmpty(movedPlayer.unitSlots[payload.toSlotIndex]))
+                        throw new InvalidOperationException("Move event contains an invalid unit destination.");
+                    movedPlayer.unitSlots[payload.fromSlotIndex] = null;
+                    movedPlayer.unitSlots[payload.toSlotIndex] = movedObject.instanceId;
+                    movedObject.slotIndex = payload.toSlotIndex;
+                    break;
                 case MatchEventTypes.PhaseChanged:
                     Current.phase = payload.phase;
                     break;
                 case MatchEventTypes.AttackResolved:
                     var attackerPlayer = FindPlayer(payload.attackerPlayerId);
-                    var attacker = FindObject(attackerPlayer, payload.attackerInstanceId);
-                    attacker.health = payload.attackerHealth;
-                    attacker.hasAttacked = true;
+                    if (payload.attackerInstanceId == MatchAttackerIds.Hero)
+                    {
+                        attackerPlayer.life = payload.attackerHealth;
+                        attackerPlayer.armor = payload.attackerArmor;
+                        attackerPlayer.heroHasAttacked = true;
+                    }
+                    else
+                    {
+                        var attacker = FindObject(attackerPlayer, payload.attackerInstanceId);
+                        attacker.health = payload.attackerHealth;
+                        attacker.hasAttacked = true;
+                    }
                     var targetPlayer = FindPlayer(payload.targetPlayerId);
                     if (payload.targetType == "HERO")
                     {
@@ -379,6 +451,7 @@ namespace BiomeRivals.Core
                     Current.phase = payload.phase;
                     Current.activePlayerIndex = payload.activePlayerIndex;
                     activePlayer.excavatedThisTurn = false;
+                    activePlayer.heroHasAttacked = false;
                     activePlayer.redstone = payload.redstone;
                     activePlayer.redstoneCapacity = payload.redstoneCapacity;
                     foreach (var battlefieldObject in activePlayer.battlefield ?? Array.Empty<BattlefieldObjectStateDto>())
@@ -410,16 +483,22 @@ namespace BiomeRivals.Core
 
         private static void ValidatePendingChoice(MatchStateDto state, PendingChoiceDto choice, string source)
         {
-            if (choice == null || choice.kind != "ARCHAEOLOGY_TOP_3" || choice.effectId != "effect.db_003.01" ||
-                choice.sourceCardId != "db_003" || string.IsNullOrWhiteSpace(choice.choiceId) ||
-                string.IsNullOrWhiteSpace(choice.sourceInstanceId) || choice.options == null || choice.options.Length > 3 ||
-                state.status != "ACTIVE" || state.phase != "MAIN")
+            var archaeology = choice != null && choice.kind == "ARCHAEOLOGY_TOP_3" &&
+                choice.effectId == "effect.db_003.01" && choice.sourceCardId == "db_003";
+            var movement = choice != null && choice.kind == "MOVE_UNIT" &&
+                choice.effectId == "effect.or_006.01" && choice.sourceCardId == "or_006";
+            if (choice == null || (!archaeology && !movement) || string.IsNullOrWhiteSpace(choice.choiceId) ||
+                string.IsNullOrWhiteSpace(choice.sourceInstanceId) || choice.options == null ||
+                choice.options.Length > (movement ? 2 : 3) || state.status != "ACTIVE" ||
+                (archaeology && state.phase != "MAIN") || (movement && state.phase != "COMBAT"))
                 throw new InvalidOperationException($"{source} contains an invalid pending card choice.");
             var owner = FindPlayer(state, choice.playerId);
+            var sourceValid = archaeology
+                ? (owner?.battlefield ?? Array.Empty<BattlefieldObjectStateDto>()).Any(value =>
+                    value != null && value.instanceId == choice.sourceInstanceId && value.cardId == choice.sourceCardId)
+                : !string.IsNullOrWhiteSpace(choice.targetPlayerId) && !string.IsNullOrWhiteSpace(choice.targetInstanceId);
             if (owner == null || state.activePlayerIndex < 0 || state.activePlayerIndex >= state.players.Length ||
-                !ReferenceEquals(state.players[state.activePlayerIndex], owner) ||
-                !(owner.battlefield ?? Array.Empty<BattlefieldObjectStateDto>()).Any(value =>
-                    value != null && value.instanceId == choice.sourceInstanceId && value.cardId == choice.sourceCardId))
+                !ReferenceEquals(state.players[state.activePlayerIndex], owner) || !sourceValid)
                 throw new InvalidOperationException($"{source} pending choice has no active source object.");
 
             var isOwnerProjection = choice.playerId == state.viewerPlayerId;
@@ -428,7 +507,9 @@ namespace BiomeRivals.Core
                 var option = choice.options[index];
                 if (option == null || option.optionIndex != index ||
                     (isOwnerProjection && string.IsNullOrWhiteSpace(option.cardId)) ||
-                    (!isOwnerProjection && (!string.IsNullOrEmpty(option.cardId) || option.selectable)))
+                    (archaeology && !isOwnerProjection && (!string.IsNullOrEmpty(option.cardId) || option.selectable)) ||
+                    (archaeology && option.slotIndex != -1) || (movement && option.slotIndex < 0) ||
+                    (movement && !isOwnerProjection && option.selectable))
                     throw new InvalidOperationException($"{source} pending choice violates option ordering or privacy projection.");
             }
         }
@@ -444,6 +525,7 @@ namespace BiomeRivals.Core
                 {
                     optionIndex = option.optionIndex,
                     cardId = option.cardId,
+                    slotIndex = option.slotIndex,
                     selectable = option.selectable
                 };
             }

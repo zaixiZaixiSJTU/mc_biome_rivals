@@ -50,6 +50,8 @@ namespace BiomeRivalsRules {
       excavatedThisTurn: false,
       discardPile: [],
       fatigueCount: 0,
+      equipment: null,
+      heroHasAttacked: false,
       unitSlots: [null, null, null, null],
       buildingSlots: [null, null, null],
       battlefield: []
@@ -125,6 +127,12 @@ namespace BiomeRivalsRules {
           excavatedThisTurn: player.excavatedThisTurn,
           discardPile: player.discardPile.slice(),
           fatigueCount: player.fatigueCount,
+          equipment: player.equipment === null ? null : {
+            instanceId: player.equipment.instanceId, cardId: player.equipment.cardId,
+            attack: player.equipment.attack, durability: player.equipment.durability,
+            maxDurability: player.equipment.maxDurability
+          },
+          heroHasAttacked: player.heroHasAttacked,
           unitSlots: player.unitSlots.slice(),
           buildingSlots: player.buildingSlots.slice(),
           battlefield: player.battlefield.map(function (object): BattlefieldObjectState {
@@ -159,11 +167,15 @@ namespace BiomeRivalsRules {
         sourceInstanceId: state.pendingChoice.sourceInstanceId,
         effectId: state.pendingChoice.effectId,
         kind: state.pendingChoice.kind,
+        targetPlayerId: state.pendingChoice.targetPlayerId,
+        targetInstanceId: state.pendingChoice.targetInstanceId,
         options: state.pendingChoice.options.map(function (option): PendingChoiceOptionSnapshot {
           const ownsChoice = state.pendingChoice !== null && state.pendingChoice.playerId === viewerPlayerId;
+          const publicMoveChoice = state.pendingChoice !== null && state.pendingChoice.kind === 'MOVE_UNIT';
           return {
             optionIndex: option.optionIndex,
-            cardId: ownsChoice ? option.cardId : null,
+            cardId: ownsChoice || publicMoveChoice ? option.cardId : null,
+            slotIndex: option.slotIndex,
             selectable: ownsChoice && option.selectable
           };
         })
@@ -183,9 +195,14 @@ namespace BiomeRivalsRules {
         Object.keys(event.payload).forEach(function (key): void { payload[key] = event.payload[key]; });
         if (event.type === 'CARD_DRAWN' && payload.playerId !== viewerPlayerId) payload.cardId = null;
         if (event.type === 'CARD_GENERATED' && payload.playerId !== viewerPlayerId && payload.destination === 'HAND') payload.cardId = null;
-        if (event.type === 'CHOICE_OFFERED' && payload.playerId !== viewerPlayerId && Array.isArray(payload.options)) {
+        if (event.type === 'CHOICE_OFFERED' && payload.playerId !== viewerPlayerId && payload.kind !== 'MOVE_UNIT' && Array.isArray(payload.options)) {
           payload.options = (payload.options as PendingChoiceOptionState[]).map(function (option): PendingChoiceOptionSnapshot {
-            return { optionIndex: option.optionIndex, cardId: null, selectable: false };
+            return { optionIndex: option.optionIndex, cardId: null, slotIndex: option.slotIndex, selectable: false };
+          });
+        }
+        if (event.type === 'CHOICE_OFFERED' && payload.playerId !== viewerPlayerId && payload.kind === 'MOVE_UNIT' && Array.isArray(payload.options)) {
+          payload.options = (payload.options as PendingChoiceOptionState[]).map(function (option): PendingChoiceOptionState {
+            return { optionIndex: option.optionIndex, cardId: option.cardId, slotIndex: option.slotIndex, selectable: false };
           });
         }
         if (event.type === 'MULLIGAN_COMPLETED' && payload.playerId !== viewerPlayerId && Array.isArray(payload.hand)) {
@@ -223,6 +240,12 @@ namespace BiomeRivalsRules {
           excavatedThisTurn: player.excavatedThisTurn,
           discardPile: player.discardPile.slice(),
           fatigueCount: player.fatigueCount,
+          equipment: player.equipment === null ? null : {
+            instanceId: player.equipment.instanceId, cardId: player.equipment.cardId,
+            attack: player.equipment.attack, durability: player.equipment.durability,
+            maxDurability: player.equipment.maxDurability
+          },
+          heroHasAttacked: player.heroHasAttacked,
           unitSlots: player.unitSlots.slice(),
           buildingSlots: player.buildingSlots.slice(),
           battlefield: player.battlefield.map(function (object): BattlefieldObjectState {
@@ -264,8 +287,10 @@ namespace BiomeRivalsRules {
         sourceInstanceId: state.pendingChoice.sourceInstanceId,
         effectId: state.pendingChoice.effectId,
         kind: state.pendingChoice.kind,
+        targetPlayerId: state.pendingChoice.targetPlayerId,
+        targetInstanceId: state.pendingChoice.targetInstanceId,
         options: state.pendingChoice.options.map(function (option): PendingChoiceOptionState {
-          return { optionIndex: option.optionIndex, cardId: option.cardId, selectable: option.selectable };
+          return { optionIndex: option.optionIndex, cardId: option.cardId, slotIndex: option.slotIndex, selectable: option.selectable };
         })
       },
       winnerPlayerId: state.winnerPlayerId,
@@ -934,6 +959,7 @@ namespace BiomeRivalsRules {
         options.push({
           optionIndex: optionIndex,
           cardId: cardId,
+          slotIndex: -1,
           selectable: player.buriedCardIds.indexOf(cardId) >= 0
         });
       }
@@ -944,6 +970,8 @@ namespace BiomeRivalsRules {
         sourceInstanceId: source.instanceId,
         effectId: effectId,
         kind: 'ARCHAEOLOGY_TOP_3',
+        targetPlayerId: '',
+        targetInstanceId: '',
         options: options
       };
       emit('CHOICE_OFFERED', {
@@ -953,8 +981,46 @@ namespace BiomeRivalsRules {
         sourceInstanceId: source.instanceId,
         effectId: effectId,
         kind: next.pendingChoice.kind,
+        targetPlayerId: '',
+        targetInstanceId: '',
         options: options.map(function (option): PendingChoiceOptionState {
-          return { optionIndex: option.optionIndex, cardId: option.cardId, selectable: option.selectable };
+          return { optionIndex: option.optionIndex, cardId: option.cardId, slotIndex: option.slotIndex, selectable: option.selectable };
+        })
+      });
+    }
+
+    function offerMoveChoice(player: PlayerState, equipment: EquipmentState, targetPlayer: PlayerState,
+      target: BattlefieldObjectState, effectId: string): void {
+      const options: PendingChoiceOptionState[] = [];
+      const candidates = [target.slotIndex - 1, target.slotIndex + 1];
+      for (let index = 0; index < candidates.length; index += 1) {
+        const slotIndex = candidates[index]!;
+        if (slotIndex < 0 || slotIndex >= targetPlayer.unitSlots.length || targetPlayer.unitSlots[slotIndex] !== null) continue;
+        options.push({ optionIndex: options.length, cardId: target.cardId, slotIndex: slotIndex, selectable: true });
+      }
+      if (options.length === 0) return;
+      next.pendingChoice = {
+        choiceId: 'choice-' + String(next.lastEventId + 1),
+        playerId: player.playerId,
+        sourceCardId: equipment.cardId,
+        sourceInstanceId: equipment.instanceId,
+        effectId: effectId,
+        kind: 'MOVE_UNIT',
+        targetPlayerId: targetPlayer.playerId,
+        targetInstanceId: target.instanceId,
+        options: options
+      };
+      emit('CHOICE_OFFERED', {
+        choiceId: next.pendingChoice.choiceId,
+        playerId: player.playerId,
+        sourceCardId: equipment.cardId,
+        sourceInstanceId: equipment.instanceId,
+        effectId: effectId,
+        kind: 'MOVE_UNIT',
+        targetPlayerId: targetPlayer.playerId,
+        targetInstanceId: target.instanceId,
+        options: options.map(function (option): PendingChoiceOptionState {
+          return { optionIndex: option.optionIndex, cardId: option.cardId, slotIndex: option.slotIndex, selectable: option.selectable };
         })
       });
     }
@@ -975,8 +1041,8 @@ namespace BiomeRivalsRules {
       if (typeof cardId !== 'string') return reject(state, 'INVALID_COMMAND', 'PLAY_CARD requires cardId');
       const definition = getCardDefinition(cardId);
       if (definition === null) return reject(state, 'UNKNOWN_CARD', 'card is not registered');
-      if (definition.cardType !== 'SPELL' && definition.cardType !== 'MATERIAL') {
-        return reject(state, 'INVALID_TARGET', 'PLAY_CARD currently accepts only spells and materials');
+      if (definition.cardType !== 'SPELL' && definition.cardType !== 'MATERIAL' && definition.cardType !== 'EQUIPMENT') {
+        return reject(state, 'INVALID_TARGET', 'PLAY_CARD accepts spells, materials, and equipment');
       }
       if (definition.effectImplementationStatus !== 'IMPLEMENTED' || definition.effectIds.length !== 1) {
         return reject(state, 'EFFECT_NOT_IMPLEMENTED', 'card effect is registered but not implemented');
@@ -984,7 +1050,7 @@ namespace BiomeRivalsRules {
       const effectId = definition.effectIds[0]!;
       if (effectId !== 'effect.db_002.01' && effectId !== 'effect.db_006.01' && effectId !== 'effect.nt_006.01' &&
           effectId !== 'effect.si_001.01' && effectId !== 'effect.si_006.01' && effectId !== 'effect.tk_005.01' &&
-          effectId !== 'effect.tk_009.01' && effectId !== 'effect.tk_010.01' &&
+          effectId !== 'effect.tk_009.01' && effectId !== 'effect.tk_010.01' && effectId !== 'effect.or_006.01' &&
           effectId !== 'effect.tk_016.01') {
         return reject(state, 'EFFECT_NOT_IMPLEMENTED', 'effect handler is not registered');
       }
@@ -1021,6 +1087,31 @@ namespace BiomeRivalsRules {
 
       player.hand.splice(handIndex, 1);
       player.redstone -= definition.cost;
+      if (definition.cardType === 'EQUIPMENT') {
+        if (definition.durability <= 0 || definition.attack <= 0) {
+          return reject(state, 'INVALID_STATE', 'equipment requires positive attack and durability');
+        }
+        if (player.equipment !== null) {
+          const replaced = player.equipment;
+          player.discardPile.push(replaced.cardId);
+          emit('EQUIPMENT_DESTROYED', {
+            playerId: player.playerId, instanceId: replaced.instanceId, cardId: replaced.cardId,
+            reason: 'REPLACED', discardCount: player.discardPile.length
+          });
+        }
+        const equipment: EquipmentState = {
+          instanceId: 'equipment-' + String(next.nextInstanceId++), cardId: cardId,
+          attack: definition.attack, durability: definition.durability, maxDurability: definition.durability
+        };
+        player.equipment = equipment;
+        emit('CARD_EQUIPPED', {
+          playerId: player.playerId, instanceId: equipment.instanceId, cardId: equipment.cardId,
+          attack: equipment.attack, durability: equipment.durability, maxDurability: equipment.maxDurability,
+          effectId: effectId, redstone: player.redstone, handCount: player.hand.length,
+          discardCount: player.discardPile.length, nextInstanceId: next.nextInstanceId
+        });
+        return null;
+      }
       player.discardPile.push(cardId);
       emit('CARD_PLAYED', {
         playerId: player.playerId,
@@ -1173,6 +1264,46 @@ namespace BiomeRivalsRules {
           typeof selectedOptionIndex !== 'number' || selectedOptionIndex % 1 !== 0) {
         return reject(state, 'INVALID_CHOICE', 'RESOLVE_CHOICE requires the current choiceId and an integer selectedOptionIndex');
       }
+      if (pendingChoice.kind === 'MOVE_UNIT') {
+        let moveOption: PendingChoiceOptionState | null = null;
+        if (selectedOptionIndex !== -1) {
+          for (let index = 0; index < pendingChoice.options.length; index += 1) {
+            const option = pendingChoice.options[index]!;
+            if (option.optionIndex === selectedOptionIndex && option.selectable) moveOption = option;
+          }
+          if (moveOption === null) return reject(state, 'INVALID_CHOICE', 'the selected movement destination is not available');
+        }
+        const targetPlayer = next.players.filter(function (candidate): boolean {
+          return candidate.playerId === pendingChoice.targetPlayerId;
+        })[0];
+        if (targetPlayer === undefined) throw new Error('pending movement target player is missing');
+        const target = findObject(targetPlayer, pendingChoice.targetInstanceId);
+        if (target === null || target.cardType !== 'UNIT') throw new Error('pending movement target unit is missing');
+        const fromSlotIndex = target.slotIndex;
+        next.pendingChoice = null;
+        emit('CHOICE_RESOLVED', {
+          choiceId: pendingChoice.choiceId, playerId: actorPlayerId,
+          sourceCardId: pendingChoice.sourceCardId, sourceInstanceId: pendingChoice.sourceInstanceId,
+          effectId: pendingChoice.effectId, kind: pendingChoice.kind,
+          selectedOptionIndex: selectedOptionIndex, selectedCardId: null,
+          selectedSlotIndex: moveOption === null ? -1 : moveOption.slotIndex
+        });
+        if (moveOption !== null) {
+          if (Math.abs(moveOption.slotIndex - fromSlotIndex) !== 1 || targetPlayer.unitSlots[moveOption.slotIndex] !== null) {
+            throw new Error('pending movement destination changed before resolution');
+          }
+          targetPlayer.unitSlots[fromSlotIndex] = null;
+          targetPlayer.unitSlots[moveOption.slotIndex] = target.instanceId;
+          target.slotIndex = moveOption.slotIndex;
+          emit('OBJECT_MOVED', {
+            playerId: targetPlayer.playerId, instanceId: target.instanceId, cardId: target.cardId,
+            sourcePlayerId: actorPlayerId, sourceCardId: pendingChoice.sourceCardId,
+            sourceInstanceId: pendingChoice.sourceInstanceId, effectId: pendingChoice.effectId,
+            fromSlotIndex: fromSlotIndex, toSlotIndex: moveOption.slotIndex
+          });
+        }
+        return null;
+      }
       const selectableOptions = pendingChoice.options.filter(function (option): boolean { return option.selectable; });
       let selectedOption: PendingChoiceOptionState | null = null;
       if (selectableOptions.length === 0) {
@@ -1194,7 +1325,8 @@ namespace BiomeRivalsRules {
         effectId: pendingChoice.effectId,
         kind: pendingChoice.kind,
         selectedOptionIndex: selectedOptionIndex,
-        selectedCardId: selectedOption === null ? null : selectedOption.cardId
+        selectedCardId: selectedOption === null ? null : selectedOption.cardId,
+        selectedSlotIndex: -1
       });
       if (selectedOption !== null) {
         const deckIndex = player.deck.length - 1 - selectedOption.optionIndex;
@@ -1231,16 +1363,25 @@ namespace BiomeRivalsRules {
       const defenderIndex = actorIndex === 0 ? 1 : 0;
       const defenderPlayer = next.players[defenderIndex]!;
       const attacker = findObject(attackerPlayer, attackerInstanceId);
-      if (attacker === null || attacker.cardType !== 'UNIT') {
-        return reject(state, 'INVALID_ATTACKER', 'attacker must be a living friendly unit');
-      }
-      if (attacker.statuses.some(function (status): boolean { return status.statusId === 'SLOW'; })) {
-        return reject(state, 'ATTACKER_NOT_READY', 'unit cannot attack while slowed');
-      }
-      if (attacker.attack <= 0) return reject(state, 'INVALID_ATTACKER', 'attacker must have attack');
-      if (attacker.hasAttacked) return reject(state, 'ATTACK_ALREADY_USED', 'unit has already attacked this turn');
-      if (attacker.summonedTurn === state.turn && attacker.keywords.indexOf('CHARGE') < 0) {
-        return reject(state, 'ATTACKER_NOT_READY', 'unit cannot attack on its summoned turn without CHARGE');
+      const heroAttack = attackerInstanceId === 'HERO';
+      const attackingEquipment = heroAttack ? attackerPlayer.equipment : null;
+      if (heroAttack) {
+        if (attackingEquipment === null || attackingEquipment.attack <= 0 || attackingEquipment.durability <= 0) {
+          return reject(state, 'INVALID_ATTACKER', 'hero requires a usable equipment card to attack');
+        }
+        if (attackerPlayer.heroHasAttacked) return reject(state, 'ATTACK_ALREADY_USED', 'hero has already attacked this turn');
+      } else {
+        if (attacker === null || attacker.cardType !== 'UNIT') {
+          return reject(state, 'INVALID_ATTACKER', 'attacker must be a living friendly unit or HERO');
+        }
+        if (attacker.statuses.some(function (status): boolean { return status.statusId === 'SLOW'; })) {
+          return reject(state, 'ATTACKER_NOT_READY', 'unit cannot attack while slowed');
+        }
+        if (attacker.attack <= 0) return reject(state, 'INVALID_ATTACKER', 'attacker must have attack');
+        if (attacker.hasAttacked) return reject(state, 'ATTACK_ALREADY_USED', 'unit has already attacked this turn');
+        if (attacker.summonedTurn === state.turn && attacker.keywords.indexOf('CHARGE') < 0) {
+          return reject(state, 'ATTACKER_NOT_READY', 'unit cannot attack on its summoned turn without CHARGE');
+        }
       }
 
       const tauntTargets = defenderPlayer.battlefield.filter(function (object): boolean {
@@ -1252,18 +1393,21 @@ namespace BiomeRivalsRules {
         if (!targetsTaunt) return reject(state, 'TAUNT_TARGET_REQUIRED', 'a legal enemy TAUNT object must be attacked first');
       }
 
-      attacker.hasAttacked = true;
+      const attackValue = heroAttack ? attackingEquipment!.attack : attacker!.attack;
+      if (heroAttack) attackerPlayer.heroHasAttacked = true;
+      else attacker!.hasAttacked = true;
       if (targetType === 'HERO') {
-        damageHero(defenderPlayer, attacker.attack);
+        damageHero(defenderPlayer, attackValue);
         emit('ATTACK_RESOLVED', {
           attackerPlayerId: attackerPlayer.playerId,
-          attackerInstanceId: attacker.instanceId,
+          attackerInstanceId: heroAttack ? 'HERO' : attacker!.instanceId,
           targetPlayerId: defenderPlayer.playerId,
           targetType: 'HERO',
           targetInstanceId: null,
-          damageToTarget: attacker.attack,
+          damageToTarget: attackValue,
           damageToAttacker: 0,
-          attackerHealth: attacker.health,
+          attackerHealth: heroAttack ? attackerPlayer.life : attacker!.health,
+          attackerArmor: heroAttack ? attackerPlayer.armor : 0,
           targetHealth: defenderPlayer.life,
           targetArmor: defenderPlayer.armor
         });
@@ -1274,29 +1418,75 @@ namespace BiomeRivalsRules {
           return reject(state, 'INVALID_TARGET', 'target is not a living enemy object of the requested type');
         }
         const retaliation = target.cardType === 'UNIT' ? target.attack : 0;
-        target.health = Math.max(0, target.health - attacker.attack);
-        attacker.health = Math.max(0, attacker.health - retaliation);
+        target.health = Math.max(0, target.health - attackValue);
+        if (heroAttack) damageHero(attackerPlayer, retaliation);
+        else attacker!.health = Math.max(0, attacker!.health - retaliation);
         const combatKillCredits: { [instanceId: string]: string } = {};
         if (target.health === 0) combatKillCredits[target.instanceId] = attackerPlayer.playerId;
-        if (attacker.health === 0 && retaliation > 0) combatKillCredits[attacker.instanceId] = defenderPlayer.playerId;
+        if (!heroAttack && attacker!.health === 0 && retaliation > 0) combatKillCredits[attacker!.instanceId] = defenderPlayer.playerId;
         emit('ATTACK_RESOLVED', {
           attackerPlayerId: attackerPlayer.playerId,
-          attackerInstanceId: attacker.instanceId,
+          attackerInstanceId: heroAttack ? 'HERO' : attacker!.instanceId,
           targetPlayerId: defenderPlayer.playerId,
           targetType: targetType,
           targetInstanceId: target.instanceId,
-          damageToTarget: attacker.attack,
+          damageToTarget: attackValue,
           damageToAttacker: retaliation,
-          attackerHealth: attacker.health,
+          attackerHealth: heroAttack ? attackerPlayer.life : attacker!.health,
+          attackerArmor: heroAttack ? attackerPlayer.armor : 0,
           targetHealth: target.health,
           targetArmor: 0
         });
         settleDeaths(attackerPlayer, defenderPlayer, combatKillCredits);
+        if (heroAttack && attackingEquipment !== null) {
+          attackingEquipment.durability -= 1;
+          emit('EQUIPMENT_DURABILITY_CHANGED', {
+            playerId: attackerPlayer.playerId, instanceId: attackingEquipment.instanceId,
+            cardId: attackingEquipment.cardId, durability: attackingEquipment.durability,
+            maxDurability: attackingEquipment.maxDurability
+          });
+          if (attackingEquipment.durability === 0) {
+            attackerPlayer.discardPile.push(attackingEquipment.cardId);
+            attackerPlayer.equipment = null;
+            emit('EQUIPMENT_DESTROYED', {
+              playerId: attackerPlayer.playerId, instanceId: attackingEquipment.instanceId,
+              cardId: attackingEquipment.cardId, reason: 'DURABILITY',
+              discardCount: attackerPlayer.discardPile.length
+            });
+          }
+          const survivingTarget = findObject(defenderPlayer, target.instanceId);
+          if (attackingEquipment.cardId === 'or_006' && survivingTarget !== null && survivingTarget.cardType === 'UNIT') {
+            offerMoveChoice(attackerPlayer, attackingEquipment, defenderPlayer, survivingTarget, 'effect.or_006.01');
+          }
+        }
+      }
+
+      if (heroAttack && targetType === 'HERO' && attackingEquipment !== null) {
+        attackingEquipment.durability -= 1;
+        emit('EQUIPMENT_DURABILITY_CHANGED', {
+          playerId: attackerPlayer.playerId, instanceId: attackingEquipment.instanceId,
+          cardId: attackingEquipment.cardId, durability: attackingEquipment.durability,
+          maxDurability: attackingEquipment.maxDurability
+        });
+        if (attackingEquipment.durability === 0) {
+          attackerPlayer.discardPile.push(attackingEquipment.cardId);
+          attackerPlayer.equipment = null;
+          emit('EQUIPMENT_DESTROYED', {
+            playerId: attackerPlayer.playerId, instanceId: attackingEquipment.instanceId,
+            cardId: attackingEquipment.cardId, reason: 'DURABILITY', discardCount: attackerPlayer.discardPile.length
+          });
+        }
       }
 
       if (defenderPlayer.life <= 0) {
         next.status = 'FINISHED';
         next.winnerPlayerId = attackerPlayer.playerId;
+        emit('MATCH_ENDED', { winnerPlayerId: next.winnerPlayerId, reason: 'HERO_DEFEATED' });
+      }
+      if (attackerPlayer.life <= 0 && next.status !== 'FINISHED') {
+        next.status = 'FINISHED';
+        next.winnerPlayerId = defenderPlayer.playerId;
+        next.pendingChoice = null;
         emit('MATCH_ENDED', { winnerPlayerId: next.winnerPlayerId, reason: 'HERO_DEFEATED' });
       }
       return null;
@@ -1369,6 +1559,7 @@ namespace BiomeRivalsRules {
         if (next.activePlayerIndex === 0) next.turn += 1;
         const nextPlayer = next.players[next.activePlayerIndex]!;
         nextPlayer.excavatedThisTurn = false;
+        nextPlayer.heroHasAttacked = false;
         next.phase = 'MAIN';
         if (next.turn > 1) nextPlayer.redstoneCapacity = Math.min(10, nextPlayer.redstoneCapacity + 1);
         nextPlayer.redstone = nextPlayer.redstoneCapacity;
