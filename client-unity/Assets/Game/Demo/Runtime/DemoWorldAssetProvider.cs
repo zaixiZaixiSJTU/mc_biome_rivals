@@ -53,10 +53,14 @@ namespace BiomeRivals.Demo
         {
             var material = CreateBlockMaterial(name, fallback, textureKey, Color.black, preferredShader);
             material.enableInstancing = false;
-            if (LoadBlockTexture(textureKey) != null)
+            var texture = LoadBlockTexture(textureKey);
+            if (texture != null)
             {
                 SetColor(material, "_BaseColor", Color.white);
                 SetColor(material, "_Color", Color.white);
+                SetTexture(material, "_EmissionMap", texture);
+                SetColor(material, "_EmissionColor", new Color(0.34f, 0.34f, 0.34f, 1f));
+                material.EnableKeyword("_EMISSION");
             }
             if (material.HasProperty("_Cutoff")) material.SetFloat("_Cutoff", 0.1f);
             material.EnableKeyword("_ALPHATEST_ON");

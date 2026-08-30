@@ -161,6 +161,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewDungeonSkeleton")) SetupDungeonSkeletonPreview();
             else if (HasCommandLineFlag("-previewStray")) SetupStrayPreview();
             else if (HasCommandLineFlag("-previewEquipment")) SetupEquipmentPreview();
+            else if (HasCommandLineFlag("-previewDrownedAdjacency")) SetupDrownedAdjacencyPreview();
             else if (HasCommandLineFlag("-previewDolphinCurrent")) SetupDolphinCurrentPreview();
             else if (HasCommandLineFlag("-previewWaterCurrent")) SetupWaterCurrentPreview();
             else if (HasCommandLineFlag("-previewSlow")) SetupSlowPreview();
@@ -711,6 +712,11 @@ namespace BiomeRivals.Demo
                             : "敌方海豚向导强化了本回合第一次移动的友军。", false);
                         yield return ShowTurnBanner("海豚引航", guidedFriendly ? Cyan : Ember);
                     }
+                    else if (matchEvent.payload?.effectId == "effect.or_003.01")
+                    {
+                        ShowStatus("溺尸战吼：相邻水生友军激活效果，对选定的敌方生物造成 1 点伤害。", false);
+                        yield return ShowTurnBanner("潮汐伏击", Cyan);
+                    }
                     yield return PulseBattlefieldObject(matchEvent.payload?.instanceId);
                     break;
                 case MatchEventTypes.ObjectStatusApplied:
@@ -1116,6 +1122,33 @@ namespace BiomeRivals.Demo
             var dolphin = _match.GetObject(true, DemoSlotKind.Unit, 0);
             var salmon = _match.GetObject(true, DemoSlotKind.Unit, 2);
             if (dolphin == null || salmon == null) ShowStatus("海洋单位模型初始化失败。", true);
+        }
+
+        private void SetupDrownedAdjacencyPreview()
+        {
+            SelectFaction("ocean_river");
+            SelectOpponentFaction("plains_forest");
+            if (!_registry.TryGetDefinition("or_001", out var salmonDefinition) ||
+                !_registry.TryGetDefinition("or_003", out var drownedDefinition) ||
+                !_registry.TryGetDefinition("pf_002", out var sheepDefinition)) return;
+            _match.ResetDeckAndHand(new[] { salmonDefinition.id, drownedDefinition.id, drownedDefinition.id }, Array.Empty<string>());
+            _match.ResetOpponent(new[] { sheepDefinition });
+            var salmonDeployed = _match.ApplyDeploy(salmonDefinition,
+                _match.CreateDeployCommand(salmonDefinition.id, DemoSlotKind.Unit, 1));
+            if (salmonDeployed.Accepted && _match.PendingChoice != null)
+                _match.ApplyResolveChoice(_match.CreateResolveChoiceCommand(_match.PendingChoice.choiceId, -1));
+            var target = _match.GetObject(false, DemoSlotKind.Unit, 0);
+            var drownedDeployed = target == null
+                ? DemoCommandResult.Reject(DemoCommandRejectionCode.InvalidTarget, "缺少溺尸战吼目标。", _match.Revision)
+                : _match.ApplyDeploy(drownedDefinition, _match.CreateDeployCommand(
+                    drownedDefinition.id, DemoSlotKind.Unit, 2, MatchPaymentMethods.Redstone, "UNIT", target.InstanceId));
+            _selectedCardId = drownedDefinition.id;
+            _selectedDeploymentTargetInstanceId = target?.InstanceId;
+            RefreshAll();
+            ShowStatus(salmonDeployed.Accepted && drownedDeployed.Accepted
+                ? "溺尸已借相邻鲑鱼触发战吼；金色地表格表示下一张溺尸可再次激活相邻条件。"
+                : !salmonDeployed.Accepted ? salmonDeployed.Message : drownedDeployed.Message,
+                !salmonDeployed.Accepted || !drownedDeployed.Accepted);
         }
 
         private void SetupStructureDeployedPreview()
@@ -1573,8 +1606,11 @@ namespace BiomeRivals.Demo
             else if (canInteract && match.Phase == DemoTurnPhase.Combat && !string.IsNullOrEmpty(_selectedAttackerInstanceId) && !empty)
                 valid = match.CanAttackTarget(battlefieldObject, view.Kind == DemoSlotKind.Unit ? "UNIT" : "BUILDING", out _);
             view.EmptyLabel.color = Color.clear;
+            var activatesDrowned = valid && player && empty && view.Kind == DemoSlotKind.Unit &&
+                _registry.TryGetDefinition(_selectedCardId, out var selectedDefinition) && IsDrowned(selectedDefinition) &&
+                DrownedBattlecryActivatesAt(view.Index);
             var priorityTarget = movementChoice && battlefieldObject?.InstanceId == match.PendingChoice.targetInstanceId ||
-                valid && !player && battlefieldObject?.HasKeyword("TAUNT") == true;
+                valid && !player && battlefieldObject?.HasKeyword("TAUNT") == true || activatesDrowned;
             _battlefield.SetSlotState(player, view.Kind, view.Index, valid, !empty, priorityTarget);
 
             if (!empty)
@@ -1644,7 +1680,10 @@ namespace BiomeRivals.Demo
                 var target = definition.cardType == "UNIT" ? "单位格" : $"建筑格（占 {Mathf.Max(1, definition.buildingSlots)} 格）";
                 var requiresBattlecryTarget = DemoCardTargeting.TryGetRule(definition, out var battlecryTargetRule);
                 var selectedBattlecryTarget = requiresBattlecryTarget ? FindSelectedDeploymentTarget() : null;
-                if (requiresBattlecryTarget)
+                var conditionalDrowned = IsDrowned(definition);
+                var drownedCanActivate = conditionalDrowned && HasPotentialDrownedBattlecrySlot();
+                var drownedHasTarget = conditionalDrowned && DemoCardTargeting.HasLegalTarget(match, battlecryTargetRule);
+                if (requiresBattlecryTarget && (!conditionalDrowned || drownedCanActivate && drownedHasTarget))
                 {
                     var targeting = _pendingTargetCardId == definition.id;
                     var hasLegalTarget = DemoCardTargeting.HasLegalTarget(match, battlecryTargetRule);
@@ -1663,6 +1702,14 @@ namespace BiomeRivals.Demo
                         : $"已锁定 {GetCardName(selectedBattlecryTarget.CardId)} · 选择发光的{target}部署";
                     CreateText(_inspectorRoot, "DeployHint", new Vector2(0, -174), new Vector2(246, 48), targetHint, 13,
                         selectedBattlecryTarget == null ? Gold : Cyan, TextAnchor.MiddleCenter, FontStyle.Bold);
+                }
+                else if (conditionalDrowned)
+                {
+                    CreateText(_inspectorRoot, "DeployHint", new Vector2(0, -126), new Vector2(246, 82),
+                        drownedCanActivate
+                            ? "金色地表格可激活战吼，\n但当前没有敌方生物可选。"
+                            : "当前没有可相邻的水生友军；\n仍可部署，但不会造成战吼伤害。",
+                        14, drownedCanActivate ? Gold : Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
                 }
                 else if (definition.hasCraftingRecipe)
                 {
@@ -1733,7 +1780,8 @@ namespace BiomeRivals.Demo
             if (!player || !string.IsNullOrEmpty(_pendingTargetCardId) || MatchView.Phase != DemoTurnPhase.Main ||
                 string.IsNullOrEmpty(_selectedCardId) || !_registry.TryGetDefinition(_selectedCardId, out var definition)) return false;
             if (definition.cardType != "UNIT" && definition.cardType != "BUILDING" && definition.cardType != "STRUCTURE") return false;
-            if (DemoCardTargeting.TryGetRule(definition, out _) && FindSelectedDeploymentTarget() == null) return false;
+            if (DemoCardTargeting.TryGetRule(definition, out var targetRule) && FindSelectedDeploymentTarget() == null &&
+                (!IsDrowned(definition) || HasPotentialDrownedBattlecrySlot() && DemoCardTargeting.HasLegalTarget(MatchView, targetRule))) return false;
             occupiedSlots = definition.cardType == "UNIT" ? 1 : Mathf.Max(1, definition.buildingSlots);
             return true;
         }
@@ -1745,7 +1793,19 @@ namespace BiomeRivals.Demo
             var isDeployment = IsPreviewingDeployment(player, out var occupiedSlots);
             var rejected = isDeployment && !preview.IsLegal;
             _battlefield.SetSlotRangeHovered(player, kind, index, isDeployment ? occupiedSlots : 1, hovered, rejected);
-            if (hovered && isDeployment) ShowStatus(preview.Message, rejected);
+            if (hovered && isDeployment)
+            {
+                if (!rejected && _registry.TryGetDefinition(_selectedCardId, out var definition) && IsDrowned(definition))
+                {
+                    var selectedTarget = FindSelectedDeploymentTarget();
+                    ShowStatus(DrownedBattlecryActivatesAt(index)
+                        ? selectedTarget == null
+                            ? "金色地表：此位置相邻水生友军，部署前需要选择敌方战吼目标。"
+                            : $"金色地表：部署后将对 {GetCardName(selectedTarget.CardId)} 造成 1 点伤害。"
+                        : "普通地表：可部署溺尸，但此位置没有相邻水生友军，战吼不会触发。", false);
+                }
+                else ShowStatus(preview.Message, rejected);
+            }
         }
 
         private void OnSlotPressed(bool player, DemoSlotKind kind, int index, bool pressed)
@@ -1801,7 +1861,8 @@ namespace BiomeRivals.Demo
                 ShowStatus("请先选择一张手牌。", true);
                 return;
             }
-            if (DemoCardTargeting.TryGetRule(definition, out var deploymentTargetRule) && FindSelectedDeploymentTarget() == null)
+            if (DemoCardTargeting.TryGetRule(definition, out var deploymentTargetRule) && FindSelectedDeploymentTarget() == null &&
+                (!IsDrowned(definition) || DrownedBattlecryActivatesAt(index) && DemoCardTargeting.HasLegalTarget(MatchView, deploymentTargetRule)))
             {
                 CastSelectedCard();
                 return;
@@ -2109,6 +2170,24 @@ namespace BiomeRivals.Demo
             if (string.IsNullOrEmpty(_selectedDeploymentTargetInstanceId)) return null;
             return MatchView.PlayerBattlefield.Concat(MatchView.OpponentBattlefield)
                 .FirstOrDefault(value => value != null && value.InstanceId == _selectedDeploymentTargetInstanceId && value.Health > 0);
+        }
+
+        private static bool IsDrowned(CardDefinitionEntry definition) =>
+            definition?.effectIds?.Contains("effect.or_003.01") == true;
+
+        private bool DrownedBattlecryActivatesAt(int slotIndex)
+        {
+            return MatchView.PlayerBattlefield.Any(value => value != null && value.Health > 0 &&
+                value.SlotKind == DemoSlotKind.Unit && Mathf.Abs(value.SlotIndex - slotIndex) == 1 &&
+                _registry.TryGetDefinition(value.CardId, out var adjacentDefinition) &&
+                (adjacentDefinition.tags ?? Array.Empty<string>()).Contains("aquatic"));
+        }
+
+        private bool HasPotentialDrownedBattlecrySlot()
+        {
+            for (var slotIndex = 0; slotIndex < MatchView.UnitSlots.Length; slotIndex++)
+                if (string.IsNullOrEmpty(MatchView.UnitSlots[slotIndex]) && DrownedBattlecryActivatesAt(slotIndex)) return true;
+            return false;
         }
 
         private async Task<MatchCommandDispatchResult?> SendOnline(Func<Task<MatchCommandDispatchResult>> send)

@@ -1,6 +1,6 @@
 namespace BiomeRivalsRules {
   export const PROTOCOL_VERSION = 18;
-  export const RULESET_VERSION = 'prototype-0.22';
+  export const RULESET_VERSION = 'prototype-0.23';
 
   export type MatchStatus = 'WAITING' | 'MULLIGAN' | 'ACTIVE' | 'FINISHED';
   export type CommandType = 'MULLIGAN' | 'DEPLOY_CARD' | 'PLAY_CARD' | 'RESOLVE_CHOICE' | 'ENTER_COMBAT' | 'ATTACK' | 'END_TURN' | 'CONCEDE';
@@ -36,6 +36,7 @@ namespace BiomeRivalsRules {
     attack: number;
     health: number;
     durability: number;
+    tags: string[];
     keywords: CardKeyword[];
     hasCraftingRecipe: boolean;
     recipeId: string;

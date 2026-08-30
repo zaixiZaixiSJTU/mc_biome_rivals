@@ -16,7 +16,8 @@ namespace BiomeRivals.Demo
             { "nt_003", "entity_blaze" },
             { "si_003", "entity_stray" },
             { "or_001", "entity_salmon" },
-            { "or_002", "entity_dolphin" }
+            { "or_002", "entity_dolphin" },
+            { "or_003", "entity_drowned" }
         };
 
         public static bool TryGetTextureKey(string cardId, out string textureKey) =>
@@ -42,6 +43,7 @@ namespace BiomeRivals.Demo
                 case "si_003": BuildStray(root, material); break;
                 case "or_001": BuildSalmon(root, material); break;
                 case "or_002": BuildDolphin(root, material); break;
+                case "or_003": BuildDrowned(root, material); break;
                 default: return false;
             }
             return true;
@@ -147,6 +149,16 @@ namespace BiomeRivals.Demo
             Cuboid(root, "RightFlipper", new Vector3(0.58f, 0.63f, -0.12f), new Vector3(0.56f, 0.07f, 0.34f), material, 48, 20, 4, 1, 3, 64, 64, Quaternion.Euler(0f, 8f, 28f));
             Cuboid(root, "TailStem", new Vector3(0f, 0.79f, 0.98f), new Vector3(0.42f, 0.38f, 0.58f), material, 0, 19, 4, 4, 5, 64, 64);
             Cuboid(root, "TailFlukes", new Vector3(0f, 0.80f, 1.37f), new Vector3(1.02f, 0.08f, 0.44f), material, 19, 20, 9, 1, 4, 64, 64);
+        }
+
+        private static void BuildDrowned(Transform root, Material material)
+        {
+            Cuboid(root, "Head", new Vector3(0f, 1.72f, 0f), new Vector3(0.66f, 0.66f, 0.66f), material, 0, 0, 8, 8, 8, 64, 64);
+            Cuboid(root, "Body", new Vector3(0f, 1.04f, 0f), new Vector3(0.54f, 0.84f, 0.30f), material, 16, 16, 8, 12, 4, 64, 64);
+            Cuboid(root, "LeftArm", new Vector3(-0.42f, 1.17f, -0.18f), new Vector3(0.20f, 0.86f, 0.20f), material, 40, 16, 4, 12, 4, 64, 64, Quaternion.Euler(-58f, 0f, 8f));
+            Cuboid(root, "RightArm", new Vector3(0.42f, 1.17f, -0.18f), new Vector3(0.20f, 0.86f, 0.20f), material, 32, 48, 4, 12, 4, 64, 64, Quaternion.Euler(-58f, 0f, -8f));
+            Cuboid(root, "LeftLeg", new Vector3(-0.15f, 0.38f, 0f), new Vector3(0.22f, 0.86f, 0.22f), material, 0, 16, 4, 12, 4, 64, 64);
+            Cuboid(root, "RightLeg", new Vector3(0.15f, 0.38f, 0f), new Vector3(0.22f, 0.86f, 0.22f), material, 16, 48, 4, 12, 4, 64, 64);
         }
 
         private static void Leg(Transform root, string name, float x, float z, Material material, int u, int v, int textureWidth, int textureHeight)

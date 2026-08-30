@@ -32,6 +32,11 @@ namespace BiomeRivalsRules {
     return definition.cost;
   }
 
+  function cardHasTag(cardId: string, tag: string): boolean {
+    const definition = getCardDefinition(cardId);
+    return definition !== null && definition.tags.indexOf(tag) >= 0;
+  }
+
   function makePlayer(playerId: string, startingCards: number, matchId: string, factionId: FactionId): PlayerState {
     const deck = prototypeDeck(FACTION_CARD_PREFIXES[factionId]!, matchId + ':' + playerId + ':' + factionId);
     const hand: string[] = [];
@@ -402,6 +407,7 @@ namespace BiomeRivalsRules {
       if (handIndex < 0) return reject(state, 'CARD_NOT_IN_HAND', 'card is not in the actor hand');
       let battlecryTargetPlayer: PlayerState | null = null;
       let battlecryTarget: BattlefieldObjectState | null = null;
+      let drownedBattlecryActive = false;
       if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
           definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.si_003.01') {
         if (command.payload.targetType !== 'UNIT' || typeof command.payload.targetInstanceId !== 'string') {
@@ -435,6 +441,32 @@ namespace BiomeRivalsRules {
         }
       } else {
         return reject(state, 'INVALID_TARGET', 'card type cannot be deployed to the battlefield');
+      }
+
+      if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
+          definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.or_003.01') {
+        const adjacentSlots = [slotIndex - 1, slotIndex + 1];
+        drownedBattlecryActive = adjacentSlots.some(function (adjacentSlot): boolean {
+          if (adjacentSlot < 0 || adjacentSlot >= player.unitSlots.length) return false;
+          const adjacentInstanceId = player.unitSlots[adjacentSlot]!;
+          if (adjacentInstanceId === null) return false;
+          const adjacentObject = findObject(player, adjacentInstanceId);
+          return adjacentObject !== null && adjacentObject.cardType === 'UNIT' && adjacentObject.health > 0 &&
+            cardHasTag(adjacentObject.cardId, 'aquatic');
+        });
+        battlecryTargetPlayer = next.players[actorIndex === 0 ? 1 : 0]!;
+        const hasEnemyUnit = battlecryTargetPlayer.battlefield.some(function (object): boolean {
+          return object.cardType === 'UNIT' && object.health > 0;
+        });
+        if (drownedBattlecryActive && hasEnemyUnit) {
+          if (command.payload.targetType !== 'UNIT' || typeof command.payload.targetInstanceId !== 'string') {
+            return reject(state, 'INVALID_TARGET', 'drowned requires an enemy unit target when deployed beside an aquatic unit');
+          }
+          battlecryTarget = findObject(battlecryTargetPlayer, command.payload.targetInstanceId);
+          if (battlecryTarget === null || battlecryTarget.cardType !== 'UNIT' || battlecryTarget.health <= 0) {
+            return reject(state, 'INVALID_TARGET', 'drowned battlecry target must be a living enemy unit');
+          }
+        }
       }
 
       const materialIndices: number[] = [];
@@ -548,6 +580,26 @@ namespace BiomeRivalsRules {
           definition.effectIds[0],
           0
         );
+      } else if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
+          definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.or_003.01') {
+        if (drownedBattlecryActive && battlecryTargetPlayer !== null && battlecryTarget !== null) {
+          battlecryTarget.health = Math.max(0, battlecryTarget.health - 1);
+          emit('OBJECT_STATS_CHANGED', {
+            playerId: battlecryTargetPlayer.playerId,
+            instanceId: battlecryTarget.instanceId,
+            sourceCardId: cardId,
+            sourceInstanceId: battlefieldObject.instanceId,
+            effectId: definition.effectIds[0],
+            reason: 'DAMAGE',
+            attack: battlecryTarget.attack,
+            health: battlecryTarget.health,
+            temporaryAttackModifier: battlecryTarget.temporaryAttackModifier,
+            temporaryAttackModifierExpiresOnTurn: battlecryTarget.temporaryAttackModifierExpiresOnTurn
+          });
+          const killCredits: { [instanceId: string]: string } = {};
+          if (battlecryTarget.health === 0) killCredits[battlecryTarget.instanceId] = player.playerId;
+          settleDeaths(player, battlecryTargetPlayer, killCredits);
+        }
       } else if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
           definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.or_001.01') {
         offerMoveChoice(player, cardId, battlefieldObject.instanceId, player, battlefieldObject, definition.effectIds[0]);

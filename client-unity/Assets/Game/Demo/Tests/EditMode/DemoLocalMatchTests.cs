@@ -1099,6 +1099,8 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(salmonTexture, Is.EqualTo("entity_salmon"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("or_002", out var dolphinTexture), Is.True);
                 Assert.That(dolphinTexture, Is.EqualTo("entity_dolphin"));
+                Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("or_003", out var drownedTexture), Is.True);
+                Assert.That(drownedTexture, Is.EqualTo("entity_drowned"));
 
                 var piecesRoot = root.transform.Find("BattlefieldPieces");
                 battlefield.SyncPieces(new[]
@@ -1355,6 +1357,45 @@ namespace BiomeRivals.Demo.Tests
             match.EndPlayerTurn();
             Assert.That(firstSalmon.Attack, Is.EqualTo(1));
             Assert.That(secondSalmon.Attack, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void DrownedRequiresAndDamagesAnEnemyTargetOnlyBesideAnAquaticAlly()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("or_001", out var salmon), Is.True);
+            Assert.That(registry.TryGetDefinition("or_003", out var drowned), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_002", out var sheep), Is.True);
+            Assert.That(drowned.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+
+            var active = new DemoLocalMatch();
+            active.ResetHand(new[] { "or_001", "or_003" });
+            active.ResetOpponent(new[] { sheep });
+            Assert.That(active.ApplyDeploy(salmon, active.CreateDeployCommand("or_001", DemoSlotKind.Unit, 1)).Accepted, Is.True);
+            Assert.That(active.ApplyResolveChoice(active.CreateResolveChoiceCommand(active.PendingChoice.choiceId, -1)).Accepted, Is.True);
+            var target = active.GetObject(false, DemoSlotKind.Unit, 0);
+            var energyBefore = active.Energy;
+            var missingTarget = active.ApplyDeploy(drowned, active.CreateDeployCommand("or_003", DemoSlotKind.Unit, 2));
+            Assert.That(missingTarget.Accepted, Is.False);
+            Assert.That(missingTarget.Code, Is.EqualTo(DemoCommandRejectionCode.InvalidTarget));
+            Assert.That(active.Energy, Is.EqualTo(energyBefore));
+            Assert.That(active.Hand, Does.Contain("or_003"));
+
+            var deployed = active.ApplyDeploy(drowned, active.CreateDeployCommand(
+                "or_003", DemoSlotKind.Unit, 2, MatchPaymentMethods.Redstone, "UNIT", target.InstanceId));
+            Assert.That(deployed.Accepted, Is.True);
+            Assert.That(deployed.Message, Does.Contain("造成 1 点伤害"));
+            Assert.That(target.Health, Is.EqualTo(sheep.health - 1));
+            Assert.That(active.GetObject(true, DemoSlotKind.Unit, 2).HasTag("aquatic"), Is.True);
+
+            var inactive = new DemoLocalMatch();
+            inactive.ResetHand(new[] { "or_003" });
+            inactive.ResetOpponent(new[] { sheep });
+            var inactiveTarget = inactive.GetObject(false, DemoSlotKind.Unit, 0);
+            var inactiveDeploy = inactive.ApplyDeploy(drowned, inactive.CreateDeployCommand("or_003", DemoSlotKind.Unit, 2));
+            Assert.That(inactiveDeploy.Accepted, Is.True);
+            Assert.That(inactiveDeploy.Message, Does.Contain("战吼未触发"));
+            Assert.That(inactiveTarget.Health, Is.EqualTo(sheep.health));
         }
 
         private static float ProjectedWidth(Camera camera, Transform surface, Vector3[] vertices)

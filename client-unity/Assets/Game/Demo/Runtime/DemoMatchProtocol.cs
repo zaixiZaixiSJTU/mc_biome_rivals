@@ -46,6 +46,7 @@ namespace BiomeRivals.Demo
         public int MaxHealth { get; set; }
         public int SummonedRound { get; set; }
         public bool HasAttacked { get; set; }
+        public string[] Tags { get; set; } = System.Array.Empty<string>();
         public string[] Keywords { get; set; } = System.Array.Empty<string>();
         public int TemporaryAttackModifier { get; set; }
         public int TemporaryAttackModifierExpiresOnRound { get; set; }
@@ -53,6 +54,9 @@ namespace BiomeRivals.Demo
 
         public bool HasKeyword(string keyword) =>
             !string.IsNullOrEmpty(keyword) && System.Array.IndexOf(Keywords ?? System.Array.Empty<string>(), keyword) >= 0;
+
+        public bool HasTag(string tag) =>
+            !string.IsNullOrEmpty(tag) && System.Array.IndexOf(Tags ?? System.Array.Empty<string>(), tag) >= 0;
 
         public bool HasStatus(string statusId) =>
             !string.IsNullOrEmpty(statusId) && System.Array.Exists(Statuses ?? System.Array.Empty<BattlefieldStatusStateDto>(),

@@ -176,15 +176,23 @@ namespace BiomeRivals.Demo
             }
 
             DemoBattlefieldObject battlecryTarget = null;
+            var drownedBattlecryActive = definition.effectImplementationStatus == "IMPLEMENTED" &&
+                definition.effectIds != null && definition.effectIds.Contains("effect.or_003.01") &&
+                HasAdjacentAquaticUnit(command.payload.slotIndex);
             if (DemoCardTargeting.TryGetRule(definition, out var targetRule))
             {
-                if (command.payload == null || command.payload.targetType != targetRule.TargetType)
-                    return Reject(DemoCommandRejectionCode.InvalidTarget, targetRule.MissingTargetMessage);
-                var playerTarget = targetRule.Owner == DemoTargetOwner.Friendly;
-                var targetBattlefield = playerTarget ? _playerBattlefield : _opponentBattlefield;
-                battlecryTarget = targetBattlefield.Find(value => value.InstanceId == command.payload.targetInstanceId);
-                if (!targetRule.IsLegal(playerTarget, targetRule.SlotKind, battlecryTarget))
-                    return Reject(DemoCommandRejectionCode.InvalidTarget, targetRule.MissingTargetMessage);
+                var drownedNeedsTarget = drownedBattlecryActive && _opponentBattlefield.Any(value =>
+                    value.SlotKind == DemoSlotKind.Unit && value.Health > 0);
+                if (targetRule.EffectId != "effect.or_003.01" || drownedNeedsTarget)
+                {
+                    if (command.payload == null || command.payload.targetType != targetRule.TargetType)
+                        return Reject(DemoCommandRejectionCode.InvalidTarget, targetRule.MissingTargetMessage);
+                    var playerTarget = targetRule.Owner == DemoTargetOwner.Friendly;
+                    var targetBattlefield = playerTarget ? _playerBattlefield : _opponentBattlefield;
+                    battlecryTarget = targetBattlefield.Find(value => value.InstanceId == command.payload.targetInstanceId);
+                    if (!targetRule.IsLegal(playerTarget, targetRule.SlotKind, battlecryTarget))
+                        return Reject(DemoCommandRejectionCode.InvalidTarget, targetRule.MissingTargetMessage);
+                }
             }
 
             ConsumeDeployment(definition, command.payload.paymentMethod);
@@ -205,6 +213,7 @@ namespace BiomeRivals.Demo
                 Health = definition.health + (crafted ? definition.craftedHealthBonus : 0),
                 MaxHealth = definition.health + (crafted ? definition.craftedHealthBonus : 0),
                 SummonedRound = Round,
+                Tags = (definition.tags ?? Array.Empty<string>()).ToArray(),
                 Keywords = (definition.keywords ?? Array.Empty<string>()).ToArray()
             };
             _playerBattlefield.Add(deployedObject);
@@ -233,6 +242,22 @@ namespace BiomeRivals.Demo
             {
                 ApplySlow(battlecryTarget, definition.id, deployedObject.InstanceId, "effect.si_003.01", 0);
                 deployMessage += $"；战吼使 {battlecryTarget.CardId} 获得缓慢。";
+            }
+            else if (definition.effectImplementationStatus == "IMPLEMENTED" &&
+                definition.effectIds != null && definition.effectIds.Contains("effect.or_003.01"))
+            {
+                if (drownedBattlecryActive && battlecryTarget != null)
+                {
+                    battlecryTarget.Health = Math.Max(0, battlecryTarget.Health - 1);
+                    var killCredits = new Dictionary<string, bool>(StringComparer.Ordinal);
+                    if (battlecryTarget.Health == 0) killCredits[battlecryTarget.InstanceId] = true;
+                    var deathMessages = SettleDeaths(killCredits);
+                    deployMessage += $"；溺尸战吼对 {battlecryTarget.CardId} 造成 1 点伤害。";
+                    if (deathMessages.Count > 0) deployMessage += " " + string.Join(" ", deathMessages);
+                }
+                else deployMessage += drownedBattlecryActive
+                    ? "；当前没有敌方生物，战吼无目标。"
+                    : "；没有相邻水生友军，战吼未触发。";
             }
             else if (definition.effectImplementationStatus == "IMPLEMENTED" &&
                 definition.effectIds != null && definition.effectIds.Contains("effect.or_001.01"))
@@ -876,6 +901,7 @@ namespace BiomeRivals.Demo
                 InstanceId = $"object-{_nextBattlefieldInstanceId++}", CardId = definition.id, Player = false,
                 SlotKind = kind, SlotIndex = slotIndex, OccupiedSlots = occupiedSlots,
                 Attack = definition.attack, Health = definition.health, MaxHealth = definition.health, SummonedRound = 0,
+                Tags = (definition.tags ?? Array.Empty<string>()).ToArray(),
                 Keywords = (definition.keywords ?? Array.Empty<string>()).ToArray()
             };
             _opponentBattlefield.Add(instance);
@@ -924,6 +950,12 @@ namespace BiomeRivals.Demo
                 value.TemporaryAttackModifier = 0;
                 value.TemporaryAttackModifierExpiresOnRound = 0;
             }
+        }
+
+        private bool HasAdjacentAquaticUnit(int slotIndex)
+        {
+            return _playerBattlefield.Any(value => value.SlotKind == DemoSlotKind.Unit && value.Health > 0 &&
+                Math.Abs(value.SlotIndex - slotIndex) == 1 && value.HasTag("aquatic"));
         }
 
         private int TriggerSuccessfulMovement(List<DemoBattlefieldObject> battlefield, DemoBattlefieldObject movedUnit)

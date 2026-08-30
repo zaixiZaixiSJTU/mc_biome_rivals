@@ -1685,6 +1685,53 @@ TestHarness.test('Dolphin Guide buffs only the first other friendly unit that mo
   TestHarness.equal(ended.state.players[0]!.triggeredEffectKeysThisTurn.length, 0);
 });
 
+TestHarness.test('Drowned requires a target beside an aquatic ally and resolves damage after deployment', function (): void {
+  const state = activeState('match-1', ['alice', 'bob'], ['ocean_river', 'plains_forest']);
+  state.players[0]!.hand = ['or_003'];
+  state.players[0]!.redstone = 2;
+  state.players[0]!.redstoneCapacity = 2;
+  placeUnit(state, 0, 'or_001', 1, 'object-10', 1);
+  placeUnit(state, 1, 'pf_001', 0, 'object-20', 1);
+  state.players[1]!.battlefield[0]!.health = 1;
+
+  const missingTarget = BiomeRivalsRules.applyCommand(state, 'alice',
+    deployCommand('drowned-missing-target', 0, 'or_003', 'UNIT', 2));
+  TestHarness.equal(missingTarget.accepted, false);
+  if (!missingTarget.accepted) TestHarness.equal(missingTarget.code, 'INVALID_TARGET');
+  TestHarness.equal(state.players[0]!.redstone, 2);
+  TestHarness.equal(state.players[0]!.hand[0], 'or_003');
+
+  const deployed = BiomeRivalsRules.applyCommand(state, 'alice',
+    deployCommand('drowned-deploy', 0, 'or_003', 'UNIT', 2, 'REDSTONE', 'UNIT', 'object-20'));
+  TestHarness.ok(deployed.accepted);
+  if (!deployed.accepted) return;
+  TestHarness.equal(deployed.batch.events[0]!.type, 'CARD_DEPLOYED');
+  TestHarness.equal(deployed.batch.events[1]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(deployed.batch.events[1]!.payload.effectId, 'effect.or_003.01');
+  TestHarness.equal(deployed.batch.events[1]!.payload.health, 0);
+  TestHarness.equal(deployed.batch.events[2]!.type, 'OBJECT_DIED');
+  TestHarness.equal(deployed.state.players[1]!.unitSlots[0], null);
+  TestHarness.equal(deployed.state.players[1]!.discardPile[0], 'pf_001');
+});
+
+TestHarness.test('Drowned deploys without a target when no adjacent aquatic ally activates its battlecry', function (): void {
+  const state = activeState('match-1', ['alice', 'bob'], ['ocean_river', 'plains_forest']);
+  state.players[0]!.hand = ['or_003'];
+  state.players[0]!.redstone = 2;
+  state.players[0]!.redstoneCapacity = 2;
+  placeUnit(state, 0, 'pf_001', 1, 'object-10', 1);
+  placeUnit(state, 1, 'pf_002', 0, 'object-20', 1);
+  const targetHealth = state.players[1]!.battlefield[0]!.health;
+
+  const deployed = BiomeRivalsRules.applyCommand(state, 'alice',
+    deployCommand('inactive-drowned-deploy', 0, 'or_003', 'UNIT', 2));
+  TestHarness.ok(deployed.accepted);
+  if (!deployed.accepted) return;
+  TestHarness.equal(deployed.batch.events.length, 1);
+  TestHarness.equal(deployed.state.players[1]!.battlefield[0]!.health, targetHealth);
+  TestHarness.equal(deployed.state.players[0]!.unitSlots[2], 'object-1');
+});
+
 TestHarness.test('rejects stale revisions', function (): void {
   const state = activeState('match-1', ['alice', 'bob']);
   const result = BiomeRivalsRules.applyCommand(state, 'alice', command('cmd-1', 99, 'END_TURN'));

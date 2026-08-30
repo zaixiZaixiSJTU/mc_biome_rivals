@@ -19,9 +19,10 @@ for ($index = 0; $index -lt $registry.entries.Count; $index++) {
     $card = $registry.entries[$index]
     $comma = if ($index -lt $registry.entries.Count - 1) { ',' } else { '' }
     $effectIds = if ($card.effectIds.Count -gt 0) { "['" + (($card.effectIds | ForEach-Object { [string]$_ }) -join "', '") + "']" } else { '[]' }
+    $tags = if ($card.tags.Count -gt 0) { "['" + (($card.tags | ForEach-Object { [string]$_ }) -join "', '") + "']" } else { '[]' }
     $keywords = if ($card.keywords.Count -gt 0) { "['" + (($card.keywords | ForEach-Object { [string]$_ }) -join "', '") + "']" } else { '[]' }
     $recipe = if ($card.craftingRecipe.Count -gt 0) { '[' + (($card.craftingRecipe | ForEach-Object { "{ cardId: '$($_.cardId)', count: $($_.count) }" }) -join ', ') + ']' } else { '[]' }
-    $lines.Add("    '$($card.id)': { id: '$($card.id)', cardType: '$($card.cardType)', cost: $($card.cost), buildingSlots: $($card.buildingSlots), attack: $($card.attack), health: $($card.health), durability: $($card.durability), keywords: $keywords, hasCraftingRecipe: $($card.hasCraftingRecipe.ToString().ToLowerInvariant()), recipeId: '$($card.recipeId)', craftingRecipe: $recipe, craftedAttackBonus: $($card.craftedAttackBonus), craftedHealthBonus: $($card.craftedHealthBonus), craftedDurabilityBonus: $($card.craftedDurabilityBonus), effectImplementationStatus: '$($card.effectImplementationStatus)', effectIds: $effectIds }$comma")
+    $lines.Add("    '$($card.id)': { id: '$($card.id)', cardType: '$($card.cardType)', cost: $($card.cost), buildingSlots: $($card.buildingSlots), attack: $($card.attack), health: $($card.health), durability: $($card.durability), tags: $tags, keywords: $keywords, hasCraftingRecipe: $($card.hasCraftingRecipe.ToString().ToLowerInvariant()), recipeId: '$($card.recipeId)', craftingRecipe: $recipe, craftedAttackBonus: $($card.craftedAttackBonus), craftedHealthBonus: $($card.craftedHealthBonus), craftedDurabilityBonus: $($card.craftedDurabilityBonus), effectImplementationStatus: '$($card.effectImplementationStatus)', effectIds: $effectIds }$comma")
 }
 $lines.Add('  };')
 $lines.Add('')

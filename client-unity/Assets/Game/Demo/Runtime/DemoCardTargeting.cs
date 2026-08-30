@@ -56,6 +56,10 @@ namespace BiomeRivals.Demo
             "effect.si_003.01", DemoTargetOwner.Enemy, DemoSlotKind.Unit, "UNIT",
             "选择战吼目标", "先选择一个发出冰蓝光的敌方生物，再选择己方部署格。", "当前没有可施加缓慢的敌方生物。");
 
+        private static readonly DemoCardTargetRule Drowned = new DemoCardTargetRule(
+            "effect.or_003.01", DemoTargetOwner.Enemy, DemoSlotKind.Unit, "UNIT",
+            "选择战吼目标", "先选择一个发出金光的敌方生物；部署到水生友军相邻格时造成 1 点伤害。", "当前没有可选择的敌方生物。");
+
         private static readonly DemoCardTargetRule Bone = new DemoCardTargetRule(
             "effect.tk_009.01", DemoTargetOwner.Friendly, DemoSlotKind.Unit, "UNIT",
             "选择己方目标", "请选择一个发光的己方生物；右键或 Esc 取消。", "当前没有可选择的己方生物。");
@@ -75,6 +79,7 @@ namespace BiomeRivals.Demo
                     case "effect.si_001.01": rule = Snowball; return true;
                     case "effect.si_003.01": rule = Stray; return true;
                     case "effect.si_006.01": rule = PowderSnowBucket; return true;
+                    case "effect.or_003.01": rule = Drowned; return true;
                     case "effect.tk_009.01": rule = Bone; return true;
                     case "effect.tk_010.01": rule = Cobblestone; return true;
                 }
