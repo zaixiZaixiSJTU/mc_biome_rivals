@@ -1301,6 +1301,54 @@ namespace BiomeRivals.Core.Tests
         }
 
         [Test]
+        public void Apply_ReplaysCoralGrowthAndMarksItsSourceTriggered()
+        {
+            var reef = new BattlefieldObjectStateDto
+            {
+                instanceId = "object-1", cardId = "or_007", cardType = "BUILDING",
+                health = 5, maxHealth = 5, slotKind = "BUILDING", slotIndex = 0, occupiedSlots = 1, summonedTurn = 1
+            };
+            var drowned = new BattlefieldObjectStateDto
+            {
+                instanceId = "object-2", cardId = "or_003", cardType = "UNIT", attack = 3,
+                health = 2, maxHealth = 2, slotKind = "UNIT", slotIndex = 0, occupiedSlots = 1, summonedTurn = 1
+            };
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "coral-growth-replay", viewerPlayerId = "alice", protocolVersion = GameVersions.Protocol,
+                rulesetVersion = GameVersions.Ruleset, status = "ACTIVE", phase = "MAIN", turn = 1, activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto
+                    {
+                        playerId = "alice", life = 30, unitSlots = new[] { "object-2", null, null, null },
+                        buildingSlots = new[] { "object-1", null, null }, battlefield = new[] { reef, drowned }
+                    },
+                    new PlayerStateDto { playerId = "bob", life = 30 }
+                }
+            });
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 1, type = MatchEventTypes.ObjectStatsChanged, payload = new MatchEventPayloadDto
+                    {
+                        playerId = "alice", instanceId = "object-2", sourceCardId = "or_007", sourceInstanceId = "object-1",
+                        effectId = "effect.or_007.01", reason = "PERMANENT_HEALTH_MODIFIER",
+                        attack = 3, health = 3, maxHealth = 3,
+                        temporaryAttackModifier = 0, temporaryAttackModifierExpiresOnTurn = 0
+                    }}
+                }
+            });
+            Assert.That(drowned.health, Is.EqualTo(3));
+            Assert.That(drowned.maxHealth, Is.EqualTo(3));
+            Assert.That(store.Current.players[0].triggeredEffectKeysThisTurn,
+                Is.EqualTo(new[] { "object-1:effect.or_007.01" }));
+        }
+
+        [Test]
         public void Apply_ReplaysPrismarineShardEffectChoiceMovementAndHealing()
         {
             var salmon = new BattlefieldObjectStateDto

@@ -915,6 +915,19 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.mainTexture.name, Is.EqualTo("field-nether-far-v1"));
                 Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.GreaterThan(0f));
                 Assert.That(buildingMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.Zero);
+                battlefield.SetSlotEngineReady(true, DemoSlotKind.Building, 0, true);
+                Assert.That(buildingMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.GreaterThan(0f));
+                battlefield.SetSlotEngineReady(true, DemoSlotKind.Building, 0, false);
+                Assert.That(buildingMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.Zero);
+                battlefield.SyncPieces(new[]
+                {
+                    new DemoBattlefieldObject
+                    {
+                        InstanceId = "object-reef", CardId = "or_007", Player = true,
+                        SlotKind = DemoSlotKind.Building, SlotIndex = 0, OccupiedSlots = 1, Health = 5, MaxHealth = 5
+                    }
+                }, System.Array.Empty<DemoBattlefieldObject>(), registry);
+                Assert.That(root.transform.Find("BattlefieldPieces/Piece_object-reef_or_007/CoralCore"), Is.Not.Null);
                 Physics.SyncTransforms();
                 var unitScreenPosition = battlefield.BoardCamera.WorldToScreenPoint(unitMarker.TransformPoint(unitMarker.GetComponent<MeshFilter>().sharedMesh.bounds.center));
                 Assert.That(battlefield.TryRaycastSlot(unitScreenPosition, out var raycastTarget), Is.True);
@@ -1539,6 +1552,46 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(moved.Message, Does.Contain("失去海龟光环而死亡"));
             Assert.That(match.PlayerBattlefield.Any(value => value.InstanceId == target.InstanceId), Is.False);
             Assert.That(match.UnitSlots[3], Is.Null.Or.Empty);
+        }
+
+        [Test]
+        public void CoralReefGrowsOnlyTheFirstAquaticUnitAndResetsNextTurn()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("or_007", out var reef), Is.True);
+            Assert.That(registry.TryGetDefinition("or_001", out var salmon), Is.True);
+            Assert.That(reef.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { reef.id, salmon.id, salmon.id });
+            Assert.That(match.ApplyDeploy(reef,
+                match.CreateDeployCommand(reef.id, DemoSlotKind.Building, 0)).Accepted, Is.True);
+            var first = match.ApplyDeploy(salmon,
+                match.CreateDeployCommand(salmon.id, DemoSlotKind.Unit, 0));
+            Assert.That(first.Accepted, Is.True);
+            Assert.That(first.Message, Does.Contain("珊瑚滋养触发 1 次"));
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 0).MaxHealth, Is.EqualTo(3));
+            Assert.That(match.HasTriggeredEffect(true, match.GetObject(true, DemoSlotKind.Building, 0).InstanceId,
+                "effect.or_007.01"), Is.True);
+            Assert.That(match.ApplyResolveChoice(
+                match.CreateResolveChoiceCommand(match.PendingChoice.choiceId, -1)).Accepted, Is.True);
+
+            var second = match.ApplyDeploy(salmon,
+                match.CreateDeployCommand(salmon.id, DemoSlotKind.Unit, 1));
+            Assert.That(second.Accepted, Is.True);
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 1).MaxHealth, Is.EqualTo(2));
+            Assert.That(match.ApplyResolveChoice(
+                match.CreateResolveChoiceCommand(match.PendingChoice.choiceId, -1)).Accepted, Is.True);
+
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            Assert.That(match.HasTriggeredEffect(true, match.GetObject(true, DemoSlotKind.Building, 0).InstanceId,
+                "effect.or_007.01"), Is.False);
+            match.ResetHand(new[] { salmon.id });
+            var nextTurn = match.ApplyDeploy(salmon,
+                match.CreateDeployCommand(salmon.id, DemoSlotKind.Unit, 2));
+            Assert.That(nextTurn.Accepted, Is.True);
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 2).MaxHealth, Is.EqualTo(3));
         }
 
         private static float ProjectedWidth(Camera camera, Transform surface, Vector3[] vertices)

@@ -40,6 +40,7 @@ $textures = [ordered]@{
     packed_ice = 'assets/minecraft/textures/block/packed_ice.png'
     deepslate_bricks = 'assets/minecraft/textures/block/deepslate_bricks.png'
     prismarine_bricks = 'assets/minecraft/textures/block/prismarine_bricks.png'
+    tube_coral_block = 'assets/minecraft/textures/block/tube_coral_block.png'
     purpur_block = 'assets/minecraft/textures/block/purpur_block.png'
     entity_magma_cube = 'assets/minecraft/textures/entity/slime/magmacube.png'
     entity_blaze = 'assets/minecraft/textures/entity/blaze.png'

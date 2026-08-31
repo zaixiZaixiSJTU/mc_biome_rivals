@@ -109,7 +109,7 @@ namespace BiomeRivals.Core
                     throw new InvalidOperationException("Snapshot contains an unsupported player faction.");
                 if (player.triggeredEffectKeysThisTurn == null) player.triggeredEffectKeysThisTurn = Array.Empty<string>();
                 if (player.triggeredEffectKeysThisTurn.Any(value => string.IsNullOrWhiteSpace(value) ||
-                    !System.Text.RegularExpressions.Regex.IsMatch(value, "^object-[0-9]+:effect\\.or_(002|004)\\.01$")) ||
+                    !System.Text.RegularExpressions.Regex.IsMatch(value, "^object-[0-9]+:effect\\.or_(002|004|007)\\.01$")) ||
                     player.triggeredEffectKeysThisTurn.Distinct(StringComparer.Ordinal).Count() != player.triggeredEffectKeysThisTurn.Length)
                     throw new InvalidOperationException("Snapshot contains invalid once-per-turn effect markers.");
                 else if (player.buriedCount < 0 || player.buriedCount > player.deckCount)
@@ -372,14 +372,16 @@ namespace BiomeRivals.Core
                     var statsObject = FindObject(FindPlayer(payload.playerId), payload.instanceId);
                     statsObject.attack = payload.attack;
                     statsObject.health = payload.health;
-                    if (payload.reason == "AURA_RECALCULATED")
+                    if (payload.reason == "AURA_RECALCULATED" || payload.reason == "PERMANENT_HEALTH_MODIFIER")
                     {
                         statsObject.maxHealth = payload.maxHealth;
-                        statsObject.adjacencyHealthModifier = payload.adjacencyHealthModifier;
+                        if (payload.reason == "AURA_RECALCULATED")
+                            statsObject.adjacencyHealthModifier = payload.adjacencyHealthModifier;
                     }
                     statsObject.temporaryAttackModifier = payload.temporaryAttackModifier;
                     statsObject.temporaryAttackModifierExpiresOnTurn = payload.temporaryAttackModifierExpiresOnTurn;
-                    if ((payload.effectId == "effect.or_002.01" || payload.effectId == "effect.or_004.01") &&
+                    if ((payload.effectId == "effect.or_002.01" || payload.effectId == "effect.or_004.01" ||
+                        payload.effectId == "effect.or_007.01") &&
                         !string.IsNullOrEmpty(payload.sourceInstanceId))
                     {
                         var sourceOwner = Current.players.FirstOrDefault(candidate =>

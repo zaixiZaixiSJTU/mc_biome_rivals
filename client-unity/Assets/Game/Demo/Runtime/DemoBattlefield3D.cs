@@ -147,6 +147,14 @@ namespace BiomeRivals.Demo
             UpdateSlotMarker(marker, Time.unscaledTime, 0f);
         }
 
+        public void SetSlotEngineReady(bool player, DemoSlotKind kind, int index, bool ready)
+        {
+            BuildNow();
+            if (!_slotMarkers.TryGetValue(SlotKey(player, kind, index), out var marker)) return;
+            marker.EngineReady = ready;
+            UpdateSlotMarker(marker, Time.unscaledTime, 0f);
+        }
+
         public void SetSlotHovered(bool player, DemoSlotKind kind, int index, bool hovered)
         {
             BuildNow();
@@ -255,6 +263,8 @@ namespace BiomeRivals.Demo
                         : Color.Lerp(Hex("#3D9E8F"), Hex("#79E0CB"), pulse)
                     : marker.AuraLayers > 0
                         ? Color.Lerp(Hex("#216F72"), Hex("#69D7C7"), pulse)
+                    : marker.EngineReady
+                        ? Color.Lerp(Hex("#8E3F72"), Hex("#F08FB4"), pulse)
                     : Hex("#777263");
             var highlightStrength = rejectedPreview
                     ? marker.Pressed ? 0.98f : 0.84f + pulse * 0.12f
@@ -266,6 +276,8 @@ namespace BiomeRivals.Demo
                         ? (marker.Occupied ? 0.48f + pulse * 0.18f : 0.18f + pulse * 0.12f)
                         : marker.AuraLayers > 0
                             ? 0.10f + Mathf.Min(2, marker.AuraLayers) * 0.05f + pulse * 0.05f
+                        : marker.EngineReady
+                            ? 0.13f + pulse * 0.07f
                         : marker.Hovered && !marker.Occupied ? 0.12f : 0f;
             SetGroundHighlight(marker.SurfaceMaterial, highlightColor, highlightStrength);
             if (marker.RiserRenderer != null)
@@ -739,7 +751,8 @@ namespace BiomeRivals.Demo
                     battlefieldObject.SlotKind,
                     battlefieldObject.SlotIndex,
                     battlefieldObject.OccupiedSlots);
-                BuildBlockStructure(root, material, theme.Accent, footprintWidth);
+                if (cardId == "or_007") BuildCoralReef(root, material, footprintWidth);
+                else BuildBlockStructure(root, material, theme.Accent, footprintWidth);
             }
             else BuildBlockCreature(root, material, theme.Accent, cardId, player, battlefieldObject.SlotIndex);
         }
@@ -783,6 +796,26 @@ namespace BiomeRivals.Demo
             CreateBlock(root, "TowerL", new Vector3(-towerOffset, 0.9f, 0), new Vector3(0.48f, 1.25f, 0.55f), material);
             CreateBlock(root, "TowerR", new Vector3(towerOffset, 0.9f, 0), new Vector3(0.48f, 1.25f, 0.55f), material);
             CreateBlock(root, "Core", new Vector3(0, 0.82f, 0), new Vector3(0.50f, 0.50f, 0.60f), accentMaterial);
+        }
+
+        private void BuildCoralReef(Transform root, Material foundationMaterial, float footprintWidth)
+        {
+            const string materialKey = "coral_reef_or007";
+            if (!_materials.TryGetValue(materialKey, out var coralMaterial))
+            {
+                var coral = Hex("#6E6FCF");
+                coralMaterial = DemoWorldAssetProvider.CreateBlockMaterial(
+                    "Demo_CoralReef_OR007", coral, "tube_coral_block", Color.Lerp(Color.black, coral, 0.18f), blockShader);
+                _materials[materialKey] = coralMaterial;
+            }
+            var width = Mathf.Max(2.05f, footprintWidth);
+            CreateBlock(root, "PrismarineBed", new Vector3(0f, 0.18f, 0f), new Vector3(width, 0.28f, 0.92f), foundationMaterial);
+            CreateBlock(root, "CoralCore", new Vector3(0f, 0.55f, 0f), new Vector3(0.58f, 0.72f, 0.54f), coralMaterial);
+            CreateBlock(root, "CoralLeft", new Vector3(-0.62f, 0.48f, 0.04f), new Vector3(0.34f, 0.58f, 0.34f), coralMaterial);
+            CreateBlock(root, "CoralRight", new Vector3(0.64f, 0.43f, -0.02f), new Vector3(0.38f, 0.48f, 0.38f), coralMaterial);
+            CreateBlock(root, "CoralTop", new Vector3(0.08f, 1.00f, 0f), new Vector3(0.30f, 0.38f, 0.30f), coralMaterial);
+            CreateBlock(root, "CoralArmL", new Vector3(-0.35f, 0.78f, 0f), new Vector3(0.58f, 0.24f, 0.30f), coralMaterial);
+            CreateBlock(root, "CoralArmR", new Vector3(0.42f, 0.68f, 0.04f), new Vector3(0.62f, 0.22f, 0.28f), coralMaterial);
         }
 
         private Material GetAccentMaterial(string key, Color color)
@@ -888,6 +921,7 @@ namespace BiomeRivals.Demo
             public bool Occupied;
             public bool PriorityTarget;
             public int AuraLayers;
+            public bool EngineReady;
             public bool Hovered;
             public bool Pressed;
             public bool HoverRejected;

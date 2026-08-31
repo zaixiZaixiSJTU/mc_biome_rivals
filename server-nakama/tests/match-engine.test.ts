@@ -2019,6 +2019,95 @@ TestHarness.test('Multiple Turtle auras stack on the shared adjacent unit', func
   TestHarness.equal(salmon.adjacencyHealthModifier, 2);
 });
 
+TestHarness.test('Coral Reef permanently grows only the first friendly aquatic unit each turn', function (): void {
+  const state = activeState('match-coral-growth', ['alice', 'bob'], ['ocean_river', 'nether']);
+  const actorIndex = state.players[0]!.playerId === 'alice' ? 0 : 1;
+  const actor = state.players[actorIndex]!;
+  state.activePlayerIndex = actorIndex;
+  actor.hand = ['or_003', 'or_003'];
+  actor.redstone = 10;
+  actor.redstoneCapacity = 10;
+  placeBuilding(state, actorIndex, 'or_007', 0, 'object-10');
+
+  const first = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('coral-first-aquatic', 0, 'or_003', 'UNIT', 0));
+  TestHarness.ok(first.accepted);
+  if (!first.accepted) return;
+  const firstDrowned = first.state.players[actorIndex]!.battlefield.filter(function (value): boolean {
+    return value.cardId === 'or_003';
+  })[0]!;
+  TestHarness.equal(firstDrowned.health, 3);
+  TestHarness.equal(firstDrowned.maxHealth, 3);
+  TestHarness.equal(first.batch.events[0]!.type, 'CARD_DEPLOYED');
+  TestHarness.equal(first.batch.events[1]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(first.batch.events[1]!.payload.reason, 'PERMANENT_HEALTH_MODIFIER');
+  TestHarness.equal(first.batch.events[1]!.payload.sourceInstanceId, 'object-10');
+  TestHarness.equal(first.state.players[actorIndex]!.triggeredEffectKeysThisTurn[0],
+    'object-10:effect.or_007.01');
+  const snapshot = BiomeRivalsRules.createClientSnapshot(first.state, actor.playerId);
+  TestHarness.equal(snapshot.players[actorIndex]!.triggeredEffectKeysThisTurn[0],
+    'object-10:effect.or_007.01');
+
+  const second = BiomeRivalsRules.applyCommand(first.state, actor.playerId,
+    deployCommand('coral-second-aquatic', 1, 'or_003', 'UNIT', 1));
+  TestHarness.ok(second.accepted);
+  if (!second.accepted) return;
+  const drowned = second.state.players[actorIndex]!.battlefield.filter(function (value): boolean {
+    return value.cardId === 'or_003';
+  }).sort(function (left, right): number { return left.slotIndex - right.slotIndex; });
+  TestHarness.equal(drowned[0]!.maxHealth, 3);
+  TestHarness.equal(drowned[1]!.maxHealth, 2);
+  TestHarness.equal(second.batch.events.filter(function (event): boolean {
+    return event.payload.effectId === 'effect.or_007.01';
+  }).length, 0);
+});
+
+TestHarness.test('Multiple Coral Reefs stack in stable order and become ready next turn', function (): void {
+  const state = activeState('match-coral-stack', ['alice', 'bob'], ['ocean_river', 'nether']);
+  const actorIndex = state.players[0]!.playerId === 'alice' ? 0 : 1;
+  const opponentIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  state.activePlayerIndex = actorIndex;
+  actor.hand = ['or_003'];
+  actor.redstone = 10;
+  actor.redstoneCapacity = 10;
+  placeBuilding(state, actorIndex, 'or_007', 1, 'object-11');
+  placeBuilding(state, actorIndex, 'or_007', 0, 'object-10');
+
+  const first = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('coral-stack-first', 0, 'or_003', 'UNIT', 0));
+  TestHarness.ok(first.accepted);
+  if (!first.accepted) return;
+  const growthEvents = first.batch.events.filter(function (event): boolean {
+    return event.type === 'OBJECT_STATS_CHANGED' && event.payload.effectId === 'effect.or_007.01';
+  });
+  TestHarness.equal(growthEvents.length, 2);
+  TestHarness.equal(growthEvents[0]!.payload.sourceInstanceId, 'object-10');
+  TestHarness.equal(growthEvents[1]!.payload.sourceInstanceId, 'object-11');
+  TestHarness.equal(growthEvents[1]!.payload.maxHealth, 4);
+
+  const ended = BiomeRivalsRules.applyCommand(first.state, actor.playerId, command('coral-end-owner', 1, 'END_TURN'));
+  TestHarness.ok(ended.accepted);
+  if (!ended.accepted) return;
+  const returned = BiomeRivalsRules.applyCommand(ended.state,
+    ended.state.players[opponentIndex]!.playerId, command('coral-end-opponent', 2, 'END_TURN'));
+  TestHarness.ok(returned.accepted);
+  if (!returned.accepted) return;
+  const returnedActor = returned.state.players[actorIndex]!;
+  TestHarness.equal(returnedActor.triggeredEffectKeysThisTurn.length, 0);
+  returnedActor.hand = ['or_003'];
+  returnedActor.redstone = 10;
+  const second = BiomeRivalsRules.applyCommand(returned.state, returnedActor.playerId,
+    deployCommand('coral-stack-next-turn', 3, 'or_003', 'UNIT', 1));
+  TestHarness.ok(second.accepted);
+  if (!second.accepted) return;
+  const nextTurnGrowth = second.batch.events.filter(function (event): boolean {
+    return event.type === 'OBJECT_STATS_CHANGED' && event.payload.effectId === 'effect.or_007.01';
+  });
+  TestHarness.equal(nextTurnGrowth.length, 2);
+  TestHarness.equal(nextTurnGrowth[1]!.payload.maxHealth, 4);
+});
+
 TestHarness.test('rejects stale revisions', function (): void {
   const state = activeState('match-1', ['alice', 'bob']);
   const result = BiomeRivalsRules.applyCommand(state, 'alice', command('cmd-1', 99, 'END_TURN'));

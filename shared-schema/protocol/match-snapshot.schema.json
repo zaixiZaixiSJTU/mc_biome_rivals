@@ -8,7 +8,7 @@
   "properties": {
     "matchId": { "type": "string", "minLength": 1 },
     "viewerPlayerId": { "type": "string", "minLength": 1 },
-    "protocolVersion": { "const": 20 },
+    "protocolVersion": { "const": 21 },
     "rulesetVersion": { "type": "string", "minLength": 1 },
     "revision": { "type": "integer", "minimum": 0 },
     "lastEventId": { "type": "integer", "minimum": 0 },
@@ -24,7 +24,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["playerId", "factionId", "mulliganCompleted", "life", "armor", "redstone", "redstoneCapacity", "hand", "deckCount", "buriedCount", "excavatedThisTurn", "discardPile", "fatigueCount", "equipment", "heroHasAttacked", "unitSlots", "buildingSlots", "battlefield"],
+        "required": ["playerId", "factionId", "mulliganCompleted", "life", "armor", "redstone", "redstoneCapacity", "hand", "deckCount", "buriedCount", "excavatedThisTurn", "discardPile", "fatigueCount", "equipment", "heroHasAttacked", "triggeredEffectKeysThisTurn", "unitSlots", "buildingSlots", "battlefield"],
         "properties": {
           "playerId": { "type": "string", "minLength": 1 },
           "factionId": { "enum": ["plains_forest", "desert_badlands", "snow_ice", "cave_dark_forest", "ocean_river", "nether", "end"] },
@@ -51,6 +51,11 @@
             }
           },
           "heroHasAttacked": { "type": "boolean" },
+          "triggeredEffectKeysThisTurn": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "type": "string", "pattern": "^object-[0-9]+:effect\\.or_(002|004|007)\\.01$" }
+          },
           "unitSlots": {
             "type": "array", "minItems": 4, "maxItems": 4,
             "items": { "type": ["string", "null"], "pattern": "^[a-z0-9_]+$" }

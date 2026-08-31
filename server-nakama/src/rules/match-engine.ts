@@ -139,6 +139,7 @@ namespace BiomeRivalsRules {
             maxDurability: player.equipment.maxDurability
           },
           heroHasAttacked: player.heroHasAttacked,
+          triggeredEffectKeysThisTurn: player.triggeredEffectKeysThisTurn.slice(),
           unitSlots: player.unitSlots.slice(),
           buildingSlots: player.buildingSlots.slice(),
           battlefield: player.battlefield.map(function (object): BattlefieldObjectState {
@@ -557,6 +558,7 @@ namespace BiomeRivalsRules {
         nextInstanceId: next.nextInstanceId
       });
       recalculateAdjacencyHealthAuras();
+      triggerCoralReefGrowth(player, battlefieldObject);
       if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
           definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.pf_001.01') {
         const healedLife = Math.min(30, player.life + 1);
@@ -763,6 +765,43 @@ namespace BiomeRivalsRules {
       }
     }
 
+    function triggerCoralReefGrowth(player: PlayerState, summonedUnit: BattlefieldObjectState): number {
+      if (summonedUnit.cardType !== 'UNIT' || summonedUnit.health <= 0 || !cardHasTag(summonedUnit.cardId, 'aquatic')) return 0;
+      const reefs = player.battlefield.filter(function (object): boolean {
+        if (object.cardType !== 'BUILDING' || object.health <= 0) return false;
+        const definition = getCardDefinition(object.cardId);
+        return definition !== null && definition.effectImplementationStatus === 'IMPLEMENTED' &&
+          definition.effectIds.indexOf('effect.or_007.01') >= 0;
+      }).slice().sort(function (left, right): number {
+        if (left.slotIndex !== right.slotIndex) return left.slotIndex - right.slotIndex;
+        return left.instanceId < right.instanceId ? -1 : left.instanceId > right.instanceId ? 1 : 0;
+      });
+      let triggered = 0;
+      for (let reefIndex = 0; reefIndex < reefs.length; reefIndex += 1) {
+        const reef = reefs[reefIndex]!;
+        const triggerKey = reef.instanceId + ':effect.or_007.01';
+        if (player.triggeredEffectKeysThisTurn.indexOf(triggerKey) >= 0) continue;
+        player.triggeredEffectKeysThisTurn.push(triggerKey);
+        summonedUnit.health += 1;
+        summonedUnit.maxHealth += 1;
+        triggered += 1;
+        emit('OBJECT_STATS_CHANGED', {
+          playerId: player.playerId,
+          instanceId: summonedUnit.instanceId,
+          sourceCardId: reef.cardId,
+          sourceInstanceId: reef.instanceId,
+          effectId: 'effect.or_007.01',
+          reason: 'PERMANENT_HEALTH_MODIFIER',
+          attack: summonedUnit.attack,
+          health: summonedUnit.health,
+          maxHealth: summonedUnit.maxHealth,
+          temporaryAttackModifier: summonedUnit.temporaryAttackModifier,
+          temporaryAttackModifierExpiresOnTurn: summonedUnit.temporaryAttackModifierExpiresOnTurn
+        });
+      }
+      return triggered;
+    }
+
     function removeDeadObjects(player: PlayerState): BattlefieldObjectState[] {
       const deadObjects = player.battlefield.filter(function (object): boolean { return object.health <= 0; });
       deadObjects.sort(function (left, right): number {
@@ -943,6 +982,7 @@ namespace BiomeRivalsRules {
         nextInstanceId: next.nextInstanceId
       });
       recalculateAdjacencyHealthAuras();
+      triggerCoralReefGrowth(player, object);
       return true;
     }
 

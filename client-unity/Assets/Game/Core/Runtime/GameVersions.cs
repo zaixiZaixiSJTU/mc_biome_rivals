@@ -2,7 +2,7 @@ namespace BiomeRivals.Core
 {
     public static class GameVersions
     {
-        public const int Protocol = 20;
-        public const string Ruleset = "prototype-0.26";
+        public const int Protocol = 21;
+        public const string Ruleset = "prototype-0.27";
     }
 }

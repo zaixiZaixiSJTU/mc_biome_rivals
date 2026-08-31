@@ -163,6 +163,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewEquipment")) SetupEquipmentPreview();
             else if (HasCommandLineFlag("-previewPrismarineShard")) SetupPrismarineShardPreview();
             else if (HasCommandLineFlag("-previewTurtleAura")) SetupTurtleAuraPreview();
+            else if (HasCommandLineFlag("-previewCoralReef")) SetupCoralReefPreview();
             else if (HasCommandLineFlag("-previewGuardianReaction")) SetupGuardianReactionPreview();
             else if (HasCommandLineFlag("-previewDrownedAdjacency")) SetupDrownedAdjacencyPreview();
             else if (HasCommandLineFlag("-previewDolphinCurrent")) SetupDolphinCurrentPreview();
@@ -746,6 +747,16 @@ namespace BiomeRivals.Demo
                             : "海龟光环已离开该单位；当前生命与最大生命同步调整。", false);
                         yield return ShowTurnBanner("潮甲光环", gainedAura ? Cyan : Ember);
                     }
+                    else if (matchEvent.payload?.effectId == "effect.or_007.01")
+                    {
+                        var coralViewerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
+                        var coralFriendly = matchEvent.payload?.playerId == coralViewerId;
+                        ShowStatus(coralFriendly
+                            ? "珊瑚滋养：本回合首次入场的水生生物获得 +1 当前与最大生命。"
+                            : "敌方珊瑚礁滋养了本回合首次入场的水生生物。", false);
+                        yield return PulseBattlefieldObject(matchEvent.payload?.sourceInstanceId);
+                        yield return ShowTurnBanner("珊瑚滋养", coralFriendly ? Cyan : Ember);
+                    }
                     yield return PulseBattlefieldObject(matchEvent.payload?.instanceId);
                     break;
                 case MatchEventTypes.ObjectStatusApplied:
@@ -1252,6 +1263,36 @@ namespace BiomeRivals.Demo
             if (salmon != null) StartCoroutine(PulseBattlefieldObject(salmon.InstanceId));
         }
 
+        private void SetupCoralReefPreview()
+        {
+            SelectFaction("ocean_river");
+            SelectOpponentFaction("nether");
+            if (!_registry.TryGetDefinition("or_007", out var reefDefinition) ||
+                !_registry.TryGetDefinition("or_003", out var drownedDefinition)) return;
+            _match.ResetDeckAndHand(new[] { reefDefinition.id, drownedDefinition.id }, new[] { "or_001" });
+            var reefDeployed = _match.ApplyDeploy(reefDefinition,
+                _match.CreateDeployCommand(reefDefinition.id, DemoSlotKind.Building, 0));
+            var drownedDeployed = _match.ApplyDeploy(drownedDefinition,
+                _match.CreateDeployCommand(drownedDefinition.id, DemoSlotKind.Unit, 1));
+            var reef = _match.GetObject(true, DemoSlotKind.Building, 0);
+            var drowned = _match.GetObject(true, DemoSlotKind.Unit, 1);
+            var grew = drownedDeployed.Accepted && drowned?.MaxHealth == drownedDefinition.health + 1;
+            if (grew)
+            {
+                _match.EndPlayerTurn();
+                _match.BeginNextPlayerTurn();
+            }
+            _match.ResetHand(new[] { reefDefinition.id });
+            _selectedCardId = reefDefinition.id;
+            RefreshAll();
+            var ready = reef != null && !_match.HasTriggeredEffect(true, reef.InstanceId, "effect.or_007.01");
+            ShowStatus(reefDeployed.Accepted && grew && ready
+                ? "珊瑚礁上一回合已使溺尸永久获得 +1 生命；当前回合重新就绪，粉紫色建筑地表脉冲表示可再次滋养。"
+                : !reefDeployed.Accepted ? reefDeployed.Message : drownedDeployed.Message,
+                !reefDeployed.Accepted || !grew || !ready);
+            if (drowned != null) StartCoroutine(PulseBattlefieldObject(drowned.InstanceId));
+        }
+
         private void SetupStructureDeployedPreview()
         {
             SelectFaction("desert_badlands");
@@ -1721,6 +1762,9 @@ namespace BiomeRivals.Demo
                     value.InstanceId != battlefieldObject?.InstanceId && Mathf.Abs(value.SlotIndex - view.Index) == 1)
                 : 0;
             _battlefield.SetSlotAura(player, view.Kind, view.Index, auraLayers);
+            var coralReady = view.Kind == DemoSlotKind.Building && battlefieldObject?.CardId == "or_007" &&
+                !match.HasTriggeredEffect(player, battlefieldObject.InstanceId, "effect.or_007.01");
+            _battlefield.SetSlotEngineReady(player, view.Kind, view.Index, coralReady);
             _battlefield.SetSlotState(player, view.Kind, view.Index, valid, !empty, priorityTarget);
 
             if (!empty)
@@ -2596,6 +2640,12 @@ namespace BiomeRivals.Demo
             {
                 stats = $"海龟光环 +{battlefieldObject.AdjacencyHealthModifier}生命 · {stats}";
                 accent = Cyan;
+            }
+            if (battlefieldObject?.CardId == "or_007")
+            {
+                var ready = !MatchView.HasTriggeredEffect(!enemy, battlefieldObject.InstanceId, "effect.or_007.01");
+                stats = $"珊瑚滋养：{(ready ? "待触发" : "本回合已触发")} · {stats}";
+                accent = ready ? Hex("#F08FB4") : accent;
             }
             var slow = (battlefieldObject?.Statuses ?? Array.Empty<BattlefieldStatusStateDto>())
                 .FirstOrDefault(value => value != null && value.statusId == "SLOW");
