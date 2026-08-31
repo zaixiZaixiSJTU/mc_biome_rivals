@@ -158,6 +158,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewRaiderDiscount")) SetupRaiderDiscountPreview();
             else if (HasCommandLineFlag("-previewArchaeology")) SetupArchaeologyPreview();
             else if (HasCommandLineFlag("-previewLoot")) SetupLootPreview();
+            else if (HasCommandLineFlag("-previewTamedWolf")) SetupTamedWolfPreview();
             else if (HasCommandLineFlag("-previewDungeonSkeleton")) SetupDungeonSkeletonPreview();
             else if (HasCommandLineFlag("-previewStray")) SetupStrayPreview();
             else if (HasCommandLineFlag("-previewEquipment")) SetupEquipmentPreview();
@@ -715,6 +716,15 @@ namespace BiomeRivals.Demo
                             : "地牢骷髅亡语：随机命中一个敌方生物并造成 1 点伤害。", false);
                         yield return ShowTurnBanner("亡语", Ember);
                     }
+                    else if (matchEvent.payload?.effectId == "effect.pf_003.01")
+                    {
+                        var wolfViewerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
+                        var wolfFriendly = matchEvent.payload?.playerId == wolfViewerId;
+                        ShowStatus(wolfFriendly
+                            ? "驯服的狼落位时与另一个己方动物相邻，永久获得 +1 当前与最大生命。"
+                            : "敌方驯服的狼借助相邻动物获得了永久生命成长。", false);
+                        yield return ShowTurnBanner("忠诚成长", wolfFriendly ? Gold : Ember);
+                    }
                     else if (matchEvent.payload?.effectId == "effect.or_002.01")
                     {
                         var guideViewerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
@@ -942,6 +952,28 @@ namespace BiomeRivals.Demo
             if (attacker != null) _battlefield.SetSlotPressed(true, DemoSlotKind.Unit, attacker.SlotIndex, true);
             RefreshAll();
             ShowStatus("嘲讽生效：只能攻击带金色地表高亮的铁傀儡。", false);
+        }
+
+        private void SetupTamedWolfPreview()
+        {
+            SelectFaction("plains_forest");
+            SelectOpponentFaction("plains_forest");
+            if (!_registry.TryGetDefinition("pf_002", out var sheepDefinition) ||
+                !_registry.TryGetDefinition("pf_003", out var wolfDefinition)) return;
+            _match.ResetHand(new[] { sheepDefinition.id, wolfDefinition.id });
+            var sheepDeployed = _match.ApplyDeploy(sheepDefinition,
+                _match.CreateDeployCommand(sheepDefinition.id, DemoSlotKind.Unit, 0));
+            var wolfDeployed = _match.ApplyDeploy(wolfDefinition,
+                _match.CreateDeployCommand(wolfDefinition.id, DemoSlotKind.Unit, 1));
+            _match.ResetHand(new[] { wolfDefinition.id });
+            _selectedCardId = wolfDefinition.id;
+            RefreshAll();
+            var wolf = _match.GetObject(true, DemoSlotKind.Unit, 1);
+            ShowStatus(sheepDeployed.Accepted && wolfDeployed.Accepted && wolf?.MaxHealth == 3
+                ? "已部署的狼因相邻绵羊永久成长；金色地表会触发忠诚战吼，远端青绿色空格只会普通部署。"
+                : !sheepDeployed.Accepted ? sheepDeployed.Message : wolfDeployed.Message,
+                !sheepDeployed.Accepted || !wolfDeployed.Accepted || wolf?.MaxHealth != 3);
+            _battlefield.SetSlotHovered(true, DemoSlotKind.Unit, 2, true);
         }
 
         private void SetupDeathrattlePreview()
@@ -1792,8 +1824,12 @@ namespace BiomeRivals.Demo
                 !string.IsNullOrEmpty(_selectedCardId) &&
                 _registry.TryGetDefinition(_selectedCardId, out var selectedDefinition) && IsDrowned(selectedDefinition) &&
                 DrownedBattlecryActivatesAt(view.Index);
+            var activatesTamedWolf = valid && player && empty && view.Kind == DemoSlotKind.Unit &&
+                !string.IsNullOrEmpty(_selectedCardId) &&
+                _registry.TryGetDefinition(_selectedCardId, out var wolfDefinition) && IsTamedWolf(wolfDefinition) &&
+                TamedWolfBattlecryActivatesAt(view.Index);
             var priorityTarget = movementChoice && battlefieldObject?.InstanceId == match.PendingChoice.targetInstanceId ||
-                valid && !player && battlefieldObject?.HasKeyword("TAUNT") == true || activatesDrowned;
+                valid && !player && battlefieldObject?.HasKeyword("TAUNT") == true || activatesDrowned || activatesTamedWolf;
             var auraBattlefield = player ? match.PlayerBattlefield : match.OpponentBattlefield;
             var auraLayers = view.Kind == DemoSlotKind.Unit
                 ? auraBattlefield.Count(value => value != null && value.Health > 0 && value.CardId == "or_005" &&
@@ -2042,6 +2078,13 @@ namespace BiomeRivals.Demo
                             ? "金色地表：此位置相邻水生友军，部署前需要选择敌方战吼目标。"
                             : $"金色地表：部署后将对 {GetCardName(selectedTarget.CardId)} 造成 1 点伤害。"
                         : "普通地表：可部署溺尸，但此位置没有相邻水生友军，战吼不会触发。", false);
+                }
+                else if (!rejected && _registry.TryGetDefinition(_selectedCardId, out var wolfHoverDefinition) &&
+                    IsTamedWolf(wolfHoverDefinition))
+                {
+                    ShowStatus(TamedWolfBattlecryActivatesAt(index)
+                        ? "金色地表：此位置相邻另一个己方动物，驯服的狼落位后永久获得 +1 生命。"
+                        : "普通地表：可以部署驯服的狼，但没有相邻动物，忠诚战吼不会触发。", false);
                 }
                 else ShowStatus(preview.Message, rejected);
             }
@@ -2414,6 +2457,17 @@ namespace BiomeRivals.Demo
         private static bool IsDrowned(CardDefinitionEntry definition) =>
             definition?.effectIds?.Contains("effect.or_003.01") == true;
 
+        private static bool IsTamedWolf(CardDefinitionEntry definition) =>
+            definition?.effectIds?.Contains("effect.pf_003.01") == true;
+
+        private bool TamedWolfBattlecryActivatesAt(int slotIndex)
+        {
+            return MatchView.PlayerBattlefield.Any(value => value != null && value.Health > 0 &&
+                value.SlotKind == DemoSlotKind.Unit && Mathf.Abs(value.SlotIndex - slotIndex) == 1 &&
+                _registry.TryGetDefinition(value.CardId, out var adjacentDefinition) &&
+                (adjacentDefinition.tags ?? Array.Empty<string>()).Contains("animal"));
+        }
+
         private bool DrownedBattlecryActivatesAt(int slotIndex)
         {
             return MatchView.PlayerBattlefield.Any(value => value != null && value.Health > 0 &&
@@ -2711,6 +2765,16 @@ namespace BiomeRivals.Demo
                 var ready = !MatchView.HasTriggeredEffect(!enemy, battlefieldObject.InstanceId, "effect.or_007.01");
                 stats = $"珊瑚滋养：{(ready ? "待触发" : "本回合已触发")} · {stats}";
                 accent = ready ? Hex("#F08FB4") : accent;
+            }
+            if (battlefieldObject?.CardId == "pf_003")
+            {
+                var permanentGrowth = Mathf.Max(0,
+                    battlefieldObject.MaxHealth - definition.health - battlefieldObject.AdjacencyHealthModifier);
+                if (permanentGrowth > 0)
+                {
+                    stats = $"忠诚 +{permanentGrowth}生命 · {stats}";
+                    accent = Gold;
+                }
             }
             if (IsOceanMonumentThreat(!enemy, battlefieldObject))
             {

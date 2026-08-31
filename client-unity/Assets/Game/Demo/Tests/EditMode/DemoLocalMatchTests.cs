@@ -923,6 +923,9 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.GreaterThan(0f));
                 battlefield.SetSlotEndPhaseThreat(false, DemoSlotKind.Unit, 0, false);
                 Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.Zero);
+                battlefield.SetSlotState(false, DemoSlotKind.Unit, 0, true, false, true);
+                Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.GreaterThanOrEqualTo(0.32f));
+                battlefield.SetSlotState(false, DemoSlotKind.Unit, 0, false, false);
                 battlefield.SyncPieces(new[]
                 {
                     new DemoBattlefieldObject
@@ -1634,6 +1637,58 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(match.GetObject(false, DemoSlotKind.Unit, 1).Health, Is.EqualTo(2));
             Assert.That(match.GetObject(false, DemoSlotKind.Unit, 3).Health, Is.EqualTo(1));
             Assert.That(match.BuildingSlots, Is.EqualTo(new[] { monument.id, monument.id, monument.id }));
+        }
+
+        [Test]
+        public void TamedWolfBattlecryPermanentlyGrowsBesideAnAnimal()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("pf_002", out var sheep), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_003", out var wolf), Is.True);
+            Assert.That(wolf.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { sheep.id, wolf.id });
+            Assert.That(match.ApplyDeploy(sheep,
+                match.CreateDeployCommand(sheep.id, DemoSlotKind.Unit, 1)).Accepted, Is.True);
+
+            var deployed = match.ApplyDeploy(wolf,
+                match.CreateDeployCommand(wolf.id, DemoSlotKind.Unit, 2));
+            Assert.That(deployed.Accepted, Is.True);
+            Assert.That(deployed.Message, Does.Contain("忠诚战吼触发"));
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 2).Health, Is.EqualTo(3));
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 2).MaxHealth, Is.EqualTo(3));
+        }
+
+        [Test]
+        public void TamedWolfBattlecryTriggersOnceAndIgnoresNonAdjacentAnimals()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("pf_001", out var bee), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_002", out var sheep), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_003", out var wolf), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_004", out var villager), Is.True);
+
+            var doubleMatch = new DemoLocalMatch();
+            doubleMatch.ResetHand(new[] { bee.id, sheep.id, wolf.id });
+            Assert.That(doubleMatch.ApplyDeploy(bee,
+                doubleMatch.CreateDeployCommand(bee.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            Assert.That(doubleMatch.ApplyDeploy(sheep,
+                doubleMatch.CreateDeployCommand(sheep.id, DemoSlotKind.Unit, 2)).Accepted, Is.True);
+            Assert.That(doubleMatch.ApplyDeploy(wolf,
+                doubleMatch.CreateDeployCommand(wolf.id, DemoSlotKind.Unit, 1)).Accepted, Is.True);
+            Assert.That(doubleMatch.GetObject(true, DemoSlotKind.Unit, 1).MaxHealth, Is.EqualTo(3));
+
+            var ignoredMatch = new DemoLocalMatch();
+            ignoredMatch.ResetHand(new[] { bee.id, villager.id, wolf.id });
+            Assert.That(ignoredMatch.ApplyDeploy(bee,
+                ignoredMatch.CreateDeployCommand(bee.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            Assert.That(ignoredMatch.ApplyDeploy(villager,
+                ignoredMatch.CreateDeployCommand(villager.id, DemoSlotKind.Unit, 1)).Accepted, Is.True);
+            var ignored = ignoredMatch.ApplyDeploy(wolf,
+                ignoredMatch.CreateDeployCommand(wolf.id, DemoSlotKind.Unit, 2));
+            Assert.That(ignored.Accepted, Is.True);
+            Assert.That(ignored.Message, Does.Contain("未触发"));
+            Assert.That(ignoredMatch.GetObject(true, DemoSlotKind.Unit, 2).MaxHealth, Is.EqualTo(2));
         }
 
         [Test]

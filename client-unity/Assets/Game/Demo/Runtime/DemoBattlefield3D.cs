@@ -283,7 +283,9 @@ namespace BiomeRivals.Demo
                     : actionableHover
                     ? 0.78f
                      : marker.ValidTarget
-                         ? (marker.Occupied ? 0.48f + pulse * 0.18f : 0.18f + pulse * 0.12f)
+                         ? marker.PriorityTarget
+                             ? (marker.Occupied ? 0.55f + pulse * 0.20f : 0.32f + pulse * 0.18f)
+                             : (marker.Occupied ? 0.48f + pulse * 0.18f : 0.18f + pulse * 0.12f)
                         : marker.EndPhaseThreat
                             ? 0.22f + pulse * 0.10f
                          : marker.AuraLayers > 0

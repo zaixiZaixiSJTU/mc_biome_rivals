@@ -113,3 +113,5 @@ DB-005 的动态费用直接复用卡面左上角费用槽，不增加独立 Web
 珊瑚礁成长预览：[`assets/demo-coral-reef-preview-v1.png`](assets/demo-coral-reef-preview-v1.png)。建筑使用本机 Minecraft `tube_coral_block` 纹理构成体素珊瑚簇；待触发时建筑格地表以低强度粉紫色脉冲提示持续效果，单位铭牌显示结算后的永久生命，右侧卡牌与手牌继续复用同一材质化卡面。
 
 海底神殿结束阶段预览：[`assets/demo-ocean-monument-preview-v1.png`](assets/demo-ocean-monument-preview-v1.png)。神殿是一个横跨三个建筑格的连续体素对象；相邻单位保持普通地表，孤立单位同时获得橙红地表材质脉冲与“神殿锁定”铭牌，所有标记都随 3D 地块接受同一相机透视。
+
+驯服的狼相邻战吼预览：[`assets/demo-tamed-wolf-preview-v1.png`](assets/demo-tamed-wolf-preview-v1.png)。已成长的狼铭牌显示永久生命；选中另一张狼时，与动物相邻的可部署地块以金色贴地材质和轻微抬升反馈显示，远离动物的合法格继续使用普通青绿色，从落位前即可读出战吼结果。

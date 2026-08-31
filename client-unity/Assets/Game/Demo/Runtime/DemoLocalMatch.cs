@@ -240,6 +240,14 @@ namespace BiomeRivals.Demo
                 deployMessage += $"；蜜蜂战吼恢复 {PlayerLife - lifeBefore} 点生命。";
             }
             else if (definition.effectImplementationStatus == "IMPLEMENTED" &&
+                definition.effectIds != null && definition.effectIds.Contains("effect.pf_003.01"))
+            {
+                var grew = TriggerTamedWolfBattlecry(_playerBattlefield, deployedObject);
+                deployMessage += grew
+                    ? "；忠诚战吼触发，获得 +1 当前与最大生命。"
+                    : "；没有相邻动物友军，忠诚战吼未触发。";
+            }
+            else if (definition.effectImplementationStatus == "IMPLEMENTED" &&
                 definition.effectIds != null && definition.effectIds.Contains("effect.db_003.01"))
             {
                 OfferArchaeologyChoice(deployedObject);
@@ -1058,6 +1066,20 @@ namespace BiomeRivals.Demo
                 triggered++;
             }
             return triggered;
+        }
+
+        private static bool TriggerTamedWolfBattlecry(
+            List<DemoBattlefieldObject> battlefield,
+            DemoBattlefieldObject wolf)
+        {
+            if (wolf == null || wolf.SlotKind != DemoSlotKind.Unit || wolf.Health <= 0) return false;
+            var hasAdjacentAnimal = battlefield.Any(value => value != null && value.InstanceId != wolf.InstanceId &&
+                value.SlotKind == DemoSlotKind.Unit && value.Health > 0 &&
+                Math.Abs(value.SlotIndex - wolf.SlotIndex) == 1 && value.HasTag("animal"));
+            if (!hasAdjacentAnimal) return false;
+            wolf.Health += 1;
+            wolf.MaxHealth += 1;
+            return true;
         }
 
         private int ResolveOceanMonumentEndPhase(List<string> deathMessages)

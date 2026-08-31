@@ -1,6 +1,6 @@
 # 珊瑚礁水生成长规范 v1
 
-本规范对应 `protocolVersion 21`、`rulesetVersion prototype-0.28` 与内容版本 20。
+本规范对应 `protocolVersion 21`、`rulesetVersion prototype-0.29` 与内容版本 21。
 
 ## OR-007 珊瑚礁
 

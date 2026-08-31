@@ -2108,6 +2108,84 @@ TestHarness.test('Multiple Coral Reefs stack in stable order and become ready ne
   TestHarness.equal(nextTurnGrowth[1]!.payload.maxHealth, 4);
 });
 
+TestHarness.test('Tamed Wolf permanently gains health beside a friendly Animal', function (): void {
+  const state = activeState('match-tamed-wolf-adjacent', ['alice', 'bob'], ['plains_forest', 'nether']);
+  const actorIndex = state.players[0]!.playerId === 'alice' ? 0 : 1;
+  const actor = state.players[actorIndex]!;
+  state.activePlayerIndex = actorIndex;
+  actor.hand = ['pf_003'];
+  actor.redstone = 10;
+  actor.redstoneCapacity = 10;
+  placeUnit(state, actorIndex, 'pf_002', 1, 'object-10', 1);
+
+  const deployed = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('tamed-wolf-adjacent', 0, 'pf_003', 'UNIT', 2));
+  TestHarness.ok(deployed.accepted);
+  if (!deployed.accepted) return;
+  const wolf = deployed.state.players[actorIndex]!.battlefield.filter(function (value): boolean {
+    return value.cardId === 'pf_003';
+  })[0]!;
+  TestHarness.equal(wolf.health, 3);
+  TestHarness.equal(wolf.maxHealth, 3);
+  TestHarness.equal(deployed.batch.events.length, 2);
+  TestHarness.equal(deployed.batch.events[0]!.type, 'CARD_DEPLOYED');
+  TestHarness.equal(deployed.batch.events[1]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(deployed.batch.events[1]!.payload.effectId, 'effect.pf_003.01');
+  TestHarness.equal(deployed.batch.events[1]!.payload.sourceInstanceId, wolf.instanceId);
+  TestHarness.equal(deployed.batch.events[1]!.payload.reason, 'PERMANENT_HEALTH_MODIFIER');
+  TestHarness.equal(deployed.batch.events[1]!.payload.maxHealth, 3);
+  const snapshot = BiomeRivalsRules.createClientSnapshot(deployed.state, actor.playerId);
+  TestHarness.equal(snapshot.players[actorIndex]!.battlefield.filter(function (value): boolean {
+    return value.cardId === 'pf_003';
+  })[0]!.maxHealth, 3);
+});
+
+TestHarness.test('Tamed Wolf triggers once with two Animals and ignores nonadjacent or enemy Animals', function (): void {
+  const doubleState = activeState('match-tamed-wolf-double', ['alice', 'bob'], ['plains_forest', 'nether']);
+  const doubleActorIndex = doubleState.players[0]!.playerId === 'alice' ? 0 : 1;
+  const doubleActor = doubleState.players[doubleActorIndex]!;
+  doubleState.activePlayerIndex = doubleActorIndex;
+  doubleActor.hand = ['pf_003'];
+  doubleActor.redstone = 10;
+  doubleActor.redstoneCapacity = 10;
+  placeUnit(doubleState, doubleActorIndex, 'pf_001', 0, 'object-10', 1);
+  placeUnit(doubleState, doubleActorIndex, 'pf_002', 2, 'object-11', 1);
+  const doubleResult = BiomeRivalsRules.applyCommand(doubleState, doubleActor.playerId,
+    deployCommand('tamed-wolf-double', 0, 'pf_003', 'UNIT', 1));
+  TestHarness.equal(doubleResult.accepted, true, JSON.stringify(doubleResult));
+  if (!doubleResult.accepted) return;
+  const doubleWolf = doubleResult.state.players[doubleActorIndex]!.battlefield.filter(function (value): boolean {
+    return value.cardId === 'pf_003';
+  })[0]!;
+  TestHarness.equal(doubleWolf.maxHealth, 3);
+  TestHarness.equal(doubleResult.batch.events.filter(function (event): boolean {
+    return event.payload.effectId === 'effect.pf_003.01';
+  }).length, 1);
+
+  const ignoredState = activeState('match-tamed-wolf-ignored', ['alice', 'bob'], ['plains_forest', 'nether']);
+  const ignoredActorIndex = ignoredState.players[0]!.playerId === 'alice' ? 0 : 1;
+  const ignoredOpponentIndex = ignoredActorIndex === 0 ? 1 : 0;
+  const ignoredActor = ignoredState.players[ignoredActorIndex]!;
+  ignoredState.activePlayerIndex = ignoredActorIndex;
+  ignoredActor.hand = ['pf_003'];
+  ignoredActor.redstone = 10;
+  ignoredActor.redstoneCapacity = 10;
+  placeUnit(ignoredState, ignoredActorIndex, 'pf_002', 0, 'object-20', 1);
+  placeUnit(ignoredState, ignoredActorIndex, 'pf_004', 1, 'object-21', 1);
+  placeUnit(ignoredState, ignoredOpponentIndex, 'pf_002', 2, 'object-22', 1);
+  const ignoredResult = BiomeRivalsRules.applyCommand(ignoredState, ignoredActor.playerId,
+    deployCommand('tamed-wolf-ignored', 0, 'pf_003', 'UNIT', 2));
+  TestHarness.equal(ignoredResult.accepted, true, JSON.stringify(ignoredResult));
+  if (!ignoredResult.accepted) return;
+  const ignoredWolf = ignoredResult.state.players[ignoredActorIndex]!.battlefield.filter(function (value): boolean {
+    return value.cardId === 'pf_003';
+  })[0]!;
+  TestHarness.equal(ignoredWolf.maxHealth, 2);
+  TestHarness.equal(ignoredResult.batch.events.filter(function (event): boolean {
+    return event.payload.effectId === 'effect.pf_003.01';
+  }).length, 0);
+});
+
 TestHarness.test('Ocean Monument damages only isolated enemy units before turn end', function (): void {
   const state = activeState('match-monument-isolation', ['alice', 'bob'], ['ocean_river', 'nether']);
   const actorIndex = state.players[0]!.playerId === 'alice' ? 0 : 1;

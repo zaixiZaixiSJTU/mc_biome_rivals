@@ -572,6 +572,9 @@ namespace BiomeRivalsRules {
           life: player.life
         });
       } else if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
+          definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.pf_003.01') {
+        triggerTamedWolfBattlecry(player, battlefieldObject);
+      } else if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
           definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.db_003.01') {
         offerArchaeologyChoice(player, battlefieldObject, definition.effectIds[0]);
       } else if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
@@ -800,6 +803,31 @@ namespace BiomeRivalsRules {
         });
       }
       return triggered;
+    }
+
+    function triggerTamedWolfBattlecry(player: PlayerState, wolf: BattlefieldObjectState): boolean {
+      if (wolf.cardType !== 'UNIT' || wolf.health <= 0) return false;
+      const hasAdjacentAnimal = player.battlefield.some(function (neighbor): boolean {
+        return neighbor.instanceId !== wolf.instanceId && neighbor.cardType === 'UNIT' && neighbor.health > 0 &&
+          Math.abs(neighbor.slotIndex - wolf.slotIndex) === 1 && cardHasTag(neighbor.cardId, 'animal');
+      });
+      if (!hasAdjacentAnimal) return false;
+      wolf.health += 1;
+      wolf.maxHealth += 1;
+      emit('OBJECT_STATS_CHANGED', {
+        playerId: player.playerId,
+        instanceId: wolf.instanceId,
+        sourceCardId: wolf.cardId,
+        sourceInstanceId: wolf.instanceId,
+        effectId: 'effect.pf_003.01',
+        reason: 'PERMANENT_HEALTH_MODIFIER',
+        attack: wolf.attack,
+        health: wolf.health,
+        maxHealth: wolf.maxHealth,
+        temporaryAttackModifier: wolf.temporaryAttackModifier,
+        temporaryAttackModifierExpiresOnTurn: wolf.temporaryAttackModifierExpiresOnTurn
+      });
+      return true;
     }
 
     function resolveOceanMonumentEndPhase(player: PlayerState, opponent: PlayerState): number {
