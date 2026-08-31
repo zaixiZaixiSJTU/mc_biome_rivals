@@ -79,6 +79,7 @@ namespace BiomeRivals.Core
         public string attackerInstanceId = string.Empty;
         public string targetType = string.Empty;
         public string targetInstanceId = string.Empty;
+        public string[] targetInstanceIds = Array.Empty<string>();
         public string choiceId = string.Empty;
         public int selectedOptionIndex = -1;
     }
@@ -145,7 +146,13 @@ namespace BiomeRivals.Core
                 payload = new MatchCommandPayloadDto()
             };
 
-        public static MatchCommandDto PlayCard(string commandId, int revision, string cardId, string targetType = "", string targetInstanceId = "") =>
+        public static MatchCommandDto PlayCard(
+            string commandId,
+            int revision,
+            string cardId,
+            string targetType = "",
+            string targetInstanceId = "",
+            string[] targetInstanceIds = null) =>
             new MatchCommandDto
             {
                 protocolVersion = GameVersions.Protocol,
@@ -157,7 +164,8 @@ namespace BiomeRivals.Core
                 {
                     cardId = cardId,
                     targetType = targetType,
-                    targetInstanceId = targetInstanceId
+                    targetInstanceId = targetInstanceId,
+                    targetInstanceIds = targetInstanceIds ?? Array.Empty<string>()
                 }
             };
 

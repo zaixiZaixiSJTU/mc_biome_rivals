@@ -38,6 +38,7 @@ namespace BiomeRivals.Demo
         private readonly List<FactionButtonView> _factionButtons = new List<FactionButtonView>();
         private readonly List<IMatchEventPresenter> _eventPresenters = new List<IMatchEventPresenter>();
         private readonly HashSet<int> _mulliganSelectedIndices = new HashSet<int>();
+        private readonly List<string> _selectedCardTargetInstanceIds = new List<string>();
 
         private CardContentRegistry _registry;
         private DemoBattlefield3D _battlefield;
@@ -162,6 +163,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewTamedWolf")) SetupTamedWolfPreview();
             else if (HasCommandLineFlag("-previewVillagerFarmer")) SetupVillagerFarmerPreview();
             else if (HasCommandLineFlag("-previewWoodlandNursery")) SetupWoodlandNurseryPreview();
+            else if (HasCommandLineFlag("-previewBreedingSeason")) SetupBreedingSeasonPreview();
             else if (HasCommandLineFlag("-previewDungeonSkeleton")) SetupDungeonSkeletonPreview();
             else if (HasCommandLineFlag("-previewStray")) SetupStrayPreview();
             else if (HasCommandLineFlag("-previewEquipment")) SetupEquipmentPreview();
@@ -561,7 +563,8 @@ namespace BiomeRivals.Demo
                     var summonedName = string.IsNullOrEmpty(matchEvent.payload?.cardId)
                         ? "一个单位"
                         : GetCardName(matchEvent.payload.cardId);
-                    var summonTriggerName = matchEvent.payload?.effectId == "effect.nt_001.01" ? "亡语" : "效果";
+                    var summonTriggerName = matchEvent.payload?.effectId == "effect.nt_001.01" ? "亡语" :
+                        matchEvent.payload?.effectId == "effect.pf_006.01" ? "繁殖" : "效果";
                     ShowStatus(ownSummon
                         ? $"{summonSourceName}{summonTriggerName}：{summonedName}已在单位格 {matchEvent.payload.slotIndex + 1} 召唤。"
                         : $"敌方{summonSourceName}{summonTriggerName}：{summonedName}已在单位格 {matchEvent.payload.slotIndex + 1} 召唤。", false);
@@ -730,6 +733,15 @@ namespace BiomeRivals.Demo
                             ? "驯服的狼落位时与另一个己方动物相邻，永久获得 +1 当前与最大生命。"
                             : "敌方驯服的狼借助相邻动物获得了永久生命成长。", false);
                         yield return ShowTurnBanner("忠诚成长", wolfFriendly ? Gold : Ember);
+                    }
+                    else if (matchEvent.payload?.effectId == "effect.pf_006.01")
+                    {
+                        var breedingViewerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
+                        var breedingFriendly = matchEvent.payload?.playerId == breedingViewerId;
+                        ShowStatus(breedingFriendly
+                            ? "繁殖季节：两个选定的己方动物永久获得 +1 当前与最大生命。"
+                            : "敌方繁殖季节强化了两个动物。", false);
+                        yield return ShowTurnBanner("繁殖成长", breedingFriendly ? Leaf : Ember);
                     }
                     else if (matchEvent.payload?.effectId == "effect.or_002.01")
                     {
@@ -932,6 +944,7 @@ namespace BiomeRivals.Demo
                 return;
             }
             _pendingTargetCardId = null;
+            _selectedCardTargetInstanceIds.Clear();
             _selectedDeploymentTargetInstanceId = null;
             _activeFaction = factionId;
             _match.SetPlayerFaction(factionId);
@@ -1399,6 +1412,31 @@ namespace BiomeRivals.Demo
             if (sheep != null) StartCoroutine(PulseBattlefieldObject(sheep.InstanceId));
         }
 
+        private void SetupBreedingSeasonPreview()
+        {
+            SelectFaction("plains_forest");
+            SelectOpponentFaction("plains_forest");
+            if (!_registry.TryGetDefinition("pf_001", out var beeDefinition) ||
+                !_registry.TryGetDefinition("pf_002", out var sheepDefinition) ||
+                !_registry.TryGetDefinition("pf_006", out var breedingDefinition)) return;
+            _match.ResetDeckAndHand(new[] { beeDefinition.id, sheepDefinition.id }, new[] { "pf_003" });
+            var beeDeployed = _match.ApplyDeploy(beeDefinition,
+                _match.CreateDeployCommand(beeDefinition.id, DemoSlotKind.Unit, 0));
+            var sheepDeployed = _match.ApplyDeploy(sheepDefinition,
+                _match.CreateDeployCommand(sheepDefinition.id, DemoSlotKind.Unit, 2));
+            var bee = _match.GetObject(true, DemoSlotKind.Unit, 0);
+            _match.ResetHand(new[] { breedingDefinition.id });
+            _selectedCardId = breedingDefinition.id;
+            _pendingTargetCardId = breedingDefinition.id;
+            _selectedCardTargetInstanceIds.Clear();
+            if (bee != null) _selectedCardTargetInstanceIds.Add(bee.InstanceId);
+            RefreshAll();
+            ShowStatus(beeDeployed.Accepted && sheepDeployed.Accepted
+                ? "繁殖目标：已选择 1/2；金色蜜蜂为已选目标，绿色绵羊仍可选择，确认后才会结算。"
+                : !beeDeployed.Accepted ? beeDeployed.Message : sheepDeployed.Message,
+                !beeDeployed.Accepted || !sheepDeployed.Accepted);
+        }
+
         private void SetupOceanMonumentPreview()
         {
             SelectFaction("ocean_river");
@@ -1503,6 +1541,7 @@ namespace BiomeRivals.Demo
             _opponentFaction = factionId;
             _match.SetOpponentFaction(factionId);
             _pendingTargetCardId = null;
+            _selectedCardTargetInstanceIds.Clear();
             _selectedDeploymentTargetInstanceId = null;
             _selectedAttackerInstanceId = null;
             _match.ResetOpponent(GetOpponentDefinitions(factionId));
@@ -1891,7 +1930,10 @@ namespace BiomeRivals.Demo
                 !string.IsNullOrEmpty(_selectedCardId) &&
                 _registry.TryGetDefinition(_selectedCardId, out var wolfDefinition) && IsTamedWolf(wolfDefinition) &&
                 TamedWolfBattlecryActivatesAt(view.Index);
-            var priorityTarget = movementChoice && battlefieldObject?.InstanceId == match.PendingChoice.targetInstanceId ||
+            var selectedCardTarget = battlefieldObject != null &&
+                _selectedCardTargetInstanceIds.Contains(battlefieldObject.InstanceId);
+            var priorityTarget = selectedCardTarget ||
+                movementChoice && battlefieldObject?.InstanceId == match.PendingChoice.targetInstanceId ||
                 valid && !player && battlefieldObject?.HasKeyword("TAUNT") == true || activatesDrowned || activatesTamedWolf;
             var auraBattlefield = player ? match.PlayerBattlefield : match.OpponentBattlefield;
             var auraLayers = view.Kind == DemoSlotKind.Unit
@@ -2091,16 +2133,36 @@ namespace BiomeRivals.Demo
                 var targeting = _pendingTargetCardId == definition.id;
                 var requiresTarget = DemoCardTargeting.TryGetRule(definition, out var targetRule);
                 var hasLegalTarget = !requiresTarget || DemoCardTargeting.HasLegalTarget(match, targetRule);
-                var actionLabel = !implemented ? "效果尚未接入" : targeting ? "取消目标选择" : !hasLegalTarget ? "没有合法目标" : requiresTarget ? targetRule.ActionLabel : definition.cardType == "EQUIPMENT" ? "装备武器" : "释放卡牌";
-                var cast = CreateSecondaryButton(_inspectorRoot, "Cast", new Vector2(0, -118), new Vector2(235, 60), actionLabel, 17);
                 var canPlay = match.IsPlayerTurn && match.Phase == DemoTurnPhase.Main && match.Hand.Contains(definition.id) && effectiveCost <= match.Energy;
-                cast.interactable = targeting || (implemented && hasLegalTarget && canPlay && (!IsOnlineBoard || _onlineSession.CanIssueCommand));
-                cast.onClick.AddListener(targeting ? (UnityEngine.Events.UnityAction)CancelTargetSelection : CastSelectedCard);
-                cast.gameObject.AddComponent<DemoHoverScale>().Configure(1.04f, 16f);
+                var multiTargeting = targeting && requiresTarget && targetRule.RequiredTargetCount > 1;
+                if (multiTargeting)
+                {
+                    var confirm = CreateSecondaryButton(_inspectorRoot, "Cast", new Vector2(-61, -112), new Vector2(116, 52),
+                        $"确认 {_selectedCardTargetInstanceIds.Count}/{targetRule.RequiredTargetCount}", 15);
+                    confirm.interactable = _selectedCardTargetInstanceIds.Count == targetRule.RequiredTargetCount &&
+                        (!IsOnlineBoard || _onlineSession.CanIssueCommand);
+                    confirm.onClick.AddListener(ConfirmMultiTargetCard);
+                    confirm.gameObject.AddComponent<DemoHoverScale>().Configure(1.04f, 16f);
+                    var cancel = CreateSecondaryButton(_inspectorRoot, "CancelTarget", new Vector2(61, -112), new Vector2(116, 52), "取消选择", 15);
+                    cancel.interactable = true;
+                    cancel.onClick.AddListener(CancelTargetSelection);
+                    CreateText(_inspectorRoot, "TargetProgress", new Vector2(0, -153), new Vector2(246, 28),
+                        "绿色可选 · 金色已选 · 再次点击可撤销", 12, Gold, TextAnchor.MiddleCenter, FontStyle.Bold);
+                }
+                else
+                {
+                    var actionLabel = !implemented ? "效果尚未接入" : targeting ? "取消目标选择" : !hasLegalTarget ? "没有合法目标" : requiresTarget ? targetRule.ActionLabel : definition.cardType == "EQUIPMENT" ? "装备武器" : "释放卡牌";
+                    var cast = CreateSecondaryButton(_inspectorRoot, "Cast", new Vector2(0, -118), new Vector2(235, 60), actionLabel, 17);
+                    cast.interactable = targeting || (implemented && hasLegalTarget && canPlay && (!IsOnlineBoard || _onlineSession.CanIssueCommand));
+                    cast.onClick.AddListener(targeting ? (UnityEngine.Events.UnityAction)CancelTargetSelection : CastSelectedCard);
+                    cast.gameObject.AddComponent<DemoHoverScale>().Configure(1.04f, 16f);
+                }
             }
             var implementationLabel = definition.effectImplementationStatus == "IMPLEMENTED" ? "已接入" : definition.effectImplementationStatus == "NONE" ? "无额外效果" : "待接入";
             var targetedDeployment = deployType && DemoCardTargeting.TryGetRule(definition, out _);
-            var implementationY = deployType && (definition.hasCraftingRecipe || targetedDeployment) ? -236 : -190;
+            var multiTargetInspector = _pendingTargetCardId == definition.id &&
+                DemoCardTargeting.TryGetRule(definition, out var inspectorTargetRule) && inspectorTargetRule.RequiredTargetCount > 1;
+            var implementationY = deployType && (definition.hasCraftingRecipe || targetedDeployment) ? -236 : multiTargetInspector ? -220 : -190;
             var implementationText = isDiscounted
                 ? $"考古联动：本回合费用 -1（{definition.cost} → {effectiveCost}）\n稳定效果槽：{string.Join(", ", definition.effectIds ?? Array.Empty<string>())}"
                 : definition.hasCraftingRecipe
@@ -2170,6 +2232,7 @@ namespace BiomeRivals.Demo
         {
             if (MatchView.PendingChoice != null) return;
             _pendingTargetCardId = null;
+            _selectedCardTargetInstanceIds.Clear();
             _selectedDeploymentTargetInstanceId = null;
             _selectedCardId = cardId;
             _selectedPaymentMethod = MatchPaymentMethods.Redstone;
@@ -2428,6 +2491,7 @@ namespace BiomeRivals.Demo
                     return;
                 }
                 _pendingTargetCardId = definition.id;
+                _selectedCardTargetInstanceIds.Clear();
                 ShowStatus(targetRule.SelectionPrompt, false);
                 RefreshAll();
                 return;
@@ -2468,6 +2532,16 @@ namespace BiomeRivals.Demo
                 ShowStatus(targetRule.SelectionPrompt, true);
                 return;
             }
+            if (targetRule.RequiredTargetCount > 1)
+            {
+                if (_selectedCardTargetInstanceIds.Contains(target.InstanceId))
+                    _selectedCardTargetInstanceIds.Remove(target.InstanceId);
+                else if (_selectedCardTargetInstanceIds.Count < targetRule.RequiredTargetCount)
+                    _selectedCardTargetInstanceIds.Add(target.InstanceId);
+                ShowStatus($"繁殖目标：已选择 {_selectedCardTargetInstanceIds.Count}/{targetRule.RequiredTargetCount}；金色为已选目标。", false);
+                RefreshAll();
+                return;
+            }
             var deployType = definition.cardType == "UNIT" || definition.cardType == "BUILDING" || definition.cardType == "STRUCTURE";
             if (deployType)
             {
@@ -2500,10 +2574,62 @@ namespace BiomeRivals.Demo
             RefreshAll();
         }
 
+        private async void ConfirmMultiTargetCard()
+        {
+            if (!_registry.TryGetDefinition(_pendingTargetCardId, out var definition) ||
+                !DemoCardTargeting.TryGetRule(definition, out var targetRule) || targetRule.RequiredTargetCount <= 1)
+            {
+                CancelTargetSelection();
+                return;
+            }
+            var targets = _selectedCardTargetInstanceIds
+                .Select(instanceId => MatchView.PlayerBattlefield.Concat(MatchView.OpponentBattlefield)
+                    .FirstOrDefault(value => value != null && value.InstanceId == instanceId))
+                .ToArray();
+            if (targets.Length != targetRule.RequiredTargetCount || targets.Any(target => target == null) ||
+                targets.Distinct().Count() != targetRule.RequiredTargetCount ||
+                targets.Any(target => !targetRule.IsLegal(MatchView, target.Player, target.SlotKind, target)))
+            {
+                ShowStatus(targetRule.MissingTargetMessage, true);
+                return;
+            }
+            var targetInstanceIds = targets.OrderBy(target => target.SlotIndex)
+                .ThenBy(target => target.InstanceId, StringComparer.Ordinal)
+                .Select(target => target.InstanceId).ToArray();
+            if (IsOnlineBoard)
+            {
+                var onlineResult = await SendOnline(() =>
+                    _onlineSession.PlayCardAsync(definition.id, targetRule.TargetType, "", targetInstanceIds));
+                if (onlineResult?.Outcome == MatchCommandOutcome.Accepted)
+                {
+                    _pendingTargetCardId = null;
+                    _selectedCardTargetInstanceIds.Clear();
+                    _selectedCardId = MatchView.Hand.FirstOrDefault();
+                }
+                RefreshAll();
+                return;
+            }
+            var command = _match.CreatePlayCardCommand(definition.id, targetRule.TargetType, "", targetInstanceIds);
+            var result = _match.ApplyPlayCard(definition, command);
+            if (result.Accepted)
+            {
+                _pendingTargetCardId = null;
+                _selectedCardTargetInstanceIds.Clear();
+                _selectedCardId = _match.Hand.FirstOrDefault();
+            }
+            var displayMessage = result.Message;
+            foreach (var target in targets)
+                displayMessage = displayMessage.Replace(target.CardId, GetCardName(target.CardId));
+            ShowStatus(result.Accepted ? $"{displayMessage} · 状态 r{result.Revision}" : displayMessage,
+                !result.Accepted);
+            RefreshAll();
+        }
+
         private void CancelTargetSelection()
         {
             if (string.IsNullOrEmpty(_pendingTargetCardId)) return;
             _pendingTargetCardId = null;
+            _selectedCardTargetInstanceIds.Clear();
             ShowStatus("已取消目标选择。", false);
             RefreshAll();
         }
@@ -2695,6 +2821,7 @@ namespace BiomeRivals.Demo
             if (match.PendingChoice != null) return;
             if (!match.IsPlayerTurn) return;
             _pendingTargetCardId = null;
+            _selectedCardTargetInstanceIds.Clear();
             if (IsOnlineBoard)
             {
                 var onlineResult = match.Phase == DemoTurnPhase.Main

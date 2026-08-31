@@ -16,7 +16,7 @@ namespace BiomeRivals.Networking.Tests
                 MatchStateDto received = null;
                 gateway.SnapshotReceived += snapshot => received = snapshot;
                 transport.Emit(MatchOpcodes.Snapshot,
-                    "{\"matchId\":\"match-1\",\"viewerPlayerId\":\"alice\",\"protocolVersion\":21,\"rulesetVersion\":\"prototype-0.31\",\"revision\":0," +
+                    "{\"matchId\":\"match-1\",\"viewerPlayerId\":\"alice\",\"protocolVersion\":22,\"rulesetVersion\":\"prototype-0.32\",\"revision\":0," +
                     "\"lastEventId\":0,\"status\":\"ACTIVE\",\"turn\":1,\"phase\":\"MAIN\",\"activePlayerIndex\":0,\"nextInstanceId\":1," +
                     "\"players\":[{\"playerId\":\"alice\",\"factionId\":\"ocean_river\",\"mulliganCompleted\":true,\"life\":30,\"armor\":0,\"redstone\":6," +
                     "\"redstoneCapacity\":6,\"hand\":[\"pf_001\"],\"deckCount\":26,\"buriedCount\":0,\"excavatedThisTurn\":false,\"discardPile\":[],\"fatigueCount\":0,\"unitSlots\":[null,null,null,null]," +
@@ -50,7 +50,7 @@ namespace BiomeRivals.Networking.Tests
                 MatchEventBatchDto received = null;
                 gateway.EventBatchReceived += batch => received = batch;
                 transport.Emit(MatchOpcodes.EventBatch,
-                    "{\"protocolVersion\":21,\"rulesetVersion\":\"prototype-0.31\",\"revision\":1," +
+                    "{\"protocolVersion\":22,\"rulesetVersion\":\"prototype-0.32\",\"revision\":1," +
                     "\"acknowledgedCommandId\":\"turn-1\",\"events\":[{\"eventId\":1,\"type\":\"CARD_DRAWN\"," +
                     "\"payload\":{\"playerId\":\"bob\",\"cardId\":null,\"handCount\":5,\"deckCount\":25}}]}");
 
@@ -134,6 +134,19 @@ namespace BiomeRivals.Networking.Tests
         }
 
         [Test]
+        public void MultiTargetedPlayCardWireContainsOnlyTheStableTargetArray()
+        {
+            var json = AuthoritativeMatchGateway.SerializeCommand(
+                MatchCommandFactory.PlayCard("play-multi-targeted", 3, "pf_006", "UNIT", "", new[] { "object-2", "object-7" }));
+
+            Assert.That(json, Does.Contain("\"cardId\":\"pf_006\""));
+            Assert.That(json, Does.Contain("\"targetType\":\"UNIT\""));
+            Assert.That(json, Does.Contain("\"targetInstanceIds\":[\"object-2\",\"object-7\"]"));
+            Assert.That(json, Does.Not.Contain("\"targetInstanceId\":"));
+            Assert.That(json, Does.Not.Contain("slotKind"));
+        }
+
+        [Test]
         public async Task AttackCommandWirePayloadContainsNoDeployFields()
         {
             var transport = new FakeTransport();
@@ -190,7 +203,7 @@ namespace BiomeRivals.Networking.Tests
                     TimeSpan.FromSeconds(1));
                 Assert.That(dispatcher.PendingCount, Is.EqualTo(1));
                 transport.Emit(MatchOpcodes.EventBatch,
-                    "{\"protocolVersion\":21,\"rulesetVersion\":\"prototype-0.31\",\"revision\":5," +
+                    "{\"protocolVersion\":22,\"rulesetVersion\":\"prototype-0.32\",\"revision\":5," +
                     "\"acknowledgedCommandId\":\"ack-1\",\"events\":[]}");
 
                 var result = await pending;

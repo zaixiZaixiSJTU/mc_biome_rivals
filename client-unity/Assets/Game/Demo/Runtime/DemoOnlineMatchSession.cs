@@ -52,8 +52,12 @@ namespace BiomeRivals.Demo
         public Task<MatchCommandDispatchResult> MulliganAsync(int[] cardIndices) =>
             Send(MatchCommandFactory.Mulligan(NewCommandId(), Revision, cardIndices));
 
-        public Task<MatchCommandDispatchResult> PlayCardAsync(string cardId, string targetType = "", string targetInstanceId = "") =>
-            Send(MatchCommandFactory.PlayCard(NewCommandId(), Revision, cardId, targetType, targetInstanceId));
+        public Task<MatchCommandDispatchResult> PlayCardAsync(
+            string cardId,
+            string targetType = "",
+            string targetInstanceId = "",
+            string[] targetInstanceIds = null) =>
+            Send(MatchCommandFactory.PlayCard(NewCommandId(), Revision, cardId, targetType, targetInstanceId, targetInstanceIds));
 
         public Task<MatchCommandDispatchResult> ResolveChoiceAsync(string choiceId, int selectedOptionIndex) =>
             Send(MatchCommandFactory.ResolveChoice(NewCommandId(), Revision, choiceId, selectedOptionIndex));

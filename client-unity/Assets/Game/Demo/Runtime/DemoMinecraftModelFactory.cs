@@ -9,6 +9,7 @@ namespace BiomeRivals.Demo
         {
             { "pf_001", "entity_bee" },
             { "pf_002", "entity_sheep" },
+            { "tk_003", "entity_sheep" },
             { "pf_003", "entity_wolf" },
             { "pf_004", "entity_villager" },
             { "nt_001", "entity_magma_cube" },
@@ -33,6 +34,10 @@ namespace BiomeRivals.Demo
             {
                 case "pf_001": BuildBee(root, material); break;
                 case "pf_002": BuildSheep(root, material); break;
+                case "tk_003":
+                    root.localScale = Vector3.one * 0.62f;
+                    BuildSheep(root, material);
+                    break;
                 case "pf_003": BuildWolf(root, material); break;
                 case "pf_004": BuildVillager(root, material); break;
                 case "nt_001": BuildMagmaCube(root, material); break;

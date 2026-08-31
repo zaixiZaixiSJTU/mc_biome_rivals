@@ -48,6 +48,8 @@ namespace BiomeRivals.Networking
                         ? JsonUtility.ToJson(new DeployCommandWire(command))
                         : JsonUtility.ToJson(new TargetedDeployCommandWire(command));
                 case MatchCommandTypes.PlayCard:
+                    if (command.payload.targetInstanceIds != null && command.payload.targetInstanceIds.Length > 0)
+                        return JsonUtility.ToJson(new MultiTargetedPlayCardCommandWire(command));
                     return string.IsNullOrEmpty(command.payload.targetType)
                         ? JsonUtility.ToJson(new PlayCardCommandWire(command))
                         : JsonUtility.ToJson(new TargetedPlayCardCommandWire(command));
@@ -168,6 +170,14 @@ namespace BiomeRivals.Networking
         }
 
         [Serializable]
+        private sealed class MultiTargetedPlayWirePayload
+        {
+            public string cardId;
+            public string targetType;
+            public string[] targetInstanceIds;
+        }
+
+        [Serializable]
         private sealed class ResolveChoiceWirePayload
         {
             public string choiceId;
@@ -285,6 +295,22 @@ namespace BiomeRivals.Networking
                     cardId = command.payload.cardId,
                     targetType = command.payload.targetType,
                     targetInstanceId = command.payload.targetInstanceId
+                };
+            }
+        }
+
+        [Serializable]
+        private sealed class MultiTargetedPlayCardCommandWire : CommandWireBase
+        {
+            public MultiTargetedPlayWirePayload payload;
+
+            public MultiTargetedPlayCardCommandWire(MatchCommandDto command) : base(command)
+            {
+                payload = new MultiTargetedPlayWirePayload
+                {
+                    cardId = command.payload.cardId,
+                    targetType = command.payload.targetType,
+                    targetInstanceIds = command.payload.targetInstanceIds ?? Array.Empty<string>()
                 };
             }
         }

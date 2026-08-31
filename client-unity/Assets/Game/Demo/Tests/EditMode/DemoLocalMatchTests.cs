@@ -97,10 +97,10 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(fleshMatch.PlayerLife, Is.EqualTo(29));
 
             var pendingMatch = new DemoLocalMatch();
-            pendingMatch.ResetDeckAndHand(new[] { "pf_006" }, new string[0]);
-            Assert.That(registry.TryGetDefinition("pf_006", out var pending), Is.True);
+            pendingMatch.ResetDeckAndHand(new[] { "pf_007" }, new string[0]);
+            Assert.That(registry.TryGetDefinition("pf_007", out var pending), Is.True);
             Assert.That(pendingMatch.TryCast(pending, out var pendingMessage), Is.False);
-            Assert.That(pendingMatch.Hand, Does.Contain("pf_006"));
+            Assert.That(pendingMatch.Hand, Does.Contain("pf_007"));
             Assert.That(pendingMatch.Energy, Is.EqualTo(6));
             Assert.That(pendingMessage, Does.Contain("尚未接入"));
         }
@@ -310,6 +310,7 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(registry.TryGetDefinition("si_001", out var snowball), Is.True);
             Assert.That(registry.TryGetDefinition("tk_009", out var bone), Is.True);
             Assert.That(registry.TryGetDefinition("tk_010", out var cobblestone), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_006", out var breeding), Is.True);
 
             Assert.That(DemoCardTargeting.TryGetRule(snowball, out var snowballRule), Is.True);
             Assert.That(snowballRule.Owner, Is.EqualTo(DemoTargetOwner.Enemy));
@@ -321,6 +322,9 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(cobbleRule.Owner, Is.EqualTo(DemoTargetOwner.Friendly));
             Assert.That(cobbleRule.SlotKind, Is.EqualTo(DemoSlotKind.Building));
             Assert.That(cobbleRule.TargetType, Is.EqualTo("BUILDING"));
+            Assert.That(DemoCardTargeting.TryGetRule(breeding, out var breedingRule), Is.True);
+            Assert.That(breedingRule.Owner, Is.EqualTo(DemoTargetOwner.Friendly));
+            Assert.That(breedingRule.RequiredTargetCount, Is.EqualTo(2));
         }
 
         [Test]
@@ -1140,6 +1144,8 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(strayTexture, Is.EqualTo("entity_stray"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("tk_014", out var smallMagmaTexture), Is.True);
                 Assert.That(smallMagmaTexture, Is.EqualTo("entity_magma_cube"));
+                Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("tk_003", out var juvenileTexture), Is.True);
+                Assert.That(juvenileTexture, Is.EqualTo("entity_sheep"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("or_001", out var salmonTexture), Is.True);
                 Assert.That(salmonTexture, Is.EqualTo("entity_salmon"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("or_002", out var dolphinTexture), Is.True);
@@ -1654,6 +1660,121 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(match.GetObject(true, DemoSlotKind.Unit, 0).MaxHealth, Is.EqualTo(9));
             Assert.That(match.PlayerBattlefield.Where(value => value.CardId == nursery.id).All(value =>
                 match.HasTriggeredEffect(true, value.InstanceId, "effect.pf_005.01")), Is.True);
+        }
+
+        [Test]
+        public void BreedingSeasonGrowsTwoCanonicalAnimalsAndSummonsNurseryGrownJuvenile()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("pf_005", out var nursery), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_001", out var bee), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_002", out var sheep), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_006", out var breeding), Is.True);
+
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { nursery.id, bee.id, sheep.id });
+            Assert.That(match.ApplyDeploy(nursery,
+                match.CreateDeployCommand(nursery.id, DemoSlotKind.Building, 0)).Accepted, Is.True);
+            Assert.That(match.ApplyDeploy(bee,
+                match.CreateDeployCommand(bee.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            Assert.That(match.ApplyDeploy(sheep,
+                match.CreateDeployCommand(sheep.id, DemoSlotKind.Unit, 2)).Accepted, Is.True);
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            match.ResetHand(new[] { breeding.id });
+            var beeTarget = match.GetObject(true, DemoSlotKind.Unit, 0);
+            var sheepTarget = match.GetObject(true, DemoSlotKind.Unit, 2);
+
+            var result = match.ApplyPlayCard(breeding,
+                match.CreatePlayCardCommand(breeding.id, "UNIT", "", new[] { sheepTarget.InstanceId, beeTarget.InstanceId }));
+
+            Assert.That(result.Accepted, Is.True, result.Message);
+            Assert.That(beeTarget.MaxHealth, Is.EqualTo(4));
+            Assert.That(sheepTarget.MaxHealth, Is.EqualTo(4));
+            var juvenile = match.GetObject(true, DemoSlotKind.Unit, 1);
+            Assert.That(juvenile.CardId, Is.EqualTo("tk_003"));
+            Assert.That(juvenile.Attack, Is.EqualTo(2));
+            Assert.That(juvenile.MaxHealth, Is.EqualTo(3));
+            Assert.That(result.Message, Does.Contain("幼体已在单位格 2 召唤"));
+            Assert.That(match.Hand, Is.Empty);
+            Assert.That(match.DiscardPile, Does.Contain("pf_006"));
+        }
+
+        [Test]
+        public void BreedingSeasonKeepsBothGrowthBuffsWhenUnitRowIsFull()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("pf_001", out var bee), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_002", out var sheep), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_003", out var wolf), Is.True);
+            Assert.That(registry.TryGetDefinition("tk_003", out var juvenileDefinition), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_006", out var breeding), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { bee.id, sheep.id, wolf.id, juvenileDefinition.id });
+            Assert.That(match.ApplyDeploy(bee, match.CreateDeployCommand(bee.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            Assert.That(match.ApplyDeploy(sheep, match.CreateDeployCommand(sheep.id, DemoSlotKind.Unit, 1)).Accepted, Is.True);
+            Assert.That(match.ApplyDeploy(wolf, match.CreateDeployCommand(wolf.id, DemoSlotKind.Unit, 2)).Accepted, Is.True);
+            Assert.That(match.ApplyDeploy(juvenileDefinition,
+                match.CreateDeployCommand(juvenileDefinition.id, DemoSlotKind.Unit, 3)).Accepted, Is.True);
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            match.ResetHand(new[] { breeding.id });
+            var first = match.GetObject(true, DemoSlotKind.Unit, 0);
+            var second = match.GetObject(true, DemoSlotKind.Unit, 1);
+
+            var result = match.ApplyPlayCard(breeding,
+                match.CreatePlayCardCommand(breeding.id, "UNIT", "", new[] { second.InstanceId, first.InstanceId }));
+
+            Assert.That(result.Accepted, Is.True, result.Message);
+            Assert.That(first.MaxHealth, Is.EqualTo(3));
+            Assert.That(second.MaxHealth, Is.EqualTo(4));
+            Assert.That(match.PlayerBattlefield, Has.Count.EqualTo(4));
+            Assert.That(result.Message, Does.Contain("单位格已满"));
+        }
+
+        [Test]
+        public void BreedingSeasonRejectsDuplicateNonAnimalAndEnemyTargetsAtomically()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("pf_001", out var bee), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_002", out var sheep), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_004", out var farmer), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_003", out var enemyWolf), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_006", out var breeding), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { bee.id, farmer.id, sheep.id });
+            Assert.That(match.ApplyDeploy(bee, match.CreateDeployCommand(bee.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            Assert.That(match.ApplyDeploy(farmer, match.CreateDeployCommand(farmer.id, DemoSlotKind.Unit, 1)).Accepted, Is.True);
+            Assert.That(match.ApplyDeploy(sheep, match.CreateDeployCommand(sheep.id, DemoSlotKind.Unit, 2)).Accepted, Is.True);
+            match.ResetOpponent(new[] { enemyWolf }, new[] { 0 });
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            match.ResetHand(new[] { breeding.id });
+            var animal = match.GetObject(true, DemoSlotKind.Unit, 0);
+            var nonAnimal = match.GetObject(true, DemoSlotKind.Unit, 1);
+            var otherAnimal = match.GetObject(true, DemoSlotKind.Unit, 2);
+            var enemy = match.GetObject(false, DemoSlotKind.Unit, 0);
+            var energyBefore = match.Energy;
+            var revisionBefore = match.Revision;
+            var invalidTargets = new[]
+            {
+                new[] { animal.InstanceId, animal.InstanceId },
+                new[] { animal.InstanceId, nonAnimal.InstanceId },
+                new[] { animal.InstanceId, enemy.InstanceId }
+            };
+
+            foreach (var targets in invalidTargets)
+            {
+                var result = match.ApplyPlayCard(breeding,
+                    match.CreatePlayCardCommand(breeding.id, "UNIT", "", targets));
+                Assert.That(result.Accepted, Is.False);
+                Assert.That(match.Energy, Is.EqualTo(energyBefore));
+                Assert.That(match.Revision, Is.EqualTo(revisionBefore));
+                Assert.That(match.Hand, Is.EqualTo(new[] { breeding.id }));
+                Assert.That(match.DiscardPile, Is.Empty);
+                Assert.That(animal.MaxHealth, Is.EqualTo(2));
+                Assert.That(otherAnimal.MaxHealth, Is.EqualTo(3));
+            }
         }
 
         [Test]

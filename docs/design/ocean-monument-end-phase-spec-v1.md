@@ -1,6 +1,6 @@
 # 海底神殿结束阶段规范 v1
 
-本规范对应 `protocolVersion 21`、`rulesetVersion prototype-0.31` 与内容版本 23。
+本规范对应 `protocolVersion 22`、`rulesetVersion prototype-0.32` 与内容版本 24。
 
 ## OR-008 海底神殿
 
@@ -21,7 +21,7 @@
 
 - 每个受伤单位产生一个 `OBJECT_STATS_CHANGED`，字段为：`sourceCardId = or_008`、真实 `sourceInstanceId`、`effectId = effect.or_008.01`、`reason = DAMAGE` 以及最终攻击/生命和临时攻击字段。
 - 死亡沿用 `OBJECT_DIED`、`OBJECT_SUMMONED`、`CARD_GENERATED` 等既有事件，不新增客户端推测字段。
-- 本效果没有跨回合私有状态，因此保持 `protocolVersion 21`；规则集升级用于阻止旧结算顺序客户端静默加入。
+- 本效果自身没有新增消息字段；当前组合协议为 `protocolVersion 22`，规则集版本仍用于阻止旧结算顺序客户端静默加入。
 
 ## Unity 交互与表现
 

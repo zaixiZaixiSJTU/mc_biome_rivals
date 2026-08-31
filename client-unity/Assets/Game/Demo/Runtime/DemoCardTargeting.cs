@@ -19,7 +19,8 @@ namespace BiomeRivals.Demo
             string actionLabel,
             string selectionPrompt,
             string missingTargetMessage,
-            Func<IDemoMatchView, DemoBattlefieldObject, bool> additionalValidation = null)
+            Func<IDemoMatchView, DemoBattlefieldObject, bool> additionalValidation = null,
+            int requiredTargetCount = 1)
         {
             EffectId = effectId ?? throw new ArgumentNullException(nameof(effectId));
             Owner = owner;
@@ -29,6 +30,7 @@ namespace BiomeRivals.Demo
             SelectionPrompt = selectionPrompt ?? throw new ArgumentNullException(nameof(selectionPrompt));
             MissingTargetMessage = missingTargetMessage ?? throw new ArgumentNullException(nameof(missingTargetMessage));
             AdditionalValidation = additionalValidation;
+            RequiredTargetCount = Math.Max(1, requiredTargetCount);
         }
 
         public string EffectId { get; }
@@ -38,6 +40,7 @@ namespace BiomeRivals.Demo
         public string ActionLabel { get; }
         public string SelectionPrompt { get; }
         public string MissingTargetMessage { get; }
+        public int RequiredTargetCount { get; }
         private Func<IDemoMatchView, DemoBattlefieldObject, bool> AdditionalValidation { get; }
 
         public bool IsLegal(IDemoMatchView match, bool player, DemoSlotKind kind, DemoBattlefieldObject target) =>
@@ -77,6 +80,11 @@ namespace BiomeRivals.Demo
             "选择水生目标", "请选择一个拥有相邻空格的己方水生生物；右键或 Esc 取消。", "当前没有可移动的己方水生生物。",
             (match, target) => HasRegisteredTag(target, "aquatic") && HasAdjacentEmptyUnitSlot(match, target));
 
+        private static readonly DemoCardTargetRule BreedingSeason = new DemoCardTargetRule(
+            "effect.pf_006.01", DemoTargetOwner.Friendly, DemoSlotKind.Unit, "UNIT",
+            "选择两个己方动物", "请选择两个发光的己方动物；已选目标会变为金色。", "场上至少需要两个己方动物。",
+            (match, target) => HasRegisteredTag(target, "animal"), 2);
+
         public static bool TryGetRule(CardDefinitionEntry definition, out DemoCardTargetRule rule)
         {
             rule = null;
@@ -92,6 +100,7 @@ namespace BiomeRivals.Demo
                     case "effect.tk_009.01": rule = Bone; return true;
                     case "effect.tk_010.01": rule = Cobblestone; return true;
                     case "effect.tk_012.01": rule = PrismarineShard; return true;
+                    case "effect.pf_006.01": rule = BreedingSeason; return true;
                 }
             }
             return false;
@@ -102,8 +111,13 @@ namespace BiomeRivals.Demo
             if (match == null) throw new ArgumentNullException(nameof(match));
             if (rule == null) return true;
             var battlefield = rule.Owner == DemoTargetOwner.Friendly ? match.PlayerBattlefield : match.OpponentBattlefield;
+            var legalTargetCount = 0;
             foreach (var target in battlefield)
-                if (rule.IsLegal(match, rule.Owner == DemoTargetOwner.Friendly, rule.SlotKind, target)) return true;
+            {
+                if (!rule.IsLegal(match, rule.Owner == DemoTargetOwner.Friendly, rule.SlotKind, target)) continue;
+                legalTargetCount++;
+                if (legalTargetCount >= rule.RequiredTargetCount) return true;
+            }
             return false;
         }
 

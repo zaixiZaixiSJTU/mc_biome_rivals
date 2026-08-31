@@ -30,11 +30,19 @@ function enterCombatCommand(id: string, revision: number): BiomeRivalsRules.Matc
   return command(id, revision, 'ENTER_COMBAT');
 }
 
-function playCommand(id: string, revision: number, cardId: string, targetType?: BiomeRivalsRules.AttackTargetType, targetInstanceId?: string): BiomeRivalsRules.MatchCommand {
+function playCommand(
+  id: string,
+  revision: number,
+  cardId: string,
+  targetType?: BiomeRivalsRules.AttackTargetType,
+  targetInstanceId?: string,
+  targetInstanceIds?: string[]
+): BiomeRivalsRules.MatchCommand {
   const result = command(id, revision, 'PLAY_CARD');
   result.payload = { cardId: cardId };
   if (targetType !== undefined) result.payload.targetType = targetType;
   if (targetInstanceId !== undefined) result.payload.targetInstanceId = targetInstanceId;
+  if (targetInstanceIds !== undefined) result.payload.targetInstanceIds = targetInstanceIds;
   return result;
 }
 
@@ -978,14 +986,14 @@ TestHarness.test('rejects a snowball without a living enemy unit target before p
   TestHarness.equal(state.players[0]!.discardPile.length, 0);
 });
 
-TestHarness.test('rejects pending card effects without paying or discarding', function (): void {
+TestHarness.test('rejects Breeding Season without two targets before paying or discarding', function (): void {
   const state = activeState('match-1', ['alice', 'bob']);
   state.players[0]!.hand = ['pf_006'];
   state.players[0]!.redstone = 6;
   state.players[0]!.redstoneCapacity = 6;
   const result = BiomeRivalsRules.applyCommand(state, 'alice', playCommand('play-pending', 0, 'pf_006'));
   TestHarness.equal(result.accepted, false);
-  if (!result.accepted) TestHarness.equal(result.code, 'EFFECT_NOT_IMPLEMENTED');
+  if (!result.accepted) TestHarness.equal(result.code, 'INVALID_TARGET');
   TestHarness.equal(state.players[0]!.redstone, 6);
   TestHarness.equal(state.players[0]!.hand[0], 'pf_006');
   TestHarness.equal(state.players[0]!.discardPile.length, 0);
@@ -2174,6 +2182,116 @@ TestHarness.test('Woodland Nurseries stack before Coral Reef in stable source or
   TestHarness.equal(growthEvents[2]!.payload.effectId, 'effect.or_007.01');
   TestHarness.equal(growthEvents[2]!.payload.sourceInstanceId, 'object-12');
   TestHarness.equal(growthEvents[2]!.payload.maxHealth, 9);
+});
+
+TestHarness.test('Breeding Season grows two canonical Animal targets and summons a juvenile', function (): void {
+  const state = activeState('match-breeding-season', ['alice', 'bob'], ['plains_forest', 'nether']);
+  const actorIndex = state.players[0]!.playerId === 'alice' ? 0 : 1;
+  const actor = state.players[actorIndex]!;
+  state.activePlayerIndex = actorIndex;
+  actor.hand = ['pf_006'];
+  actor.redstone = 3;
+  actor.redstoneCapacity = 3;
+  placeUnit(state, actorIndex, 'pf_001', 0, 'object-10', state.turn);
+  placeUnit(state, actorIndex, 'pf_002', 2, 'object-12', state.turn);
+  placeBuilding(state, actorIndex, 'pf_005', 0, 'object-20');
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('breeding-season', 0, 'pf_006', 'UNIT', undefined, ['object-12', 'object-10']));
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.batch.events.length, 5);
+  TestHarness.equal(result.batch.events[0]!.type, 'CARD_PLAYED');
+  TestHarness.equal(result.batch.events[1]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(result.batch.events[1]!.payload.instanceId, 'object-10');
+  TestHarness.equal(result.batch.events[1]!.payload.sourceInstanceId, 'effect-1');
+  TestHarness.equal(result.batch.events[1]!.payload.effectId, 'effect.pf_006.01');
+  TestHarness.equal(result.batch.events[1]!.payload.maxHealth, 3);
+  TestHarness.equal(result.batch.events[2]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(result.batch.events[2]!.payload.instanceId, 'object-12');
+  TestHarness.equal(result.batch.events[2]!.payload.maxHealth, 4);
+  TestHarness.equal(result.batch.events[3]!.type, 'OBJECT_SUMMONED');
+  TestHarness.equal(result.batch.events[3]!.payload.cardId, 'tk_003');
+  TestHarness.equal(result.batch.events[3]!.payload.slotIndex, 1);
+  TestHarness.equal(result.batch.events[3]!.payload.sourceInstanceId, 'effect-1');
+  TestHarness.equal(result.batch.events[4]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(result.batch.events[4]!.payload.effectId, 'effect.pf_005.01');
+  const juvenile = result.state.players[actorIndex]!.battlefield.filter(function (value): boolean {
+    return value.cardId === 'tk_003';
+  })[0]!;
+  TestHarness.equal(juvenile.attack, 2);
+  TestHarness.equal(juvenile.health, 3);
+  TestHarness.equal(juvenile.maxHealth, 3);
+  TestHarness.equal(result.state.players[actorIndex]!.redstone, 0);
+  TestHarness.equal(result.state.players[actorIndex]!.hand.length, 0);
+  TestHarness.equal(result.state.players[actorIndex]!.discardPile[0], 'pf_006');
+});
+
+TestHarness.test('Breeding Season still grows both Animals when every unit slot is full', function (): void {
+  const state = activeState('match-breeding-season-full', ['alice', 'bob'], ['plains_forest', 'nether']);
+  const actorIndex = state.players[0]!.playerId === 'alice' ? 0 : 1;
+  const actor = state.players[actorIndex]!;
+  state.activePlayerIndex = actorIndex;
+  actor.hand = ['pf_006'];
+  actor.redstone = 3;
+  actor.redstoneCapacity = 3;
+  placeUnit(state, actorIndex, 'pf_001', 0, 'object-10', state.turn);
+  placeUnit(state, actorIndex, 'pf_002', 1, 'object-11', state.turn);
+  placeUnit(state, actorIndex, 'pf_003', 2, 'object-12', state.turn);
+  placeUnit(state, actorIndex, 'tk_003', 3, 'object-13', state.turn);
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('breeding-season-full', 0, 'pf_006', 'UNIT', undefined, ['object-11', 'object-10']));
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.batch.events.length, 3);
+  TestHarness.equal(result.batch.events.filter(function (event): boolean {
+    return event.type === 'OBJECT_SUMMONED';
+  }).length, 0);
+  TestHarness.equal(result.state.players[actorIndex]!.battlefield.length, 4);
+  TestHarness.equal(result.state.players[actorIndex]!.battlefield[0]!.maxHealth, 3);
+  TestHarness.equal(result.state.players[actorIndex]!.battlefield[1]!.maxHealth, 4);
+});
+
+TestHarness.test('Breeding Season rejects duplicate, non-Animal, and enemy targets atomically', function (): void {
+  function createCase(matchId: string): {
+    state: BiomeRivalsRules.MatchState;
+    actorIndex: number;
+    actor: BiomeRivalsRules.PlayerState;
+    enemy: BiomeRivalsRules.PlayerState;
+  } {
+    const state = activeState(matchId, ['alice', 'bob'], ['plains_forest', 'nether']);
+    const actorIndex = state.players[0]!.playerId === 'alice' ? 0 : 1;
+    const actor = state.players[actorIndex]!;
+    const enemy = state.players[actorIndex === 0 ? 1 : 0]!;
+    state.activePlayerIndex = actorIndex;
+    actor.hand = ['pf_006'];
+    actor.redstone = 3;
+    actor.redstoneCapacity = 3;
+    placeUnit(state, actorIndex, 'pf_001', 0, 'object-10', state.turn);
+    placeUnit(state, actorIndex, 'pf_004', 1, 'object-11', state.turn);
+    placeUnit(state, actorIndex, 'pf_002', 2, 'object-12', state.turn);
+    placeUnit(state, actorIndex === 0 ? 1 : 0, 'pf_003', 0, 'object-20', state.turn);
+    return { state, actorIndex, actor, enemy };
+  }
+
+  const cases: Array<[string, string[]]> = [
+    ['duplicate', ['object-10', 'object-10']],
+    ['non-animal', ['object-10', 'object-11']],
+    ['enemy', ['object-10', 'object-20']]
+  ];
+  for (let index = 0; index < cases.length; index += 1) {
+    const current = createCase('match-breeding-season-' + cases[index]![0]);
+    const result = BiomeRivalsRules.applyCommand(current.state, current.actor.playerId,
+      playCommand('breeding-season-invalid-' + index, 0, 'pf_006', 'UNIT', undefined, cases[index]![1]));
+    TestHarness.equal(result.accepted, false);
+    if (result.accepted) continue;
+    TestHarness.equal(result.state.players[current.actorIndex]!.hand[0], 'pf_006');
+    TestHarness.equal(result.state.players[current.actorIndex]!.redstone, 3);
+    TestHarness.equal(result.state.players[current.actorIndex]!.discardPile.length, 0);
+    TestHarness.equal(result.state.revision, 0);
+    TestHarness.equal(result.state.lastEventId, 0);
+  }
 });
 
 TestHarness.test('Coral Reef permanently grows only the first friendly aquatic unit each turn', function (): void {

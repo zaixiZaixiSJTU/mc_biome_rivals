@@ -416,8 +416,12 @@ namespace BiomeRivals.Demo
             return result.Accepted;
         }
 
-        public MatchCommandDto CreatePlayCardCommand(string cardId, string targetType = "", string targetInstanceId = "") =>
-            MatchCommandFactory.PlayCard(NextCommandId(), Revision, cardId, targetType, targetInstanceId);
+        public MatchCommandDto CreatePlayCardCommand(
+            string cardId,
+            string targetType = "",
+            string targetInstanceId = "",
+            string[] targetInstanceIds = null) =>
+            MatchCommandFactory.PlayCard(NextCommandId(), Revision, cardId, targetType, targetInstanceId, targetInstanceIds);
 
         public DemoCommandResult ApplyPlayCard(CardDefinitionEntry definition, MatchCommandDto command)
         {
@@ -432,18 +436,38 @@ namespace BiomeRivals.Demo
             if (effectId != "effect.db_002.01" && effectId != "effect.db_006.01" && effectId != "effect.nt_006.01" &&
                 effectId != "effect.si_001.01" && effectId != "effect.si_006.01" && effectId != "effect.tk_005.01" &&
                 effectId != "effect.tk_009.01" && effectId != "effect.tk_010.01" && effectId != "effect.or_006.01" &&
-                effectId != "effect.tk_012.01" && effectId != "effect.tk_016.01")
+                effectId != "effect.tk_012.01" && effectId != "effect.tk_016.01" && effectId != "effect.pf_006.01")
                 return Reject(DemoCommandRejectionCode.EffectNotImplemented, "找不到该 effectId 的规则处理器。");
             DemoBattlefieldObject targetedObject = null;
+            var targetedObjects = new List<DemoBattlefieldObject>();
             if (DemoCardTargeting.TryGetRule(definition, out var targetRule))
             {
                 if (command.payload == null || command.payload.targetType != targetRule.TargetType)
                     return Reject(DemoCommandRejectionCode.InvalidTarget, targetRule.MissingTargetMessage);
                 var playerTarget = targetRule.Owner == DemoTargetOwner.Friendly;
                 var battlefield = playerTarget ? _playerBattlefield : _opponentBattlefield;
-                targetedObject = battlefield.Find(value => value.InstanceId == command.payload.targetInstanceId);
-                if (!targetRule.IsLegal(this, playerTarget, targetRule.SlotKind, targetedObject))
-                    return Reject(DemoCommandRejectionCode.InvalidTarget, targetRule.MissingTargetMessage);
+                if (targetRule.RequiredTargetCount > 1)
+                {
+                    var targetIds = command.payload.targetInstanceIds;
+                    if (targetIds == null || targetIds.Length != targetRule.RequiredTargetCount ||
+                        targetIds.Any(string.IsNullOrEmpty) || targetIds.Distinct(StringComparer.Ordinal).Count() != targetIds.Length)
+                        return Reject(DemoCommandRejectionCode.InvalidTarget, targetRule.MissingTargetMessage);
+                    foreach (var targetId in targetIds)
+                    {
+                        var target = battlefield.Find(value => value.InstanceId == targetId);
+                        if (!targetRule.IsLegal(this, playerTarget, targetRule.SlotKind, target))
+                            return Reject(DemoCommandRejectionCode.InvalidTarget, targetRule.MissingTargetMessage);
+                        targetedObjects.Add(target);
+                    }
+                    targetedObjects = targetedObjects.OrderBy(value => value.SlotIndex)
+                        .ThenBy(value => value.InstanceId, StringComparer.Ordinal).ToList();
+                }
+                else
+                {
+                    targetedObject = battlefield.Find(value => value.InstanceId == command.payload.targetInstanceId);
+                    if (!targetRule.IsLegal(this, playerTarget, targetRule.SlotKind, targetedObject))
+                        return Reject(DemoCommandRejectionCode.InvalidTarget, targetRule.MissingTargetMessage);
+                }
             }
             Consume(definition);
             if (definition.cardType == "EQUIPMENT")
@@ -547,6 +571,18 @@ namespace BiomeRivals.Demo
                 case "effect.tk_016.01":
                     PlayerArmor += 2;
                     message = "潜影壳：获得 2 点护甲。";
+                    break;
+                case "effect.pf_006.01":
+                    foreach (var target in targetedObjects)
+                    {
+                        target.Health += 1;
+                        target.MaxHealth += 1;
+                    }
+                    var targetNames = string.Join("、", targetedObjects.Select(value => value.CardId));
+                    if (TrySummonUnit("tk_003", true, -1, out var juvenile))
+                        message = $"繁殖季节：{targetNames} 获得 +1 当前与最大生命；幼体已在单位格 {juvenile.SlotIndex + 1} 召唤。";
+                    else
+                        message = $"繁殖季节：{targetNames} 获得 +1 当前与最大生命；单位格已满，未能召唤幼体。";
                     break;
                 default:
                     throw new InvalidOperationException("Validated effect handler was not dispatched.");
@@ -1050,6 +1086,40 @@ namespace BiomeRivals.Demo
             RecalculateAdjacencyHealthAuras(_opponentBattlefield);
         }
 
+        private bool TrySummonUnit(string cardId, bool player, int preferredSlotIndex, out DemoBattlefieldObject summoned)
+        {
+            summoned = null;
+            if (!CardContentLoader.Current.TryGetDefinition(cardId, out var definition) || definition.cardType != "UNIT")
+                return false;
+            var slots = player ? UnitSlots : OpponentUnitSlots;
+            var battlefield = player ? _playerBattlefield : _opponentBattlefield;
+            var slotIndex = preferredSlotIndex >= 0 && preferredSlotIndex < slots.Length && string.IsNullOrEmpty(slots[preferredSlotIndex])
+                ? preferredSlotIndex
+                : Array.FindIndex(slots, string.IsNullOrEmpty);
+            if (slotIndex < 0) return false;
+            summoned = new DemoBattlefieldObject
+            {
+                InstanceId = $"object-{_nextBattlefieldInstanceId++}",
+                CardId = definition.id,
+                Player = player,
+                SlotKind = DemoSlotKind.Unit,
+                SlotIndex = slotIndex,
+                OccupiedSlots = 1,
+                Attack = definition.attack,
+                Health = definition.health,
+                MaxHealth = definition.health,
+                SummonedRound = Round,
+                Tags = (definition.tags ?? Array.Empty<string>()).ToArray(),
+                Keywords = (definition.keywords ?? Array.Empty<string>()).ToArray()
+            };
+            battlefield.Add(summoned);
+            slots[slotIndex] = summoned.CardId;
+            RecalculateAdjacencyHealthAuras();
+            TriggerWoodlandNurseryGrowth(battlefield, summoned);
+            TriggerCoralReefGrowth(battlefield, summoned);
+            return true;
+        }
+
         private static void RecalculateAdjacencyHealthAuras(List<DemoBattlefieldObject> battlefield)
         {
             var sources = battlefield.Where(value => value.CardId == "or_005" && value.SlotKind == DemoSlotKind.Unit && value.Health > 0)
@@ -1381,36 +1451,12 @@ namespace BiomeRivals.Demo
             }
             if (value.CardId == "nt_001")
             {
-                var slots = value.Player ? UnitSlots : OpponentUnitSlots;
-                var battlefield = value.Player ? _playerBattlefield : _opponentBattlefield;
-                var slotIndex = value.SlotIndex >= 0 && value.SlotIndex < slots.Length && string.IsNullOrEmpty(slots[value.SlotIndex])
-                    ? value.SlotIndex
-                    : Array.FindIndex(slots, string.IsNullOrEmpty);
-                if (slotIndex < 0) return value.Player
+                if (!TrySummonUnit("tk_014", value.Player, value.SlotIndex, out var summoned)) return value.Player
                     ? "岩浆怪亡语：没有空单位格，未能召唤小型岩浆怪。"
                     : "敌方岩浆怪亡语：没有空单位格，未能召唤小型岩浆怪。";
-                var summoned = new DemoBattlefieldObject
-                {
-                    InstanceId = $"object-{_nextBattlefieldInstanceId++}",
-                    CardId = "tk_014",
-                    Player = value.Player,
-                    SlotKind = DemoSlotKind.Unit,
-                    SlotIndex = slotIndex,
-                    OccupiedSlots = 1,
-                    Attack = 1,
-                    Health = 1,
-                    MaxHealth = 1,
-                    SummonedRound = Round,
-                    Keywords = Array.Empty<string>()
-                };
-                battlefield.Add(summoned);
-                slots[slotIndex] = summoned.CardId;
-                RecalculateAdjacencyHealthAuras();
-                TriggerWoodlandNurseryGrowth(battlefield, summoned);
-                TriggerCoralReefGrowth(battlefield, summoned);
                 return value.Player
-                    ? $"岩浆怪亡语：小型岩浆怪已在单位格 {slotIndex + 1} 召唤。"
-                    : $"敌方岩浆怪亡语：小型岩浆怪已在单位格 {slotIndex + 1} 召唤。";
+                    ? $"岩浆怪亡语：小型岩浆怪已在单位格 {summoned.SlotIndex + 1} 召唤。"
+                    : $"敌方岩浆怪亡语：小型岩浆怪已在单位格 {summoned.SlotIndex + 1} 召唤。";
             }
             return string.Empty;
         }

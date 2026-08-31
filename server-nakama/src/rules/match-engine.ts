@@ -1380,6 +1380,7 @@ namespace BiomeRivalsRules {
       }
       const effectId = definition.effectIds[0]!;
       if (effectId !== 'effect.db_002.01' && effectId !== 'effect.db_006.01' && effectId !== 'effect.nt_006.01' &&
+          effectId !== 'effect.pf_006.01' &&
           effectId !== 'effect.si_001.01' && effectId !== 'effect.si_006.01' && effectId !== 'effect.tk_005.01' &&
           effectId !== 'effect.tk_009.01' && effectId !== 'effect.tk_010.01' && effectId !== 'effect.tk_012.01' && effectId !== 'effect.or_006.01' &&
           effectId !== 'effect.tk_016.01') {
@@ -1389,7 +1390,26 @@ namespace BiomeRivalsRules {
       const opponent = next.players[actorIndex === 0 ? 1 : 0]!;
       let targetedObject: BattlefieldObjectState | null = null;
       let targetedPlayer: PlayerState | null = null;
-      if (effectId === 'effect.si_001.01' || effectId === 'effect.si_006.01' ||
+      let targetedObjects: BattlefieldObjectState[] = [];
+      if (effectId === 'effect.pf_006.01') {
+        const targetInstanceIds = command.payload.targetInstanceIds;
+        if (command.payload.targetType !== 'UNIT' || !Array.isArray(targetInstanceIds) || targetInstanceIds.length !== 2 ||
+            targetInstanceIds.some(function (instanceId): boolean { return typeof instanceId !== 'string'; }) ||
+            targetInstanceIds[0] === targetInstanceIds[1]) {
+          return reject(state, 'INVALID_TARGET', 'breeding season requires two different friendly Animal targets');
+        }
+        for (let targetIndex = 0; targetIndex < targetInstanceIds.length; targetIndex += 1) {
+          const target = findObject(player, targetInstanceIds[targetIndex] as string);
+          if (target === null || target.cardType !== 'UNIT' || target.health <= 0 || !cardHasTag(target.cardId, 'animal')) {
+            return reject(state, 'INVALID_TARGET', 'breeding season targets must be living friendly Animals');
+          }
+          targetedObjects.push(target);
+        }
+        targetedObjects.sort(function (left, right): number {
+          if (left.slotIndex !== right.slotIndex) return left.slotIndex - right.slotIndex;
+          return left.instanceId < right.instanceId ? -1 : left.instanceId > right.instanceId ? 1 : 0;
+        });
+      } else if (effectId === 'effect.si_001.01' || effectId === 'effect.si_006.01' ||
           effectId === 'effect.tk_009.01' || effectId === 'effect.tk_012.01') {
         if (command.payload.targetType !== 'UNIT' || typeof command.payload.targetInstanceId !== 'string') {
           return reject(state, 'INVALID_TARGET', effectId === 'effect.tk_009.01' || effectId === 'effect.tk_012.01'
@@ -1462,6 +1482,7 @@ namespace BiomeRivalsRules {
         handCount: player.hand.length,
         discardCount: player.discardPile.length
       });
+      const effectSourceInstanceId = 'effect-' + String(next.lastEventId);
 
       switch (effectId) {
         case 'effect.db_002.01':
@@ -1508,6 +1529,29 @@ namespace BiomeRivalsRules {
           drawCard(player);
           finishForSelfDefeat(player, 'FATIGUE');
           return null;
+        case 'effect.pf_006.01': {
+          if (targetedObjects.length !== 2) throw new Error('validated breeding targets were not resolved');
+          for (let targetIndex = 0; targetIndex < targetedObjects.length; targetIndex += 1) {
+            const target = targetedObjects[targetIndex]!;
+            target.health += 1;
+            target.maxHealth += 1;
+            emit('OBJECT_STATS_CHANGED', {
+              playerId: player.playerId,
+              instanceId: target.instanceId,
+              sourceCardId: cardId,
+              sourceInstanceId: effectSourceInstanceId,
+              effectId: effectId,
+              reason: 'PERMANENT_HEALTH_MODIFIER',
+              attack: target.attack,
+              health: target.health,
+              maxHealth: target.maxHealth,
+              temporaryAttackModifier: target.temporaryAttackModifier,
+              temporaryAttackModifierExpiresOnTurn: target.temporaryAttackModifierExpiresOnTurn
+            });
+          }
+          summonUnit(player, 'tk_003', cardId, effectSourceInstanceId, effectId, -1);
+          return null;
+        }
         case 'effect.si_001.01': {
           if (targetedObject === null || targetedPlayer === null) throw new Error('validated snowball target was not resolved');
           const attackBefore = targetedObject.attack;
