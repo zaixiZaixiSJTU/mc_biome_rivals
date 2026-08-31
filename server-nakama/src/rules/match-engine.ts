@@ -575,6 +575,9 @@ namespace BiomeRivalsRules {
           definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.pf_003.01') {
         triggerTamedWolfBattlecry(player, battlefieldObject);
       } else if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
+          definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.pf_004.01') {
+        generateCard(player, 'tk_002', cardId, battlefieldObject.instanceId, definition.effectIds[0]);
+      } else if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
           definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.db_003.01') {
         offerArchaeologyChoice(player, battlefieldObject, definition.effectIds[0]);
       } else if (definition.effectImplementationStatus === 'IMPLEMENTED' &&

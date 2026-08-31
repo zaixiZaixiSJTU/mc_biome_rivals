@@ -1,6 +1,6 @@
 # 海晶碎片位移规范 v1
 
-本规范对应 `protocolVersion 21`、`rulesetVersion prototype-0.29` 与内容版本 21。
+本规范对应 `protocolVersion 21`、`rulesetVersion prototype-0.30` 与内容版本 22。
 
 ## 合法目标与支付
 

@@ -248,6 +248,20 @@ namespace BiomeRivals.Demo
                     : "；没有相邻动物友军，忠诚战吼未触发。";
             }
             else if (definition.effectImplementationStatus == "IMPLEMENTED" &&
+                definition.effectIds != null && definition.effectIds.Contains("effect.pf_004.01"))
+            {
+                if (_hand.Count < 7)
+                {
+                    _hand.Add("tk_002");
+                    deployMessage += "；农夫战吼将小麦置入手牌。";
+                }
+                else
+                {
+                    _discardPile.Add("tk_002");
+                    deployMessage += "；手牌已满，小麦进入弃牌堆。";
+                }
+            }
+            else if (definition.effectImplementationStatus == "IMPLEMENTED" &&
                 definition.effectIds != null && definition.effectIds.Contains("effect.db_003.01"))
             {
                 OfferArchaeologyChoice(deployedObject);

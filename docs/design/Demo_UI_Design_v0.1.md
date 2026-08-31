@@ -115,3 +115,5 @@ DB-005 的动态费用直接复用卡面左上角费用槽，不增加独立 Web
 海底神殿结束阶段预览：[`assets/demo-ocean-monument-preview-v1.png`](assets/demo-ocean-monument-preview-v1.png)。神殿是一个横跨三个建筑格的连续体素对象；相邻单位保持普通地表，孤立单位同时获得橙红地表材质脉冲与“神殿锁定”铭牌，所有标记都随 3D 地块接受同一相机透视。
 
 驯服的狼相邻战吼预览：[`assets/demo-tamed-wolf-preview-v1.png`](assets/demo-tamed-wolf-preview-v1.png)。已成长的狼铭牌显示永久生命；选中另一张狼时，与动物相邻的可部署地块以金色贴地材质和轻微抬升反馈显示，远离动物的合法格继续使用普通青绿色，从落位前即可读出战吼结果。
+
+村民农夫小麦战吼预览：[`assets/demo-villager-farmer-preview-v1.png`](assets/demo-villager-farmer-preview-v1.png)。村民农夫部署后保留 Minecraft 村民模型，并将小麦生成至己方手牌；新牌直接复用手牌与右侧详情的统一卡牌预制体。联机事件只向拥有者公开小麦身份；部署前达到七张手牌时，农夫先离手再生成小麦，因此合法流程仍保持七张而不会误判为爆牌。

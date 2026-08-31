@@ -159,6 +159,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewArchaeology")) SetupArchaeologyPreview();
             else if (HasCommandLineFlag("-previewLoot")) SetupLootPreview();
             else if (HasCommandLineFlag("-previewTamedWolf")) SetupTamedWolfPreview();
+            else if (HasCommandLineFlag("-previewVillagerFarmer")) SetupVillagerFarmerPreview();
             else if (HasCommandLineFlag("-previewDungeonSkeleton")) SetupDungeonSkeletonPreview();
             else if (HasCommandLineFlag("-previewStray")) SetupStrayPreview();
             else if (HasCommandLineFlag("-previewEquipment")) SetupEquipmentPreview();
@@ -665,7 +666,9 @@ namespace BiomeRivals.Demo
                         matchEvent.payload?.effectId == "effect.cd_003.01" ||
                         matchEvent.payload?.effectId == "effect.si_003.01" ||
                         matchEvent.payload?.effectId == "effect.or_004.01";
-                    var triggerName = isLoot ? "掉落" : matchEvent.payload?.effectId == "effect.ed_004.01" ? "亡语" : "效果";
+                    var isFarmerBattlecry = matchEvent.payload?.effectId == "effect.pf_004.01";
+                    var triggerName = isLoot ? "掉落" : matchEvent.payload?.effectId == "effect.ed_004.01" ? "亡语" :
+                        isFarmerBattlecry ? "战吼" : "效果";
                     if (generatedToHand)
                     {
                         ShowStatus(ownGeneration
@@ -679,6 +682,7 @@ namespace BiomeRivals.Demo
                             : $"敌方{sourceName}{triggerName}：对手手牌已满，{generatedName}进入弃牌堆。", false);
                     }
                     if (isLoot) yield return ShowTurnBanner("战利品", Gold);
+                    else if (isFarmerBattlecry) yield return ShowTurnBanner("收获小麦", Gold);
                     if (ownGeneration) yield return PulsePlayerHud(generatedToHand ? Gold : Ember);
                     else yield return null;
                     break;
@@ -974,6 +978,22 @@ namespace BiomeRivals.Demo
                 : !sheepDeployed.Accepted ? sheepDeployed.Message : wolfDeployed.Message,
                 !sheepDeployed.Accepted || !wolfDeployed.Accepted || wolf?.MaxHealth != 3);
             _battlefield.SetSlotHovered(true, DemoSlotKind.Unit, 2, true);
+        }
+
+        private void SetupVillagerFarmerPreview()
+        {
+            SelectFaction("plains_forest");
+            SelectOpponentFaction("plains_forest");
+            if (!_registry.TryGetDefinition("pf_004", out var farmerDefinition) ||
+                !_registry.TryGetDefinition("tk_002", out var wheatDefinition)) return;
+            _match.ResetHand(new[] { farmerDefinition.id });
+            var deployed = _match.ApplyDeploy(farmerDefinition,
+                _match.CreateDeployCommand(farmerDefinition.id, DemoSlotKind.Unit, 1));
+            _selectedCardId = wheatDefinition.id;
+            RefreshAll();
+            ShowStatus(deployed.Accepted && _match.Hand.Contains(wheatDefinition.id)
+                ? "村民农夫已在战场站稳，并将小麦生成到手牌；右侧详情与手牌复用同一张材料卡预制体。"
+                : deployed.Message, !deployed.Accepted || !_match.Hand.Contains(wheatDefinition.id));
         }
 
         private void SetupDeathrattlePreview()

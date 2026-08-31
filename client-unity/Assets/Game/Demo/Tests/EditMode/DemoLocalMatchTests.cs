@@ -1692,6 +1692,39 @@ namespace BiomeRivals.Demo.Tests
         }
 
         [Test]
+        public void VillagerFarmerBattlecryGeneratesWheatLocally()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("pf_004", out var farmer), Is.True);
+            Assert.That(farmer.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { farmer.id });
+
+            var deployed = match.ApplyDeploy(farmer,
+                match.CreateDeployCommand(farmer.id, DemoSlotKind.Unit, 1));
+            Assert.That(deployed.Accepted, Is.True);
+            Assert.That(deployed.Message, Does.Contain("小麦置入手牌"));
+            Assert.That(match.Hand, Is.EqualTo(new[] { "tk_002" }));
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 1).CardId, Is.EqualTo(farmer.id));
+        }
+
+        [Test]
+        public void VillagerFarmerReplacesItselfAtTheLocalHandLimit()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("pf_004", out var farmer), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { farmer.id, "tk_003", "tk_003", "tk_003", "tk_003", "tk_003", "tk_003" });
+
+            var deployed = match.ApplyDeploy(farmer,
+                match.CreateDeployCommand(farmer.id, DemoSlotKind.Unit, 0));
+            Assert.That(deployed.Accepted, Is.True);
+            Assert.That(match.Hand.Count, Is.EqualTo(7));
+            Assert.That(match.Hand.Count(cardId => cardId == "tk_002"), Is.EqualTo(1));
+            Assert.That(match.DiscardCount, Is.Zero);
+        }
+
+        [Test]
         public void OceanMonumentLethalDamageAwardsTheEnemyDropLocally()
         {
             var registry = CardContentLoader.Load();

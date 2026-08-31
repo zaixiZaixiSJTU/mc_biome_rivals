@@ -290,6 +290,58 @@ TestHarness.test('resolves the bee battlecry after deployment', function (): voi
   TestHarness.equal(result.batch.events[1]!.payload.healing, 1);
 });
 
+TestHarness.test('Villager Farmer generates private Wheat after deployment', function (): void {
+  const state = activeState('match-farmer-wheat', ['alice', 'bob'], ['plains_forest', 'nether']);
+  const actorIndex = state.players[0]!.playerId === 'alice' ? 0 : 1;
+  const opponentIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  state.activePlayerIndex = actorIndex;
+  actor.hand = ['pf_004'];
+  actor.redstone = 3;
+  actor.redstoneCapacity = 3;
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('farmer-wheat', 0, 'pf_004', 'UNIT', 1));
+  TestHarness.ok(result.accepted);
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[actorIndex]!.hand.join(','), 'tk_002');
+  TestHarness.equal(result.batch.events.length, 2);
+  TestHarness.equal(result.batch.events[0]!.type, 'CARD_DEPLOYED');
+  TestHarness.equal(result.batch.events[1]!.type, 'CARD_GENERATED');
+  TestHarness.equal(result.batch.events[1]!.payload.sourceCardId, 'pf_004');
+  TestHarness.equal(result.batch.events[1]!.payload.sourceInstanceId, result.batch.events[0]!.payload.instanceId);
+  TestHarness.equal(result.batch.events[1]!.payload.effectId, 'effect.pf_004.01');
+  TestHarness.equal(result.batch.events[1]!.payload.cardId, 'tk_002');
+  TestHarness.equal(result.batch.events[1]!.payload.destination, 'HAND');
+  const ownerEvents = BiomeRivalsRules.createClientEventBatch(result.batch, actor.playerId);
+  const opponentEvents = BiomeRivalsRules.createClientEventBatch(
+    result.batch, result.state.players[opponentIndex]!.playerId);
+  TestHarness.equal(ownerEvents.events[1]!.payload.cardId, 'tk_002');
+  TestHarness.equal(opponentEvents.events[1]!.payload.cardId, null);
+});
+
+TestHarness.test('Villager Farmer replaces itself with Wheat at the seven-card hand limit', function (): void {
+  const state = activeState('match-farmer-hand-limit', ['alice', 'bob'], ['plains_forest', 'nether']);
+  const actorIndex = state.players[0]!.playerId === 'alice' ? 0 : 1;
+  const actor = state.players[actorIndex]!;
+  state.activePlayerIndex = actorIndex;
+  actor.hand = ['pf_004', 'tk_003', 'tk_003', 'tk_003', 'tk_003', 'tk_003', 'tk_003'];
+  actor.redstone = 3;
+  actor.redstoneCapacity = 3;
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('farmer-hand-limit', 0, 'pf_004', 'UNIT', 0));
+  TestHarness.ok(result.accepted);
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[actorIndex]!.hand.length, 7);
+  TestHarness.equal(result.state.players[actorIndex]!.hand.filter(function (cardId): boolean {
+    return cardId === 'tk_002';
+  }).length, 1);
+  TestHarness.equal(result.state.players[actorIndex]!.discardPile.length, 0);
+  TestHarness.equal(result.batch.events[1]!.payload.handCount, 7);
+  TestHarness.equal(result.batch.events[1]!.payload.destination, 'HAND');
+});
+
 TestHarness.test('offers the archaeologists top-three choice privately after deployment', function (): void {
   const state = activeState('match-1', ['alice', 'bob'], ['desert_badlands', 'nether']);
   state.players[0]!.hand = ['db_003'];
