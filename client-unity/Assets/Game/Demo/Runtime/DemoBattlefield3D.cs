@@ -155,6 +155,14 @@ namespace BiomeRivals.Demo
             UpdateSlotMarker(marker, Time.unscaledTime, 0f);
         }
 
+        public void SetSlotEndPhaseThreat(bool player, DemoSlotKind kind, int index, bool threatened)
+        {
+            BuildNow();
+            if (!_slotMarkers.TryGetValue(SlotKey(player, kind, index), out var marker)) return;
+            marker.EndPhaseThreat = threatened;
+            UpdateSlotMarker(marker, Time.unscaledTime, 0f);
+        }
+
         public void SetSlotHovered(bool player, DemoSlotKind kind, int index, bool hovered)
         {
             BuildNow();
@@ -257,12 +265,14 @@ namespace BiomeRivals.Demo
                 ? Color.Lerp(Hex("#B41635"), Hex("#FF3157"), pulse)
                 : actionablePress || actionableHover
                 ? Hex("#F1C96A")
-                : marker.ValidTarget
-                    ? marker.PriorityTarget
-                        ? Color.Lerp(Hex("#A97727"), Hex("#FFE08A"), pulse)
-                        : Color.Lerp(Hex("#3D9E8F"), Hex("#79E0CB"), pulse)
-                    : marker.AuraLayers > 0
-                        ? Color.Lerp(Hex("#216F72"), Hex("#69D7C7"), pulse)
+                     : marker.ValidTarget
+                         ? marker.PriorityTarget
+                             ? Color.Lerp(Hex("#A97727"), Hex("#FFE08A"), pulse)
+                             : Color.Lerp(Hex("#3D9E8F"), Hex("#79E0CB"), pulse)
+                    : marker.EndPhaseThreat
+                        ? Color.Lerp(Hex("#8A2E24"), Hex("#FF8865"), pulse)
+                     : marker.AuraLayers > 0
+                         ? Color.Lerp(Hex("#216F72"), Hex("#69D7C7"), pulse)
                     : marker.EngineReady
                         ? Color.Lerp(Hex("#8E3F72"), Hex("#F08FB4"), pulse)
                     : Hex("#777263");
@@ -272,10 +282,12 @@ namespace BiomeRivals.Demo
                     ? 0.92f
                     : actionableHover
                     ? 0.78f
-                    : marker.ValidTarget
-                        ? (marker.Occupied ? 0.48f + pulse * 0.18f : 0.18f + pulse * 0.12f)
-                        : marker.AuraLayers > 0
-                            ? 0.10f + Mathf.Min(2, marker.AuraLayers) * 0.05f + pulse * 0.05f
+                     : marker.ValidTarget
+                         ? (marker.Occupied ? 0.48f + pulse * 0.18f : 0.18f + pulse * 0.12f)
+                        : marker.EndPhaseThreat
+                            ? 0.22f + pulse * 0.10f
+                         : marker.AuraLayers > 0
+                             ? 0.10f + Mathf.Min(2, marker.AuraLayers) * 0.05f + pulse * 0.05f
                         : marker.EngineReady
                             ? 0.13f + pulse * 0.07f
                         : marker.Hovered && !marker.Occupied ? 0.12f : 0f;
@@ -752,6 +764,7 @@ namespace BiomeRivals.Demo
                     battlefieldObject.SlotIndex,
                     battlefieldObject.OccupiedSlots);
                 if (cardId == "or_007") BuildCoralReef(root, material, footprintWidth);
+                else if (cardId == "or_008") BuildOceanMonument(root, material, footprintWidth);
                 else BuildBlockStructure(root, material, theme.Accent, footprintWidth);
             }
             else BuildBlockCreature(root, material, theme.Accent, cardId, player, battlefieldObject.SlotIndex);
@@ -816,6 +829,45 @@ namespace BiomeRivals.Demo
             CreateBlock(root, "CoralTop", new Vector3(0.08f, 1.00f, 0f), new Vector3(0.30f, 0.38f, 0.30f), coralMaterial);
             CreateBlock(root, "CoralArmL", new Vector3(-0.35f, 0.78f, 0f), new Vector3(0.58f, 0.24f, 0.30f), coralMaterial);
             CreateBlock(root, "CoralArmR", new Vector3(0.42f, 0.68f, 0.04f), new Vector3(0.62f, 0.22f, 0.28f), coralMaterial);
+        }
+
+        private void BuildOceanMonument(Transform root, Material prismarineBricks, float footprintWidth)
+        {
+            const string darkKey = "ocean_monument_dark_prismarine";
+            if (!_materials.TryGetValue(darkKey, out var darkPrismarine))
+            {
+                darkPrismarine = DemoWorldAssetProvider.CreateBlockMaterial(
+                    "Demo_OceanMonument_DarkPrismarine", Hex("#315D59"), "dark_prismarine", Color.black, blockShader);
+                _materials[darkKey] = darkPrismarine;
+            }
+
+            const string lanternKey = "ocean_monument_sea_lantern";
+            if (!_materials.TryGetValue(lanternKey, out var seaLantern))
+            {
+                var lanternColor = Hex("#D8F2D2");
+                seaLantern = DemoWorldAssetProvider.CreateBlockMaterial(
+                    "Demo_OceanMonument_SeaLantern", lanternColor, "sea_lantern", Hex("#5FAE94"), blockShader);
+                _materials[lanternKey] = seaLantern;
+            }
+
+            var width = Mathf.Max(6.15f, footprintWidth);
+            var wingOffset = width * 0.28f;
+            var sideTowerOffset = width * 0.5f - 0.48f;
+            CreateBlock(root, "MonumentFoundation", new Vector3(0f, 0.18f, 0f), new Vector3(width, 0.30f, 1.00f), darkPrismarine);
+            CreateBlock(root, "MonumentLowerTerrace", new Vector3(0f, 0.43f, 0f), new Vector3(width - 0.48f, 0.26f, 0.86f), prismarineBricks);
+            CreateBlock(root, "MonumentLeftWing", new Vector3(-wingOffset, 0.69f, 0f), new Vector3(width * 0.34f, 0.40f, 0.72f), prismarineBricks);
+            CreateBlock(root, "MonumentRightWing", new Vector3(wingOffset, 0.69f, 0f), new Vector3(width * 0.34f, 0.40f, 0.72f), prismarineBricks);
+            CreateBlock(root, "MonumentLeftTower", new Vector3(-sideTowerOffset, 1.05f, 0f), new Vector3(0.64f, 1.24f, 0.68f), darkPrismarine);
+            CreateBlock(root, "MonumentRightTower", new Vector3(sideTowerOffset, 1.05f, 0f), new Vector3(0.64f, 1.24f, 0.68f), darkPrismarine);
+            CreateBlock(root, "MonumentLeftCrown", new Vector3(-sideTowerOffset, 1.72f, 0f), new Vector3(0.84f, 0.18f, 0.84f), prismarineBricks);
+            CreateBlock(root, "MonumentRightCrown", new Vector3(sideTowerOffset, 1.72f, 0f), new Vector3(0.84f, 0.18f, 0.84f), prismarineBricks);
+            CreateBlock(root, "MonumentCore", new Vector3(0f, 1.02f, 0f), new Vector3(1.58f, 1.46f, 0.82f), prismarineBricks);
+            CreateBlock(root, "MonumentCoreCap", new Vector3(0f, 1.82f, 0f), new Vector3(1.92f, 0.22f, 0.96f), darkPrismarine);
+            CreateBlock(root, "MonumentCoreSpire", new Vector3(0f, 2.08f, 0f), new Vector3(0.62f, 0.42f, 0.62f), prismarineBricks);
+            CreateBlock(root, "MonumentEntrance", new Vector3(0f, 0.78f, -0.43f), new Vector3(0.54f, 0.64f, 0.08f), darkPrismarine);
+            CreateBlock(root, "MonumentLanternLeft", new Vector3(-0.57f, 1.31f, -0.44f), new Vector3(0.26f, 0.28f, 0.10f), seaLantern);
+            CreateBlock(root, "MonumentLanternRight", new Vector3(0.57f, 1.31f, -0.44f), new Vector3(0.26f, 0.28f, 0.10f), seaLantern);
+            CreateBlock(root, "MonumentBeacon", new Vector3(0f, 2.34f, 0f), new Vector3(0.30f, 0.20f, 0.30f), seaLantern);
         }
 
         private Material GetAccentMaterial(string key, Color color)
@@ -922,6 +974,7 @@ namespace BiomeRivals.Demo
             public bool PriorityTarget;
             public int AuraLayers;
             public bool EngineReady;
+            public bool EndPhaseThreat;
             public bool Hovered;
             public bool Pressed;
             public bool HoverRejected;

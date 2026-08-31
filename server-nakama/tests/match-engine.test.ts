@@ -2108,6 +2108,53 @@ TestHarness.test('Multiple Coral Reefs stack in stable order and become ready ne
   TestHarness.equal(nextTurnGrowth[1]!.payload.maxHealth, 4);
 });
 
+TestHarness.test('Ocean Monument damages only isolated enemy units before turn end', function (): void {
+  const state = activeState('match-monument-isolation', ['alice', 'bob'], ['ocean_river', 'nether']);
+  const actorIndex = state.players[0]!.playerId === 'alice' ? 0 : 1;
+  const opponentIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  state.activePlayerIndex = actorIndex;
+  placeBuilding(state, actorIndex, 'or_008', 0, 'object-10');
+  placeUnit(state, opponentIndex, 'pf_001', 0, 'object-20', 1);
+  placeUnit(state, opponentIndex, 'pf_001', 1, 'object-21', 1);
+  placeUnit(state, opponentIndex, 'or_003', 3, 'object-22', 1);
+
+  const ended = BiomeRivalsRules.applyCommand(state, actor.playerId, command('monument-isolation-end', 0, 'END_TURN'));
+  TestHarness.ok(ended.accepted);
+  if (!ended.accepted) return;
+  const opponent = ended.state.players[opponentIndex]!;
+  TestHarness.equal(opponent.battlefield.filter(function (value): boolean { return value.instanceId === 'object-20'; })[0]!.health, 2);
+  TestHarness.equal(opponent.battlefield.filter(function (value): boolean { return value.instanceId === 'object-21'; })[0]!.health, 2);
+  TestHarness.equal(opponent.battlefield.filter(function (value): boolean { return value.instanceId === 'object-22'; })[0]!.health, 1);
+  TestHarness.equal(ended.batch.events[0]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(ended.batch.events[0]!.payload.instanceId, 'object-22');
+  TestHarness.equal(ended.batch.events[0]!.payload.sourceInstanceId, 'object-10');
+  TestHarness.equal(ended.batch.events[0]!.payload.effectId, 'effect.or_008.01');
+  TestHarness.equal(ended.batch.events[1]!.type, 'TURN_ENDED');
+});
+
+TestHarness.test('Ocean Monument lethal damage settles enemy loot before TURN_ENDED', function (): void {
+  const state = activeState('match-monument-lethal', ['alice', 'bob'], ['ocean_river', 'desert_badlands']);
+  const actorIndex = state.players[0]!.playerId === 'alice' ? 0 : 1;
+  const opponentIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  state.activePlayerIndex = actorIndex;
+  placeBuilding(state, actorIndex, 'or_008', 0, 'object-10');
+  placeUnit(state, opponentIndex, 'db_001', 3, 'object-20', 1);
+
+  const ended = BiomeRivalsRules.applyCommand(state, actor.playerId, command('monument-lethal-end', 0, 'END_TURN'));
+  TestHarness.ok(ended.accepted);
+  if (!ended.accepted) return;
+  const eventTypes = ended.batch.events.map(function (event): string { return event.type; });
+  TestHarness.equal(eventTypes.slice(0, 4).join(','),
+    'OBJECT_STATS_CHANGED,OBJECT_DIED,CARD_GENERATED,TURN_ENDED');
+  TestHarness.equal(ended.batch.events[0]!.payload.health, 0);
+  TestHarness.equal(ended.batch.events[1]!.payload.instanceId, 'object-20');
+  TestHarness.equal(ended.batch.events[2]!.payload.cardId, 'tk_005');
+  TestHarness.equal(ended.state.players[actorIndex]!.hand.indexOf('tk_005') >= 0, true);
+  TestHarness.equal(ended.state.players[opponentIndex]!.battlefield.length, 0);
+});
+
 TestHarness.test('rejects stale revisions', function (): void {
   const state = activeState('match-1', ['alice', 'bob']);
   const result = BiomeRivalsRules.applyCommand(state, 'alice', command('cmd-1', 99, 'END_TURN'));

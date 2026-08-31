@@ -802,6 +802,54 @@ namespace BiomeRivalsRules {
       return triggered;
     }
 
+    function resolveOceanMonumentEndPhase(player: PlayerState, opponent: PlayerState): number {
+      const monuments = player.battlefield.filter(function (object): boolean {
+        if (object.cardType !== 'STRUCTURE' || object.health <= 0) return false;
+        const definition = getCardDefinition(object.cardId);
+        return definition !== null && definition.effectImplementationStatus === 'IMPLEMENTED' &&
+          definition.effectIds.indexOf('effect.or_008.01') >= 0;
+      }).slice().sort(function (left, right): number {
+        if (left.slotIndex !== right.slotIndex) return left.slotIndex - right.slotIndex;
+        return left.instanceId < right.instanceId ? -1 : left.instanceId > right.instanceId ? 1 : 0;
+      });
+      let totalDamage = 0;
+      for (let monumentIndex = 0; monumentIndex < monuments.length; monumentIndex += 1) {
+        const monument = monuments[monumentIndex]!;
+        if (player.battlefield.indexOf(monument) < 0 || monument.health <= 0) continue;
+        const targets = opponent.battlefield.filter(function (target): boolean {
+          if (target.cardType !== 'UNIT' || target.health <= 0) return false;
+          return !opponent.battlefield.some(function (neighbor): boolean {
+            return neighbor.instanceId !== target.instanceId && neighbor.cardType === 'UNIT' && neighbor.health > 0 &&
+              Math.abs(neighbor.slotIndex - target.slotIndex) === 1;
+          });
+        }).slice().sort(function (left, right): number {
+          if (left.slotIndex !== right.slotIndex) return left.slotIndex - right.slotIndex;
+          return left.instanceId < right.instanceId ? -1 : left.instanceId > right.instanceId ? 1 : 0;
+        });
+        const killCredits: { [instanceId: string]: string } = {};
+        for (let targetIndex = 0; targetIndex < targets.length; targetIndex += 1) {
+          const target = targets[targetIndex]!;
+          target.health = Math.max(0, target.health - 1);
+          totalDamage += 1;
+          if (target.health === 0) killCredits[target.instanceId] = player.playerId;
+          emit('OBJECT_STATS_CHANGED', {
+            playerId: opponent.playerId,
+            instanceId: target.instanceId,
+            sourceCardId: monument.cardId,
+            sourceInstanceId: monument.instanceId,
+            effectId: 'effect.or_008.01',
+            reason: 'DAMAGE',
+            attack: target.attack,
+            health: target.health,
+            temporaryAttackModifier: target.temporaryAttackModifier,
+            temporaryAttackModifierExpiresOnTurn: target.temporaryAttackModifierExpiresOnTurn
+          });
+        }
+        if (targets.length > 0) settleDeaths(player, opponent, killCredits);
+      }
+      return totalDamage;
+    }
+
     function removeDeadObjects(player: PlayerState): BattlefieldObjectState[] {
       const deadObjects = player.battlefield.filter(function (object): boolean { return object.health <= 0; });
       deadObjects.sort(function (left, right): number {
@@ -1792,6 +1840,7 @@ namespace BiomeRivalsRules {
       case 'END_TURN': {
         if (state.status !== 'ACTIVE') return reject(state, 'MULLIGAN_REQUIRED', 'both players must confirm their opening hands first');
         if (actorIndex !== state.activePlayerIndex) return reject(state, 'NOT_ACTIVE_PLAYER', 'only the active player may end the turn');
+        resolveOceanMonumentEndPhase(next.players[actorIndex]!, next.players[actorIndex === 0 ? 1 : 0]!);
         expireStatuses(next.players[actorIndex]!);
         for (let playerIndex = 0; playerIndex < next.players.length; playerIndex += 1) {
           const effectPlayer = next.players[playerIndex]!;

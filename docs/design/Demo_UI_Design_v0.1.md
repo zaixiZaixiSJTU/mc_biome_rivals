@@ -55,7 +55,7 @@ UGUI 样式由 `DemoUiStyleCatalog` 集中提供材质、底色、描边和交�
 
 手牌底板左下角持续显示“手牌 / 牌库 / 弃牌”三个区域计数，信息使用与 HUD 相同的低对比度浅色文字，不额外叠加 Web 风格浮层。新回合抽到的卡直接进入扇形手牌；满 7 张时卡牌公开进入弃牌堆，空牌库时状态板显示本次疲劳伤害。离线展示牌组为 5 张展示手牌加 25 张临时群系循环牌库，用于 UI 和回合测试；正式权威规则按 GDD 使用 30 张牌组与 3/4 张起手。
 
-本机原型贴图通过 `scripts/extract-minecraft-world-textures.ps1` 从已拥有的 Java 客户端 JAR 按白名单提取 18 张方块贴图和 11 张生物皮肤到 Git 忽略目录。运行时先查找 `Resources/DemoWorld/Prefabs/{cardId}`；不存在时由 `DemoMinecraftModelFactory` 为已注册的蜜蜂、绵羊、狼、村民、岩浆怪、烈焰人、流浪者、鲑鱼、海豚、溺尸与守卫者构造 Minecraft 式分件模型；珊瑚礁则直接使用 `tube_coral_block` 方块材质构成体素建筑，其余对象才使用通用后备模型。因此以后注册正式 Prefab 不需要改部署逻辑。
+本机原型贴图通过 `scripts/extract-minecraft-world-textures.ps1` 从已拥有的 Java 客户端 JAR 按白名单提取 20 张方块贴图和 11 张生物皮肤到 Git 忽略目录。运行时先查找 `Resources/DemoWorld/Prefabs/{cardId}`；不存在时由 `DemoMinecraftModelFactory` 为已注册的蜜蜂、绵羊、狼、村民、岩浆怪、烈焰人、流浪者、鲑鱼、海豚、溺尸与守卫者构造 Minecraft 式分件模型；珊瑚礁直接使用 `tube_coral_block`，海底神殿则组合 `prismarine_bricks`、`dark_prismarine` 与 `sea_lantern` 构成横跨三个建筑格的体素建筑，其余对象才使用通用后备模型。因此以后注册正式 Prefab 不需要改部署逻辑。
 
 部署、攻击与卡牌目标槽位不再使用屏幕空间矩形、透明 `Graphic` 或 UGUI `Button` 命中。每个槽位由一个合并的地砖顶面 Mesh、同 Mesh 的 `MeshCollider`、`DemoBattlefieldSlotTarget` 语义组件，以及一个仅在抬升时显示的合并侧壁 Mesh 组成，不为单块地砖创建 Renderer 或 Collider。`DemoBattlefieldPointerController` 使用主相机 `ScreenPointToRay` 在 3D 世界中寻找最近的双方语义槽位；UI 面板遮挡指针时停止世界命中。战斗阶段先持续高亮合法己方攻击者，选择后保持攻击者地砖的按下亮度，并点亮敌方生物/建筑目标；敌方英雄使用其实体 HUD 面板作为明确的点击目标。有目标卡牌进入独立选择态，已占用的合法地表直接发光而不抬升生物模型，右键或 Esc 可取消。
 
@@ -111,3 +111,5 @@ DB-005 的动态费用直接复用卡面左上角费用槽，不增加独立 Web
 有目标卡牌预览：[`assets/demo-targeted-card-preview-v1.png`](assets/demo-targeted-card-preview-v1.png)。`雪球`先进入目标选择态，只点亮合法敌方单位所在的真实 3D 地表；命令携带稳定对象实例 ID，服务端在扣费和弃牌前完成存活、阵营与类型校验。
 
 珊瑚礁成长预览：[`assets/demo-coral-reef-preview-v1.png`](assets/demo-coral-reef-preview-v1.png)。建筑使用本机 Minecraft `tube_coral_block` 纹理构成体素珊瑚簇；待触发时建筑格地表以低强度粉紫色脉冲提示持续效果，单位铭牌显示结算后的永久生命，右侧卡牌与手牌继续复用同一材质化卡面。
+
+海底神殿结束阶段预览：[`assets/demo-ocean-monument-preview-v1.png`](assets/demo-ocean-monument-preview-v1.png)。神殿是一个横跨三个建筑格的连续体素对象；相邻单位保持普通地表，孤立单位同时获得橙红地表材质脉冲与“神殿锁定”铭牌，所有标记都随 3D 地块接受同一相机透视。

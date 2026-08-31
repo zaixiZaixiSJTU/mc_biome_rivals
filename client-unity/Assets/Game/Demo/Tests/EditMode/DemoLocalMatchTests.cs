@@ -919,6 +919,10 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(buildingMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.GreaterThan(0f));
                 battlefield.SetSlotEngineReady(true, DemoSlotKind.Building, 0, false);
                 Assert.That(buildingMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.Zero);
+                battlefield.SetSlotEndPhaseThreat(false, DemoSlotKind.Unit, 0, true);
+                Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.GreaterThan(0f));
+                battlefield.SetSlotEndPhaseThreat(false, DemoSlotKind.Unit, 0, false);
+                Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.Zero);
                 battlefield.SyncPieces(new[]
                 {
                     new DemoBattlefieldObject
@@ -928,6 +932,17 @@ namespace BiomeRivals.Demo.Tests
                     }
                 }, System.Array.Empty<DemoBattlefieldObject>(), registry);
                 Assert.That(root.transform.Find("BattlefieldPieces/Piece_object-reef_or_007/CoralCore"), Is.Not.Null);
+                battlefield.SyncPieces(new[]
+                {
+                    new DemoBattlefieldObject
+                    {
+                        InstanceId = "object-monument", CardId = "or_008", Player = true,
+                        SlotKind = DemoSlotKind.Building, SlotIndex = 0, OccupiedSlots = 3, Health = 11, MaxHealth = 11
+                    }
+                }, System.Array.Empty<DemoBattlefieldObject>(), registry);
+                Assert.That(root.transform.Find("BattlefieldPieces/Piece_object-monument_or_008/MonumentCore"), Is.Not.Null);
+                Assert.That(root.transform.Find("BattlefieldPieces/Piece_object-monument_or_008/MonumentLeftTower"), Is.Not.Null);
+                Assert.That(root.transform.Find("BattlefieldPieces/Piece_object-monument_or_008/MonumentRightTower"), Is.Not.Null);
                 Physics.SyncTransforms();
                 var unitScreenPosition = battlefield.BoardCamera.WorldToScreenPoint(unitMarker.TransformPoint(unitMarker.GetComponent<MeshFilter>().sharedMesh.bounds.center));
                 Assert.That(battlefield.TryRaycastSlot(unitScreenPosition, out var raycastTarget), Is.True);
@@ -1592,6 +1607,55 @@ namespace BiomeRivals.Demo.Tests
                 match.CreateDeployCommand(salmon.id, DemoSlotKind.Unit, 2));
             Assert.That(nextTurn.Accepted, Is.True);
             Assert.That(match.GetObject(true, DemoSlotKind.Unit, 2).MaxHealth, Is.EqualTo(3));
+        }
+
+        [Test]
+        public void OceanMonumentEndPhaseDamagesOnlyTheIsolatedOpponent()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("or_008", out var monument), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_001", out var bee), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_003", out var wolf), Is.True);
+            Assert.That(monument.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(System.Array.Empty<string>(), new[] { bee.id });
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            match.ResetHand(new[] { monument.id });
+            Assert.That(match.ApplyDeploy(monument,
+                match.CreateDeployCommand(monument.id, DemoSlotKind.Building, 0)).Accepted, Is.True);
+            match.ResetOpponent(new[] { bee, bee, wolf }, new[] { 0, 1, 3 });
+
+            var ended = match.ApplyEndTurn(match.CreateEndTurnCommand());
+            Assert.That(ended.Accepted, Is.True);
+            Assert.That(ended.Message, Does.Contain("1 个孤立敌方生物"));
+            Assert.That(match.GetObject(false, DemoSlotKind.Unit, 0).Health, Is.EqualTo(2));
+            Assert.That(match.GetObject(false, DemoSlotKind.Unit, 1).Health, Is.EqualTo(2));
+            Assert.That(match.GetObject(false, DemoSlotKind.Unit, 3).Health, Is.EqualTo(1));
+            Assert.That(match.BuildingSlots, Is.EqualTo(new[] { monument.id, monument.id, monument.id }));
+        }
+
+        [Test]
+        public void OceanMonumentLethalDamageAwardsTheEnemyDropLocally()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("or_008", out var monument), Is.True);
+            Assert.That(registry.TryGetDefinition("db_001", out var husk), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(System.Array.Empty<string>(), new[] { husk.id });
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            match.ResetHand(new[] { monument.id });
+            Assert.That(match.ApplyDeploy(monument,
+                match.CreateDeployCommand(monument.id, DemoSlotKind.Building, 0)).Accepted, Is.True);
+            match.ResetOpponent(new[] { husk }, new[] { 3 });
+
+            var ended = match.ApplyEndTurn(match.CreateEndTurnCommand());
+            Assert.That(ended.Accepted, Is.True);
+            Assert.That(match.GetObject(false, DemoSlotKind.Unit, 3), Is.Null);
+            Assert.That(match.Hand, Does.Contain("tk_005"));
+            Assert.That(ended.Message, Does.Contain("腐肉"));
         }
 
         private static float ProjectedWidth(Camera camera, Transform surface, Vector3[] vertices)

@@ -531,7 +531,9 @@ namespace BiomeRivals.Demo
             return DemoCommandResult.Accept(message, Revision);
         }
 
-        public void ResetOpponent(IEnumerable<CardDefinitionEntry> definitions)
+        public void ResetOpponent(IEnumerable<CardDefinitionEntry> definitions) => ResetOpponent(definitions, null);
+
+        public void ResetOpponent(IEnumerable<CardDefinitionEntry> definitions, IReadOnlyList<int> preferredUnitSlots)
         {
             Array.Clear(OpponentUnitSlots, 0, OpponentUnitSlots.Length);
             Array.Clear(OpponentBuildingSlots, 0, OpponentBuildingSlots.Length);
@@ -539,13 +541,21 @@ namespace BiomeRivals.Demo
             OpponentLife = 30;
             _opponentHandCount = 5;
             var unitIndex = 0;
+            var unitOrdinal = 0;
             var buildingIndex = 0;
             foreach (var definition in definitions)
             {
                 if (definition == null) continue;
-                if (definition.cardType == "UNIT" && unitIndex < OpponentUnitSlots.Length)
+                if (definition.cardType == "UNIT" &&
+                    (preferredUnitSlots != null ? unitOrdinal < preferredUnitSlots.Count : unitIndex < OpponentUnitSlots.Length))
                 {
-                    SeedOpponent(definition, DemoSlotKind.Unit, unitIndex);
+                    var targetIndex = preferredUnitSlots != null && unitOrdinal < preferredUnitSlots.Count
+                        ? preferredUnitSlots[unitOrdinal]
+                        : unitIndex;
+                    unitOrdinal++;
+                    if (targetIndex < 0 || targetIndex >= OpponentUnitSlots.Length || !string.IsNullOrEmpty(OpponentUnitSlots[targetIndex]))
+                        continue;
+                    SeedOpponent(definition, DemoSlotKind.Unit, targetIndex);
                     unitIndex += 2;
                 }
                 else if ((definition.cardType == "BUILDING" || definition.cardType == "STRUCTURE") && buildingIndex < OpponentBuildingSlots.Length)
@@ -609,6 +619,9 @@ namespace BiomeRivals.Demo
 
         public MatchCommandDto CreateEnterCombatCommand() =>
             MatchCommandFactory.EnterCombat(NextCommandId(), Revision);
+
+        public MatchCommandDto CreateEndTurnCommand() =>
+            MatchCommandFactory.EndTurn(NextCommandId(), Revision);
 
         public DemoCommandResult ApplyEnterCombat(MatchCommandDto command)
         {
@@ -699,20 +712,26 @@ namespace BiomeRivals.Demo
         public void EndPlayerTurn()
         {
             if (!IsPlayerTurn) return;
-            ApplyEndTurn(MatchCommandFactory.EndTurn(NextCommandId(), Revision));
+            ApplyEndTurn(CreateEndTurnCommand());
         }
 
         public DemoCommandResult ApplyEndTurn(MatchCommandDto command)
         {
             if (!ValidateCommand(command, MatchCommandTypes.EndTurn, out var rejection)) return rejection;
             if (!IsPlayerTurn) return Reject(DemoCommandRejectionCode.NotActivePlayer, "当前不是你的回合。");
+            var monumentDeathMessages = new List<string>();
+            var monumentDamage = ResolveOceanMonumentEndPhase(monumentDeathMessages);
             RestoreExpiredAttackModifiers(_playerBattlefield);
             RestoreExpiredAttackModifiers(_opponentBattlefield);
             _triggeredEffectKeysThisTurn.Clear();
             ExcavatedThisTurn = false;
             IsPlayerTurn = false;
             AcceptCommand(command);
-            return DemoCommandResult.Accept("已结束回合。", Revision);
+            var monumentMessage = monumentDamage > 0
+                ? $"海底神殿对 {monumentDamage} 个孤立敌方生物各造成 1 点伤害。"
+                : string.Empty;
+            if (monumentDeathMessages.Count > 0) monumentMessage += " " + string.Join(" ", monumentDeathMessages);
+            return DemoCommandResult.Accept(string.IsNullOrEmpty(monumentMessage) ? "已结束回合。" : monumentMessage + " 已结束回合。", Revision);
         }
 
         public DemoDrawResult BeginNextPlayerTurn()
@@ -1039,6 +1058,33 @@ namespace BiomeRivals.Demo
                 triggered++;
             }
             return triggered;
+        }
+
+        private int ResolveOceanMonumentEndPhase(List<string> deathMessages)
+        {
+            var monuments = _playerBattlefield
+                .Where(value => value.CardId == "or_008" && value.SlotKind == DemoSlotKind.Building && value.Health > 0)
+                .OrderBy(value => value.SlotIndex).ThenBy(value => value.InstanceId, StringComparer.Ordinal).ToArray();
+            var totalDamage = 0;
+            foreach (var monument in monuments)
+            {
+                if (!_playerBattlefield.Contains(monument) || monument.Health <= 0) continue;
+                var targets = _opponentBattlefield.Where(value => value.SlotKind == DemoSlotKind.Unit && value.Health > 0 &&
+                        !_opponentBattlefield.Any(neighbor => neighbor.InstanceId != value.InstanceId &&
+                            neighbor.SlotKind == DemoSlotKind.Unit && neighbor.Health > 0 &&
+                            Math.Abs(neighbor.SlotIndex - value.SlotIndex) == 1))
+                    .OrderBy(value => value.SlotIndex).ThenBy(value => value.InstanceId, StringComparer.Ordinal).ToArray();
+                var killCredits = new Dictionary<string, bool>(StringComparer.Ordinal);
+                foreach (var target in targets)
+                {
+                    target.Health = Math.Max(0, target.Health - 1);
+                    totalDamage++;
+                    if (target.Health == 0) killCredits[target.InstanceId] = true;
+                }
+                if (targets.Length > 0 && deathMessages != null)
+                    deathMessages.AddRange(SettleDeaths(killCredits));
+            }
+            return totalDamage;
         }
 
         private int TriggerSuccessfulMovement(

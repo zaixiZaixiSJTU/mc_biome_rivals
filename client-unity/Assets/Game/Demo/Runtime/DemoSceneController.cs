@@ -164,6 +164,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewPrismarineShard")) SetupPrismarineShardPreview();
             else if (HasCommandLineFlag("-previewTurtleAura")) SetupTurtleAuraPreview();
             else if (HasCommandLineFlag("-previewCoralReef")) SetupCoralReefPreview();
+            else if (HasCommandLineFlag("-previewOceanMonument")) SetupOceanMonumentPreview();
             else if (HasCommandLineFlag("-previewGuardianReaction")) SetupGuardianReactionPreview();
             else if (HasCommandLineFlag("-previewDrownedAdjacency")) SetupDrownedAdjacencyPreview();
             else if (HasCommandLineFlag("-previewDolphinCurrent")) SetupDolphinCurrentPreview();
@@ -757,6 +758,16 @@ namespace BiomeRivals.Demo
                         yield return PulseBattlefieldObject(matchEvent.payload?.sourceInstanceId);
                         yield return ShowTurnBanner("珊瑚滋养", coralFriendly ? Cyan : Ember);
                     }
+                    else if (matchEvent.payload?.effectId == "effect.or_008.01")
+                    {
+                        var monumentViewerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
+                        var hitFriendly = matchEvent.payload?.playerId == monumentViewerId;
+                        ShowStatus(hitFriendly
+                            ? "敌方海底神殿锁定了没有相邻友军的己方生物，并在结束阶段造成 1 点伤害。"
+                            : "海底神殿对没有相邻友军的敌方生物造成 1 点结束阶段伤害。", false);
+                        yield return PulseBattlefieldObject(matchEvent.payload?.sourceInstanceId);
+                        yield return ShowTurnBanner("神殿脉冲", hitFriendly ? Danger : Gold);
+                    }
                     yield return PulseBattlefieldObject(matchEvent.payload?.instanceId);
                     break;
                 case MatchEventTypes.ObjectStatusApplied:
@@ -1293,6 +1304,31 @@ namespace BiomeRivals.Demo
             if (drowned != null) StartCoroutine(PulseBattlefieldObject(drowned.InstanceId));
         }
 
+        private void SetupOceanMonumentPreview()
+        {
+            SelectFaction("ocean_river");
+            SelectOpponentFaction("plains_forest");
+            if (!_registry.TryGetDefinition("or_008", out var monumentDefinition) ||
+                !_registry.TryGetDefinition("pf_001", out var beeDefinition) ||
+                !_registry.TryGetDefinition("pf_003", out var wolfDefinition)) return;
+
+            _match.ResetDeckAndHand(Array.Empty<string>(), new[] { "or_001" });
+            _match.EndPlayerTurn();
+            _match.BeginNextPlayerTurn();
+            _match.ResetHand(new[] { monumentDefinition.id });
+            var deployed = _match.ApplyDeploy(monumentDefinition,
+                _match.CreateDeployCommand(monumentDefinition.id, DemoSlotKind.Building, 0));
+            _match.ResetOpponent(new[] { beeDefinition, beeDefinition, wolfDefinition }, new[] { 0, 1, 3 });
+            _match.ResetHand(new[] { monumentDefinition.id });
+            _selectedCardId = monumentDefinition.id;
+            RefreshAll();
+            var isolatedWolf = _match.GetObject(false, DemoSlotKind.Unit, 3);
+            ShowStatus(deployed.Accepted
+                ? "海底神殿横跨三个建筑格；相邻的两只蜜蜂互相掩护，孤立的狼已被结束阶段脉冲锁定。"
+                : deployed.Message, !deployed.Accepted);
+            if (isolatedWolf != null) StartCoroutine(PulseBattlefieldObject(isolatedWolf.InstanceId));
+        }
+
         private void SetupStructureDeployedPreview()
         {
             SelectFaction("desert_badlands");
@@ -1450,13 +1486,15 @@ namespace BiomeRivals.Demo
             _handCanvasGroup.interactable = canUseHand;
             _handCanvasGroup.blocksRaycasts = canUseHand;
             _endTurnButton.interactable = !match.IsMulligan && match.PendingChoice == null && match.IsPlayerTurn && !match.IsFinished && (!IsOnlineBoard || _onlineSession.CanIssueCommand);
+            var monumentThreatCount = CountOceanMonumentThreats(true);
             _endTurnLabel.text = IsOnlineBoard && _onlineSession.HasPendingCommand
                 ? "等待服务器"
                 : match.IsMulligan ? "等待起手确认"
                 : match.PendingChoice != null ? match.PendingChoice.kind == "MOVE_UNIT"
                     ? match.IsChoiceOwner ? "选择移动地块" : "对手正在移动"
                     : match.IsChoiceOwner ? "完成考古选择" : "对手正在选择"
-                : !match.IsPlayerTurn ? "对手行动中" : match.IsFinished ? "对局结束" : match.Phase == DemoTurnPhase.Main ? "进入战斗" : "结束回合";
+                : !match.IsPlayerTurn ? "对手行动中" : match.IsFinished ? "对局结束" : match.Phase == DemoTurnPhase.Main ? "进入战斗" :
+                    monumentThreatCount > 0 ? $"结束回合 · 神殿 {monumentThreatCount}" : "结束回合";
         }
 
         private void RefreshPendingChoice()
@@ -1765,6 +1803,8 @@ namespace BiomeRivals.Demo
             var coralReady = view.Kind == DemoSlotKind.Building && battlefieldObject?.CardId == "or_007" &&
                 !match.HasTriggeredEffect(player, battlefieldObject.InstanceId, "effect.or_007.01");
             _battlefield.SetSlotEngineReady(player, view.Kind, view.Index, coralReady);
+            _battlefield.SetSlotEndPhaseThreat(player, view.Kind, view.Index,
+                IsOceanMonumentThreat(player, battlefieldObject));
             _battlefield.SetSlotState(player, view.Kind, view.Index, valid, !empty, priorityTarget);
 
             if (!empty)
@@ -1774,6 +1814,29 @@ namespace BiomeRivals.Demo
                 else
                     CreateWorldPieceLabel(view.Content, cardId, view.Content.sizeDelta, !player, battlefieldObject);
             }
+        }
+
+        private bool IsOceanMonumentThreat(bool targetPlayer, DemoBattlefieldObject target)
+        {
+            var match = MatchView;
+            if (target == null || target.Health <= 0 || target.SlotKind != DemoSlotKind.Unit) return false;
+            var sourcePlayer = match.IsPlayerTurn;
+            if (targetPlayer == sourcePlayer) return false;
+            var sourceBattlefield = sourcePlayer ? match.PlayerBattlefield : match.OpponentBattlefield;
+            if (!sourceBattlefield.Any(value => value != null && value.Health > 0 &&
+                value.SlotKind == DemoSlotKind.Building && value.CardId == "or_008")) return false;
+            var targetBattlefield = targetPlayer ? match.PlayerBattlefield : match.OpponentBattlefield;
+            return !targetBattlefield.Any(value => value != null && value.Health > 0 &&
+                value.SlotKind == DemoSlotKind.Unit && value.InstanceId != target.InstanceId &&
+                Mathf.Abs(value.SlotIndex - target.SlotIndex) == 1);
+        }
+
+        private int CountOceanMonumentThreats(bool sourcePlayer)
+        {
+            var match = MatchView;
+            if (match.IsPlayerTurn != sourcePlayer) return 0;
+            var targetBattlefield = sourcePlayer ? match.OpponentBattlefield : match.PlayerBattlefield;
+            return targetBattlefield.Count(value => IsOceanMonumentThreat(!sourcePlayer, value));
         }
 
         private void RefreshInspector()
@@ -2532,7 +2595,9 @@ namespace BiomeRivals.Demo
                 RefreshAll();
                 return;
             }
-            _match.EndPlayerTurn();
+            var endResult = _match.ApplyEndTurn(_match.CreateEndTurnCommand());
+            ShowStatus(endResult.Message, !endResult.Accepted);
+            if (!endResult.Accepted) return;
             ClearSelectedAttackerHighlight();
             _selectedAttackerInstanceId = null;
             RefreshAll();
@@ -2646,6 +2711,11 @@ namespace BiomeRivals.Demo
                 var ready = !MatchView.HasTriggeredEffect(!enemy, battlefieldObject.InstanceId, "effect.or_007.01");
                 stats = $"珊瑚滋养：{(ready ? "待触发" : "本回合已触发")} · {stats}";
                 accent = ready ? Hex("#F08FB4") : accent;
+            }
+            if (IsOceanMonumentThreat(!enemy, battlefieldObject))
+            {
+                stats = $"神殿锁定 · {stats}";
+                accent = Hex("#FF8865");
             }
             var slow = (battlefieldObject?.Statuses ?? Array.Empty<BattlefieldStatusStateDto>())
                 .FirstOrDefault(value => value != null && value.statusId == "SLOW");
