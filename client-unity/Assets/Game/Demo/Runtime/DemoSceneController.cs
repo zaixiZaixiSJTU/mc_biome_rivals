@@ -25,6 +25,7 @@ namespace BiomeRivals.Demo
         private static readonly Color Pale = Hex("#F1E6CB");
         private static readonly Color Muted = Hex("#B2AA96");
         private static readonly Color Cyan = Hex("#5AAE9F");
+        private static readonly Color Leaf = Hex("#91C25A");
         private static readonly Color Gold = Hex("#E4B95F");
         private static readonly Color Ember = Hex("#D98545");
         private static readonly Color Danger = Hex("#E05A47");
@@ -160,6 +161,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewLoot")) SetupLootPreview();
             else if (HasCommandLineFlag("-previewTamedWolf")) SetupTamedWolfPreview();
             else if (HasCommandLineFlag("-previewVillagerFarmer")) SetupVillagerFarmerPreview();
+            else if (HasCommandLineFlag("-previewWoodlandNursery")) SetupWoodlandNurseryPreview();
             else if (HasCommandLineFlag("-previewDungeonSkeleton")) SetupDungeonSkeletonPreview();
             else if (HasCommandLineFlag("-previewStray")) SetupStrayPreview();
             else if (HasCommandLineFlag("-previewEquipment")) SetupEquipmentPreview();
@@ -762,6 +764,16 @@ namespace BiomeRivals.Demo
                             : "海龟光环已离开该单位；当前生命与最大生命同步调整。", false);
                         yield return ShowTurnBanner("潮甲光环", gainedAura ? Cyan : Ember);
                     }
+                    else if (matchEvent.payload?.effectId == "effect.pf_005.01")
+                    {
+                        var nurseryViewerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
+                        var nurseryFriendly = matchEvent.payload?.playerId == nurseryViewerId;
+                        ShowStatus(nurseryFriendly
+                            ? "苗圃培育：本回合首次入场的动物永久获得 +1 当前与最大生命。"
+                            : "敌方林地苗圃培育了本回合首次入场的动物。", false);
+                        yield return PulseBattlefieldObject(matchEvent.payload?.sourceInstanceId);
+                        yield return ShowTurnBanner("苗圃培育", nurseryFriendly ? Leaf : Ember);
+                    }
                     else if (matchEvent.payload?.effectId == "effect.or_007.01")
                     {
                         var coralViewerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
@@ -1356,6 +1368,37 @@ namespace BiomeRivals.Demo
             if (drowned != null) StartCoroutine(PulseBattlefieldObject(drowned.InstanceId));
         }
 
+        private void SetupWoodlandNurseryPreview()
+        {
+            SelectFaction("plains_forest");
+            SelectOpponentFaction("plains_forest");
+            if (!_registry.TryGetDefinition("pf_005", out var nurseryDefinition) ||
+                !_registry.TryGetDefinition("pf_002", out var sheepDefinition)) return;
+            _match.ResetDeckAndHand(new[] { nurseryDefinition.id, sheepDefinition.id }, new[] { "pf_001" });
+            var nurseryDeployed = _match.ApplyDeploy(nurseryDefinition,
+                _match.CreateDeployCommand(nurseryDefinition.id, DemoSlotKind.Building, 0));
+            var sheepDeployed = _match.ApplyDeploy(sheepDefinition,
+                _match.CreateDeployCommand(sheepDefinition.id, DemoSlotKind.Unit, 1));
+            var nursery = _match.GetObject(true, DemoSlotKind.Building, 0);
+            var sheep = _match.GetObject(true, DemoSlotKind.Unit, 1);
+            var grew = sheepDeployed.Accepted && sheep?.MaxHealth == sheepDefinition.health + 1;
+            if (grew)
+            {
+                _match.EndPlayerTurn();
+                _match.BeginNextPlayerTurn();
+            }
+            _match.ResetHand(new[] { nurseryDefinition.id });
+            _selectedCardId = nurseryDefinition.id;
+            RefreshAll();
+            var ready = nursery != null &&
+                !_match.HasTriggeredEffect(true, nursery.InstanceId, "effect.pf_005.01");
+            ShowStatus(nurseryDeployed.Accepted && grew && ready
+                ? "林地苗圃上一回合已使放牧绵羊永久获得 +1 生命；当前回合重新就绪，叶绿色地表脉冲表示可再次培育。"
+                : !nurseryDeployed.Accepted ? nurseryDeployed.Message : sheepDeployed.Message,
+                !nurseryDeployed.Accepted || !grew || !ready);
+            if (sheep != null) StartCoroutine(PulseBattlefieldObject(sheep.InstanceId));
+        }
+
         private void SetupOceanMonumentPreview()
         {
             SelectFaction("ocean_river");
@@ -1856,9 +1899,14 @@ namespace BiomeRivals.Demo
                     value.InstanceId != battlefieldObject?.InstanceId && Mathf.Abs(value.SlotIndex - view.Index) == 1)
                 : 0;
             _battlefield.SetSlotAura(player, view.Kind, view.Index, auraLayers);
-            var coralReady = view.Kind == DemoSlotKind.Building && battlefieldObject?.CardId == "or_007" &&
-                !match.HasTriggeredEffect(player, battlefieldObject.InstanceId, "effect.or_007.01");
-            _battlefield.SetSlotEngineReady(player, view.Kind, view.Index, coralReady);
+            var engineReadyKind = DemoEngineReadyKind.None;
+            if (view.Kind == DemoSlotKind.Building && battlefieldObject?.CardId == "pf_005" &&
+                !match.HasTriggeredEffect(player, battlefieldObject.InstanceId, "effect.pf_005.01"))
+                engineReadyKind = DemoEngineReadyKind.Nursery;
+            else if (view.Kind == DemoSlotKind.Building && battlefieldObject?.CardId == "or_007" &&
+                !match.HasTriggeredEffect(player, battlefieldObject.InstanceId, "effect.or_007.01"))
+                engineReadyKind = DemoEngineReadyKind.Coral;
+            _battlefield.SetSlotEngineReady(player, view.Kind, view.Index, engineReadyKind);
             _battlefield.SetSlotEndPhaseThreat(player, view.Kind, view.Index,
                 IsOceanMonumentThreat(player, battlefieldObject));
             _battlefield.SetSlotState(player, view.Kind, view.Index, valid, !empty, priorityTarget);
@@ -2785,6 +2833,12 @@ namespace BiomeRivals.Demo
                 var ready = !MatchView.HasTriggeredEffect(!enemy, battlefieldObject.InstanceId, "effect.or_007.01");
                 stats = $"珊瑚滋养：{(ready ? "待触发" : "本回合已触发")} · {stats}";
                 accent = ready ? Hex("#F08FB4") : accent;
+            }
+            if (battlefieldObject?.CardId == "pf_005")
+            {
+                var ready = !MatchView.HasTriggeredEffect(!enemy, battlefieldObject.InstanceId, "effect.pf_005.01");
+                stats = $"苗圃培育：{(ready ? "待触发" : "本回合已触发")} · {stats}";
+                accent = ready ? Leaf : accent;
             }
             if (battlefieldObject?.CardId == "pf_003")
             {

@@ -222,6 +222,7 @@ namespace BiomeRivals.Demo
             };
             _playerBattlefield.Add(deployedObject);
             RecalculateAdjacencyHealthAuras();
+            var nurseryGrowthTriggers = TriggerWoodlandNurseryGrowth(_playerBattlefield, deployedObject);
             var coralGrowthTriggers = TriggerCoralReefGrowth(_playerBattlefield, deployedObject);
             var craftingBonuses = new List<string>();
             if (definition.craftedAttackBonus > 0) craftingBonuses.Add($"+{definition.craftedAttackBonus} 攻击");
@@ -230,6 +231,8 @@ namespace BiomeRivals.Demo
             var deployMessage = crafted
                 ? $"已合成并部署：{definition.designId}（{string.Join("，", craftingBonuses)}）"
                 : $"已部署：{definition.designId}";
+            if (nurseryGrowthTriggers > 0)
+                deployMessage += $"；苗圃培育触发 {nurseryGrowthTriggers} 次，获得 +{nurseryGrowthTriggers} 当前与最大生命。";
             if (coralGrowthTriggers > 0)
                 deployMessage += $"；珊瑚滋养触发 {coralGrowthTriggers} 次，获得 +{coralGrowthTriggers} 当前与最大生命。";
             if (definition.effectImplementationStatus == "IMPLEMENTED" &&
@@ -1064,6 +1067,27 @@ namespace BiomeRivals.Demo
             }
         }
 
+        private int TriggerWoodlandNurseryGrowth(
+            List<DemoBattlefieldObject> battlefield,
+            DemoBattlefieldObject summonedUnit)
+        {
+            if (summonedUnit == null || summonedUnit.SlotKind != DemoSlotKind.Unit || summonedUnit.Health <= 0 ||
+                !summonedUnit.HasTag("animal")) return 0;
+            var nurseries = battlefield.Where(value => value.CardId == "pf_005" &&
+                    value.SlotKind == DemoSlotKind.Building && value.Health > 0)
+                .OrderBy(value => value.SlotIndex).ThenBy(value => value.InstanceId, StringComparer.Ordinal).ToArray();
+            var triggered = 0;
+            foreach (var nursery in nurseries)
+            {
+                var triggerKey = $"{nursery.InstanceId}:effect.pf_005.01";
+                if (!_triggeredEffectKeysThisTurn.Add(triggerKey)) continue;
+                summonedUnit.Health += 1;
+                summonedUnit.MaxHealth += 1;
+                triggered++;
+            }
+            return triggered;
+        }
+
         private int TriggerCoralReefGrowth(List<DemoBattlefieldObject> battlefield, DemoBattlefieldObject summonedUnit)
         {
             if (summonedUnit == null || summonedUnit.SlotKind != DemoSlotKind.Unit || summonedUnit.Health <= 0 ||
@@ -1382,6 +1406,7 @@ namespace BiomeRivals.Demo
                 battlefield.Add(summoned);
                 slots[slotIndex] = summoned.CardId;
                 RecalculateAdjacencyHealthAuras();
+                TriggerWoodlandNurseryGrowth(battlefield, summoned);
                 TriggerCoralReefGrowth(battlefield, summoned);
                 return value.Player
                     ? $"岩浆怪亡语：小型岩浆怪已在单位格 {slotIndex + 1} 召唤。"

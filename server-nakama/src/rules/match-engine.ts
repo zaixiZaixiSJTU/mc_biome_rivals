@@ -558,6 +558,7 @@ namespace BiomeRivalsRules {
         nextInstanceId: next.nextInstanceId
       });
       recalculateAdjacencyHealthAuras();
+      triggerWoodlandNurseryGrowth(player, battlefieldObject);
       triggerCoralReefGrowth(player, battlefieldObject);
       if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
           definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.pf_001.01') {
@@ -769,6 +770,43 @@ namespace BiomeRivalsRules {
           });
         }
       }
+    }
+
+    function triggerWoodlandNurseryGrowth(player: PlayerState, summonedUnit: BattlefieldObjectState): number {
+      if (summonedUnit.cardType !== 'UNIT' || summonedUnit.health <= 0 || !cardHasTag(summonedUnit.cardId, 'animal')) return 0;
+      const nurseries = player.battlefield.filter(function (object): boolean {
+        if (object.cardType !== 'BUILDING' || object.health <= 0) return false;
+        const definition = getCardDefinition(object.cardId);
+        return definition !== null && definition.effectImplementationStatus === 'IMPLEMENTED' &&
+          definition.effectIds.indexOf('effect.pf_005.01') >= 0;
+      }).slice().sort(function (left, right): number {
+        if (left.slotIndex !== right.slotIndex) return left.slotIndex - right.slotIndex;
+        return left.instanceId < right.instanceId ? -1 : left.instanceId > right.instanceId ? 1 : 0;
+      });
+      let triggered = 0;
+      for (let nurseryIndex = 0; nurseryIndex < nurseries.length; nurseryIndex += 1) {
+        const nursery = nurseries[nurseryIndex]!;
+        const triggerKey = nursery.instanceId + ':effect.pf_005.01';
+        if (player.triggeredEffectKeysThisTurn.indexOf(triggerKey) >= 0) continue;
+        player.triggeredEffectKeysThisTurn.push(triggerKey);
+        summonedUnit.health += 1;
+        summonedUnit.maxHealth += 1;
+        triggered += 1;
+        emit('OBJECT_STATS_CHANGED', {
+          playerId: player.playerId,
+          instanceId: summonedUnit.instanceId,
+          sourceCardId: nursery.cardId,
+          sourceInstanceId: nursery.instanceId,
+          effectId: 'effect.pf_005.01',
+          reason: 'PERMANENT_HEALTH_MODIFIER',
+          attack: summonedUnit.attack,
+          health: summonedUnit.health,
+          maxHealth: summonedUnit.maxHealth,
+          temporaryAttackModifier: summonedUnit.temporaryAttackModifier,
+          temporaryAttackModifierExpiresOnTurn: summonedUnit.temporaryAttackModifierExpiresOnTurn
+        });
+      }
+      return triggered;
     }
 
     function triggerCoralReefGrowth(player: PlayerState, summonedUnit: BattlefieldObjectState): number {
@@ -1061,6 +1099,7 @@ namespace BiomeRivalsRules {
         nextInstanceId: next.nextInstanceId
       });
       recalculateAdjacencyHealthAuras();
+      triggerWoodlandNurseryGrowth(player, object);
       triggerCoralReefGrowth(player, object);
       return true;
     }

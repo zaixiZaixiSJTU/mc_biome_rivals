@@ -915,9 +915,13 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.mainTexture.name, Is.EqualTo("field-nether-far-v1"));
                 Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.GreaterThan(0f));
                 Assert.That(buildingMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.Zero);
-                battlefield.SetSlotEngineReady(true, DemoSlotKind.Building, 0, true);
+                battlefield.SetSlotEngineReady(true, DemoSlotKind.Building, 0, DemoEngineReadyKind.Nursery);
                 Assert.That(buildingMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.GreaterThan(0f));
-                battlefield.SetSlotEngineReady(true, DemoSlotKind.Building, 0, false);
+                var nurseryHighlight = buildingMarker.GetComponent<MeshRenderer>().sharedMaterial.GetColor("_HighlightColor");
+                battlefield.SetSlotEngineReady(true, DemoSlotKind.Building, 0, DemoEngineReadyKind.Coral);
+                var coralHighlight = buildingMarker.GetComponent<MeshRenderer>().sharedMaterial.GetColor("_HighlightColor");
+                Assert.That(nurseryHighlight, Is.Not.EqualTo(coralHighlight));
+                battlefield.SetSlotEngineReady(true, DemoSlotKind.Building, 0, DemoEngineReadyKind.None);
                 Assert.That(buildingMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.Zero);
                 battlefield.SetSlotEndPhaseThreat(false, DemoSlotKind.Unit, 0, true);
                 Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.GreaterThan(0f));
@@ -926,6 +930,16 @@ namespace BiomeRivals.Demo.Tests
                 battlefield.SetSlotState(false, DemoSlotKind.Unit, 0, true, false, true);
                 Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.GreaterThanOrEqualTo(0.32f));
                 battlefield.SetSlotState(false, DemoSlotKind.Unit, 0, false, false);
+                battlefield.SyncPieces(new[]
+                {
+                    new DemoBattlefieldObject
+                    {
+                        InstanceId = "object-nursery", CardId = "pf_005", Player = true,
+                        SlotKind = DemoSlotKind.Building, SlotIndex = 0, OccupiedSlots = 1, Health = 4, MaxHealth = 4
+                    }
+                }, System.Array.Empty<DemoBattlefieldObject>(), registry);
+                Assert.That(root.transform.Find("BattlefieldPieces/Piece_object-nursery_pf_005/NurserySoil"), Is.Not.Null);
+                Assert.That(root.transform.Find("BattlefieldPieces/Piece_object-nursery_pf_005/SaplingCenterLeaves"), Is.Not.Null);
                 battlefield.SyncPieces(new[]
                 {
                     new DemoBattlefieldObject
@@ -1570,6 +1584,76 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(moved.Message, Does.Contain("失去海龟光环而死亡"));
             Assert.That(match.PlayerBattlefield.Any(value => value.InstanceId == target.InstanceId), Is.False);
             Assert.That(match.UnitSlots[3], Is.Null.Or.Empty);
+        }
+
+        [Test]
+        public void WoodlandNurseryGrowsOnlyTheFirstAnimalAndResetsNextTurn()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("pf_005", out var nursery), Is.True);
+            Assert.That(registry.TryGetDefinition("db_001", out var husk), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_002", out var sheep), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_001", out var bee), Is.True);
+            Assert.That(nursery.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { nursery.id, husk.id, sheep.id, bee.id });
+            Assert.That(match.ApplyDeploy(nursery,
+                match.CreateDeployCommand(nursery.id, DemoSlotKind.Building, 0)).Accepted, Is.True);
+            Assert.That(match.ApplyDeploy(husk,
+                match.CreateDeployCommand(husk.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            var first = match.ApplyDeploy(sheep,
+                match.CreateDeployCommand(sheep.id, DemoSlotKind.Unit, 1));
+            Assert.That(first.Accepted, Is.True);
+            Assert.That(first.Message, Does.Contain("苗圃培育触发 1 次"));
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 1).MaxHealth, Is.EqualTo(4));
+            var source = match.GetObject(true, DemoSlotKind.Building, 0);
+            Assert.That(match.HasTriggeredEffect(true, source.InstanceId, "effect.pf_005.01"), Is.True);
+
+            var second = match.ApplyDeploy(bee,
+                match.CreateDeployCommand(bee.id, DemoSlotKind.Unit, 2));
+            Assert.That(second.Accepted, Is.True);
+            Assert.That(second.Message, Does.Not.Contain("苗圃培育"));
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 2).MaxHealth, Is.EqualTo(2));
+
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            Assert.That(match.HasTriggeredEffect(true, source.InstanceId, "effect.pf_005.01"), Is.False);
+            match.ResetHand(new[] { sheep.id });
+            var nextTurn = match.ApplyDeploy(sheep,
+                match.CreateDeployCommand(sheep.id, DemoSlotKind.Unit, 3));
+            Assert.That(nextTurn.Accepted, Is.True);
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 3).MaxHealth, Is.EqualTo(4));
+        }
+
+        [Test]
+        public void WoodlandNurseriesStackBeforeCoralGrowthLocally()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("pf_005", out var nursery), Is.True);
+            Assert.That(registry.TryGetDefinition("or_007", out var reef), Is.True);
+            Assert.That(registry.TryGetDefinition("or_005", out var turtle), Is.True);
+
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { nursery.id, reef.id });
+            Assert.That(match.ApplyDeploy(nursery,
+                match.CreateDeployCommand(nursery.id, DemoSlotKind.Building, 1)).Accepted, Is.True);
+            Assert.That(match.ApplyDeploy(reef,
+                match.CreateDeployCommand(reef.id, DemoSlotKind.Building, 2)).Accepted, Is.True);
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            match.ResetHand(new[] { nursery.id, turtle.id });
+            Assert.That(match.ApplyDeploy(nursery,
+                match.CreateDeployCommand(nursery.id, DemoSlotKind.Building, 0)).Accepted, Is.True);
+
+            var deployed = match.ApplyDeploy(turtle,
+                match.CreateDeployCommand(turtle.id, DemoSlotKind.Unit, 0));
+            Assert.That(deployed.Accepted, Is.True);
+            Assert.That(deployed.Message, Does.Contain("苗圃培育触发 2 次"));
+            Assert.That(deployed.Message, Does.Contain("珊瑚滋养触发 1 次"));
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 0).MaxHealth, Is.EqualTo(9));
+            Assert.That(match.PlayerBattlefield.Where(value => value.CardId == nursery.id).All(value =>
+                match.HasTriggeredEffect(true, value.InstanceId, "effect.pf_005.01")), Is.True);
         }
 
         [Test]

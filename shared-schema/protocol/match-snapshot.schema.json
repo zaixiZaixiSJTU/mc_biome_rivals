@@ -54,7 +54,7 @@
           "triggeredEffectKeysThisTurn": {
             "type": "array",
             "uniqueItems": true,
-            "items": { "type": "string", "pattern": "^object-[0-9]+:effect\\.or_(002|004|007)\\.01$" }
+            "items": { "type": "string", "pattern": "^object-[0-9]+:effect\\.(pf_005|or_(002|004|007))\\.01$" }
           },
           "unitSlots": {
             "type": "array", "minItems": 4, "maxItems": 4,

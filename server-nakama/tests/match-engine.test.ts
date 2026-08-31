@@ -2071,6 +2071,111 @@ TestHarness.test('Multiple Turtle auras stack on the shared adjacent unit', func
   TestHarness.equal(salmon.adjacencyHealthModifier, 2);
 });
 
+TestHarness.test('Woodland Nursery grows only the first friendly Animal each turn', function (): void {
+  const state = activeState('match-nursery-growth', ['alice', 'bob'], ['plains_forest', 'nether']);
+  const actorIndex = state.players[0]!.playerId === 'alice' ? 0 : 1;
+  const opponentIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  state.activePlayerIndex = actorIndex;
+  actor.hand = ['db_001', 'pf_002', 'pf_001', 'pf_002'];
+  actor.redstone = 10;
+  actor.redstoneCapacity = 10;
+  placeBuilding(state, actorIndex, 'pf_005', 0, 'object-10');
+
+  const nonAnimal = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('nursery-non-animal', 0, 'db_001', 'UNIT', 0));
+  TestHarness.equal(nonAnimal.accepted, true, JSON.stringify(nonAnimal));
+  if (!nonAnimal.accepted) return;
+  TestHarness.equal(nonAnimal.state.players[actorIndex]!.triggeredEffectKeysThisTurn.length, 0);
+
+  const first = BiomeRivalsRules.applyCommand(nonAnimal.state, actor.playerId,
+    deployCommand('nursery-first-animal', 1, 'pf_002', 'UNIT', 1));
+  TestHarness.equal(first.accepted, true, JSON.stringify(first));
+  if (!first.accepted) return;
+  const sheep = first.state.players[actorIndex]!.battlefield.filter(function (value): boolean {
+    return value.cardId === 'pf_002';
+  })[0]!;
+  TestHarness.equal(sheep.health, 4);
+  TestHarness.equal(sheep.maxHealth, 4);
+  TestHarness.equal(first.batch.events[0]!.type, 'CARD_DEPLOYED');
+  TestHarness.equal(first.batch.events[1]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(first.batch.events[1]!.payload.sourceCardId, 'pf_005');
+  TestHarness.equal(first.batch.events[1]!.payload.sourceInstanceId, 'object-10');
+  TestHarness.equal(first.batch.events[1]!.payload.effectId, 'effect.pf_005.01');
+  TestHarness.equal(first.batch.events[1]!.payload.reason, 'PERMANENT_HEALTH_MODIFIER');
+  TestHarness.equal(first.state.players[actorIndex]!.triggeredEffectKeysThisTurn[0],
+    'object-10:effect.pf_005.01');
+
+  const second = BiomeRivalsRules.applyCommand(first.state, actor.playerId,
+    deployCommand('nursery-second-animal', 2, 'pf_001', 'UNIT', 2));
+  TestHarness.equal(second.accepted, true, JSON.stringify(second));
+  if (!second.accepted) return;
+  const bee = second.state.players[actorIndex]!.battlefield.filter(function (value): boolean {
+    return value.cardId === 'pf_001';
+  })[0]!;
+  TestHarness.equal(bee.maxHealth, 2);
+  TestHarness.equal(second.batch.events.filter(function (event): boolean {
+    return event.payload.effectId === 'effect.pf_005.01';
+  }).length, 0);
+
+  const ended = BiomeRivalsRules.applyCommand(second.state, actor.playerId,
+    command('nursery-end-owner', 3, 'END_TURN'));
+  TestHarness.ok(ended.accepted);
+  if (!ended.accepted) return;
+  const returned = BiomeRivalsRules.applyCommand(ended.state,
+    ended.state.players[opponentIndex]!.playerId, command('nursery-end-opponent', 4, 'END_TURN'));
+  TestHarness.ok(returned.accepted);
+  if (!returned.accepted) return;
+  const returnedActor = returned.state.players[actorIndex]!;
+  TestHarness.equal(returnedActor.triggeredEffectKeysThisTurn.length, 0);
+  returnedActor.redstone = 10;
+  const nextTurn = BiomeRivalsRules.applyCommand(returned.state, returnedActor.playerId,
+    deployCommand('nursery-next-turn-animal', 5, 'pf_002', 'UNIT', 3));
+  TestHarness.equal(nextTurn.accepted, true, JSON.stringify(nextTurn));
+  if (!nextTurn.accepted) return;
+  const nextSheep = nextTurn.state.players[actorIndex]!.battlefield.filter(function (value): boolean {
+    return value.cardId === 'pf_002' && value.slotIndex === 3;
+  })[0]!;
+  TestHarness.equal(nextSheep.maxHealth, 4);
+  TestHarness.equal(nextTurn.batch.events.filter(function (event): boolean {
+    return event.payload.effectId === 'effect.pf_005.01';
+  }).length, 1);
+});
+
+TestHarness.test('Woodland Nurseries stack before Coral Reef in stable source order', function (): void {
+  const state = activeState('match-nursery-coral-stack', ['alice', 'bob'], ['plains_forest', 'nether']);
+  const actorIndex = state.players[0]!.playerId === 'alice' ? 0 : 1;
+  const actor = state.players[actorIndex]!;
+  state.activePlayerIndex = actorIndex;
+  actor.hand = ['or_005'];
+  actor.redstone = 10;
+  actor.redstoneCapacity = 10;
+  placeBuilding(state, actorIndex, 'pf_005', 1, 'object-11');
+  placeBuilding(state, actorIndex, 'or_007', 2, 'object-12');
+  placeBuilding(state, actorIndex, 'pf_005', 0, 'object-10');
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('nursery-coral-animal', 0, 'or_005', 'UNIT', 0));
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  const turtle = result.state.players[actorIndex]!.battlefield.filter(function (value): boolean {
+    return value.cardId === 'or_005';
+  })[0]!;
+  TestHarness.equal(turtle.health, 9);
+  TestHarness.equal(turtle.maxHealth, 9);
+  const growthEvents = result.batch.events.filter(function (event): boolean {
+    return event.type === 'OBJECT_STATS_CHANGED' && event.payload.reason === 'PERMANENT_HEALTH_MODIFIER';
+  });
+  TestHarness.equal(growthEvents.length, 3);
+  TestHarness.equal(growthEvents[0]!.payload.effectId, 'effect.pf_005.01');
+  TestHarness.equal(growthEvents[0]!.payload.sourceInstanceId, 'object-10');
+  TestHarness.equal(growthEvents[1]!.payload.effectId, 'effect.pf_005.01');
+  TestHarness.equal(growthEvents[1]!.payload.sourceInstanceId, 'object-11');
+  TestHarness.equal(growthEvents[2]!.payload.effectId, 'effect.or_007.01');
+  TestHarness.equal(growthEvents[2]!.payload.sourceInstanceId, 'object-12');
+  TestHarness.equal(growthEvents[2]!.payload.maxHealth, 9);
+});
+
 TestHarness.test('Coral Reef permanently grows only the first friendly aquatic unit each turn', function (): void {
   const state = activeState('match-coral-growth', ['alice', 'bob'], ['ocean_river', 'nether']);
   const actorIndex = state.players[0]!.playerId === 'alice' ? 0 : 1;

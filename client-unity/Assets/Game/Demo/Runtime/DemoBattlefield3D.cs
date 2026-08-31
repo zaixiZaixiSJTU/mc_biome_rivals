@@ -7,6 +7,13 @@ using UnityEngine.Rendering;
 
 namespace BiomeRivals.Demo
 {
+    public enum DemoEngineReadyKind
+    {
+        None,
+        Nursery,
+        Coral
+    }
+
     public sealed class DemoBattlefield3D : MonoBehaviour
     {
         private const float ReferenceWidth = 1920f;
@@ -147,11 +154,11 @@ namespace BiomeRivals.Demo
             UpdateSlotMarker(marker, Time.unscaledTime, 0f);
         }
 
-        public void SetSlotEngineReady(bool player, DemoSlotKind kind, int index, bool ready)
+        public void SetSlotEngineReady(bool player, DemoSlotKind kind, int index, DemoEngineReadyKind readyKind)
         {
             BuildNow();
             if (!_slotMarkers.TryGetValue(SlotKey(player, kind, index), out var marker)) return;
-            marker.EngineReady = ready;
+            marker.EngineReadyKind = readyKind;
             UpdateSlotMarker(marker, Time.unscaledTime, 0f);
         }
 
@@ -261,6 +268,10 @@ namespace BiomeRivals.Demo
             var rejectedPreview = marker.Hovered && marker.HoverRejected || marker.Pressed && marker.PressRejected;
             var actionableHover = marker.Hovered && marker.ValidTarget;
             var actionablePress = marker.Pressed && marker.ValidTarget;
+            var engineReady = marker.EngineReadyKind != DemoEngineReadyKind.None;
+            var engineColor = marker.EngineReadyKind == DemoEngineReadyKind.Nursery
+                ? Color.Lerp(Hex("#41672D"), Hex("#A8D66D"), pulse)
+                : Color.Lerp(Hex("#8E3F72"), Hex("#F08FB4"), pulse);
             var highlightColor = rejectedPreview
                 ? Color.Lerp(Hex("#B41635"), Hex("#FF3157"), pulse)
                 : actionablePress || actionableHover
@@ -273,8 +284,8 @@ namespace BiomeRivals.Demo
                         ? Color.Lerp(Hex("#8A2E24"), Hex("#FF8865"), pulse)
                      : marker.AuraLayers > 0
                          ? Color.Lerp(Hex("#216F72"), Hex("#69D7C7"), pulse)
-                    : marker.EngineReady
-                        ? Color.Lerp(Hex("#8E3F72"), Hex("#F08FB4"), pulse)
+                    : engineReady
+                        ? engineColor
                     : Hex("#777263");
             var highlightStrength = rejectedPreview
                     ? marker.Pressed ? 0.98f : 0.84f + pulse * 0.12f
@@ -290,7 +301,7 @@ namespace BiomeRivals.Demo
                             ? 0.22f + pulse * 0.10f
                          : marker.AuraLayers > 0
                              ? 0.10f + Mathf.Min(2, marker.AuraLayers) * 0.05f + pulse * 0.05f
-                        : marker.EngineReady
+                        : engineReady
                             ? 0.13f + pulse * 0.07f
                         : marker.Hovered && !marker.Occupied ? 0.12f : 0f;
             SetGroundHighlight(marker.SurfaceMaterial, highlightColor, highlightStrength);
@@ -765,7 +776,8 @@ namespace BiomeRivals.Demo
                     battlefieldObject.SlotKind,
                     battlefieldObject.SlotIndex,
                     battlefieldObject.OccupiedSlots);
-                if (cardId == "or_007") BuildCoralReef(root, material, footprintWidth);
+                if (cardId == "pf_005") BuildWoodlandNursery(root, footprintWidth);
+                else if (cardId == "or_007") BuildCoralReef(root, material, footprintWidth);
                 else if (cardId == "or_008") BuildOceanMonument(root, material, footprintWidth);
                 else BuildBlockStructure(root, material, theme.Accent, footprintWidth);
             }
@@ -811,6 +823,36 @@ namespace BiomeRivals.Demo
             CreateBlock(root, "TowerL", new Vector3(-towerOffset, 0.9f, 0), new Vector3(0.48f, 1.25f, 0.55f), material);
             CreateBlock(root, "TowerR", new Vector3(towerOffset, 0.9f, 0), new Vector3(0.48f, 1.25f, 0.55f), material);
             CreateBlock(root, "Core", new Vector3(0, 0.82f, 0), new Vector3(0.50f, 0.50f, 0.60f), accentMaterial);
+        }
+
+        private void BuildWoodlandNursery(Transform root, float footprintWidth)
+        {
+            var width = Mathf.Max(2.05f, footprintWidth);
+            var bedWidth = width - 0.42f;
+            CreateBlock(root, "NurseryFoundation", new Vector3(0f, 0.14f, 0f),
+                new Vector3(width, 0.24f, 0.96f), _materials["oak"]);
+            CreateBlock(root, "NurserySoil", new Vector3(0f, 0.30f, 0f),
+                new Vector3(bedWidth, 0.18f, 0.70f), _materials["dirt"]);
+            CreateBlock(root, "NurseryFrontRail", new Vector3(0f, 0.42f, -0.43f),
+                new Vector3(width, 0.20f, 0.13f), _materials["oak"]);
+            CreateBlock(root, "NurseryBackRail", new Vector3(0f, 0.42f, 0.43f),
+                new Vector3(width, 0.20f, 0.13f), _materials["oak"]);
+            CreateBlock(root, "NurseryLeftPost", new Vector3(-width * 0.43f, 0.68f, 0f),
+                new Vector3(0.16f, 0.72f, 0.16f), _materials["oak"]);
+            CreateBlock(root, "NurseryRightPost", new Vector3(width * 0.43f, 0.68f, 0f),
+                new Vector3(0.16f, 0.72f, 0.16f), _materials["oak"]);
+            BuildNurserySapling(root, "Left", -bedWidth * 0.31f, 0.64f, 0.44f);
+            BuildNurserySapling(root, "Center", 0f, 0.76f, 0.56f);
+            BuildNurserySapling(root, "Right", bedWidth * 0.31f, 0.60f, 0.40f);
+        }
+
+        private void BuildNurserySapling(Transform root, string name, float x, float topY, float leafSize)
+        {
+            var trunkHeight = Mathf.Max(0.24f, topY - 0.36f);
+            CreateBlock(root, $"Sapling{name}Trunk", new Vector3(x, 0.36f + trunkHeight * 0.5f, 0f),
+                new Vector3(0.13f, trunkHeight, 0.13f), _materials["oak"]);
+            CreateBlock(root, $"Sapling{name}Leaves", new Vector3(x, topY, 0f),
+                new Vector3(leafSize, leafSize * 0.72f, leafSize), _materials["leaf"]);
         }
 
         private void BuildCoralReef(Transform root, Material foundationMaterial, float footprintWidth)
@@ -975,7 +1017,7 @@ namespace BiomeRivals.Demo
             public bool Occupied;
             public bool PriorityTarget;
             public int AuraLayers;
-            public bool EngineReady;
+            public DemoEngineReadyKind EngineReadyKind;
             public bool EndPhaseThreat;
             public bool Hovered;
             public bool Pressed;
