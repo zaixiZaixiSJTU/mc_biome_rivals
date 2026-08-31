@@ -162,6 +162,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewStray")) SetupStrayPreview();
             else if (HasCommandLineFlag("-previewEquipment")) SetupEquipmentPreview();
             else if (HasCommandLineFlag("-previewPrismarineShard")) SetupPrismarineShardPreview();
+            else if (HasCommandLineFlag("-previewTurtleAura")) SetupTurtleAuraPreview();
             else if (HasCommandLineFlag("-previewGuardianReaction")) SetupGuardianReactionPreview();
             else if (HasCommandLineFlag("-previewDrownedAdjacency")) SetupDrownedAdjacencyPreview();
             else if (HasCommandLineFlag("-previewDolphinCurrent")) SetupDolphinCurrentPreview();
@@ -737,6 +738,14 @@ namespace BiomeRivals.Demo
                         ShowStatus("海晶碎片：目标在移动后恢复 1 点生命值。", false);
                         yield return ShowTurnBanner("海晶愈合", Cyan);
                     }
+                    else if (matchEvent.payload?.effectId == "effect.or_005.01")
+                    {
+                        var gainedAura = matchEvent.payload?.adjacencyHealthModifier > 0;
+                        ShowStatus(gainedAura
+                            ? $"海龟光环：相邻单位当前获得 +{matchEvent.payload.adjacencyHealthModifier} 最大生命。"
+                            : "海龟光环已离开该单位；当前生命与最大生命同步调整。", false);
+                        yield return ShowTurnBanner("潮甲光环", gainedAura ? Cyan : Ember);
+                    }
                     yield return PulseBattlefieldObject(matchEvent.payload?.instanceId);
                     break;
                 case MatchEventTypes.ObjectStatusApplied:
@@ -1219,6 +1228,30 @@ namespace BiomeRivals.Demo
             if (played.Accepted) StartCoroutine(PulseBattlefieldObject(salmon.InstanceId));
         }
 
+        private void SetupTurtleAuraPreview()
+        {
+            SelectFaction("ocean_river");
+            SelectOpponentFaction("plains_forest");
+            if (!_registry.TryGetDefinition("or_005", out var turtleDefinition) ||
+                !_registry.TryGetDefinition("or_001", out var salmonDefinition)) return;
+            _match.ResetDeckAndHand(new[] { turtleDefinition.id, salmonDefinition.id }, Array.Empty<string>());
+            var turtleDeployed = _match.ApplyDeploy(turtleDefinition,
+                _match.CreateDeployCommand(turtleDefinition.id, DemoSlotKind.Unit, 1));
+            var salmonDeployed = _match.ApplyDeploy(salmonDefinition,
+                _match.CreateDeployCommand(salmonDefinition.id, DemoSlotKind.Unit, 2));
+            if (salmonDeployed.Accepted && _match.PendingChoice != null)
+                _match.ApplyResolveChoice(_match.CreateResolveChoiceCommand(_match.PendingChoice.choiceId, -1));
+            _match.ResetHand(new[] { turtleDefinition.id });
+            _selectedCardId = turtleDefinition.id;
+            RefreshAll();
+            var salmon = _match.GetObject(true, DemoSlotKind.Unit, 2);
+            ShowStatus(turtleDeployed.Accepted && salmonDeployed.Accepted && salmon?.AdjacencyHealthModifier == 1
+                ? "海龟的潮甲光环正在贴地照亮左右相邻格；鲑鱼群已动态获得 +1 当前与最大生命，离开后会立即失去。"
+                : !turtleDeployed.Accepted ? turtleDeployed.Message : salmonDeployed.Message,
+                !turtleDeployed.Accepted || !salmonDeployed.Accepted || salmon?.AdjacencyHealthModifier != 1);
+            if (salmon != null) StartCoroutine(PulseBattlefieldObject(salmon.InstanceId));
+        }
+
         private void SetupStructureDeployedPreview()
         {
             SelectFaction("desert_badlands");
@@ -1682,6 +1715,12 @@ namespace BiomeRivals.Demo
                 DrownedBattlecryActivatesAt(view.Index);
             var priorityTarget = movementChoice && battlefieldObject?.InstanceId == match.PendingChoice.targetInstanceId ||
                 valid && !player && battlefieldObject?.HasKeyword("TAUNT") == true || activatesDrowned;
+            var auraBattlefield = player ? match.PlayerBattlefield : match.OpponentBattlefield;
+            var auraLayers = view.Kind == DemoSlotKind.Unit
+                ? auraBattlefield.Count(value => value != null && value.Health > 0 && value.CardId == "or_005" &&
+                    value.InstanceId != battlefieldObject?.InstanceId && Mathf.Abs(value.SlotIndex - view.Index) == 1)
+                : 0;
+            _battlefield.SetSlotAura(player, view.Kind, view.Index, auraLayers);
             _battlefield.SetSlotState(player, view.Kind, view.Index, valid, !empty, priorityTarget);
 
             if (!empty)
@@ -1824,9 +1863,16 @@ namespace BiomeRivals.Demo
                         craftingSelected && !hasMaterials ? Danger : Cyan, TextAnchor.MiddleCenter, FontStyle.Bold);
                 }
                 else
-                    CreateText(_inspectorRoot, "DeployHint", new Vector2(0, -118), new Vector2(246, 64), isDiscounted
-                        ? $"考古触发 · 费用 {definition.cost} → {effectiveCost}\n选择发光的{target}完成部署"
-                        : $"选择发光的{target}完成部署", 15, isDiscounted ? Gold : Cyan, TextAnchor.MiddleCenter, FontStyle.Bold);
+                {
+                    var insufficientRedstone = effectiveCost > match.Energy;
+                    var deploymentHint = insufficientRedstone
+                        ? $"红石不足：需要 {effectiveCost}，当前 {match.Energy}"
+                        : isDiscounted
+                            ? $"考古触发 · 费用 {definition.cost} → {effectiveCost}\n选择发光的{target}完成部署"
+                            : $"选择发光的{target}完成部署";
+                    CreateText(_inspectorRoot, "DeployHint", new Vector2(0, -118), new Vector2(246, 64), deploymentHint,
+                        15, insufficientRedstone ? Danger : isDiscounted ? Gold : Cyan, TextAnchor.MiddleCenter, FontStyle.Bold);
+                }
             }
             else
             {
@@ -2546,6 +2592,11 @@ namespace BiomeRivals.Demo
                     : text.name;
             if (battlefieldObject?.HasKeyword("TAUNT") == true) stats = $"◆ 嘲讽   {stats}";
             else if (battlefieldObject?.HasKeyword("CHARGE") == true) stats = $"➤ 冲锋   {stats}";
+            if ((battlefieldObject?.AdjacencyHealthModifier ?? 0) > 0)
+            {
+                stats = $"海龟光环 +{battlefieldObject.AdjacencyHealthModifier}生命 · {stats}";
+                accent = Cyan;
+            }
             var slow = (battlefieldObject?.Statuses ?? Array.Empty<BattlefieldStatusStateDto>())
                 .FirstOrDefault(value => value != null && value.statusId == "SLOW");
             if (slow != null)

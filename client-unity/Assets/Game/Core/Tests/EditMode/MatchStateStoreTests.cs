@@ -1259,6 +1259,48 @@ namespace BiomeRivals.Core.Tests
         }
 
         [Test]
+        public void Apply_ReplaysTurtleAuraHealthAndMaximumHealth()
+        {
+            var salmon = new BattlefieldObjectStateDto
+            {
+                instanceId = "object-1", cardId = "or_001", cardType = "UNIT", attack = 1,
+                health = 2, maxHealth = 2, slotKind = "UNIT", slotIndex = 0, occupiedSlots = 1, summonedTurn = 1
+            };
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "turtle-aura-replay", viewerPlayerId = "alice", protocolVersion = GameVersions.Protocol,
+                rulesetVersion = GameVersions.Ruleset, status = "ACTIVE", phase = "MAIN", turn = 1, activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto
+                    {
+                        playerId = "alice", life = 30, unitSlots = new[] { "object-1", null, null, null },
+                        battlefield = new[] { salmon }
+                    },
+                    new PlayerStateDto { playerId = "bob", life = 30 }
+                }
+            });
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 1, type = MatchEventTypes.ObjectStatsChanged, payload = new MatchEventPayloadDto
+                    {
+                        playerId = "alice", instanceId = "object-1", sourceCardId = "or_005",
+                        effectId = "effect.or_005.01", reason = "AURA_RECALCULATED",
+                        attack = 1, health = 3, maxHealth = 3, adjacencyHealthModifier = 1,
+                        temporaryAttackModifier = 0, temporaryAttackModifierExpiresOnTurn = 0
+                    }}
+                }
+            });
+            Assert.That(salmon.health, Is.EqualTo(3));
+            Assert.That(salmon.maxHealth, Is.EqualTo(3));
+            Assert.That(salmon.adjacencyHealthModifier, Is.EqualTo(1));
+        }
+
+        [Test]
         public void Apply_ReplaysPrismarineShardEffectChoiceMovementAndHealing()
         {
             var salmon = new BattlefieldObjectStateDto

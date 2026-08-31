@@ -262,6 +262,7 @@ namespace BiomeRivals.Core
         public int attack;
         public int health;
         public int maxHealth;
+        public int adjacencyHealthModifier;
         public int summonedTurn;
         public int nextInstanceId;
         public string attackerPlayerId = string.Empty;

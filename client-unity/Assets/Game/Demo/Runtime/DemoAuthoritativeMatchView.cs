@@ -177,6 +177,7 @@ namespace BiomeRivals.Demo
                 Attack = value.attack,
                 Health = value.health,
                 MaxHealth = value.maxHealth,
+                AdjacencyHealthModifier = value.adjacencyHealthModifier,
                 SummonedRound = value.summonedTurn,
                 HasAttacked = value.hasAttacked,
                 Keywords = value.keywords ?? Array.Empty<string>(),

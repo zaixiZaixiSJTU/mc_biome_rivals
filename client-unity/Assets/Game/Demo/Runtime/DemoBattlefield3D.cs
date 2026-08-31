@@ -139,6 +139,14 @@ namespace BiomeRivals.Demo
             UpdateSlotMarker(marker, Time.unscaledTime, 0f);
         }
 
+        public void SetSlotAura(bool player, DemoSlotKind kind, int index, int auraLayers)
+        {
+            BuildNow();
+            if (!_slotMarkers.TryGetValue(SlotKey(player, kind, index), out var marker)) return;
+            marker.AuraLayers = Mathf.Max(0, auraLayers);
+            UpdateSlotMarker(marker, Time.unscaledTime, 0f);
+        }
+
         public void SetSlotHovered(bool player, DemoSlotKind kind, int index, bool hovered)
         {
             BuildNow();
@@ -245,6 +253,8 @@ namespace BiomeRivals.Demo
                     ? marker.PriorityTarget
                         ? Color.Lerp(Hex("#A97727"), Hex("#FFE08A"), pulse)
                         : Color.Lerp(Hex("#3D9E8F"), Hex("#79E0CB"), pulse)
+                    : marker.AuraLayers > 0
+                        ? Color.Lerp(Hex("#216F72"), Hex("#69D7C7"), pulse)
                     : Hex("#777263");
             var highlightStrength = rejectedPreview
                     ? marker.Pressed ? 0.98f : 0.84f + pulse * 0.12f
@@ -254,6 +264,8 @@ namespace BiomeRivals.Demo
                     ? 0.78f
                     : marker.ValidTarget
                         ? (marker.Occupied ? 0.48f + pulse * 0.18f : 0.18f + pulse * 0.12f)
+                        : marker.AuraLayers > 0
+                            ? 0.10f + Mathf.Min(2, marker.AuraLayers) * 0.05f + pulse * 0.05f
                         : marker.Hovered && !marker.Occupied ? 0.12f : 0f;
             SetGroundHighlight(marker.SurfaceMaterial, highlightColor, highlightStrength);
             if (marker.RiserRenderer != null)
@@ -875,6 +887,7 @@ namespace BiomeRivals.Demo
             public bool ValidTarget;
             public bool Occupied;
             public bool PriorityTarget;
+            public int AuraLayers;
             public bool Hovered;
             public bool Pressed;
             public bool HoverRejected;

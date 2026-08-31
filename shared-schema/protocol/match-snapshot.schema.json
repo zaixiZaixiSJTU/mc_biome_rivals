@@ -8,7 +8,7 @@
   "properties": {
     "matchId": { "type": "string", "minLength": 1 },
     "viewerPlayerId": { "type": "string", "minLength": 1 },
-    "protocolVersion": { "const": 19 },
+    "protocolVersion": { "const": 20 },
     "rulesetVersion": { "type": "string", "minLength": 1 },
     "revision": { "type": "integer", "minimum": 0 },
     "lastEventId": { "type": "integer", "minimum": 0 },
@@ -63,7 +63,7 @@
             "type": "array",
             "items": {
               "type": "object", "additionalProperties": false,
-              "required": ["instanceId", "cardId", "cardType", "attack", "health", "maxHealth", "slotKind", "slotIndex", "occupiedSlots", "summonedTurn", "hasAttacked", "keywords", "temporaryAttackModifier", "temporaryAttackModifierExpiresOnTurn", "statuses"],
+              "required": ["instanceId", "cardId", "cardType", "attack", "health", "maxHealth", "adjacencyHealthModifier", "slotKind", "slotIndex", "occupiedSlots", "summonedTurn", "hasAttacked", "keywords", "temporaryAttackModifier", "temporaryAttackModifierExpiresOnTurn", "statuses"],
               "properties": {
                 "instanceId": { "type": "string", "pattern": "^object-[0-9]+$" },
                 "cardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
@@ -71,6 +71,7 @@
                 "attack": { "type": "integer", "minimum": 0 },
                 "health": { "type": "integer", "minimum": 1 },
                 "maxHealth": { "type": "integer", "minimum": 1 },
+                "adjacencyHealthModifier": { "type": "integer", "minimum": 0, "maximum": 2 },
                 "slotKind": { "enum": ["UNIT", "BUILDING"] },
                 "slotIndex": { "type": "integer", "minimum": 0 },
                 "occupiedSlots": { "type": "integer", "minimum": 1, "maximum": 3 },

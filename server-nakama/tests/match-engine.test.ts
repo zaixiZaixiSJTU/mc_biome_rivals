@@ -97,6 +97,7 @@ function placeUnit(
     attack: definition.attack,
     health: definition.health,
     maxHealth: definition.health,
+    adjacencyHealthModifier: 0,
     slotKind: 'UNIT',
     slotIndex: slotIndex,
     occupiedSlots: 1,
@@ -128,6 +129,7 @@ function placeBuilding(
     attack: definition.attack,
     health: health === undefined ? definition.health : health,
     maxHealth: definition.health,
+    adjacencyHealthModifier: 0,
     slotKind: 'BUILDING',
     slotIndex: slotIndex,
     occupiedSlots: occupiedSlots,
@@ -1246,6 +1248,9 @@ TestHarness.test('requires attacking one of multiple living TAUNT targets first'
   placeUnit(state, 1, 'pf_008', 0, 'object-2', 1);
   placeUnit(state, 1, 'pf_001', 1, 'object-3', 1);
   placeUnit(state, 1, 'or_005', 2, 'object-4', 1);
+  state.players[1]!.battlefield[1]!.health += 1;
+  state.players[1]!.battlefield[1]!.maxHealth += 1;
+  state.players[1]!.battlefield[1]!.adjacencyHealthModifier = 1;
 
   const hero = BiomeRivalsRules.applyCommand(state, 'alice', attackCommand('taunt-hero', 0, 'object-1', 'HERO'));
   TestHarness.equal(hero.accepted, false);
@@ -1906,6 +1911,112 @@ TestHarness.test('Prismarine Shard forces movement then heals before Dolphin and
   TestHarness.equal(salmon.slotIndex, 2);
   TestHarness.equal(salmon.health, 1);
   TestHarness.equal(salmon.attack, 2);
+});
+
+TestHarness.test('Turtle grants a live adjacent health aura without buffing itself', function (): void {
+  const state = activeState('match-turtle-aura', ['alice', 'bob'], ['ocean_river', 'nether']);
+  const actorIndex = state.players[0]!.playerId === 'alice' ? 0 : 1;
+  const actor = state.players[actorIndex]!;
+  state.activePlayerIndex = actorIndex;
+  actor.hand = ['or_005'];
+  actor.redstone = 4;
+  actor.redstoneCapacity = 4;
+  placeUnit(state, actorIndex, 'or_001', 0, 'object-10', 1);
+  placeUnit(state, actorIndex, 'or_003', 2, 'object-11', 1);
+
+  const deployed = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('turtle-aura-deploy', 0, 'or_005', 'UNIT', 1));
+  TestHarness.ok(deployed.accepted);
+  if (!deployed.accepted) return;
+  TestHarness.equal(deployed.batch.events[0]!.type, 'CARD_DEPLOYED');
+  const auraEvents = deployed.batch.events.filter(function (event): boolean {
+    return event.type === 'OBJECT_STATS_CHANGED' && event.payload.effectId === 'effect.or_005.01';
+  });
+  TestHarness.equal(auraEvents.length, 2);
+  TestHarness.equal(auraEvents[0]!.payload.instanceId, 'object-10');
+  TestHarness.equal(auraEvents[1]!.payload.instanceId, 'object-11');
+  const salmon = deployed.state.players[actorIndex]!.battlefield.filter(function (value): boolean {
+    return value.instanceId === 'object-10';
+  })[0]!;
+  const drowned = deployed.state.players[actorIndex]!.battlefield.filter(function (value): boolean {
+    return value.instanceId === 'object-11';
+  })[0]!;
+  const turtle = deployed.state.players[actorIndex]!.battlefield.filter(function (value): boolean {
+    return value.cardId === 'or_005';
+  })[0]!;
+  TestHarness.equal(salmon.health, 3);
+  TestHarness.equal(salmon.maxHealth, 3);
+  TestHarness.equal(salmon.adjacencyHealthModifier, 1);
+  TestHarness.equal(drowned.health, 3);
+  TestHarness.equal(drowned.adjacencyHealthModifier, 1);
+  TestHarness.equal(turtle.health, 6);
+  TestHarness.equal(turtle.adjacencyHealthModifier, 0);
+});
+
+TestHarness.test('Losing Turtle aura during movement can kill before Prismarine healing', function (): void {
+  const state = activeState('match-turtle-aura-loss', ['alice', 'bob'], ['ocean_river', 'nether']);
+  const actorIndex = state.players[0]!.playerId === 'alice' ? 0 : 1;
+  const actor = state.players[actorIndex]!;
+  state.activePlayerIndex = actorIndex;
+  actor.hand = ['or_005'];
+  actor.redstone = 4;
+  actor.redstoneCapacity = 4;
+  placeUnit(state, actorIndex, 'or_001', 2, 'object-10', 1);
+  const deployed = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('turtle-loss-deploy', 0, 'or_005', 'UNIT', 1));
+  TestHarness.ok(deployed.accepted);
+  if (!deployed.accepted) return;
+  const salmon = deployed.state.players[actorIndex]!.battlefield.filter(function (value): boolean {
+    return value.instanceId === 'object-10';
+  })[0]!;
+  salmon.health = 1;
+  deployed.state.players[actorIndex]!.hand.push('tk_012');
+  const played = BiomeRivalsRules.applyCommand(deployed.state, actor.playerId,
+    playCommand('turtle-loss-shard', 1, 'tk_012', 'UNIT', salmon.instanceId));
+  TestHarness.ok(played.accepted);
+  if (!played.accepted) return;
+  const moved = BiomeRivalsRules.applyCommand(played.state, actor.playerId,
+    resolveChoiceCommand('turtle-loss-move', 2, played.state.pendingChoice!.choiceId, 0));
+  TestHarness.ok(moved.accepted);
+  if (!moved.accepted) return;
+  TestHarness.equal(moved.batch.events[0]!.type, 'CHOICE_RESOLVED');
+  TestHarness.equal(moved.batch.events[1]!.type, 'OBJECT_MOVED');
+  TestHarness.equal(moved.batch.events[2]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(moved.batch.events[2]!.payload.reason, 'AURA_RECALCULATED');
+  TestHarness.equal(moved.batch.events[2]!.payload.health, 0);
+  TestHarness.equal(moved.batch.events[3]!.type, 'OBJECT_DIED');
+  TestHarness.equal(moved.batch.events.some(function (event): boolean {
+    return event.type === 'OBJECT_STATS_CHANGED' && event.payload.effectId === 'effect.tk_012.01';
+  }), false);
+  TestHarness.equal(moved.state.players[actorIndex]!.battlefield.some(function (value): boolean {
+    return value.instanceId === salmon.instanceId;
+  }), false);
+});
+
+TestHarness.test('Multiple Turtle auras stack on the shared adjacent unit', function (): void {
+  const state = activeState('match-turtle-aura-stack', ['alice', 'bob'], ['ocean_river', 'nether']);
+  const actorIndex = state.players[0]!.playerId === 'alice' ? 0 : 1;
+  const actor = state.players[actorIndex]!;
+  state.activePlayerIndex = actorIndex;
+  actor.hand = ['or_005'];
+  actor.redstone = 4;
+  actor.redstoneCapacity = 4;
+  placeUnit(state, actorIndex, 'or_005', 0, 'object-10', 1);
+  placeUnit(state, actorIndex, 'or_001', 1, 'object-11', 1);
+  actor.battlefield[1]!.health += 1;
+  actor.battlefield[1]!.maxHealth += 1;
+  actor.battlefield[1]!.adjacencyHealthModifier = 1;
+
+  const deployed = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('turtle-stack-deploy', 0, 'or_005', 'UNIT', 2));
+  TestHarness.ok(deployed.accepted);
+  if (!deployed.accepted) return;
+  const salmon = deployed.state.players[actorIndex]!.battlefield.filter(function (value): boolean {
+    return value.instanceId === 'object-11';
+  })[0]!;
+  TestHarness.equal(salmon.health, 4);
+  TestHarness.equal(salmon.maxHealth, 4);
+  TestHarness.equal(salmon.adjacencyHealthModifier, 2);
 });
 
 TestHarness.test('rejects stale revisions', function (): void {

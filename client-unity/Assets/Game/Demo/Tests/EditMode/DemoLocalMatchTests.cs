@@ -1507,6 +1507,40 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(target.Health, Is.EqualTo(1));
         }
 
+        [Test]
+        public void TurtleAuraTracksAdjacencyAndCanKillBeforePrismarineHealing()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("or_001", out var salmon), Is.True);
+            Assert.That(registry.TryGetDefinition("or_005", out var turtle), Is.True);
+            Assert.That(registry.TryGetDefinition("tk_012", out var shard), Is.True);
+            Assert.That(turtle.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { turtle.id, salmon.id });
+            Assert.That(match.ApplyDeploy(turtle,
+                match.CreateDeployCommand(turtle.id, DemoSlotKind.Unit, 1)).Accepted, Is.True);
+            Assert.That(match.ApplyDeploy(salmon,
+                match.CreateDeployCommand(salmon.id, DemoSlotKind.Unit, 2)).Accepted, Is.True);
+            Assert.That(match.ApplyResolveChoice(
+                match.CreateResolveChoiceCommand(match.PendingChoice.choiceId, -1)).Accepted, Is.True);
+            var target = match.GetObject(true, DemoSlotKind.Unit, 2);
+            Assert.That(target.Health, Is.EqualTo(3));
+            Assert.That(target.MaxHealth, Is.EqualTo(3));
+            Assert.That(target.AdjacencyHealthModifier, Is.EqualTo(1));
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 1).AdjacencyHealthModifier, Is.Zero);
+
+            target.Health = 1;
+            match.ResetHand(new[] { shard.id });
+            Assert.That(match.ApplyPlayCard(shard,
+                match.CreatePlayCardCommand(shard.id, "UNIT", target.InstanceId)).Accepted, Is.True);
+            var moved = match.ApplyResolveChoice(match.CreateResolveChoiceCommand(match.PendingChoice.choiceId, 0));
+            Assert.That(moved.Accepted, Is.True);
+            Assert.That(moved.Message, Does.Contain("失去海龟光环而死亡"));
+            Assert.That(match.PlayerBattlefield.Any(value => value.InstanceId == target.InstanceId), Is.False);
+            Assert.That(match.UnitSlots[3], Is.Null.Or.Empty);
+        }
+
         private static float ProjectedWidth(Camera camera, Transform surface, Vector3[] vertices)
         {
             var min = vertices.Min(vertex => camera.WorldToViewportPoint(surface.TransformPoint(vertex)).x);

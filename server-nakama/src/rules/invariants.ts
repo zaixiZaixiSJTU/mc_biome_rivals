@@ -174,6 +174,20 @@ namespace BiomeRivalsRules {
           }
         }
         if (object.health <= 0 || object.health > object.maxHealth || object.maxHealth <= 0) violations.push('battlefield health is out of range');
+        if (object.adjacencyHealthModifier < 0 || object.adjacencyHealthModifier > 2 ||
+            object.adjacencyHealthModifier % 1 !== 0) {
+          violations.push('adjacency health modifier is invalid');
+        }
+        const expectedAdjacencyHealthModifier = object.cardType !== 'UNIT' ? 0 : player.battlefield.filter(function (source): boolean {
+          if (source.instanceId === object.instanceId || source.cardType !== 'UNIT' || source.health <= 0 ||
+              Math.abs(source.slotIndex - object.slotIndex) !== 1) return false;
+          const sourceDefinition = getCardDefinition(source.cardId);
+          return sourceDefinition !== null && sourceDefinition.effectImplementationStatus === 'IMPLEMENTED' &&
+            sourceDefinition.effectIds.indexOf('effect.or_005.01') >= 0;
+        }).length;
+        if (object.adjacencyHealthModifier !== expectedAdjacencyHealthModifier) {
+          violations.push('adjacency health modifier does not match current turtle auras');
+        }
         if (object.attack < 0 || object.summonedTurn < 1 || object.summonedTurn > state.turn) violations.push('battlefield combat values are invalid');
         if (object.temporaryAttackModifierExpiresOnTurn < 0) {
           violations.push('temporary attack modifier state is invalid');

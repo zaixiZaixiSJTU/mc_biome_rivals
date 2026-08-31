@@ -145,6 +145,7 @@ namespace BiomeRivalsRules {
             return {
               instanceId: object.instanceId, cardId: object.cardId, cardType: object.cardType,
               attack: object.attack, health: object.health, maxHealth: object.maxHealth,
+              adjacencyHealthModifier: object.adjacencyHealthModifier,
               slotKind: object.slotKind, slotIndex: object.slotIndex, occupiedSlots: object.occupiedSlots,
               summonedTurn: object.summonedTurn, hasAttacked: object.hasAttacked,
               keywords: object.keywords.slice(),
@@ -263,6 +264,7 @@ namespace BiomeRivalsRules {
               attack: object.attack,
               health: object.health,
               maxHealth: object.maxHealth,
+              adjacencyHealthModifier: object.adjacencyHealthModifier,
               slotKind: object.slotKind,
               slotIndex: object.slotIndex,
               occupiedSlots: object.occupiedSlots,
@@ -504,6 +506,7 @@ namespace BiomeRivalsRules {
         attack: definition.attack + (paymentMethod === 'CRAFTING' ? definition.craftedAttackBonus : 0),
         health: definition.health + (paymentMethod === 'CRAFTING' ? definition.craftedHealthBonus : 0),
         maxHealth: definition.health + (paymentMethod === 'CRAFTING' ? definition.craftedHealthBonus : 0),
+        adjacencyHealthModifier: 0,
         slotKind: slotKind,
         slotIndex: slotIndex,
         occupiedSlots: occupiedSlots,
@@ -553,6 +556,7 @@ namespace BiomeRivalsRules {
         keywords: battlefieldObject.keywords.slice(),
         nextInstanceId: next.nextInstanceId
       });
+      recalculateAdjacencyHealthAuras();
       if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
           definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.pf_001.01') {
         const healedLife = Math.min(30, player.life + 1);
@@ -714,6 +718,51 @@ namespace BiomeRivalsRules {
       }
     }
 
+    function isImplementedTurtleAuraSource(object: BattlefieldObjectState): boolean {
+      if (object.cardType !== 'UNIT' || object.health <= 0) return false;
+      const definition = getCardDefinition(object.cardId);
+      return definition !== null && definition.effectImplementationStatus === 'IMPLEMENTED' &&
+        definition.effectIds.indexOf('effect.or_005.01') >= 0;
+    }
+
+    function recalculateAdjacencyHealthAuras(): void {
+      for (let playerIndex = 0; playerIndex < next.players.length; playerIndex += 1) {
+        const player = next.players[playerIndex]!;
+        const sources = player.battlefield.filter(isImplementedTurtleAuraSource).slice();
+        const targets = player.battlefield.filter(function (object): boolean {
+          return object.cardType === 'UNIT';
+        }).slice().sort(function (left, right): number {
+          if (left.slotIndex !== right.slotIndex) return left.slotIndex - right.slotIndex;
+          return left.instanceId < right.instanceId ? -1 : left.instanceId > right.instanceId ? 1 : 0;
+        });
+        for (let targetIndex = 0; targetIndex < targets.length; targetIndex += 1) {
+          const target = targets[targetIndex]!;
+          const desiredModifier = sources.filter(function (source): boolean {
+            return source.instanceId !== target.instanceId && Math.abs(source.slotIndex - target.slotIndex) === 1;
+          }).length;
+          if (desiredModifier === target.adjacencyHealthModifier) continue;
+          const delta = desiredModifier - target.adjacencyHealthModifier;
+          target.adjacencyHealthModifier = desiredModifier;
+          target.maxHealth += delta;
+          target.health = Math.max(0, Math.min(target.maxHealth, target.health + delta));
+          emit('OBJECT_STATS_CHANGED', {
+            playerId: player.playerId,
+            instanceId: target.instanceId,
+            sourceCardId: 'or_005',
+            sourceInstanceId: null,
+            effectId: 'effect.or_005.01',
+            reason: 'AURA_RECALCULATED',
+            attack: target.attack,
+            health: target.health,
+            maxHealth: target.maxHealth,
+            adjacencyHealthModifier: target.adjacencyHealthModifier,
+            temporaryAttackModifier: target.temporaryAttackModifier,
+            temporaryAttackModifierExpiresOnTurn: target.temporaryAttackModifierExpiresOnTurn
+          });
+        }
+      }
+    }
+
     function removeDeadObjects(player: PlayerState): BattlefieldObjectState[] {
       const deadObjects = player.battlefield.filter(function (object): boolean { return object.health <= 0; });
       deadObjects.sort(function (left, right): number {
@@ -753,6 +802,7 @@ namespace BiomeRivalsRules {
         const currentDeaths = removeDeadObjects(currentPlayer);
         const nonCurrentDeaths = removeDeadObjects(nonCurrentPlayer);
         if (currentDeaths.length === 0 && nonCurrentDeaths.length === 0) return;
+        recalculateAdjacencyHealthAuras();
         for (let index = 0; index < currentDeaths.length; index += 1) {
           const object = currentDeaths[index]!;
           resolveDeathTriggers(currentPlayer, object, resolvedKillCredits);
@@ -860,6 +910,7 @@ namespace BiomeRivalsRules {
         attack: definition.attack,
         health: definition.health,
         maxHealth: definition.health,
+        adjacencyHealthModifier: 0,
         slotKind: 'UNIT',
         slotIndex: slotIndex,
         occupiedSlots: 1,
@@ -891,6 +942,7 @@ namespace BiomeRivalsRules {
         keywords: object.keywords.slice(),
         nextInstanceId: next.nextInstanceId
       });
+      recalculateAdjacencyHealthAuras();
       return true;
     }
 
@@ -1440,6 +1492,11 @@ namespace BiomeRivalsRules {
             sourceInstanceId: pendingChoice.sourceInstanceId, effectId: pendingChoice.effectId,
             fromSlotIndex: fromSlotIndex, toSlotIndex: moveOption.slotIndex
           });
+          recalculateAdjacencyHealthAuras();
+          const activePlayer = next.players[next.activePlayerIndex]!;
+          const nonActivePlayer = next.players[next.activePlayerIndex === 0 ? 1 : 0]!;
+          settleDeaths(activePlayer, nonActivePlayer);
+          if (targetPlayer.battlefield.indexOf(target) < 0) return null;
           if (pendingChoice.effectId === 'effect.or_001.01') {
             target.attack += 1;
             target.temporaryAttackModifier += 1;

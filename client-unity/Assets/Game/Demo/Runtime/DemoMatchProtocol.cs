@@ -44,6 +44,7 @@ namespace BiomeRivals.Demo
         public int Attack { get; set; }
         public int Health { get; set; }
         public int MaxHealth { get; set; }
+        public int AdjacencyHealthModifier { get; set; }
         public int SummonedRound { get; set; }
         public bool HasAttacked { get; set; }
         public string[] Tags { get; set; } = System.Array.Empty<string>();

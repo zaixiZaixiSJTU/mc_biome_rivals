@@ -26,6 +26,7 @@ namespace BiomeRivals.Core
         public int attack;
         public int health;
         public int maxHealth;
+        public int adjacencyHealthModifier;
         public string slotKind = string.Empty;
         public int slotIndex;
         public int occupiedSlots;
@@ -371,6 +372,11 @@ namespace BiomeRivals.Core
                     var statsObject = FindObject(FindPlayer(payload.playerId), payload.instanceId);
                     statsObject.attack = payload.attack;
                     statsObject.health = payload.health;
+                    if (payload.reason == "AURA_RECALCULATED")
+                    {
+                        statsObject.maxHealth = payload.maxHealth;
+                        statsObject.adjacencyHealthModifier = payload.adjacencyHealthModifier;
+                    }
                     statsObject.temporaryAttackModifier = payload.temporaryAttackModifier;
                     statsObject.temporaryAttackModifierExpiresOnTurn = payload.temporaryAttackModifierExpiresOnTurn;
                     if ((payload.effectId == "effect.or_002.01" || payload.effectId == "effect.or_004.01") &&
@@ -601,6 +607,7 @@ namespace BiomeRivals.Core
                     attack = payload.attack,
                     health = payload.health,
                     maxHealth = payload.maxHealth,
+                    adjacencyHealthModifier = 0,
                     slotKind = payload.slotKind,
                     slotIndex = payload.slotIndex,
                     occupiedSlots = occupiedSlots,

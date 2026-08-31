@@ -221,6 +221,7 @@ namespace BiomeRivals.Demo
                 Keywords = (definition.keywords ?? Array.Empty<string>()).ToArray()
             };
             _playerBattlefield.Add(deployedObject);
+            RecalculateAdjacencyHealthAuras();
             var craftingBonuses = new List<string>();
             if (definition.craftedAttackBonus > 0) craftingBonuses.Add($"+{definition.craftedAttackBonus} 攻击");
             if (definition.craftedHealthBonus > 0) craftingBonuses.Add($"+{definition.craftedHealthBonus} 最大生命");
@@ -301,6 +302,8 @@ namespace BiomeRivals.Demo
                 var target = targetBattlefield.Find(value => value.InstanceId == PendingChoice.targetInstanceId);
                 if (target == null || target.SlotKind != DemoSlotKind.Unit)
                     return Reject(DemoCommandRejectionCode.InvalidChoice, "待移动单位已经离场。");
+                var movementDeathMessages = new List<string>();
+                var targetSurvivedAura = true;
                 if (move != null)
                 {
                     if (move.slotIndex < 0 || move.slotIndex >= targetSlots.Length ||
@@ -309,7 +312,10 @@ namespace BiomeRivals.Demo
                     targetSlots[target.SlotIndex] = null;
                     targetSlots[move.slotIndex] = target.CardId;
                     target.SlotIndex = move.slotIndex;
-                    if (moveEffectId == "effect.or_001.01")
+                    RecalculateAdjacencyHealthAuras();
+                    movementDeathMessages.AddRange(SettleDeaths());
+                    targetSurvivedAura = targetBattlefield.Contains(target);
+                    if (targetSurvivedAura && moveEffectId == "effect.or_001.01")
                     {
                         target.Attack += 1;
                         target.TemporaryAttackModifier += 1;
@@ -318,7 +324,7 @@ namespace BiomeRivals.Demo
                 }
                 PendingChoice = null;
                 var shardHealing = 0;
-                if (move != null && prismarineMovement)
+                if (move != null && targetSurvivedAura && prismarineMovement)
                 {
                     var healthBeforeShard = target.Health;
                     target.Health = Math.Min(target.MaxHealth, target.Health + 1);
@@ -326,13 +332,13 @@ namespace BiomeRivals.Demo
                 }
                 var triggeredGuides = 0;
                 var triggeredGuardians = 0;
-                var movementDeathMessages = new List<string>();
-                if (move != null)
+                if (move != null && targetSurvivedAura)
                     triggeredGuides = TriggerSuccessfulMovement(targetBattlefield, target, out triggeredGuardians, movementDeathMessages);
                 AcceptCommand(command);
                 var sourceName = moveEffectId == "effect.or_001.01" ? "鲑鱼群水流" : "激流三叉戟";
                 if (prismarineMovement) sourceName = "海晶碎片";
-                var healingMessage = prismarineMovement ? $" 目标恢复 {shardHealing} 点生命。" : string.Empty;
+                var healingMessage = prismarineMovement && targetSurvivedAura ? $" 目标恢复 {shardHealing} 点生命。" : string.Empty;
+                var auraLossMessage = move != null && !targetSurvivedAura ? " 目标因失去海龟光环而死亡。" : string.Empty;
                 var guideMessage = triggeredGuides > 0 ? $" 海豚向导触发 {triggeredGuides} 次，目标额外获得 +{triggeredGuides} 攻击。" : string.Empty;
                 var guardianMessage = triggeredGuardians > 0
                     ? $" 守卫者射线触发 {triggeredGuardians} 次，目标受到 {triggeredGuardians} 点伤害。"
@@ -340,7 +346,7 @@ namespace BiomeRivals.Demo
                 var deathMessage = movementDeathMessages.Count > 0 ? " " + string.Join(" ", movementDeathMessages) : string.Empty;
                 return DemoCommandResult.Accept(move == null
                     ? $"{sourceName}：目标保持原位，未触发移动反应。"
-                    : $"{sourceName}：移动成功。{healingMessage}{guideMessage}{guardianMessage}{deathMessage}", Revision);
+                    : $"{sourceName}：移动成功。{auraLossMessage}{healingMessage}{guideMessage}{guardianMessage}{deathMessage}", Revision);
             }
             var selectable = (PendingChoice.options ?? Array.Empty<PendingChoiceOptionDto>()).Where(option => option != null && option.selectable).ToArray();
             PendingChoiceOptionDto selected = null;
@@ -545,6 +551,7 @@ namespace BiomeRivals.Demo
                     buildingIndex += Math.Max(1, definition.buildingSlots);
                 }
             }
+            RecalculateAdjacencyHealthAuras();
         }
 
         public DemoBattlefieldObject GetObject(bool player, DemoSlotKind kind, int slotIndex)
@@ -990,6 +997,29 @@ namespace BiomeRivals.Demo
                 Math.Abs(value.SlotIndex - slotIndex) == 1 && value.HasTag("aquatic"));
         }
 
+        private void RecalculateAdjacencyHealthAuras()
+        {
+            RecalculateAdjacencyHealthAuras(_playerBattlefield);
+            RecalculateAdjacencyHealthAuras(_opponentBattlefield);
+        }
+
+        private static void RecalculateAdjacencyHealthAuras(List<DemoBattlefieldObject> battlefield)
+        {
+            var sources = battlefield.Where(value => value.CardId == "or_005" && value.SlotKind == DemoSlotKind.Unit && value.Health > 0)
+                .ToArray();
+            foreach (var target in battlefield.Where(value => value.SlotKind == DemoSlotKind.Unit)
+                .OrderBy(value => value.SlotIndex).ThenBy(value => value.InstanceId, StringComparer.Ordinal))
+            {
+                var desiredModifier = sources.Count(source => source.InstanceId != target.InstanceId &&
+                    Math.Abs(source.SlotIndex - target.SlotIndex) == 1);
+                if (desiredModifier == target.AdjacencyHealthModifier) continue;
+                var delta = desiredModifier - target.AdjacencyHealthModifier;
+                target.AdjacencyHealthModifier = desiredModifier;
+                target.MaxHealth += delta;
+                target.Health = Math.Max(0, Math.Min(target.MaxHealth, target.Health + delta));
+            }
+        }
+
         private int TriggerSuccessfulMovement(
             List<DemoBattlefieldObject> battlefield,
             DemoBattlefieldObject movedUnit,
@@ -1132,6 +1162,7 @@ namespace BiomeRivals.Demo
                 var playerDeaths = RemoveDeadObjects(_playerBattlefield, UnitSlots, BuildingSlots);
                 var opponentDeaths = RemoveDeadObjects(_opponentBattlefield, OpponentUnitSlots, OpponentBuildingSlots);
                 if (playerDeaths.Count == 0 && opponentDeaths.Count == 0) return messages;
+                RecalculateAdjacencyHealthAuras();
                 foreach (var value in playerDeaths)
                 {
                     var message = ResolveLocalDeathrattle(value, resolvedKillCredits);
@@ -1247,6 +1278,7 @@ namespace BiomeRivals.Demo
                 };
                 battlefield.Add(summoned);
                 slots[slotIndex] = summoned.CardId;
+                RecalculateAdjacencyHealthAuras();
                 return value.Player
                     ? $"岩浆怪亡语：小型岩浆怪已在单位格 {slotIndex + 1} 召唤。"
                     : $"敌方岩浆怪亡语：小型岩浆怪已在单位格 {slotIndex + 1} 召唤。";
