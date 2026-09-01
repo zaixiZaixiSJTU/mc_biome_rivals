@@ -1,6 +1,6 @@
 # 林地苗圃动物成长规范 v1
 
-本规范对应 `protocolVersion 22`、`rulesetVersion prototype-0.32` 与内容版本 24。
+本规范对应 `protocolVersion 22`、`rulesetVersion prototype-0.33` 与内容版本 25。
 
 ## PF-005 林地苗圃
 

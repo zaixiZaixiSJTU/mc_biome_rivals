@@ -436,7 +436,8 @@ namespace BiomeRivals.Demo
             if (effectId != "effect.db_002.01" && effectId != "effect.db_006.01" && effectId != "effect.nt_006.01" &&
                 effectId != "effect.si_001.01" && effectId != "effect.si_006.01" && effectId != "effect.tk_005.01" &&
                 effectId != "effect.tk_009.01" && effectId != "effect.tk_010.01" && effectId != "effect.or_006.01" &&
-                effectId != "effect.tk_012.01" && effectId != "effect.tk_016.01" && effectId != "effect.pf_006.01")
+                effectId != "effect.tk_012.01" && effectId != "effect.tk_016.01" && effectId != "effect.pf_006.01" &&
+                effectId != "effect.pf_007.01")
                 return Reject(DemoCommandRejectionCode.EffectNotImplemented, "找不到该 effectId 的规则处理器。");
             DemoBattlefieldObject targetedObject = null;
             var targetedObjects = new List<DemoBattlefieldObject>();
@@ -583,6 +584,30 @@ namespace BiomeRivals.Demo
                         message = $"繁殖季节：{targetNames} 获得 +1 当前与最大生命；幼体已在单位格 {juvenile.SlotIndex + 1} 召唤。";
                     else
                         message = $"繁殖季节：{targetNames} 获得 +1 当前与最大生命；单位格已满，未能召唤幼体。";
+                    break;
+                case "effect.pf_007.01":
+                    var rallySummons = 0;
+                    var rallyDraws = 0;
+                    var rallyBurns = 0;
+                    var rallyFatigue = 0;
+                    for (var rallyStep = 0; rallyStep < 2; rallyStep++)
+                    {
+                        if (TrySummonUnit("tk_004", true, -1, out _))
+                        {
+                            rallySummons++;
+                            continue;
+                        }
+                        var rallyDraw = DrawCard();
+                        if (rallyDraw.Outcome == DemoDrawOutcome.Drawn) rallyDraws++;
+                        else if (rallyDraw.Outcome == DemoDrawOutcome.Burned) rallyBurns++;
+                        else rallyFatigue += rallyDraw.FatigueDamage;
+                        if (IsFinished) break;
+                    }
+                    message = $"林间集结：召唤 {rallySummons} 个林地伙伴";
+                    if (rallyDraws > 0) message += $"，抽取 {rallyDraws} 张牌";
+                    if (rallyBurns > 0) message += $"，爆牌 {rallyBurns} 张";
+                    if (rallyFatigue > 0) message += $"，受到 {rallyFatigue} 点疲劳伤害";
+                    message += "。";
                     break;
                 default:
                     throw new InvalidOperationException("Validated effect handler was not dispatched.");

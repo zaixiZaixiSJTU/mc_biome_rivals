@@ -164,6 +164,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewVillagerFarmer")) SetupVillagerFarmerPreview();
             else if (HasCommandLineFlag("-previewWoodlandNursery")) SetupWoodlandNurseryPreview();
             else if (HasCommandLineFlag("-previewBreedingSeason")) SetupBreedingSeasonPreview();
+            else if (HasCommandLineFlag("-previewWoodlandRally")) SetupWoodlandRallyPreview();
             else if (HasCommandLineFlag("-previewDungeonSkeleton")) SetupDungeonSkeletonPreview();
             else if (HasCommandLineFlag("-previewStray")) SetupStrayPreview();
             else if (HasCommandLineFlag("-previewEquipment")) SetupEquipmentPreview();
@@ -564,7 +565,8 @@ namespace BiomeRivals.Demo
                         ? "一个单位"
                         : GetCardName(matchEvent.payload.cardId);
                     var summonTriggerName = matchEvent.payload?.effectId == "effect.nt_001.01" ? "亡语" :
-                        matchEvent.payload?.effectId == "effect.pf_006.01" ? "繁殖" : "效果";
+                        matchEvent.payload?.effectId == "effect.pf_006.01" ? "繁殖" :
+                        matchEvent.payload?.effectId == "effect.pf_007.01" ? "集结" : "效果";
                     ShowStatus(ownSummon
                         ? $"{summonSourceName}{summonTriggerName}：{summonedName}已在单位格 {matchEvent.payload.slotIndex + 1} 召唤。"
                         : $"敌方{summonSourceName}{summonTriggerName}：{summonedName}已在单位格 {matchEvent.payload.slotIndex + 1} 召唤。", false);
@@ -585,6 +587,12 @@ namespace BiomeRivals.Demo
                             break;
                         case "effect.tk_010.01":
                             ShowStatus(ownEffect ? "圆石已生效：己方建筑恢复至新的生命值。" : "对手使用圆石修复了一个建筑。", false);
+                            break;
+                        case "effect.pf_007.01":
+                            ShowStatus(ownEffect
+                                ? "林间集结开始：每个步骤会召唤林地伙伴；单位格不足时改为抽牌。"
+                                : "敌方正在进行林间集结。", false);
+                            yield return ShowTurnBanner("林间集结", ownEffect ? Leaf : Ember);
                             break;
                     }
                     yield return null;
@@ -1435,6 +1443,35 @@ namespace BiomeRivals.Demo
                 ? "繁殖目标：已选择 1/2；金色蜜蜂为已选目标，绿色绵羊仍可选择，确认后才会结算。"
                 : !beeDeployed.Accepted ? beeDeployed.Message : sheepDeployed.Message,
                 !beeDeployed.Accepted || !sheepDeployed.Accepted);
+        }
+
+        private void SetupWoodlandRallyPreview()
+        {
+            SelectFaction("plains_forest");
+            SelectOpponentFaction("nether");
+            if (!_registry.TryGetDefinition("pf_001", out var beeDefinition) ||
+                !_registry.TryGetDefinition("pf_002", out var sheepDefinition) ||
+                !_registry.TryGetDefinition("pf_003", out var wolfDefinition) ||
+                !_registry.TryGetDefinition("pf_007", out var rallyDefinition)) return;
+            _match.ResetDeckAndHand(new[] { beeDefinition.id, sheepDefinition.id, wolfDefinition.id }, new[] { "pf_001" });
+            var beeDeployed = _match.ApplyDeploy(beeDefinition,
+                _match.CreateDeployCommand(beeDefinition.id, DemoSlotKind.Unit, 0));
+            var sheepDeployed = _match.ApplyDeploy(sheepDefinition,
+                _match.CreateDeployCommand(sheepDefinition.id, DemoSlotKind.Unit, 1));
+            var wolfDeployed = _match.ApplyDeploy(wolfDefinition,
+                _match.CreateDeployCommand(wolfDefinition.id, DemoSlotKind.Unit, 3));
+            _match.EndPlayerTurn();
+            _match.BeginNextPlayerTurn();
+            _match.ResetDeckAndHand(new[] { rallyDefinition.id }, new[] { beeDefinition.id });
+            var result = _match.ApplyPlayCard(rallyDefinition, _match.CreatePlayCardCommand(rallyDefinition.id));
+            _selectedCardId = rallyDefinition.id;
+            RefreshAll();
+            var companion = _match.GetObject(true, DemoSlotKind.Unit, 2);
+            ShowStatus(result.Accepted
+                ? "林间集结：唯一空位召唤了林地伙伴；第二个集结步骤因满场改为抽取一张牌。"
+                : result.Message,
+                !result.Accepted || !beeDeployed.Accepted || !sheepDeployed.Accepted || !wolfDeployed.Accepted);
+            if (companion != null) StartCoroutine(PulseBattlefieldObject(companion.InstanceId));
         }
 
         private void SetupOceanMonumentPreview()

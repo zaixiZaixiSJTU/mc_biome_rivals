@@ -1,6 +1,6 @@
 # 驯服的狼相邻战吼规范 v1
 
-本规范对应 `protocolVersion 22`、`rulesetVersion prototype-0.32` 与内容版本 24。
+本规范对应 `protocolVersion 22`、`rulesetVersion prototype-0.33` 与内容版本 25。
 
 ## PF-003 驯服的狼
 

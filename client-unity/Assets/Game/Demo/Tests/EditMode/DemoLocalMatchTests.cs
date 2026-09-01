@@ -97,10 +97,10 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(fleshMatch.PlayerLife, Is.EqualTo(29));
 
             var pendingMatch = new DemoLocalMatch();
-            pendingMatch.ResetDeckAndHand(new[] { "pf_007" }, new string[0]);
-            Assert.That(registry.TryGetDefinition("pf_007", out var pending), Is.True);
+            pendingMatch.ResetDeckAndHand(new[] { "cd_006" }, new string[0]);
+            Assert.That(registry.TryGetDefinition("cd_006", out var pending), Is.True);
             Assert.That(pendingMatch.TryCast(pending, out var pendingMessage), Is.False);
-            Assert.That(pendingMatch.Hand, Does.Contain("pf_007"));
+            Assert.That(pendingMatch.Hand, Does.Contain("cd_006"));
             Assert.That(pendingMatch.Energy, Is.EqualTo(6));
             Assert.That(pendingMessage, Does.Contain("尚未接入"));
         }
@@ -1146,6 +1146,8 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(smallMagmaTexture, Is.EqualTo("entity_magma_cube"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("tk_003", out var juvenileTexture), Is.True);
                 Assert.That(juvenileTexture, Is.EqualTo("entity_sheep"));
+                Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("tk_004", out var companionTexture), Is.True);
+                Assert.That(companionTexture, Is.EqualTo("entity_wolf"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("or_001", out var salmonTexture), Is.True);
                 Assert.That(salmonTexture, Is.EqualTo("entity_salmon"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("or_002", out var dolphinTexture), Is.True);
@@ -1775,6 +1777,94 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(animal.MaxHealth, Is.EqualTo(2));
                 Assert.That(otherAnimal.MaxHealth, Is.EqualTo(3));
             }
+        }
+
+        [Test]
+        public void WoodlandRallySummonsTwoCompanionsAndNurseryGrowsOnlyTheFirst()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("pf_005", out var nursery), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_001", out var bee), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_002", out var sheep), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_007", out var rally), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(new[] { nursery.id, bee.id, sheep.id }, new[] { "pf_001" });
+            Assert.That(match.ApplyDeploy(nursery,
+                match.CreateDeployCommand(nursery.id, DemoSlotKind.Building, 0)).Accepted, Is.True);
+            Assert.That(match.ApplyDeploy(bee,
+                match.CreateDeployCommand(bee.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            Assert.That(match.ApplyDeploy(sheep,
+                match.CreateDeployCommand(sheep.id, DemoSlotKind.Unit, 2)).Accepted, Is.True);
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            match.ResetDeckAndHand(new[] { rally.id }, new[] { "pf_003" });
+
+            var result = match.ApplyPlayCard(rally, match.CreatePlayCardCommand(rally.id));
+
+            Assert.That(result.Accepted, Is.True, result.Message);
+            var companions = match.PlayerBattlefield.Where(value => value.CardId == "tk_004")
+                .OrderBy(value => value.SlotIndex).ToArray();
+            Assert.That(companions, Has.Length.EqualTo(2));
+            Assert.That(companions[0].SlotIndex, Is.EqualTo(1));
+            Assert.That(companions[0].MaxHealth, Is.EqualTo(3));
+            Assert.That(companions[1].SlotIndex, Is.EqualTo(3));
+            Assert.That(companions[1].MaxHealth, Is.EqualTo(2));
+            Assert.That(result.Message, Does.Contain("召唤 2 个林地伙伴"));
+        }
+
+        [Test]
+        public void WoodlandRallySummonsOnceThenDrawsWhenOnlyOneSlotIsOpen()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("pf_001", out var bee), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_002", out var sheep), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_003", out var wolf), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_007", out var rally), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(new[] { bee.id, sheep.id, wolf.id }, new[] { "pf_001" });
+            Assert.That(match.ApplyDeploy(bee, match.CreateDeployCommand(bee.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            Assert.That(match.ApplyDeploy(sheep, match.CreateDeployCommand(sheep.id, DemoSlotKind.Unit, 1)).Accepted, Is.True);
+            Assert.That(match.ApplyDeploy(wolf, match.CreateDeployCommand(wolf.id, DemoSlotKind.Unit, 3)).Accepted, Is.True);
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            match.ResetDeckAndHand(new[] { rally.id }, new[] { "pf_001" });
+
+            var result = match.ApplyPlayCard(rally, match.CreatePlayCardCommand(rally.id));
+
+            Assert.That(result.Accepted, Is.True, result.Message);
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 2).CardId, Is.EqualTo("tk_004"));
+            Assert.That(match.Hand, Is.EqualTo(new[] { "pf_001" }));
+            Assert.That(result.Message, Does.Contain("召唤 1 个林地伙伴"));
+            Assert.That(result.Message, Does.Contain("抽取 1 张牌"));
+        }
+
+        [Test]
+        public void WoodlandRallyDrawsTwiceWhenTheUnitRowIsFull()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("pf_001", out var bee), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_002", out var sheep), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_003", out var wolf), Is.True);
+            Assert.That(registry.TryGetDefinition("tk_003", out var juvenile), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_007", out var rally), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(new[] { bee.id, sheep.id, wolf.id, juvenile.id }, new[] { "pf_001" });
+            Assert.That(match.ApplyDeploy(bee, match.CreateDeployCommand(bee.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            Assert.That(match.ApplyDeploy(sheep, match.CreateDeployCommand(sheep.id, DemoSlotKind.Unit, 1)).Accepted, Is.True);
+            Assert.That(match.ApplyDeploy(wolf, match.CreateDeployCommand(wolf.id, DemoSlotKind.Unit, 2)).Accepted, Is.True);
+            Assert.That(match.ApplyDeploy(juvenile,
+                match.CreateDeployCommand(juvenile.id, DemoSlotKind.Unit, 3)).Accepted, Is.True);
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            match.ResetDeckAndHand(new[] { rally.id }, new[] { "pf_001", "pf_002" });
+
+            var result = match.ApplyPlayCard(rally, match.CreatePlayCardCommand(rally.id));
+
+            Assert.That(result.Accepted, Is.True, result.Message);
+            Assert.That(match.Hand, Is.EqualTo(new[] { "pf_002", "pf_001" }));
+            Assert.That(match.PlayerBattlefield, Has.Count.EqualTo(4));
+            Assert.That(result.Message, Does.Contain("召唤 0 个林地伙伴"));
+            Assert.That(result.Message, Does.Contain("抽取 2 张牌"));
         }
 
         [Test]

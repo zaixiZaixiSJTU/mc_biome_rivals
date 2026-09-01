@@ -2294,6 +2294,122 @@ TestHarness.test('Breeding Season rejects duplicate, non-Animal, and enemy targe
   }
 });
 
+TestHarness.test('Woodland Rally summons two companions in leftmost slots and Nursery grows only the first', function (): void {
+  const state = activeState('match-woodland-rally-open', ['alice', 'bob'], ['plains_forest', 'nether']);
+  const actorIndex = state.players[0]!.playerId === 'alice' ? 0 : 1;
+  const actor = state.players[actorIndex]!;
+  state.activePlayerIndex = actorIndex;
+  actor.hand = ['pf_007'];
+  actor.redstone = 4;
+  actor.redstoneCapacity = 4;
+  placeUnit(state, actorIndex, 'pf_001', 0, 'object-10', state.turn);
+  placeUnit(state, actorIndex, 'pf_002', 2, 'object-12', state.turn);
+  placeBuilding(state, actorIndex, 'pf_005', 0, 'object-20');
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('woodland-rally-open', 0, 'pf_007'));
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.batch.events.length, 4);
+  TestHarness.equal(result.batch.events[0]!.type, 'CARD_PLAYED');
+  TestHarness.equal(result.batch.events[1]!.type, 'OBJECT_SUMMONED');
+  TestHarness.equal(result.batch.events[1]!.payload.cardId, 'tk_004');
+  TestHarness.equal(result.batch.events[1]!.payload.slotIndex, 1);
+  TestHarness.equal(result.batch.events[1]!.payload.sourceInstanceId, 'effect-1');
+  TestHarness.equal(result.batch.events[2]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(result.batch.events[2]!.payload.effectId, 'effect.pf_005.01');
+  TestHarness.equal(result.batch.events[3]!.type, 'OBJECT_SUMMONED');
+  TestHarness.equal(result.batch.events[3]!.payload.slotIndex, 3);
+  const companions = result.state.players[actorIndex]!.battlefield.filter(function (value): boolean {
+    return value.cardId === 'tk_004';
+  }).sort(function (left, right): number { return left.slotIndex - right.slotIndex; });
+  TestHarness.equal(companions.length, 2);
+  TestHarness.equal(companions[0]!.attack, 2);
+  TestHarness.equal(companions[0]!.maxHealth, 3);
+  TestHarness.equal(companions[1]!.maxHealth, 2);
+});
+
+TestHarness.test('Woodland Rally converts its second step into a draw when only one slot is open', function (): void {
+  const state = activeState('match-woodland-rally-one-slot', ['alice', 'bob'], ['plains_forest', 'nether']);
+  const actorIndex = state.players[0]!.playerId === 'alice' ? 0 : 1;
+  const actor = state.players[actorIndex]!;
+  state.activePlayerIndex = actorIndex;
+  actor.hand = ['pf_007'];
+  actor.deck = ['pf_001'];
+  actor.redstone = 4;
+  actor.redstoneCapacity = 4;
+  placeUnit(state, actorIndex, 'pf_001', 0, 'object-10', state.turn);
+  placeUnit(state, actorIndex, 'pf_002', 1, 'object-11', state.turn);
+  placeUnit(state, actorIndex, 'pf_003', 3, 'object-13', state.turn);
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('woodland-rally-one-slot', 0, 'pf_007'));
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.batch.events.length, 3);
+  TestHarness.equal(result.batch.events[1]!.type, 'OBJECT_SUMMONED');
+  TestHarness.equal(result.batch.events[1]!.payload.slotIndex, 2);
+  TestHarness.equal(result.batch.events[2]!.type, 'CARD_DRAWN');
+  TestHarness.equal(result.batch.events[2]!.payload.cardId, 'pf_001');
+  TestHarness.equal(result.state.players[actorIndex]!.hand[0], 'pf_001');
+  TestHarness.equal(result.state.players[actorIndex]!.battlefield.filter(function (value): boolean {
+    return value.cardId === 'tk_004';
+  }).length, 1);
+});
+
+TestHarness.test('Woodland Rally draws twice in stable order on a full unit row', function (): void {
+  const state = activeState('match-woodland-rally-full', ['alice', 'bob'], ['plains_forest', 'nether']);
+  const actorIndex = state.players[0]!.playerId === 'alice' ? 0 : 1;
+  const actor = state.players[actorIndex]!;
+  state.activePlayerIndex = actorIndex;
+  actor.hand = ['pf_007'];
+  actor.deck = ['pf_001', 'pf_002'];
+  actor.redstone = 4;
+  actor.redstoneCapacity = 4;
+  for (let slotIndex = 0; slotIndex < 4; slotIndex += 1) {
+    placeUnit(state, actorIndex, slotIndex % 2 === 0 ? 'pf_001' : 'pf_002', slotIndex,
+      'object-' + String(10 + slotIndex), state.turn);
+  }
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('woodland-rally-full', 0, 'pf_007'));
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.batch.events.length, 3);
+  TestHarness.equal(result.batch.events[1]!.type, 'CARD_DRAWN');
+  TestHarness.equal(result.batch.events[1]!.payload.cardId, 'pf_002');
+  TestHarness.equal(result.batch.events[2]!.type, 'CARD_DRAWN');
+  TestHarness.equal(result.batch.events[2]!.payload.cardId, 'pf_001');
+  TestHarness.equal(JSON.stringify(result.state.players[actorIndex]!.hand), JSON.stringify(['pf_002', 'pf_001']));
+  TestHarness.equal(result.state.players[actorIndex]!.battlefield.length, 4);
+});
+
+TestHarness.test('Woodland Rally stops after lethal replacement fatigue', function (): void {
+  const state = activeState('match-woodland-rally-fatigue', ['alice', 'bob'], ['plains_forest', 'nether']);
+  const actorIndex = state.players[0]!.playerId === 'alice' ? 0 : 1;
+  const actor = state.players[actorIndex]!;
+  state.activePlayerIndex = actorIndex;
+  actor.hand = ['pf_007'];
+  actor.deck = [];
+  actor.life = 1;
+  actor.redstone = 4;
+  actor.redstoneCapacity = 4;
+  for (let slotIndex = 0; slotIndex < 4; slotIndex += 1) {
+    placeUnit(state, actorIndex, 'pf_001', slotIndex, 'object-' + String(10 + slotIndex), state.turn);
+  }
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('woodland-rally-fatigue', 0, 'pf_007'));
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.batch.events.length, 3);
+  TestHarness.equal(result.batch.events[1]!.type, 'FATIGUE_DAMAGE');
+  TestHarness.equal(result.batch.events[2]!.type, 'MATCH_ENDED');
+  TestHarness.equal(result.state.players[actorIndex]!.fatigueCount, 1);
+  TestHarness.equal(result.state.players[actorIndex]!.life, 0);
+  TestHarness.equal(result.state.status, 'FINISHED');
+});
+
 TestHarness.test('Coral Reef permanently grows only the first friendly aquatic unit each turn', function (): void {
   const state = activeState('match-coral-growth', ['alice', 'bob'], ['ocean_river', 'nether']);
   const actorIndex = state.players[0]!.playerId === 'alice' ? 0 : 1;

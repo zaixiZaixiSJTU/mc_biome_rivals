@@ -1380,7 +1380,7 @@ namespace BiomeRivalsRules {
       }
       const effectId = definition.effectIds[0]!;
       if (effectId !== 'effect.db_002.01' && effectId !== 'effect.db_006.01' && effectId !== 'effect.nt_006.01' &&
-          effectId !== 'effect.pf_006.01' &&
+          effectId !== 'effect.pf_006.01' && effectId !== 'effect.pf_007.01' &&
           effectId !== 'effect.si_001.01' && effectId !== 'effect.si_006.01' && effectId !== 'effect.tk_005.01' &&
           effectId !== 'effect.tk_009.01' && effectId !== 'effect.tk_010.01' && effectId !== 'effect.tk_012.01' && effectId !== 'effect.or_006.01' &&
           effectId !== 'effect.tk_016.01') {
@@ -1550,6 +1550,14 @@ namespace BiomeRivalsRules {
             });
           }
           summonUnit(player, 'tk_003', cardId, effectSourceInstanceId, effectId, -1);
+          return null;
+        }
+        case 'effect.pf_007.01': {
+          for (let rallyStep = 0; rallyStep < 2; rallyStep += 1) {
+            if (summonUnit(player, 'tk_004', cardId, effectSourceInstanceId, effectId, -1)) continue;
+            drawCard(player);
+            if (finishForSelfDefeat(player, 'FATIGUE')) break;
+          }
           return null;
         }
         case 'effect.si_001.01': {
