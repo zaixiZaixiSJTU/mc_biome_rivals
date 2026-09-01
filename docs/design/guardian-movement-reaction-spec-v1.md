@@ -1,6 +1,6 @@
 # 守卫者移动反应规范 v1
 
-本规范对应 `protocolVersion 22`、`rulesetVersion prototype-0.33` 与内容版本 25。
+本规范对应 `protocolVersion 23`、`rulesetVersion prototype-0.34` 与内容版本 26。
 
 ## OR-004 守卫者
 

@@ -265,6 +265,24 @@ namespace BiomeRivals.Demo
                 }
             }
             else if (definition.effectImplementationStatus == "IMPLEMENTED" &&
+                definition.effectIds != null && definition.effectIds.Contains("effect.pf_008.01"))
+            {
+                var controlsBuilding = _playerBattlefield.Any(value =>
+                    value.InstanceId != deployedObject.InstanceId && value.Health > 0 &&
+                    value.SlotKind == DemoSlotKind.Building);
+                if (controlsBuilding)
+                {
+                    deployedObject.Attack += 1;
+                    deployedObject.Health += 1;
+                    deployedObject.MaxHealth += 1;
+                    deployMessage += "；建筑共鸣战吼触发，永久获得 +1/+1。";
+                }
+                else
+                {
+                    deployMessage += "；未控制存活建筑或结构，建筑共鸣战吼未触发。";
+                }
+            }
+            else if (definition.effectImplementationStatus == "IMPLEMENTED" &&
                 definition.effectIds != null && definition.effectIds.Contains("effect.db_003.01"))
             {
                 OfferArchaeologyChoice(deployedObject);

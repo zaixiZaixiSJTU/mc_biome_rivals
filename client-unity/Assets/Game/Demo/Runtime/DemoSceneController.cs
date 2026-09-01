@@ -165,6 +165,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewWoodlandNursery")) SetupWoodlandNurseryPreview();
             else if (HasCommandLineFlag("-previewBreedingSeason")) SetupBreedingSeasonPreview();
             else if (HasCommandLineFlag("-previewWoodlandRally")) SetupWoodlandRallyPreview();
+            else if (HasCommandLineFlag("-previewIronGolem")) SetupIronGolemPreview();
             else if (HasCommandLineFlag("-previewDungeonSkeleton")) SetupDungeonSkeletonPreview();
             else if (HasCommandLineFlag("-previewStray")) SetupStrayPreview();
             else if (HasCommandLineFlag("-previewEquipment")) SetupEquipmentPreview();
@@ -750,6 +751,15 @@ namespace BiomeRivals.Demo
                             ? "繁殖季节：两个选定的己方动物永久获得 +1 当前与最大生命。"
                             : "敌方繁殖季节强化了两个动物。", false);
                         yield return ShowTurnBanner("繁殖成长", breedingFriendly ? Leaf : Ember);
+                    }
+                    else if (matchEvent.payload?.effectId == "effect.pf_008.01")
+                    {
+                        var golemViewerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
+                        var golemFriendly = matchEvent.payload?.playerId == golemViewerId;
+                        ShowStatus(golemFriendly
+                            ? "铁傀儡响应己方建筑，永久获得 +1 攻击、+1 当前与最大生命。"
+                            : "敌方铁傀儡响应建筑，永久获得了 +1/+1。", false);
+                        yield return ShowTurnBanner("建筑共鸣", golemFriendly ? Gold : Ember);
                     }
                     else if (matchEvent.payload?.effectId == "effect.or_002.01")
                     {
@@ -1472,6 +1482,31 @@ namespace BiomeRivals.Demo
                 : result.Message,
                 !result.Accepted || !beeDeployed.Accepted || !sheepDeployed.Accepted || !wolfDeployed.Accepted);
             if (companion != null) StartCoroutine(PulseBattlefieldObject(companion.InstanceId));
+        }
+
+        private void SetupIronGolemPreview()
+        {
+            SelectFaction("plains_forest");
+            SelectOpponentFaction("nether");
+            if (!_registry.TryGetDefinition("pf_005", out var nurseryDefinition) ||
+                !_registry.TryGetDefinition("pf_008", out var golemDefinition)) return;
+            _match.ResetDeckAndHand(new[] { nurseryDefinition.id }, Array.Empty<string>());
+            var nurseryDeployed = _match.ApplyDeploy(nurseryDefinition,
+                _match.CreateDeployCommand(nurseryDefinition.id, DemoSlotKind.Building, 0));
+            _match.EndPlayerTurn();
+            _match.BeginNextPlayerTurn();
+            _match.ResetHand(new[] { golemDefinition.id });
+            var golemDeployed = _match.ApplyDeploy(golemDefinition,
+                _match.CreateDeployCommand(golemDefinition.id, DemoSlotKind.Unit, 1));
+            var golem = _match.GetObject(true, DemoSlotKind.Unit, 1);
+            _match.ResetHand(new[] { golemDefinition.id });
+            _selectedCardId = golemDefinition.id;
+            RefreshAll();
+            ShowStatus(nurseryDeployed.Accepted && golemDeployed.Accepted && golem?.Attack == 6 && golem.MaxHealth == 8
+                ? "铁傀儡响应己方林地苗圃，战吼永久获得 +1/+1；场上模型与卡牌均使用 Minecraft 铁傀儡纹理。"
+                : !nurseryDeployed.Accepted ? nurseryDeployed.Message : golemDeployed.Message,
+                !nurseryDeployed.Accepted || !golemDeployed.Accepted || golem?.Attack != 6 || golem.MaxHealth != 8);
+            if (golem != null) StartCoroutine(PulseBattlefieldObject(golem.InstanceId));
         }
 
         private void SetupOceanMonumentPreview()

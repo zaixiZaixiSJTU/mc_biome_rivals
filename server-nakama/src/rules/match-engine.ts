@@ -579,6 +579,9 @@ namespace BiomeRivalsRules {
           definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.pf_004.01') {
         generateCard(player, 'tk_002', cardId, battlefieldObject.instanceId, definition.effectIds[0]);
       } else if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
+          definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.pf_008.01') {
+        triggerIronGolemBattlecry(player, battlefieldObject);
+      } else if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
           definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.db_003.01') {
         offerArchaeologyChoice(player, battlefieldObject, definition.effectIds[0]);
       } else if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
@@ -867,6 +870,32 @@ namespace BiomeRivalsRules {
         maxHealth: wolf.maxHealth,
         temporaryAttackModifier: wolf.temporaryAttackModifier,
         temporaryAttackModifierExpiresOnTurn: wolf.temporaryAttackModifierExpiresOnTurn
+      });
+      return true;
+    }
+
+    function triggerIronGolemBattlecry(player: PlayerState, golem: BattlefieldObjectState): boolean {
+      if (golem.cardType !== 'UNIT' || golem.health <= 0) return false;
+      const controlsBuilding = player.battlefield.some(function (object): boolean {
+        return object.instanceId !== golem.instanceId && object.health > 0 &&
+          (object.cardType === 'BUILDING' || object.cardType === 'STRUCTURE');
+      });
+      if (!controlsBuilding) return false;
+      golem.attack += 1;
+      golem.health += 1;
+      golem.maxHealth += 1;
+      emit('OBJECT_STATS_CHANGED', {
+        playerId: player.playerId,
+        instanceId: golem.instanceId,
+        sourceCardId: golem.cardId,
+        sourceInstanceId: golem.instanceId,
+        effectId: 'effect.pf_008.01',
+        reason: 'PERMANENT_STAT_MODIFIER',
+        attack: golem.attack,
+        health: golem.health,
+        maxHealth: golem.maxHealth,
+        temporaryAttackModifier: golem.temporaryAttackModifier,
+        temporaryAttackModifierExpiresOnTurn: golem.temporaryAttackModifierExpiresOnTurn
       });
       return true;
     }

@@ -1,6 +1,6 @@
 # 驯服的狼相邻战吼规范 v1
 
-本规范对应 `protocolVersion 22`、`rulesetVersion prototype-0.33` 与内容版本 25。
+本规范对应 `protocolVersion 23`、`rulesetVersion prototype-0.34` 与内容版本 26。
 
 ## PF-003 驯服的狼
 
@@ -16,7 +16,7 @@
 - 战吼成功时发送一个 `OBJECT_STATS_CHANGED`：`sourceCardId = pf_003`、`sourceInstanceId =` 本牌实例、`effectId = effect.pf_003.01`、`reason = PERMANENT_HEALTH_MODIFIER`，并携带最终攻击、当前生命、最大生命与已有临时攻击字段。
 - 战吼不成功时不发送属性事件，也不创建隐藏的触发标记。
 - 若本牌同时受到动态生命光环，事件中的最终最大生命包含光环；光环日后移除时，本战吼提供的永久 `+1` 仍保留。
-- 本效果自身没有新增消息字段；当前组合协议为 `protocolVersion 22`，规则集版本仍用于阻止旧战吼顺序客户端静默加入。
+- 本效果自身没有新增消息字段；当前组合协议为 `protocolVersion 23`，规则集版本仍用于阻止旧战吼顺序客户端静默加入。
 
 ## Unity 交互与表现
 

@@ -2650,3 +2650,87 @@ TestHarness.test('rejects duplicate command ids after acceptance', function (): 
   TestHarness.equal(duplicate.accepted, false);
   if (!duplicate.accepted) TestHarness.equal(duplicate.code, 'DUPLICATE_COMMAND');
 });
+
+TestHarness.test('Iron Golem gains permanent attack and health when a friendly building is alive', function (): void {
+  const state = activeState('match-iron-golem-building', ['alice', 'bob'], ['plains_forest', 'nether']);
+  const actorIndex = state.players[0]!.playerId === 'alice' ? 0 : 1;
+  const actor = state.players[actorIndex]!;
+  state.activePlayerIndex = actorIndex;
+  actor.hand = ['pf_008'];
+  actor.redstone = 6;
+  actor.redstoneCapacity = 6;
+  placeBuilding(state, actorIndex, 'pf_005', 0, 'object-10');
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('iron-golem-building', 0, 'pf_008', 'UNIT', 1));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  const golem = result.state.players[actorIndex]!.battlefield.filter(function (value): boolean {
+    return value.cardId === 'pf_008';
+  })[0]!;
+  TestHarness.equal(golem.attack, 6);
+  TestHarness.equal(golem.health, 8);
+  TestHarness.equal(golem.maxHealth, 8);
+  TestHarness.equal(golem.keywords.join(','), 'TAUNT');
+  TestHarness.equal(result.batch.events.length, 2);
+  TestHarness.equal(result.batch.events[0]!.type, 'CARD_DEPLOYED');
+  TestHarness.equal(result.batch.events[0]!.payload.attack, 5);
+  TestHarness.equal(result.batch.events[1]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(result.batch.events[1]!.payload.sourceCardId, 'pf_008');
+  TestHarness.equal(result.batch.events[1]!.payload.sourceInstanceId, golem.instanceId);
+  TestHarness.equal(result.batch.events[1]!.payload.effectId, 'effect.pf_008.01');
+  TestHarness.equal(result.batch.events[1]!.payload.reason, 'PERMANENT_STAT_MODIFIER');
+  TestHarness.equal(result.batch.events[1]!.payload.attack, 6);
+  TestHarness.equal(result.batch.events[1]!.payload.health, 8);
+  TestHarness.equal(result.batch.events[1]!.payload.maxHealth, 8);
+});
+
+TestHarness.test('Iron Golem treats a friendly structure as a building condition', function (): void {
+  const state = activeState('match-iron-golem-structure', ['alice', 'bob'], ['plains_forest', 'nether']);
+  const actorIndex = state.players[0]!.playerId === 'alice' ? 0 : 1;
+  const actor = state.players[actorIndex]!;
+  state.activePlayerIndex = actorIndex;
+  actor.hand = ['pf_008'];
+  actor.redstone = 6;
+  actor.redstoneCapacity = 6;
+  placeBuilding(state, actorIndex, 'db_007', 0, 'object-10');
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('iron-golem-structure', 0, 'pf_008', 'UNIT', 0));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  const golem = result.state.players[actorIndex]!.battlefield.filter(function (value): boolean {
+    return value.cardId === 'pf_008';
+  })[0]!;
+  TestHarness.equal(golem.attack, 6);
+  TestHarness.equal(golem.maxHealth, 8);
+  TestHarness.equal(result.batch.events[1]!.payload.effectId, 'effect.pf_008.01');
+});
+
+TestHarness.test('Iron Golem stays at base stats when only the opponent controls a building', function (): void {
+  const state = activeState('match-iron-golem-no-friendly-building', ['alice', 'bob'], ['plains_forest', 'nether']);
+  const actorIndex = state.players[0]!.playerId === 'alice' ? 0 : 1;
+  const opponentIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  state.activePlayerIndex = actorIndex;
+  actor.hand = ['pf_008'];
+  actor.redstone = 6;
+  actor.redstoneCapacity = 6;
+  placeBuilding(state, opponentIndex, 'pf_005', 0, 'object-10');
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('iron-golem-no-friendly-building', 0, 'pf_008', 'UNIT', 0));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  const golem = result.state.players[actorIndex]!.battlefield.filter(function (value): boolean {
+    return value.cardId === 'pf_008';
+  })[0]!;
+  TestHarness.equal(golem.attack, 5);
+  TestHarness.equal(golem.health, 7);
+  TestHarness.equal(golem.maxHealth, 7);
+  TestHarness.equal(result.batch.events.length, 1);
+  TestHarness.equal(result.batch.events[0]!.type, 'CARD_DEPLOYED');
+});

@@ -1349,6 +1349,52 @@ namespace BiomeRivals.Core.Tests
         }
 
         [Test]
+        public void Apply_ReplaysPermanentAttackAndHealthGrowth()
+        {
+            var golem = new BattlefieldObjectStateDto
+            {
+                instanceId = "object-2", cardId = "pf_008", cardType = "UNIT", attack = 5,
+                health = 7, maxHealth = 7, slotKind = "UNIT", slotIndex = 1, occupiedSlots = 1,
+                summonedTurn = 1, keywords = new[] { "TAUNT" }
+            };
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "iron-golem-replay", viewerPlayerId = "alice", protocolVersion = GameVersions.Protocol,
+                rulesetVersion = GameVersions.Ruleset, status = "ACTIVE", phase = "MAIN", turn = 1, activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto
+                    {
+                        playerId = "alice", life = 30, unitSlots = new[] { null, "object-2", null, null },
+                        buildingSlots = new[] { "object-1", null, null }, battlefield = new[] { golem }
+                    },
+                    new PlayerStateDto { playerId = "bob", life = 30 }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 1, type = MatchEventTypes.ObjectStatsChanged, payload = new MatchEventPayloadDto
+                    {
+                        playerId = "alice", instanceId = "object-2", sourceCardId = "pf_008", sourceInstanceId = "object-2",
+                        effectId = "effect.pf_008.01", reason = "PERMANENT_STAT_MODIFIER",
+                        attack = 6, health = 8, maxHealth = 8,
+                        temporaryAttackModifier = 0, temporaryAttackModifierExpiresOnTurn = 0
+                    }}
+                }
+            });
+
+            Assert.That(golem.attack, Is.EqualTo(6));
+            Assert.That(golem.health, Is.EqualTo(8));
+            Assert.That(golem.maxHealth, Is.EqualTo(8));
+            Assert.That(golem.keywords, Does.Contain("TAUNT"));
+        }
+
+        [Test]
         public void Apply_ReplaysPrismarineShardEffectChoiceMovementAndHealing()
         {
             var salmon = new BattlefieldObjectStateDto

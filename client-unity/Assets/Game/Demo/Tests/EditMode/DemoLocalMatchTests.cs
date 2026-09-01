@@ -1148,6 +1148,8 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(juvenileTexture, Is.EqualTo("entity_sheep"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("tk_004", out var companionTexture), Is.True);
                 Assert.That(companionTexture, Is.EqualTo("entity_wolf"));
+                Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("pf_008", out var golemTexture), Is.True);
+                Assert.That(golemTexture, Is.EqualTo("entity_iron_golem"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("or_001", out var salmonTexture), Is.True);
                 Assert.That(salmonTexture, Is.EqualTo("entity_salmon"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("or_002", out var dolphinTexture), Is.True);
@@ -2039,6 +2041,75 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(match.GetObject(false, DemoSlotKind.Unit, 3), Is.Null);
             Assert.That(match.Hand, Does.Contain("tk_005"));
             Assert.That(ended.Message, Does.Contain("腐肉"));
+        }
+
+        [Test]
+        public void IronGolemGainsPermanentStatsWhenAPlayerBuildingIsAlive()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("pf_005", out var nursery), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_008", out var golemDefinition), Is.True);
+            Assert.That(golemDefinition.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { nursery.id });
+            Assert.That(match.ApplyDeploy(nursery,
+                match.CreateDeployCommand(nursery.id, DemoSlotKind.Building, 0)).Accepted, Is.True);
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            match.ResetHand(new[] { golemDefinition.id });
+
+            var result = match.ApplyDeploy(golemDefinition,
+                match.CreateDeployCommand(golemDefinition.id, DemoSlotKind.Unit, 1));
+
+            Assert.That(result.Accepted, Is.True, result.Message);
+            var golem = match.GetObject(true, DemoSlotKind.Unit, 1);
+            Assert.That(golem.Attack, Is.EqualTo(6));
+            Assert.That(golem.Health, Is.EqualTo(8));
+            Assert.That(golem.MaxHealth, Is.EqualTo(8));
+            Assert.That(golem.Keywords, Does.Contain("TAUNT"));
+            Assert.That(result.Message, Does.Contain("建筑共鸣战吼触发"));
+        }
+
+        [Test]
+        public void IronGolemTreatsStructuresAsBuildingsAndDoesNotStackPerObject()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("db_007", out var temple), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_008", out var golemDefinition), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { temple.id });
+            Assert.That(match.ApplyDeploy(temple,
+                match.CreateDeployCommand(temple.id, DemoSlotKind.Building, 0)).Accepted, Is.True);
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            match.ResetHand(new[] { golemDefinition.id });
+
+            var result = match.ApplyDeploy(golemDefinition,
+                match.CreateDeployCommand(golemDefinition.id, DemoSlotKind.Unit, 0));
+
+            Assert.That(result.Accepted, Is.True, result.Message);
+            var golem = match.GetObject(true, DemoSlotKind.Unit, 0);
+            Assert.That(golem.Attack, Is.EqualTo(6));
+            Assert.That(golem.MaxHealth, Is.EqualTo(8));
+        }
+
+        [Test]
+        public void IronGolemStaysAtBaseStatsWithoutAFriendlyBuilding()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("pf_008", out var golemDefinition), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { golemDefinition.id });
+
+            var result = match.ApplyDeploy(golemDefinition,
+                match.CreateDeployCommand(golemDefinition.id, DemoSlotKind.Unit, 0));
+
+            Assert.That(result.Accepted, Is.True, result.Message);
+            var golem = match.GetObject(true, DemoSlotKind.Unit, 0);
+            Assert.That(golem.Attack, Is.EqualTo(5));
+            Assert.That(golem.Health, Is.EqualTo(7));
+            Assert.That(golem.MaxHealth, Is.EqualTo(7));
+            Assert.That(result.Message, Does.Contain("建筑共鸣战吼未触发"));
         }
 
         private static float ProjectedWidth(Camera camera, Transform surface, Vector3[] vertices)

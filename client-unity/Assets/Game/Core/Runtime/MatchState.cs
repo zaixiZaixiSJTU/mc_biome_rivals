@@ -372,7 +372,8 @@ namespace BiomeRivals.Core
                     var statsObject = FindObject(FindPlayer(payload.playerId), payload.instanceId);
                     statsObject.attack = payload.attack;
                     statsObject.health = payload.health;
-                    if (payload.reason == "AURA_RECALCULATED" || payload.reason == "PERMANENT_HEALTH_MODIFIER")
+                    if (payload.reason == "AURA_RECALCULATED" || payload.reason == "PERMANENT_HEALTH_MODIFIER" ||
+                        payload.reason == "PERMANENT_STAT_MODIFIER")
                     {
                         statsObject.maxHealth = payload.maxHealth;
                         if (payload.reason == "AURA_RECALCULATED")
