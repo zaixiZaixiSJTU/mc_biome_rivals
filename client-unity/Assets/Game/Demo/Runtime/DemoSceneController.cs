@@ -166,6 +166,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewBreedingSeason")) SetupBreedingSeasonPreview();
             else if (HasCommandLineFlag("-previewWoodlandRally")) SetupWoodlandRallyPreview();
             else if (HasCommandLineFlag("-previewIronGolem")) SetupIronGolemPreview();
+            else if (HasCommandLineFlag("-previewCactusFence")) SetupCactusFencePreview();
             else if (HasCommandLineFlag("-previewDungeonSkeleton")) SetupDungeonSkeletonPreview();
             else if (HasCommandLineFlag("-previewStray")) SetupStrayPreview();
             else if (HasCommandLineFlag("-previewEquipment")) SetupEquipmentPreview();
@@ -760,6 +761,16 @@ namespace BiomeRivals.Demo
                             ? "铁傀儡响应己方建筑，永久获得 +1 攻击、+1 当前与最大生命。"
                             : "敌方铁傀儡响应建筑，永久获得了 +1/+1。", false);
                         yield return ShowTurnBanner("建筑共鸣", golemFriendly ? Gold : Ember);
+                    }
+                    else if (matchEvent.payload?.effectId == "effect.db_004.01")
+                    {
+                        var cactusViewerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
+                        var hitFriendly = matchEvent.payload?.playerId == cactusViewerId;
+                        ShowStatus(hitFriendly
+                            ? "敌方仙人掌围栏在英雄受击后反伤，使己方攻击生物受到 1 点伤害。"
+                            : "仙人掌围栏反击了攻击己方英雄的敌方生物，造成 1 点伤害。", false);
+                        yield return PulseBattlefieldObject(matchEvent.payload?.sourceInstanceId);
+                        yield return ShowTurnBanner("尖刺反击", hitFriendly ? Danger : Gold);
                     }
                     else if (matchEvent.payload?.effectId == "effect.or_002.01")
                     {
@@ -1509,6 +1520,37 @@ namespace BiomeRivals.Demo
             if (golem != null) StartCoroutine(PulseBattlefieldObject(golem.InstanceId));
         }
 
+        private void SetupCactusFencePreview()
+        {
+            SelectFaction("plains_forest");
+            SelectOpponentFaction("desert_badlands");
+            if (!_registry.TryGetDefinition("pf_001", out var beeDefinition) ||
+                !_registry.TryGetDefinition("pf_002", out var sheepDefinition) ||
+                !_registry.TryGetDefinition("db_004", out var fenceDefinition)) return;
+            _match.ResetDeckAndHand(new[] { beeDefinition.id }, new[] { sheepDefinition.id });
+            _match.ResetOpponent(new[] { fenceDefinition });
+            var deployed = _match.ApplyDeploy(beeDefinition,
+                _match.CreateDeployCommand(beeDefinition.id, DemoSlotKind.Unit, 0));
+            _match.EndPlayerTurn();
+            _match.BeginNextPlayerTurn();
+            var enteredCombat = _match.ApplyEnterCombat(_match.CreateEnterCombatCommand());
+            var attacker = _match.GetObject(true, DemoSlotKind.Unit, 0);
+            var attacked = attacker == null
+                ? DemoCommandResult.Reject(DemoCommandRejectionCode.InvalidTarget, "攻击者不存在。", _match.Revision)
+                : _match.ApplyAttack(_match.CreateAttackCommand(attacker.InstanceId, "HERO"));
+            var fence = _match.GetObject(false, DemoSlotKind.Building, 0);
+            _selectedCardId = fenceDefinition.id;
+            _selectedAttackerInstanceId = null;
+            RefreshAll();
+            var triggered = fence != null && _match.HasTriggeredEffect(false, fence.InstanceId, "effect.db_004.01");
+            ShowStatus(deployed.Accepted && enteredCombat.Accepted && attacked.Accepted && attacker?.Health == 1 && triggered
+                ? "仙人掌围栏在英雄承受攻击后完成尖刺反击：蜜蜂受到 1 点伤害，围栏铭牌切换为本回合已触发。"
+                : !deployed.Accepted ? deployed.Message : !enteredCombat.Accepted ? enteredCombat.Message : attacked.Message,
+                !deployed.Accepted || !enteredCombat.Accepted || !attacked.Accepted || attacker?.Health != 1 || !triggered);
+            if (fence != null) StartCoroutine(PulseBattlefieldObject(fence.InstanceId));
+            if (attacker != null) StartCoroutine(PulseBattlefieldObject(attacker.InstanceId));
+        }
+
         private void SetupOceanMonumentPreview()
         {
             SelectFaction("ocean_river");
@@ -2020,6 +2062,9 @@ namespace BiomeRivals.Demo
             else if (view.Kind == DemoSlotKind.Building && battlefieldObject?.CardId == "or_007" &&
                 !match.HasTriggeredEffect(player, battlefieldObject.InstanceId, "effect.or_007.01"))
                 engineReadyKind = DemoEngineReadyKind.Coral;
+            else if (view.Kind == DemoSlotKind.Building && battlefieldObject?.CardId == "db_004" &&
+                !match.HasTriggeredEffect(player, battlefieldObject.InstanceId, "effect.db_004.01"))
+                engineReadyKind = DemoEngineReadyKind.Cactus;
             _battlefield.SetSlotEngineReady(player, view.Kind, view.Index, engineReadyKind);
             _battlefield.SetSlotEndPhaseThreat(player, view.Kind, view.Index,
                 IsOceanMonumentThreat(player, battlefieldObject));
@@ -3038,6 +3083,12 @@ namespace BiomeRivals.Demo
                 var ready = !MatchView.HasTriggeredEffect(!enemy, battlefieldObject.InstanceId, "effect.pf_005.01");
                 stats = $"苗圃培育：{(ready ? "待触发" : "本回合已触发")} · {stats}";
                 accent = ready ? Leaf : accent;
+            }
+            if (battlefieldObject?.CardId == "db_004")
+            {
+                var ready = !MatchView.HasTriggeredEffect(!enemy, battlefieldObject.InstanceId, "effect.db_004.01");
+                stats = $"尖刺反击：{(ready ? "待触发" : "本回合已触发")} · {stats}";
+                accent = ready ? Hex("#C7D65A") : accent;
             }
             if (battlefieldObject?.CardId == "pf_003")
             {

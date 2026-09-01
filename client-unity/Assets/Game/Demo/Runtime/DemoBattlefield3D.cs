@@ -11,7 +11,8 @@ namespace BiomeRivals.Demo
     {
         None,
         Nursery,
-        Coral
+        Coral,
+        Cactus
     }
 
     public sealed class DemoBattlefield3D : MonoBehaviour
@@ -271,7 +272,9 @@ namespace BiomeRivals.Demo
             var engineReady = marker.EngineReadyKind != DemoEngineReadyKind.None;
             var engineColor = marker.EngineReadyKind == DemoEngineReadyKind.Nursery
                 ? Color.Lerp(Hex("#41672D"), Hex("#A8D66D"), pulse)
-                : Color.Lerp(Hex("#8E3F72"), Hex("#F08FB4"), pulse);
+                : marker.EngineReadyKind == DemoEngineReadyKind.Cactus
+                    ? Color.Lerp(Hex("#8A6424"), Hex("#C7D65A"), pulse)
+                    : Color.Lerp(Hex("#8E3F72"), Hex("#F08FB4"), pulse);
             var highlightColor = rejectedPreview
                 ? Color.Lerp(Hex("#B41635"), Hex("#FF3157"), pulse)
                 : actionablePress || actionableHover
@@ -777,6 +780,7 @@ namespace BiomeRivals.Demo
                     battlefieldObject.SlotIndex,
                     battlefieldObject.OccupiedSlots);
                 if (cardId == "pf_005") BuildWoodlandNursery(root, footprintWidth);
+                else if (cardId == "db_004") BuildCactusFence(root, material, footprintWidth);
                 else if (cardId == "or_007") BuildCoralReef(root, material, footprintWidth);
                 else if (cardId == "or_008") BuildOceanMonument(root, material, footprintWidth);
                 else BuildBlockStructure(root, material, theme.Accent, footprintWidth);
@@ -873,6 +877,41 @@ namespace BiomeRivals.Demo
             CreateBlock(root, "CoralTop", new Vector3(0.08f, 1.00f, 0f), new Vector3(0.30f, 0.38f, 0.30f), coralMaterial);
             CreateBlock(root, "CoralArmL", new Vector3(-0.35f, 0.78f, 0f), new Vector3(0.58f, 0.24f, 0.30f), coralMaterial);
             CreateBlock(root, "CoralArmR", new Vector3(0.42f, 0.68f, 0.04f), new Vector3(0.62f, 0.22f, 0.28f), coralMaterial);
+        }
+
+        private void BuildCactusFence(Transform root, Material sandstoneMaterial, float footprintWidth)
+        {
+            const string sideKey = "cactus_fence_side";
+            if (!_materials.TryGetValue(sideKey, out var cactusSide))
+            {
+                cactusSide = DemoWorldAssetProvider.CreateBlockMaterial(
+                    "Demo_CactusFence_Side", Hex("#4F8A3A"), "cactus_side", Color.black, blockShader);
+                _materials[sideKey] = cactusSide;
+            }
+            const string topKey = "cactus_fence_top";
+            if (!_materials.TryGetValue(topKey, out var cactusTop))
+            {
+                cactusTop = DemoWorldAssetProvider.CreateBlockMaterial(
+                    "Demo_CactusFence_Top", Hex("#7AAE50"), "cactus_top", Color.black, blockShader);
+                _materials[topKey] = cactusTop;
+            }
+            var width = Mathf.Max(2.05f, footprintWidth);
+            CreateBlock(root, "CactusFenceFoundation", new Vector3(0f, 0.16f, 0f),
+                new Vector3(width, 0.28f, 0.92f), sandstoneMaterial);
+            var postXs = new[] { -width * 0.34f, 0f, width * 0.34f };
+            for (var index = 0; index < postXs.Length; index++)
+            {
+                var height = index == 1 ? 1.16f : 0.92f;
+                var y = 0.30f + height * 0.5f;
+                CreateBlock(root, "CactusPost_" + index, new Vector3(postXs[index], y, 0f),
+                    new Vector3(0.46f, height, 0.46f), cactusSide);
+                CreateBlock(root, "CactusCap_" + index, new Vector3(postXs[index], 0.31f + height, 0f),
+                    new Vector3(0.47f, 0.06f, 0.47f), cactusTop);
+            }
+            CreateBlock(root, "CactusRailFront", new Vector3(0f, 0.68f, -0.30f),
+                new Vector3(width * 0.78f, 0.20f, 0.20f), cactusSide);
+            CreateBlock(root, "CactusRailBack", new Vector3(0f, 0.68f, 0.30f),
+                new Vector3(width * 0.78f, 0.20f, 0.20f), cactusSide);
         }
 
         private void BuildOceanMonument(Transform root, Material prismarineBricks, float footprintWidth)

@@ -2734,3 +2734,122 @@ TestHarness.test('Iron Golem stays at base stats when only the opponent controls
   TestHarness.equal(result.batch.events.length, 1);
   TestHarness.equal(result.batch.events[0]!.type, 'CARD_DEPLOYED');
 });
+
+TestHarness.test('Cactus Fence damages the first enemy unit that attacks its hero each turn', function (): void {
+  const state = activeState('match-cactus-fence-reaction', ['alice', 'bob'], ['plains_forest', 'desert_badlands']);
+  const actorIndex = state.activePlayerIndex;
+  const defenderIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  const defender = state.players[defenderIndex]!;
+  state.turn = 2;
+  state.phase = 'COMBAT';
+  placeUnit(state, actorIndex, 'pf_001', 0, 'object-10', 1);
+  placeBuilding(state, defenderIndex, 'db_004', 0, 'object-20');
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    attackCommand('cactus-first-hero-attack', 0, 'object-10', 'HERO'));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[defenderIndex]!.life, 29);
+  TestHarness.equal(result.state.players[actorIndex]!.battlefield[0]!.health, 1);
+  TestHarness.equal(result.state.players[defenderIndex]!.triggeredEffectKeysThisTurn.join(','),
+    'object-20:effect.db_004.01');
+  TestHarness.equal(result.batch.events.length, 2);
+  TestHarness.equal(result.batch.events[0]!.type, 'ATTACK_RESOLVED');
+  TestHarness.equal(result.batch.events[1]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(result.batch.events[1]!.payload.sourceCardId, 'db_004');
+  TestHarness.equal(result.batch.events[1]!.payload.sourceInstanceId, 'object-20');
+  TestHarness.equal(result.batch.events[1]!.payload.effectId, 'effect.db_004.01');
+  TestHarness.equal(result.batch.events[1]!.payload.reason, 'DAMAGE');
+  TestHarness.equal(result.batch.events[1]!.payload.health, 1);
+});
+
+TestHarness.test('Cactus Fence triggers only once before turn-end markers reset', function (): void {
+  const state = activeState('match-cactus-fence-once', ['alice', 'bob'], ['plains_forest', 'desert_badlands']);
+  const actorIndex = state.activePlayerIndex;
+  const defenderIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  state.turn = 2;
+  state.phase = 'COMBAT';
+  placeUnit(state, actorIndex, 'pf_001', 0, 'object-10', 1);
+  placeUnit(state, actorIndex, 'pf_002', 1, 'object-11', 1);
+  placeBuilding(state, defenderIndex, 'db_004', 0, 'object-20');
+
+  const first = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    attackCommand('cactus-first', 0, 'object-10', 'HERO'));
+  TestHarness.equal(first.accepted, true, JSON.stringify(first));
+  if (!first.accepted) return;
+  const second = BiomeRivalsRules.applyCommand(first.state, actor.playerId,
+    attackCommand('cactus-second', 1, 'object-11', 'HERO'));
+  TestHarness.equal(second.accepted, true, JSON.stringify(second));
+  if (!second.accepted) return;
+  const sheep = second.state.players[actorIndex]!.battlefield.filter(function (value): boolean {
+    return value.instanceId === 'object-11';
+  })[0]!;
+  TestHarness.equal(sheep.health, 3);
+  TestHarness.equal(second.batch.events.length, 1);
+  TestHarness.equal(second.batch.events[0]!.type, 'ATTACK_RESOLVED');
+  const ended = BiomeRivalsRules.applyCommand(second.state, actor.playerId,
+    command('cactus-turn-end', 2, 'END_TURN'));
+  TestHarness.equal(ended.accepted, true, JSON.stringify(ended));
+  if (!ended.accepted) return;
+  TestHarness.equal(ended.state.players[defenderIndex]!.triggeredEffectKeysThisTurn.length, 0);
+});
+
+TestHarness.test('Cactus Fence ignores an enemy hero equipment attack', function (): void {
+  const state = activeState('match-cactus-fence-hero-equipment', ['alice', 'bob'], ['ocean_river', 'desert_badlands']);
+  const actorIndex = state.activePlayerIndex;
+  const defenderIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  const defender = state.players[defenderIndex]!;
+  state.turn = 2;
+  state.phase = 'COMBAT';
+  actor.equipment = {
+    instanceId: 'equipment-10', cardId: 'or_006', attack: 2, durability: 3, maxDurability: 3
+  };
+  placeBuilding(state, defenderIndex, 'db_004', 0, 'object-20');
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    attackCommand('cactus-ignore-hero-equipment', 0, 'HERO', 'HERO'));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[defenderIndex]!.life, 28);
+  TestHarness.equal(result.state.players[defenderIndex]!.triggeredEffectKeysThisTurn.length, 0);
+  TestHarness.equal(result.state.players[actorIndex]!.equipment!.durability, 2);
+  TestHarness.equal(result.batch.events.length, 2);
+  TestHarness.equal(result.batch.events[0]!.type, 'ATTACK_RESOLVED');
+  TestHarness.equal(result.batch.events[1]!.type, 'EQUIPMENT_DURABILITY_CHANGED');
+  TestHarness.equal(defender.battlefield[0]!.health, 5);
+});
+
+TestHarness.test('Cactus Fences stop after a lethal reaction and award the enemy drop', function (): void {
+  const state = activeState('match-cactus-fence-lethal', ['alice', 'bob'], ['desert_badlands', 'plains_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const defenderIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  const defender = state.players[defenderIndex]!;
+  state.turn = 2;
+  state.phase = 'COMBAT';
+  placeUnit(state, actorIndex, 'db_001', 0, 'object-10', 1);
+  placeBuilding(state, defenderIndex, 'db_004', 0, 'object-20');
+  placeBuilding(state, defenderIndex, 'db_004', 1, 'object-21');
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    attackCommand('cactus-lethal', 0, 'object-10', 'HERO'));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[actorIndex]!.battlefield.length, 0);
+  TestHarness.equal(result.state.players[defenderIndex]!.hand.indexOf('tk_005') >= 0, true);
+  TestHarness.equal(result.state.players[defenderIndex]!.triggeredEffectKeysThisTurn.join(','),
+    'object-20:effect.db_004.01');
+  TestHarness.equal(result.batch.events.length, 4);
+  TestHarness.equal(result.batch.events[0]!.type, 'ATTACK_RESOLVED');
+  TestHarness.equal(result.batch.events[1]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(result.batch.events[2]!.type, 'OBJECT_DIED');
+  TestHarness.equal(result.batch.events[3]!.type, 'CARD_GENERATED');
+  TestHarness.equal(result.batch.events[3]!.payload.cardId, 'tk_005');
+  TestHarness.equal(result.batch.events[3]!.payload.playerId, defender.playerId);
+});

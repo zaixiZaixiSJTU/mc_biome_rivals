@@ -1,6 +1,6 @@
 # 林间集结召唤 / 抽牌规范 v1
 
-本规范对应 `protocolVersion 23`、`rulesetVersion prototype-0.34` 与内容版本 26。
+本规范对应 `protocolVersion 24`、`rulesetVersion prototype-0.35` 与内容版本 27。
 
 ## PF-007 林间集结
 
@@ -15,7 +15,7 @@
 - 合法事件以 `CARD_PLAYED` 开始，两个集结步骤严格按索引 `0 → 1` 执行。
 - 召唤步骤产生 `OBJECT_SUMMONED`，随后才产生该单位引发的光环与持续效果事件；抽牌步骤产生既有 `CARD_DRAWN`、`CARD_BURNED` 或 `FATIGUE_DAMAGE`。
 - 召唤使用 `effect.pf_007.01`，`sourceInstanceId` 绑定本次施法的 `effect-<CARD_PLAYED eventId>`，不能依赖客户端生成对象 ID。
-- 本效果自身没有新增网络字段；当前组合协议为 `protocolVersion 23`，当前规则集为 `prototype-0.34`。
+- 本效果自身没有新增网络字段；当前组合协议为 `protocolVersion 24`，当前规则集为 `prototype-0.35`。
 
 ## Unity 表现
 

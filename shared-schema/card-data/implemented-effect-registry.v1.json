@@ -1,12 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "schemaVersion": 1,
-  "contentVersion": 26,
+  "contentVersion": 27,
   "implementedEffectIds": [
     "effect.cd_003.01",
     "effect.db_001.01",
     "effect.db_002.01",
     "effect.db_003.01",
+    "effect.db_004.01",
     "effect.db_005.01",
     "effect.db_006.01",
     "effect.ed_004.01",

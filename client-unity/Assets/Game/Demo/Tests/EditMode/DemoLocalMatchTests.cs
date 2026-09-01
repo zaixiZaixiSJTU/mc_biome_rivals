@@ -925,6 +925,10 @@ namespace BiomeRivals.Demo.Tests
                 battlefield.SetSlotEngineReady(true, DemoSlotKind.Building, 0, DemoEngineReadyKind.Coral);
                 var coralHighlight = buildingMarker.GetComponent<MeshRenderer>().sharedMaterial.GetColor("_HighlightColor");
                 Assert.That(nurseryHighlight, Is.Not.EqualTo(coralHighlight));
+                battlefield.SetSlotEngineReady(true, DemoSlotKind.Building, 0, DemoEngineReadyKind.Cactus);
+                var cactusHighlight = buildingMarker.GetComponent<MeshRenderer>().sharedMaterial.GetColor("_HighlightColor");
+                Assert.That(cactusHighlight, Is.Not.EqualTo(nurseryHighlight));
+                Assert.That(cactusHighlight, Is.Not.EqualTo(coralHighlight));
                 battlefield.SetSlotEngineReady(true, DemoSlotKind.Building, 0, DemoEngineReadyKind.None);
                 Assert.That(buildingMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.Zero);
                 battlefield.SetSlotEndPhaseThreat(false, DemoSlotKind.Unit, 0, true);
@@ -1189,6 +1193,21 @@ namespace BiomeRivals.Demo.Tests
                                                battlefield.GetSlotWorldPosition(true, DemoSlotKind.Building, 1)) * 0.5f;
                 Assert.That(structurePiece, Is.Not.Null);
                 Assert.That(structurePiece.localPosition.x, Is.EqualTo(expectedStructureCenter.x).Within(0.001f));
+
+                battlefield.SyncPieces(new[]
+                {
+                    new DemoBattlefieldObject
+                    {
+                        InstanceId = "object-render-4", CardId = "db_004", Player = true,
+                        SlotKind = DemoSlotKind.Building, SlotIndex = 0, OccupiedSlots = 1, Health = 5, MaxHealth = 5
+                    }
+                }, System.Array.Empty<DemoBattlefieldObject>(), registry);
+                var cactusPiece = piecesRoot.Find("Piece_object-render-4_db_004");
+                Assert.That(cactusPiece, Is.Not.Null);
+                Assert.That(cactusPiece.Find("CactusPost_0"), Is.Not.Null);
+                Assert.That(cactusPiece.Find("CactusPost_1"), Is.Not.Null);
+                Assert.That(cactusPiece.Find("CactusPost_2"), Is.Not.Null);
+                Assert.That(cactusPiece.Find("CactusFenceFoundation"), Is.Not.Null);
 
                 var buildingMarker1 = root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Building_1/InteractiveGround");
                 var buildingMarker2 = root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Building_2/InteractiveGround");
@@ -2110,6 +2129,92 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(golem.Health, Is.EqualTo(7));
             Assert.That(golem.MaxHealth, Is.EqualTo(7));
             Assert.That(result.Message, Does.Contain("建筑共鸣战吼未触发"));
+        }
+
+        [Test]
+        public void CactusFenceDamagesOnlyTheFirstUnitThatAttacksTheHeroEachTurn()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("pf_001", out var bee), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_002", out var sheep), Is.True);
+            Assert.That(registry.TryGetDefinition("db_004", out var fence), Is.True);
+            Assert.That(fence.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(new[] { bee.id, sheep.id }, new[] { "pf_003" });
+            match.ResetOpponent(new[] { fence });
+            Assert.That(match.ApplyDeploy(bee,
+                match.CreateDeployCommand(bee.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            Assert.That(match.ApplyDeploy(sheep,
+                match.CreateDeployCommand(sheep.id, DemoSlotKind.Unit, 1)).Accepted, Is.True);
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            Assert.That(match.ApplyEnterCombat(match.CreateEnterCombatCommand()).Accepted, Is.True);
+            var firstAttacker = match.GetObject(true, DemoSlotKind.Unit, 0);
+            var secondAttacker = match.GetObject(true, DemoSlotKind.Unit, 1);
+
+            var first = match.ApplyAttack(match.CreateAttackCommand(firstAttacker.InstanceId, "HERO"));
+            var second = match.ApplyAttack(match.CreateAttackCommand(secondAttacker.InstanceId, "HERO"));
+
+            Assert.That(first.Accepted, Is.True, first.Message);
+            Assert.That(firstAttacker.Health, Is.EqualTo(1));
+            Assert.That(first.Message, Does.Contain("仙人掌围栏反击 1 次"));
+            Assert.That(second.Accepted, Is.True, second.Message);
+            Assert.That(secondAttacker.Health, Is.EqualTo(3));
+            var source = match.GetObject(false, DemoSlotKind.Building, 0);
+            Assert.That(match.HasTriggeredEffect(false, source.InstanceId, "effect.db_004.01"), Is.True);
+            match.EndPlayerTurn();
+            Assert.That(match.HasTriggeredEffect(false, source.InstanceId, "effect.db_004.01"), Is.False);
+        }
+
+        [Test]
+        public void CactusFenceIgnoresHeroEquipmentAttacks()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("or_006", out var trident), Is.True);
+            Assert.That(registry.TryGetDefinition("db_004", out var fence), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { trident.id });
+            match.ResetOpponent(new[] { fence });
+            Assert.That(match.ApplyPlayCard(trident,
+                match.CreatePlayCardCommand(trident.id)).Accepted, Is.True);
+            Assert.That(match.ApplyEnterCombat(match.CreateEnterCombatCommand()).Accepted, Is.True);
+
+            var result = match.ApplyAttack(match.CreateAttackCommand(MatchAttackerIds.Hero, "HERO"));
+
+            Assert.That(result.Accepted, Is.True, result.Message);
+            Assert.That(match.OpponentLife, Is.EqualTo(28));
+            Assert.That(match.PlayerEquipment.Durability, Is.EqualTo(2));
+            var source = match.GetObject(false, DemoSlotKind.Building, 0);
+            Assert.That(source.Health, Is.EqualTo(5));
+            Assert.That(match.HasTriggeredEffect(false, source.InstanceId, "effect.db_004.01"), Is.False);
+            Assert.That(result.Message, Does.Not.Contain("仙人掌围栏反击"));
+        }
+
+        [Test]
+        public void CactusFencesStopAfterLethalDamageAndAwardTheDropToTheOpponent()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("db_001", out var husk), Is.True);
+            Assert.That(registry.TryGetDefinition("db_004", out var fence), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(new[] { husk.id }, new[] { "db_002" });
+            match.ResetOpponent(new[] { fence, fence });
+            Assert.That(match.ApplyDeploy(husk,
+                match.CreateDeployCommand(husk.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            Assert.That(match.ApplyEnterCombat(match.CreateEnterCombatCommand()).Accepted, Is.True);
+            var attacker = match.GetObject(true, DemoSlotKind.Unit, 0);
+            var firstFence = match.GetObject(false, DemoSlotKind.Building, 0);
+            var secondFence = match.GetObject(false, DemoSlotKind.Building, 1);
+
+            var result = match.ApplyAttack(match.CreateAttackCommand(attacker.InstanceId, "HERO"));
+
+            Assert.That(result.Accepted, Is.True, result.Message);
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 0), Is.Null);
+            Assert.That(match.HasTriggeredEffect(false, firstFence.InstanceId, "effect.db_004.01"), Is.True);
+            Assert.That(match.HasTriggeredEffect(false, secondFence.InstanceId, "effect.db_004.01"), Is.False);
+            Assert.That(result.Message, Does.Contain("对手获得一张腐肉"));
         }
 
         private static float ProjectedWidth(Camera camera, Transform surface, Vector3[] vertices)

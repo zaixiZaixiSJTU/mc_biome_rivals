@@ -767,10 +767,19 @@ namespace BiomeRivals.Demo
             if (command.payload.targetType == "HERO")
             {
                 OpponentLife = Math.Max(0, OpponentLife - attackValue);
+                var cactusDeathMessages = new List<string>();
+                var cactusTriggers = heroAttack ? 0 : TriggerCactusFenceReaction(attacker, out cactusDeathMessages);
                 if (heroAttack) ConsumeEquipmentDurability();
                 if (OpponentLife == 0) IsFinished = true;
                 AcceptCommand(command);
-                return DemoCommandResult.Accept(IsFinished ? "敌方英雄生命归零，你获得胜利！" : $"对敌方英雄造成 {attackValue} 点伤害。", Revision);
+                var heroAttackMessage = IsFinished
+                    ? "敌方英雄生命归零，你获得胜利！"
+                    : $"对敌方英雄造成 {attackValue} 点伤害。";
+                if (cactusTriggers > 0)
+                    heroAttackMessage += $" 仙人掌围栏反击 {cactusTriggers} 次，对攻击者造成 {cactusTriggers} 点伤害。";
+                if (cactusDeathMessages != null && cactusDeathMessages.Count > 0)
+                    heroAttackMessage += " " + string.Join(" ", cactusDeathMessages);
+                return DemoCommandResult.Accept(heroAttackMessage, Revision);
             }
 
             var expectedKind = command.payload.targetType == "UNIT" ? DemoSlotKind.Unit : DemoSlotKind.Building;
@@ -1297,6 +1306,30 @@ namespace BiomeRivals.Demo
             }
             if (movedUnit.Health == 0 && deathMessages != null)
                 deathMessages.AddRange(SettleDeaths(killCredits));
+            return triggered;
+        }
+
+        private int TriggerCactusFenceReaction(DemoBattlefieldObject attacker, out List<string> deathMessages)
+        {
+            deathMessages = new List<string>();
+            if (attacker == null || attacker.SlotKind != DemoSlotKind.Unit || attacker.Health <= 0) return 0;
+            var fences = _opponentBattlefield
+                .Where(value => value.SlotKind == DemoSlotKind.Building && value.CardId == "db_004" && value.Health > 0)
+                .OrderBy(value => value.SlotIndex)
+                .ThenBy(value => value.InstanceId, StringComparer.Ordinal)
+                .ToArray();
+            var killCredits = new Dictionary<string, bool>(StringComparer.Ordinal);
+            var triggered = 0;
+            foreach (var fence in fences)
+            {
+                if (attacker.Health <= 0) break;
+                var triggerKey = $"{fence.InstanceId}:effect.db_004.01";
+                if (!_triggeredEffectKeysThisTurn.Add(triggerKey)) continue;
+                attacker.Health = Math.Max(0, attacker.Health - 1);
+                triggered++;
+                if (attacker.Health == 0) killCredits[attacker.InstanceId] = false;
+            }
+            if (attacker.Health == 0) deathMessages.AddRange(SettleDeaths(killCredits));
             return triggered;
         }
 

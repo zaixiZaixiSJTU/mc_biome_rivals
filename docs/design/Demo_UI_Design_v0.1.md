@@ -123,3 +123,5 @@ DB-005 的动态费用直接复用卡面左上角费用槽，不增加独立 Web
 林间集结空间替代预览：[`assets/demo-woodland-rally-preview-v1.png`](assets/demo-woodland-rally-preview-v1.png)。己方单位排只剩一个空格时，第一步在真实地表召唤使用 Minecraft 狼模型的林地伙伴，第二步因场地已满改为抽牌；右侧仍展示效果来源卡，底部手牌展示实际抽到的牌，避免只用状态文字暗示结算结果。
 
 铁傀儡建筑共鸣预览：[`assets/demo-iron-golem-preview-v1.png`](assets/demo-iron-golem-preview-v1.png)。林地苗圃在真实建筑格提供可读的条件来源，铁傀儡以 Minecraft 实体纹理和体素比例落在单位格；战吼结算后场上铭牌显示 `6/8`，同时保留嘲讽标记，右侧详情和手牌继续复用统一卡牌预制体。
+
+仙人掌围栏尖刺反击预览：[`assets/demo-cactus-fence-preview-v1.png`](assets/demo-cactus-fence-preview-v1.png)。围栏使用 Minecraft 仙人掌侧面与顶部纹理构成三柱体素建筑，并在红砂岩基座上继承远端半场透视；英雄受击后，蜜蜂铭牌从 `1/2` 更新为 `1/1`，围栏铭牌由“待触发”切换为“本回合已触发”，底部状态按攻击与反伤顺序解释结果。

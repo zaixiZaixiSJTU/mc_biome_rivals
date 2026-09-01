@@ -1395,6 +1395,61 @@ namespace BiomeRivals.Core.Tests
         }
 
         [Test]
+        public void Apply_ReplaysCactusReactionAndPreservesNurseryTriggerMarkers()
+        {
+            var attacker = new BattlefieldObjectStateDto
+            {
+                instanceId = "object-2", cardId = "pf_001", cardType = "UNIT", attack = 1,
+                health = 2, maxHealth = 2, slotKind = "UNIT", slotIndex = 0, occupiedSlots = 1,
+                summonedTurn = 0
+            };
+            var fence = new BattlefieldObjectStateDto
+            {
+                instanceId = "object-1", cardId = "db_004", cardType = "BUILDING",
+                health = 5, maxHealth = 5, slotKind = "BUILDING", slotIndex = 0, occupiedSlots = 1,
+                summonedTurn = 1
+            };
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "cactus-replay", viewerPlayerId = "alice", protocolVersion = GameVersions.Protocol,
+                rulesetVersion = GameVersions.Ruleset, status = "ACTIVE", phase = "COMBAT", turn = 1, activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto
+                    {
+                        playerId = "alice", life = 30, unitSlots = new[] { "object-2", null, null, null },
+                        buildingSlots = new string[3], battlefield = new[] { attacker }
+                    },
+                    new PlayerStateDto
+                    {
+                        playerId = "bob", life = 29, unitSlots = new string[4],
+                        buildingSlots = new[] { "object-1", null, null }, battlefield = new[] { fence },
+                        triggeredEffectKeysThisTurn = new[] { "object-3:effect.pf_005.01" }
+                    }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 1, type = MatchEventTypes.ObjectStatsChanged, payload = new MatchEventPayloadDto
+                    {
+                        playerId = "alice", instanceId = "object-2", sourceCardId = "db_004", sourceInstanceId = "object-1",
+                        effectId = "effect.db_004.01", reason = "DAMAGE", attack = 1, health = 1,
+                        temporaryAttackModifier = 0, temporaryAttackModifierExpiresOnTurn = 0
+                    }}
+                }
+            });
+
+            Assert.That(attacker.health, Is.EqualTo(1));
+            Assert.That(store.Current.players[1].triggeredEffectKeysThisTurn,
+                Is.EqualTo(new[] { "object-3:effect.pf_005.01", "object-1:effect.db_004.01" }));
+        }
+
+        [Test]
         public void Apply_ReplaysPrismarineShardEffectChoiceMovementAndHealing()
         {
             var salmon = new BattlefieldObjectStateDto

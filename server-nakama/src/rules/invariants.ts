@@ -101,7 +101,7 @@ namespace BiomeRivalsRules {
       if (!Array.isArray(player.triggeredEffectKeysThisTurn) ||
           player.triggeredEffectKeysThisTurn.some(function (key): boolean {
             return typeof key !== 'string' ||
-              !/^object-[0-9]+:effect\.(?:pf_005|or_(?:002|004|007))\.01$/.test(key);
+              !/^object-[0-9]+:effect\.(?:db_004|pf_005|or_(?:002|004|007))\.01$/.test(key);
           }) || player.triggeredEffectKeysThisTurn.some(function (key, keyIndex): boolean {
             return player.triggeredEffectKeysThisTurn.indexOf(key) !== keyIndex;
           })) {

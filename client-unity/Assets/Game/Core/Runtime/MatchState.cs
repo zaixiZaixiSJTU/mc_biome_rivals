@@ -109,7 +109,7 @@ namespace BiomeRivals.Core
                     throw new InvalidOperationException("Snapshot contains an unsupported player faction.");
                 if (player.triggeredEffectKeysThisTurn == null) player.triggeredEffectKeysThisTurn = Array.Empty<string>();
                 if (player.triggeredEffectKeysThisTurn.Any(value => string.IsNullOrWhiteSpace(value) ||
-                    !System.Text.RegularExpressions.Regex.IsMatch(value, "^object-[0-9]+:effect\\.or_(002|004|007)\\.01$")) ||
+                    !System.Text.RegularExpressions.Regex.IsMatch(value, "^object-[0-9]+:effect\\.(db_004|pf_005|or_(002|004|007))\\.01$")) ||
                     player.triggeredEffectKeysThisTurn.Distinct(StringComparer.Ordinal).Count() != player.triggeredEffectKeysThisTurn.Length)
                     throw new InvalidOperationException("Snapshot contains invalid once-per-turn effect markers.");
                 else if (player.buriedCount < 0 || player.buriedCount > player.deckCount)
@@ -381,7 +381,8 @@ namespace BiomeRivals.Core
                     }
                     statsObject.temporaryAttackModifier = payload.temporaryAttackModifier;
                     statsObject.temporaryAttackModifierExpiresOnTurn = payload.temporaryAttackModifierExpiresOnTurn;
-                    if ((payload.effectId == "effect.or_002.01" || payload.effectId == "effect.or_004.01" ||
+                    if ((payload.effectId == "effect.db_004.01" || payload.effectId == "effect.pf_005.01" ||
+                        payload.effectId == "effect.or_002.01" || payload.effectId == "effect.or_004.01" ||
                         payload.effectId == "effect.or_007.01") &&
                         !string.IsNullOrEmpty(payload.sourceInstanceId))
                     {

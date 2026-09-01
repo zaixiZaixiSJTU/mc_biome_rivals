@@ -900,6 +900,49 @@ namespace BiomeRivalsRules {
       return true;
     }
 
+    function triggerCactusFenceReaction(
+      defender: PlayerState,
+      attackerPlayer: PlayerState,
+      attacker: BattlefieldObjectState
+    ): number {
+      if (attacker.cardType !== 'UNIT' || attacker.health <= 0) return 0;
+      const fences = defender.battlefield.filter(function (object): boolean {
+        if (object.cardType !== 'BUILDING' || object.health <= 0) return false;
+        const definition = getCardDefinition(object.cardId);
+        return definition !== null && definition.effectImplementationStatus === 'IMPLEMENTED' &&
+          definition.effectIds.indexOf('effect.db_004.01') >= 0;
+      }).slice().sort(function (left, right): number {
+        if (left.slotIndex !== right.slotIndex) return left.slotIndex - right.slotIndex;
+        return left.instanceId < right.instanceId ? -1 : left.instanceId > right.instanceId ? 1 : 0;
+      });
+      const killCredits: { [instanceId: string]: string } = {};
+      let triggered = 0;
+      for (let fenceIndex = 0; fenceIndex < fences.length; fenceIndex += 1) {
+        if (attacker.health <= 0) break;
+        const fence = fences[fenceIndex]!;
+        const triggerKey = fence.instanceId + ':effect.db_004.01';
+        if (defender.triggeredEffectKeysThisTurn.indexOf(triggerKey) >= 0) continue;
+        defender.triggeredEffectKeysThisTurn.push(triggerKey);
+        attacker.health = Math.max(0, attacker.health - 1);
+        triggered += 1;
+        if (attacker.health === 0) killCredits[attacker.instanceId] = defender.playerId;
+        emit('OBJECT_STATS_CHANGED', {
+          playerId: attackerPlayer.playerId,
+          instanceId: attacker.instanceId,
+          sourceCardId: fence.cardId,
+          sourceInstanceId: fence.instanceId,
+          effectId: 'effect.db_004.01',
+          reason: 'DAMAGE',
+          attack: attacker.attack,
+          health: attacker.health,
+          temporaryAttackModifier: attacker.temporaryAttackModifier,
+          temporaryAttackModifierExpiresOnTurn: attacker.temporaryAttackModifierExpiresOnTurn
+        });
+      }
+      if (attacker.health === 0) settleDeaths(attackerPlayer, defender, killCredits);
+      return triggered;
+    }
+
     function resolveOceanMonumentEndPhase(player: PlayerState, opponent: PlayerState): number {
       const monuments = player.battlefield.filter(function (object): boolean {
         if (object.cardType !== 'STRUCTURE' || object.health <= 0) return false;
@@ -1870,6 +1913,7 @@ namespace BiomeRivalsRules {
           targetHealth: defenderPlayer.life,
           targetArmor: defenderPlayer.armor
         });
+        if (!heroAttack) triggerCactusFenceReaction(defenderPlayer, attackerPlayer, attacker!);
       } else {
         const target = typeof targetInstanceId === 'string' ? findObject(defenderPlayer, targetInstanceId) : null;
         const expectedSlotKind = targetType === 'UNIT' ? 'UNIT' : 'BUILDING';
