@@ -1303,6 +1303,8 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(companionTexture, Is.EqualTo("entity_wolf"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("pf_008", out var golemTexture), Is.True);
                 Assert.That(golemTexture, Is.EqualTo("entity_iron_golem"));
+                Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("si_002", out var snowGolemTexture), Is.True);
+                Assert.That(snowGolemTexture, Is.EqualTo("entity_snow_golem"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("or_001", out var salmonTexture), Is.True);
                 Assert.That(salmonTexture, Is.EqualTo("entity_salmon"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("or_002", out var dolphinTexture), Is.True);
@@ -2194,6 +2196,31 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(match.Hand.Count, Is.EqualTo(7));
             Assert.That(match.Hand.Count(cardId => cardId == "tk_002"), Is.EqualTo(1));
             Assert.That(match.DiscardCount, Is.Zero);
+        }
+
+        [Test]
+        public void SnowGolemBattlecryGeneratesPlayableSnowballLocally()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("si_002", out var snowGolem), Is.True);
+            Assert.That(registry.TryGetDefinition("si_001", out var snowball), Is.True);
+            Assert.That(snowGolem.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { snowGolem.id });
+
+            var deployed = match.ApplyDeploy(snowGolem,
+                match.CreateDeployCommand(snowGolem.id, DemoSlotKind.Unit, 2));
+            Assert.That(deployed.Accepted, Is.True);
+            Assert.That(deployed.Message, Does.Contain("雪球置入手牌"));
+            Assert.That(match.Hand, Is.EqualTo(new[] { snowball.id }));
+
+            match.ResetOpponent(new[] { snowGolem }, new[] { 0 });
+            var target = match.GetObject(false, DemoSlotKind.Unit, 0);
+            var played = match.ApplyPlayCard(snowball,
+                match.CreatePlayCardCommand(snowball.id, "UNIT", target.InstanceId));
+            Assert.That(played.Accepted, Is.True);
+            Assert.That(target.Attack, Is.Zero);
+            Assert.That(match.Hand, Is.Empty);
         }
 
         [Test]

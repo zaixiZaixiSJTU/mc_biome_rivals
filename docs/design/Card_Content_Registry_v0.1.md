@@ -21,9 +21,9 @@
 
 - 56 张可收集牌。
 - 18 张不可收集衍生物。
-- 69 张有规则文本的牌预留 `effect.<cardId>.01`；其中 38 张为 `IMPLEMENTED`，其余 31 张为 `PENDING`。
+- 69 张有规则文本的牌预留 `effect.<cardId>.01`；其中 39 张为 `IMPLEMENTED`，其余 30 张为 `PENDING`。
 - 5 张无规则文本衍生物状态为 `NONE`。
-- 卡牌定义 Schema v4 / 内容版本 v28 注册通用 `keywords`、二元支付配方、DB-003 考古选择、DB-005 本回合出土降费、DB-007 双格神殿与掩埋链，以及 `manualPlayAllowed` 主动打出权限。当前注册 4 张 `TAUNT`，并预留 `CHARGE`。首个完整材料循环为 `DB-002 → TK-006 → DB-007`。
+- 卡牌定义 Schema v4 / 内容版本 v29 注册通用 `keywords`、二元支付配方、DB-003 考古选择、DB-005 本回合出土降费、DB-007 双格神殿与掩埋链、SI-002 雪球生成战吼，以及 `manualPlayAllowed` 主动打出权限。当前注册 4 张 `TAUNT`，并预留 `CHARGE`。雪原教学链路可完成 `SI-002 → SI-001 → 敌方单位临时减攻`。
 
 ## 效果实现约束
 

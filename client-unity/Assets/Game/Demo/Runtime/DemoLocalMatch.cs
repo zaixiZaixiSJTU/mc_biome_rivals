@@ -299,6 +299,14 @@ namespace BiomeRivals.Demo
                 deployMessage += "；神殿战吼将藏宝图与炸药机关埋入牌库。";
             }
             else if (definition.effectImplementationStatus == "IMPLEMENTED" &&
+                definition.effectIds != null && definition.effectIds.Contains("effect.si_002.01"))
+            {
+                var snowballToHand = GenerateCard("si_001");
+                deployMessage += snowballToHand
+                    ? "；雪傀儡战吼将雪球置入手牌。"
+                    : "；手牌已满，雪球进入弃牌堆。";
+            }
+            else if (definition.effectImplementationStatus == "IMPLEMENTED" &&
                 definition.effectIds != null && definition.effectIds.Contains("effect.si_003.01"))
             {
                 ApplySlow(battlecryTarget, definition.id, deployedObject.InstanceId, "effect.si_003.01", 0);
@@ -946,10 +954,15 @@ namespace BiomeRivals.Demo
             return IsFinished;
         }
 
-        private void GenerateCard(string cardId)
+        private bool GenerateCard(string cardId)
         {
-            if (_hand.Count >= 7) _discardPile.Add(cardId);
-            else _hand.Add(cardId);
+            if (_hand.Count >= 7)
+            {
+                _discardPile.Add(cardId);
+                return false;
+            }
+            _hand.Add(cardId);
+            return true;
         }
 
         private int HealDesertTemples()

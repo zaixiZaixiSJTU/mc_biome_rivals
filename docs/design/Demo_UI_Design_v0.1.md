@@ -110,6 +110,8 @@ DB-005 的动态费用直接复用卡面左上角费用槽，不增加独立 Web
 
 有目标卡牌预览：[`assets/demo-targeted-card-preview-v1.png`](assets/demo-targeted-card-preview-v1.png)。`雪球`先进入目标选择态，只点亮合法敌方单位所在的真实 3D 地表；命令携带稳定对象实例 ID，服务端在扣费和弃牌前完成存活、阵营与类型校验。
 
+雪傀儡资源链预览：[`assets/demo-snow-golem-preview-v1.png`](assets/demo-snow-golem-preview-v1.png)。雪傀儡部署后使用 Minecraft `entity/snow_golem.png` 的三段体素模型留在冰原地表，战吼生成的雪球立即进入统一手牌与右侧详情组件；底部提示把下一步“释放卡牌 → 点击敌方发光地表”连成明确的可操作教学。
+
 珊瑚礁成长预览：[`assets/demo-coral-reef-preview-v1.png`](assets/demo-coral-reef-preview-v1.png)。建筑使用本机 Minecraft `tube_coral_block` 纹理构成体素珊瑚簇；待触发时建筑格地表以低强度粉紫色脉冲提示持续效果，单位铭牌显示结算后的永久生命，右侧卡牌与手牌继续复用同一材质化卡面。
 
 海底神殿结束阶段预览：[`assets/demo-ocean-monument-preview-v1.png`](assets/demo-ocean-monument-preview-v1.png)。神殿是一个横跨三个建筑格的连续体素对象；相邻单位保持普通地表，孤立单位同时获得橙红地表材质脉冲与“神殿锁定”铭牌，所有标记都随 3D 地块接受同一相机透视。

@@ -172,6 +172,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewDesertTemple")) SetupDesertTemplePreview();
             else if (HasCommandLineFlag("-previewDungeonSkeleton")) SetupDungeonSkeletonPreview();
             else if (HasCommandLineFlag("-previewStray")) SetupStrayPreview();
+            else if (HasCommandLineFlag("-previewSnowGolem")) SetupSnowGolemPreview();
             else if (HasCommandLineFlag("-previewEquipment")) SetupEquipmentPreview();
             else if (HasCommandLineFlag("-previewPrismarineShard")) SetupPrismarineShardPreview();
             else if (HasCommandLineFlag("-previewTurtleAura")) SetupTurtleAuraPreview();
@@ -696,8 +697,9 @@ namespace BiomeRivals.Demo
                         matchEvent.payload?.effectId == "effect.si_003.01" ||
                         matchEvent.payload?.effectId == "effect.or_004.01";
                     var isFarmerBattlecry = matchEvent.payload?.effectId == "effect.pf_004.01";
+                    var isSnowGolemBattlecry = matchEvent.payload?.effectId == "effect.si_002.01";
                     var triggerName = isLoot ? "掉落" : matchEvent.payload?.effectId == "effect.ed_004.01" ? "亡语" :
-                        isFarmerBattlecry ? "战吼" : "效果";
+                        isFarmerBattlecry || isSnowGolemBattlecry ? "战吼" : "效果";
                     if (generatedToHand)
                     {
                         ShowStatus(ownGeneration
@@ -712,6 +714,7 @@ namespace BiomeRivals.Demo
                     }
                     if (isLoot) yield return ShowTurnBanner("战利品", Gold);
                     else if (isFarmerBattlecry) yield return ShowTurnBanner("收获小麦", Gold);
+                    else if (isSnowGolemBattlecry) yield return ShowTurnBanner("凝聚雪球", Cyan);
                     if (ownGeneration) yield return PulsePlayerHud(generatedToHand ? Gold : Ember);
                     else yield return null;
                     break;
@@ -1225,6 +1228,25 @@ namespace BiomeRivals.Demo
             RefreshAll();
             ShowStatus(result.Message, !result.Accepted);
             if (result.Accepted) StartCoroutine(PulseBattlefieldObject(target.InstanceId));
+        }
+
+        private void SetupSnowGolemPreview()
+        {
+            SelectFaction("snow_ice");
+            SelectOpponentFaction("nether");
+            if (!_registry.TryGetDefinition("si_002", out var snowGolemDefinition) ||
+                !_registry.TryGetDefinition("nt_003", out var blazeDefinition)) return;
+            _match.ResetHand(new[] { snowGolemDefinition.id });
+            _match.ResetOpponent(new[] { blazeDefinition });
+            var result = _match.ApplyDeploy(snowGolemDefinition,
+                _match.CreateDeployCommand(snowGolemDefinition.id, DemoSlotKind.Unit, 1));
+            RefreshAll();
+            if (result.Accepted && _match.Hand.Contains("si_001")) SelectCard("si_001");
+            ShowStatus(result.Accepted
+                ? "雪傀儡战吼已凝聚雪球；选择右侧“释放卡牌”，再点击敌方单位所在的发光地表。"
+                : result.Message, !result.Accepted);
+            var snowGolem = _match.GetObject(true, DemoSlotKind.Unit, 1);
+            if (result.Accepted && snowGolem != null) StartCoroutine(PulseBattlefieldObject(snowGolem.InstanceId));
         }
 
         private void SetupStrayPreview()

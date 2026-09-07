@@ -416,6 +416,39 @@ TestHarness.test('Villager Farmer replaces itself with Wheat at the seven-card h
   TestHarness.equal(result.batch.events[1]!.payload.destination, 'HAND');
 });
 
+TestHarness.test('Snow Golem generates a private Snowball after deployment', function (): void {
+  const state = activeState('match-snow-golem', ['alice', 'bob'], ['snow_ice', 'nether']);
+  const actorIndex = state.players[0]!.playerId === 'alice' ? 0 : 1;
+  const opponentIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  state.activePlayerIndex = actorIndex;
+  actor.hand = ['si_002'];
+  actor.redstone = 2;
+  actor.redstoneCapacity = 2;
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('snow-golem-snowball', 0, 'si_002', 'UNIT', 2));
+  TestHarness.ok(result.accepted);
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[actorIndex]!.hand.join(','), 'si_001');
+  TestHarness.equal(result.state.players[actorIndex]!.redstone, 0);
+  TestHarness.equal(result.batch.events.length, 2);
+  TestHarness.equal(result.batch.events[0]!.type, 'CARD_DEPLOYED');
+  TestHarness.equal(result.batch.events[1]!.type, 'CARD_GENERATED');
+  TestHarness.equal(result.batch.events[1]!.payload.sourceCardId, 'si_002');
+  TestHarness.equal(result.batch.events[1]!.payload.sourceInstanceId, result.batch.events[0]!.payload.instanceId);
+  TestHarness.equal(result.batch.events[1]!.payload.effectId, 'effect.si_002.01');
+  TestHarness.equal(result.batch.events[1]!.payload.cardId, 'si_001');
+  TestHarness.equal(result.batch.events[1]!.payload.destination, 'HAND');
+  assertEventBatchMatchesSchema(result.batch);
+  const ownerEvents = BiomeRivalsRules.createClientEventBatch(result.batch, actor.playerId);
+  const opponentEvents = BiomeRivalsRules.createClientEventBatch(
+    result.batch, result.state.players[opponentIndex]!.playerId);
+  TestHarness.equal(ownerEvents.events[1]!.payload.cardId, 'si_001');
+  TestHarness.equal(opponentEvents.events[1]!.payload.cardId, null);
+  assertEventBatchMatchesSchema(opponentEvents);
+});
+
 TestHarness.test('offers the archaeologists top-three choice privately after deployment', function (): void {
   const state = activeState('match-1', ['alice', 'bob'], ['desert_badlands', 'nether']);
   state.players[0]!.hand = ['db_003'];

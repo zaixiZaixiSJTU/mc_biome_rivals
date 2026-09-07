@@ -14,6 +14,7 @@ namespace BiomeRivals.Demo
             { "pf_003", "entity_wolf" },
             { "pf_004", "entity_villager" },
             { "pf_008", "entity_iron_golem" },
+            { "si_002", "entity_snow_golem" },
             { "nt_001", "entity_magma_cube" },
             { "tk_014", "entity_magma_cube" },
             { "nt_003", "entity_blaze" },
@@ -47,6 +48,7 @@ namespace BiomeRivals.Demo
                 case "pf_003": BuildWolf(root, material); break;
                 case "pf_004": BuildVillager(root, material); break;
                 case "pf_008": BuildIronGolem(root, material); break;
+                case "si_002": BuildSnowGolem(root, material); break;
                 case "nt_001": BuildMagmaCube(root, material); break;
                 case "tk_014":
                     root.localScale = Vector3.one * 0.62f;
@@ -117,6 +119,16 @@ namespace BiomeRivals.Demo
             Cuboid(root, "RightArm", new Vector3(0.74f, 0.96f, 0f), new Vector3(0.34f, 1.58f, 0.40f), material, 60, 21, 4, 30, 6, 128, 128);
             Cuboid(root, "LeftLeg", new Vector3(-0.30f, 0.28f, 0f), new Vector3(0.42f, 0.88f, 0.48f), material, 60, 0, 6, 16, 5, 128, 128);
             Cuboid(root, "RightLeg", new Vector3(0.30f, 0.28f, 0f), new Vector3(0.42f, 0.88f, 0.48f), material, 37, 0, 6, 16, 5, 128, 128);
+        }
+
+        private static void BuildSnowGolem(Transform root, Material material)
+        {
+            root.localScale = Vector3.one * 0.92f;
+            Cuboid(root, "LowerSnowball", new Vector3(0f, 0.58f, 0f), new Vector3(1.05f, 1.05f, 1.05f), material, 0, 36, 12, 12, 12, 64, 64);
+            Cuboid(root, "UpperSnowball", new Vector3(0f, 1.38f, 0f), new Vector3(0.82f, 0.82f, 0.82f), material, 0, 16, 10, 10, 10, 64, 64);
+            Cuboid(root, "Head", new Vector3(0f, 2.02f, 0f), new Vector3(0.70f, 0.70f, 0.70f), material, 0, 0, 8, 8, 8, 64, 64);
+            Cuboid(root, "LeftArm", new Vector3(-0.72f, 1.40f, 0f), new Vector3(0.76f, 0.11f, 0.11f), material, 32, 0, 12, 2, 2, 64, 64, Quaternion.Euler(0f, 0f, 18f));
+            Cuboid(root, "RightArm", new Vector3(0.72f, 1.40f, 0f), new Vector3(0.76f, 0.11f, 0.11f), material, 32, 0, 12, 2, 2, 64, 64, Quaternion.Euler(0f, 0f, -18f));
         }
 
         private static void BuildMagmaCube(Transform root, Material material)

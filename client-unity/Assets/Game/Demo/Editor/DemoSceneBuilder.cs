@@ -29,10 +29,23 @@ namespace BiomeRivals.Demo.Editor
             DemoUiPrefabBuilder.Rebuild();
             Directory.CreateDirectory("Assets/Game/Demo/Scenes");
 
-            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
-            scene.name = "Demo";
-            var root = new GameObject("[Demo] Biome Rivals Local Match");
-            var battlefield = root.AddComponent<DemoBattlefield3D>();
+            var sceneAlreadyExists = File.Exists(ScenePath);
+            var scene = sceneAlreadyExists
+                ? EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single)
+                : EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            if (!sceneAlreadyExists) scene.name = "Demo";
+            GameObject root = null;
+            foreach (var candidate in scene.GetRootGameObjects())
+            {
+                if (candidate.name == "[Demo] Biome Rivals Local Match")
+                {
+                    root = candidate;
+                    break;
+                }
+            }
+            if (root == null) root = new GameObject("[Demo] Biome Rivals Local Match");
+            var battlefield = root.GetComponent<DemoBattlefield3D>();
+            if (battlefield == null) battlefield = root.AddComponent<DemoBattlefield3D>();
             var blockShader = Shader.Find("Standard") ?? Shader.Find("Universal Render Pipeline/Lit");
             if (blockShader == null) throw new MissingReferenceException("A tracked block shader is required by the 2.5D demo.");
             var backdropShader = Shader.Find("BiomeRivals/Demo/CompositeBackdrop");
@@ -42,7 +55,7 @@ namespace BiomeRivals.Demo.Editor
             var backdrop = AssetDatabase.LoadAssetAtPath<Texture2D>(BackgroundPath);
             if (backdrop == null) throw new FileNotFoundException("The illustrated battlefield backdrop is missing.", BackgroundPath);
             battlefield.Configure(blockShader, backdropShader, groundSurfaceShader, backdrop);
-            root.AddComponent<DemoSceneController>();
+            if (root.GetComponent<DemoSceneController>() == null) root.AddComponent<DemoSceneController>();
 
             if (!EditorSceneManager.SaveScene(scene, ScenePath))
                 throw new IOException("Failed to save demo scene: " + ScenePath);

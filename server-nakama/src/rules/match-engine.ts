@@ -640,6 +640,9 @@ namespace BiomeRivalsRules {
         buryCard(player, 'tk_007', cardId, definition.effectIds[0]);
         buryCard(player, 'tk_008', cardId, definition.effectIds[0]);
       } else if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
+          definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.si_002.01') {
+        generateCard(player, 'si_001', cardId, battlefieldObject.instanceId, definition.effectIds[0]);
+      } else if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
           definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.si_003.01') {
         if (battlecryTargetPlayer === null || battlecryTarget === null) throw new Error('validated stray target was not resolved');
         applySlow(
