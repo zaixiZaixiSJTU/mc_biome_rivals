@@ -48,6 +48,7 @@ namespace BiomeRivals.Demo
         private CanvasGroup _handCanvasGroup;
         private RectTransform _inspectorRoot;
         private CardDetailsView _cardDetailsView;
+        private RectTransform _opponentHud;
         private RectTransform _playerHud;
         private Text _energyText;
         private Text _handLabel;
@@ -60,6 +61,7 @@ namespace BiomeRivals.Demo
         private Text _opponentAvatarGlyph;
         private Text _opponentNameText;
         private Text _opponentFactionLabel;
+        private CanvasGroup _opponentEffectFlash;
         private Text _playerHealthText;
         private Image _playerAvatarImage;
         private Text _playerAvatarGlyph;
@@ -105,7 +107,7 @@ namespace BiomeRivals.Demo
         private DemoHudMaterialFactory _hudMaterialFactory;
 
         private bool IsOnlineBoard => _onlineSession?.HasAuthoritativeState == true;
-        private bool IsFactionSelectionLocked => MatchView.PendingChoice != null || (_onlineGateway != null &&
+        private bool IsFactionSelectionLocked => MatchView.IsFinished || MatchView.PendingChoice != null || (_onlineGateway != null &&
             _onlineGateway.CurrentStatus.Phase != MatchConnectionPhase.Offline &&
             _onlineGateway.CurrentStatus.Phase != MatchConnectionPhase.Failed);
         private IDemoMatchView MatchView => IsOnlineBoard ? _onlineSession.View : _match;
@@ -167,6 +169,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewWoodlandRally")) SetupWoodlandRallyPreview();
             else if (HasCommandLineFlag("-previewIronGolem")) SetupIronGolemPreview();
             else if (HasCommandLineFlag("-previewCactusFence")) SetupCactusFencePreview();
+            else if (HasCommandLineFlag("-previewDesertTemple")) SetupDesertTemplePreview();
             else if (HasCommandLineFlag("-previewDungeonSkeleton")) SetupDungeonSkeletonPreview();
             else if (HasCommandLineFlag("-previewStray")) SetupStrayPreview();
             else if (HasCommandLineFlag("-previewEquipment")) SetupEquipmentPreview();
@@ -270,14 +273,19 @@ namespace BiomeRivals.Demo
             var titlePlate = CreateBasePanel(_canvasRoot, "TitlePlate", new Vector2(0, 502), new Vector2(510, 58));
             _titleText = CreateText(titlePlate, "Title", Vector2.zero, new Vector2(480, 44), "群系竞逐  ·  本地战场演示", 24, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
 
-            var opponentHud = CreateBasePanel(_canvasRoot, "OpponentHUD", new Vector2(-760, 455), new Vector2(315, 104));
-            _opponentAvatarImage = CreatePanel(opponentHud, "Avatar", new Vector2(-112, 0), new Vector2(70, 70), Hex("#5B2020"));
-            _opponentAvatarGlyph = CreateText(opponentHud, "AvatarGlyph", new Vector2(-112, 1), new Vector2(60, 60), "▣", 36, Ember, TextAnchor.MiddleCenter, FontStyle.Bold);
-            _opponentNameText = CreateText(opponentHud, "Name", new Vector2(34, 22), new Vector2(190, 32), "熔岩统御者", 20, Pale, TextAnchor.MiddleLeft, FontStyle.Bold);
-            _opponentHealthText = CreateText(opponentHud, "Health", new Vector2(34, -19), new Vector2(190, 30), "❤ 30", 17, Hex("#F4C18A"), TextAnchor.MiddleLeft, FontStyle.Bold);
-            var opponentHeroTarget = opponentHud.gameObject.AddComponent<Button>();
+            _opponentHud = CreateBasePanel(_canvasRoot, "OpponentHUD", new Vector2(-760, 455), new Vector2(315, 104));
+            _opponentAvatarImage = CreatePanel(_opponentHud, "Avatar", new Vector2(-112, 0), new Vector2(70, 70), Hex("#5B2020"));
+            _opponentAvatarGlyph = CreateText(_opponentHud, "AvatarGlyph", new Vector2(-112, 1), new Vector2(60, 60), "▣", 36, Ember, TextAnchor.MiddleCenter, FontStyle.Bold);
+            _opponentNameText = CreateText(_opponentHud, "Name", new Vector2(34, 22), new Vector2(190, 32), "熔岩统御者", 20, Pale, TextAnchor.MiddleLeft, FontStyle.Bold);
+            _opponentHealthText = CreateText(_opponentHud, "Health", new Vector2(34, -19), new Vector2(190, 30), "❤ 30", 17, Hex("#F4C18A"), TextAnchor.MiddleLeft, FontStyle.Bold);
+            var opponentFlash = CreatePanel(_opponentHud, "EffectFlash", Vector2.zero, new Vector2(303, 92), Color.white);
+            opponentFlash.raycastTarget = false;
+            _opponentEffectFlash = opponentFlash.gameObject.AddComponent<CanvasGroup>();
+            _opponentEffectFlash.alpha = 0f;
+            _opponentEffectFlash.blocksRaycasts = false;
+            var opponentHeroTarget = _opponentHud.gameObject.AddComponent<Button>();
             _opponentHeroTargetButton = opponentHeroTarget;
-            opponentHeroTarget.targetGraphic = opponentHud.GetComponent<Image>();
+            opponentHeroTarget.targetGraphic = _opponentHud.GetComponent<Image>();
             opponentHeroTarget.transition = Selectable.Transition.ColorTint;
             opponentHeroTarget.colors = new ColorBlock
             {
@@ -622,7 +630,7 @@ namespace BiomeRivals.Demo
                     var ownBurial = matchEvent.payload?.playerId == burialViewerId;
                     ShowStatus(ownBurial
                         ? $"已将 {GetCardName(matchEvent.payload.cardId)} 埋入牌库；当前有 {matchEvent.payload.buriedCount} 张掩埋牌。"
-                        : $"对手埋入了 {GetCardName(matchEvent.payload.cardId)}。", false);
+                        : "对手将一张未知卡牌埋入了隐藏牌库。", false);
                     yield return ShowTurnBanner("掩埋", Ember);
                     break;
                 }
@@ -660,10 +668,16 @@ namespace BiomeRivals.Demo
                     var excavationViewerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
                     var ownExcavation = matchEvent.payload?.playerId == excavationViewerId;
                     var destination = matchEvent.payload?.destination == "HAND" ? "进入手牌" : "因满手进入弃牌堆";
+                    var excavationName = GetCardName(matchEvent.payload.cardId);
+                    var excavationDetail = matchEvent.payload?.effectId == "effect.tk_007.01"
+                        ? "藏宝图将生成一张绿宝石。"
+                        : matchEvent.payload?.effectId == "effect.tk_008.01"
+                            ? "炸药机关即将对双方英雄结算伤害。"
+                            : "随后继续正常抽牌。";
                     ShowStatus(ownExcavation
-                        ? $"出土：{GetCardName(matchEvent.payload.cardId)} {destination}，随后继续正常抽牌。"
-                        : $"对手出土了 {GetCardName(matchEvent.payload.cardId)}。", false);
-                    yield return ShowTurnBanner("出土", Gold);
+                        ? $"出土：{excavationName} {destination}；{excavationDetail}"
+                        : $"对手出土了 {excavationName}；{excavationDetail}", false);
+                    yield return ShowTurnBanner(matchEvent.payload?.effectId == "effect.tk_008.01" ? "炸药机关" : "出土", Gold);
                     break;
                 }
                 case MatchEventTypes.CardGenerated: {
@@ -717,13 +731,23 @@ namespace BiomeRivals.Demo
                     break;
                 case MatchEventTypes.HeroDamaged:
                 case MatchEventTypes.FatigueDamage:
-                    if (matchEvent.payload?.playerId == GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId)
-                        yield return PulsePlayerHud(Danger);
+                    var damagedViewer = matchEvent.payload?.playerId == GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
+                    if (matchEvent.payload?.effectId == "effect.tk_008.01")
+                    {
+                        var damagedSide = damagedViewer ? "己方" : "敌方";
+                        var damageType = matchEvent.payload.damageType == "TRUE" ? "真实" : "普通";
+                        ShowStatus($"炸药机关：{damagedSide}英雄受到 {matchEvent.payload.damage} 点{damageType}伤害。", false);
+                        if (matchEvent.payload.damageType == "NORMAL")
+                            yield return PulseBothHeroHuds(Danger);
+                        else
+                            yield return null;
+                    }
+                    else yield return damagedViewer ? PulsePlayerHud(Danger) : PulseOpponentHud(Danger);
                     break;
                 case MatchEventTypes.HeroHealed:
                 case MatchEventTypes.ArmorGained:
-                    if (matchEvent.payload?.playerId == GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId)
-                        yield return PulsePlayerHud(Cyan);
+                    var healedViewer = matchEvent.payload?.playerId == GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
+                    yield return healedViewer ? PulsePlayerHud(Cyan) : PulseOpponentHud(Cyan);
                     break;
                 case MatchEventTypes.ObjectStatsChanged:
                     if (matchEvent.payload?.effectId == "effect.cd_003.01")
@@ -771,6 +795,12 @@ namespace BiomeRivals.Demo
                             : "仙人掌围栏反击了攻击己方英雄的敌方生物，造成 1 点伤害。", false);
                         yield return PulseBattlefieldObject(matchEvent.payload?.sourceInstanceId);
                         yield return ShowTurnBanner("尖刺反击", hitFriendly ? Danger : Gold);
+                    }
+                    else if (matchEvent.payload?.effectId == "effect.db_007.01")
+                    {
+                        ShowStatus($"沙漠神殿响应掩埋牌出土；当前生命为 {matchEvent.payload.health}。", false);
+                        yield return PulseBattlefieldObject(matchEvent.payload?.sourceInstanceId);
+                        yield return ShowTurnBanner("遗迹修复", Gold);
                     }
                     else if (matchEvent.payload?.effectId == "effect.or_002.01")
                     {
@@ -1551,6 +1581,30 @@ namespace BiomeRivals.Demo
             if (attacker != null) StartCoroutine(PulseBattlefieldObject(attacker.InstanceId));
         }
 
+        private void SetupDesertTemplePreview()
+        {
+            SelectFaction("desert_badlands");
+            SelectOpponentFaction("plains_forest");
+            if (!_registry.TryGetDefinition("db_007", out var templeDefinition)) return;
+            _match.ResetDeckAndHand(new[] { templeDefinition.id }, Array.Empty<string>());
+            var deployed = _match.ApplyDeploy(templeDefinition,
+                _match.CreateDeployCommand(templeDefinition.id, DemoSlotKind.Building, 0));
+            var temple = _match.GetObject(true, DemoSlotKind.Building, 0);
+            if (temple != null) temple.Health = 4;
+            _match.ResetDeckAndHand(Array.Empty<string>(), new[] { "db_001", "tk_008" }, new[] { "tk_008" });
+            _match.EndPlayerTurn();
+            var draw = _match.BeginNextPlayerTurn();
+            _selectedCardId = draw.ExcavatedCardIds.Contains("tk_008") ? "tk_008" : templeDefinition.id;
+            RefreshAll();
+            var resolved = deployed.Accepted && draw.ExcavatedCardIds.Contains("tk_008") && temple?.Health == 6 &&
+                _match.PlayerLife == 29 && _match.OpponentLife == 27;
+            ShowStatus(resolved
+                ? "炸药机关出土：敌方英雄受到 3 点伤害，己方英雄受到 1 点真实伤害；沙漠神殿随后由 4/8 修复至 6/8。"
+                : "沙漠神殿出土链预览初始化失败。", !resolved);
+            StartCoroutine(PulseBothHeroHuds(Danger));
+            if (temple != null) StartCoroutine(PulseBattlefieldObject(temple.InstanceId));
+        }
+
         private void SetupOceanMonumentPreview()
         {
             SelectFaction("ocean_river");
@@ -1719,17 +1773,21 @@ namespace BiomeRivals.Demo
             _energyText.text = $"◆ {match.Energy}/{match.MaxEnergy}";
             _titleText.text = IsOnlineBoard ? "群系竞逐  ·  权威联机对局" : "群系竞逐  ·  本地战场演示";
             _roundText.text = match.IsMulligan ? "开局 · 起手调度" : $"第 {match.Round} 回合 · {(match.Phase == DemoTurnPhase.Main ? "主行动" : "战斗")}";
-            _opponentHealthText.text = $"❤ {match.OpponentLife}";
+            _opponentHealthText.text = match.OpponentArmor > 0
+                ? $"❤ {match.OpponentLife}  ◈ {match.OpponentArmor}"
+                : $"❤ {match.OpponentLife}";
             _playerHealthText.text = match.PlayerArmor > 0 ? $"❤ {match.PlayerLife}  ◈ {match.PlayerArmor}" : $"❤ {match.PlayerLife}";
             _playerEquipmentText.text = FormatEquipment(match.PlayerEquipment);
             _playerEquipmentText.color = match.PlayerEquipment == null ? Muted : Cyan;
             _opponentEquipmentText.text = FormatEquipment(match.OpponentEquipment);
             _opponentEquipmentText.color = match.OpponentEquipment == null ? Muted : Ember;
-            _playerHeroButton.interactable = match.Phase != DemoTurnPhase.Combat || match.CanAttackWithHero(out _);
+            _playerHeroButton.interactable = !match.IsFinished &&
+                (match.Phase != DemoTurnPhase.Combat || match.CanAttackWithHero(out _));
             _handLabel.text = match.BuriedCount > 0
                 ? $"手牌 {match.Hand.Count}/7 · 牌库 {match.DeckCount}（掩埋 {match.BuriedCount}）· 弃牌 {match.DiscardCount}"
                 : $"手牌 {match.Hand.Count}/7 · 牌库 {match.DeckCount} · 弃牌 {match.DiscardCount}";
-            var canUseHand = !match.IsMulligan && match.PendingChoice == null && match.Phase == DemoTurnPhase.Main && match.IsPlayerTurn && (!IsOnlineBoard || _onlineSession.CanIssueCommand);
+            var canUseHand = !match.IsFinished && !match.IsMulligan && match.PendingChoice == null &&
+                match.Phase == DemoTurnPhase.Main && match.IsPlayerTurn && (!IsOnlineBoard || _onlineSession.CanIssueCommand);
             _handCanvasGroup.alpha = canUseHand ? 1f : 0.52f;
             _handCanvasGroup.interactable = canUseHand;
             _handCanvasGroup.blocksRaycasts = canUseHand;
@@ -1741,7 +1799,7 @@ namespace BiomeRivals.Demo
                 : match.PendingChoice != null ? match.PendingChoice.kind == "MOVE_UNIT"
                     ? match.IsChoiceOwner ? "选择移动地块" : "对手正在移动"
                     : match.IsChoiceOwner ? "完成考古选择" : "对手正在选择"
-                : !match.IsPlayerTurn ? "对手行动中" : match.IsFinished ? "对局结束" : match.Phase == DemoTurnPhase.Main ? "进入战斗" :
+                : match.IsFinished ? "对局结束" : !match.IsPlayerTurn ? "对手行动中" : match.Phase == DemoTurnPhase.Main ? "进入战斗" :
                     monumentThreatCount > 0 ? $"结束回合 · 神殿 {monumentThreatCount}" : "结束回合";
         }
 
@@ -1778,7 +1836,7 @@ namespace BiomeRivals.Demo
             }
 
             _choiceConfirmButton.gameObject.SetActive(true);
-            _choiceRuleText.text = "查看牌库顶 3 张；选择一张带“掩埋”标记的牌立即出土，然后正常抽一张牌";
+            _choiceRuleText.text = "查看牌库顶 3 张；选择一张带“掩埋”标记的牌立即出土；若对局未结束，再正常抽一张牌";
             var options = (choice.options ?? Array.Empty<PendingChoiceOptionDto>()).Where(option => option != null).ToArray();
             var hasSelectable = options.Any(option => option.selectable);
             foreach (var option in options) CreateChoiceCard(option, options.Length);
@@ -1792,7 +1850,8 @@ namespace BiomeRivals.Demo
                 _choiceStatusText.text = "这三张牌中没有掩埋牌，将保持原顺序放回";
                 _choiceConfirmLabel.text = "确认未发现";
             }
-            _choiceConfirmButton.interactable = (!IsOnlineBoard || _onlineSession.CanIssueCommand) && (!hasSelectable || _selectedChoiceOptionIndex >= 0);
+            _choiceConfirmButton.interactable = !match.IsFinished &&
+                (!IsOnlineBoard || _onlineSession.CanIssueCommand) && (!hasSelectable || _selectedChoiceOptionIndex >= 0);
         }
 
         private void CreateChoiceCard(PendingChoiceOptionDto option, int optionCount)
@@ -1829,7 +1888,7 @@ namespace BiomeRivals.Demo
         private void SelectChoiceOption(int optionIndex)
         {
             var choice = MatchView.PendingChoice;
-            if (choice == null || !MatchView.IsChoiceOwner || (IsOnlineBoard && !_onlineSession.CanIssueCommand)) return;
+            if (MatchView.IsFinished || choice == null || !MatchView.IsChoiceOwner || (IsOnlineBoard && !_onlineSession.CanIssueCommand)) return;
             var option = (choice.options ?? Array.Empty<PendingChoiceOptionDto>())
                 .FirstOrDefault(value => value != null && value.optionIndex == optionIndex && value.selectable);
             if (option == null) return;
@@ -1840,7 +1899,7 @@ namespace BiomeRivals.Demo
         private async void ConfirmChoice()
         {
             var choice = MatchView.PendingChoice;
-            if (choice == null || !MatchView.IsChoiceOwner) return;
+            if (MatchView.IsFinished || choice == null || !MatchView.IsChoiceOwner) return;
             var options = choice.options ?? Array.Empty<PendingChoiceOptionDto>();
             var hasSelectable = options.Any(option => option != null && option.selectable);
             if (hasSelectable && _selectedChoiceOptionIndex < 0) return;
@@ -1860,14 +1919,15 @@ namespace BiomeRivals.Demo
             if (_match.LastDrawResult != null && !string.IsNullOrEmpty(_match.LastDrawResult.CardId))
                 message = message.Replace(_match.LastDrawResult.CardId, GetCardName(_match.LastDrawResult.CardId));
             ShowStatus(result.Accepted ? $"{message} · 状态 r{result.Revision}" : message, !result.Accepted);
-            if (result.Accepted) StartCoroutine(ShowTurnBanner(hasSelectable ? "出土" : "未发现", hasSelectable ? Gold : Muted));
+            if (result.Accepted && !TryShowLocalMatchOutcome())
+                StartCoroutine(ShowTurnBanner(hasSelectable ? "出土" : "未发现", hasSelectable ? Gold : Muted));
             RefreshAll();
         }
 
         private async void ResolveMovementChoice(int optionIndex)
         {
             var choice = MatchView.PendingChoice;
-            if (choice == null || choice.kind != "MOVE_UNIT" || !MatchView.IsChoiceOwner) return;
+            if (MatchView.IsFinished || choice == null || choice.kind != "MOVE_UNIT" || !MatchView.IsChoiceOwner) return;
             if (choice.effectId == "effect.tk_012.01" && optionIndex < 0) return;
             if (IsOnlineBoard)
             {
@@ -1880,7 +1940,8 @@ namespace BiomeRivals.Demo
             var prismarineShard = choice.effectId == "effect.tk_012.01";
             var result = _match.ApplyResolveChoice(_match.CreateResolveChoiceCommand(choice.choiceId, optionIndex));
             ShowStatus(result.Accepted ? $"{result.Message} · 状态 r{result.Revision}" : result.Message, !result.Accepted);
-            if (result.Accepted) StartCoroutine(ShowTurnBanner(optionIndex < 0 ? "保持原位" : prismarineShard ? "碎片涌流" : waterCurrent ? "水流移动" : "激流位移", Gold));
+            if (result.Accepted && !TryShowLocalMatchOutcome())
+                StartCoroutine(ShowTurnBanner(optionIndex < 0 ? "保持原位" : prismarineShard ? "碎片涌流" : waterCurrent ? "水流移动" : "激流位移", Gold));
             RefreshAll();
         }
 
@@ -2006,8 +2067,8 @@ namespace BiomeRivals.Demo
             var match = MatchView;
             var attacker = FindSelectedAttacker();
             var hasSelectedAttacker = attacker != null || _selectedAttackerInstanceId == MatchAttackerIds.Hero;
-            _opponentHeroTargetButton.interactable = match.Phase != DemoTurnPhase.Combat || !hasSelectedAttacker ||
-                match.CanAttackTarget(null, "HERO", out _);
+            _opponentHeroTargetButton.interactable = !match.IsFinished &&
+                (match.Phase != DemoTurnPhase.Combat || !hasSelectedAttacker || match.CanAttackTarget(null, "HERO", out _));
         }
 
         private void RefreshSlot(bool player, SlotView view, string cardId)
@@ -2018,7 +2079,7 @@ namespace BiomeRivals.Demo
             var match = MatchView;
             var battlefieldObject = match.GetObject(player, view.Kind, view.Index);
             var selectingCardTarget = !string.IsNullOrEmpty(_pendingTargetCardId);
-            var canInteract = !IsOnlineBoard || _onlineSession.CanIssueCommand;
+            var canInteract = !match.IsFinished && (!IsOnlineBoard || _onlineSession.CanIssueCommand);
             var valid = false;
             var movementChoice = match.PendingChoice != null && match.PendingChoice.kind == "MOVE_UNIT";
             var movementTargetIsPlayer = movementChoice && match.PlayerBattlefield.Any(value =>
@@ -2065,7 +2126,14 @@ namespace BiomeRivals.Demo
             else if (view.Kind == DemoSlotKind.Building && battlefieldObject?.CardId == "db_004" &&
                 !match.HasTriggeredEffect(player, battlefieldObject.InstanceId, "effect.db_004.01"))
                 engineReadyKind = DemoEngineReadyKind.Cactus;
-            _battlefield.SetSlotEngineReady(player, view.Kind, view.Index, engineReadyKind);
+            else if (view.Kind == DemoSlotKind.Building && battlefieldObject?.CardId == "db_007")
+                engineReadyKind = DemoEngineReadyKind.Temple;
+            _battlefield.SetSlotEngineReady(
+                player,
+                view.Kind,
+                view.Index,
+                engineReadyKind,
+                engineReadyKind == DemoEngineReadyKind.None ? null : battlefieldObject?.InstanceId);
             _battlefield.SetSlotEndPhaseThreat(player, view.Kind, view.Index,
                 IsOceanMonumentThreat(player, battlefieldObject));
             _battlefield.SetSlotState(player, view.Kind, view.Index, valid, !empty, priorityTarget);
@@ -2108,6 +2176,13 @@ namespace BiomeRivals.Demo
             ClearChildren(_inspectorRoot);
             var moving = match.PendingChoice != null && match.PendingChoice.kind == "MOVE_UNIT";
             CreateText(_inspectorRoot, "Header", new Vector2(0, 315), new Vector2(250, 38), moving ? "位移指令" : match.Phase == DemoTurnPhase.Main ? "卡牌详情" : "战斗指令", 20, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
+            if (match.IsFinished)
+            {
+                _cardDetailsView.Clear();
+                CreateText(_inspectorRoot, "MatchFinished", new Vector2(0, 40), new Vector2(235, 210),
+                    "对局已经结束\n所有操作已锁定", 20, Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
+                return;
+            }
             if (moving)
             {
                 _cardDetailsView.Clear();
@@ -2247,6 +2322,7 @@ namespace BiomeRivals.Demo
             else
             {
                 var implemented = definition.effectImplementationStatus == "IMPLEMENTED";
+                var automaticExcavation = !definition.manualPlayAllowed;
                 var targeting = _pendingTargetCardId == definition.id;
                 var requiresTarget = DemoCardTargeting.TryGetRule(definition, out var targetRule);
                 var hasLegalTarget = !requiresTarget || DemoCardTargeting.HasLegalTarget(match, targetRule);
@@ -2268,14 +2344,20 @@ namespace BiomeRivals.Demo
                 }
                 else
                 {
-                    var actionLabel = !implemented ? "效果尚未接入" : targeting ? "取消目标选择" : !hasLegalTarget ? "没有合法目标" : requiresTarget ? targetRule.ActionLabel : definition.cardType == "EQUIPMENT" ? "装备武器" : "释放卡牌";
+                    var actionLabel = automaticExcavation
+                        ? "出土效果 · 自动结算"
+                        : !implemented ? "效果尚未接入" : targeting ? "取消目标选择" : !hasLegalTarget ? "没有合法目标" : requiresTarget ? targetRule.ActionLabel : definition.cardType == "EQUIPMENT" ? "装备武器" : "释放卡牌";
                     var cast = CreateSecondaryButton(_inspectorRoot, "Cast", new Vector2(0, -118), new Vector2(235, 60), actionLabel, 17);
-                    cast.interactable = targeting || (implemented && hasLegalTarget && canPlay && (!IsOnlineBoard || _onlineSession.CanIssueCommand));
+                    cast.interactable = !automaticExcavation &&
+                        (targeting || (implemented && hasLegalTarget && canPlay && (!IsOnlineBoard || _onlineSession.CanIssueCommand)));
                     cast.onClick.AddListener(targeting ? (UnityEngine.Events.UnityAction)CancelTargetSelection : CastSelectedCard);
                     cast.gameObject.AddComponent<DemoHoverScale>().Configure(1.04f, 16f);
                 }
             }
-            var implementationLabel = definition.effectImplementationStatus == "IMPLEMENTED" ? "已接入" : definition.effectImplementationStatus == "NONE" ? "无额外效果" : "待接入";
+            var excavationToken = !definition.manualPlayAllowed;
+            var implementationLabel = excavationToken
+                ? "已接入（出土触发）"
+                : definition.effectImplementationStatus == "IMPLEMENTED" ? "已接入" : definition.effectImplementationStatus == "NONE" ? "无额外效果" : "待接入";
             var targetedDeployment = deployType && DemoCardTargeting.TryGetRule(definition, out _);
             var multiTargetInspector = _pendingTargetCardId == definition.id &&
                 DemoCardTargeting.TryGetRule(definition, out var inspectorTargetRule) && inspectorTargetRule.RequiredTargetCount > 1;
@@ -2284,7 +2366,9 @@ namespace BiomeRivals.Demo
                 ? $"考古联动：本回合费用 -1（{definition.cost} → {effectiveCost}）\n稳定效果槽：{string.Join(", ", definition.effectIds ?? Array.Empty<string>())}"
                 : definition.hasCraftingRecipe
                 ? $"配方：已接入 · {definition.recipeId}\n卡牌效果：{implementationLabel}\n{string.Join(", ", definition.effectIds ?? Array.Empty<string>())}"
-                : $"规则状态：{implementationLabel}\n稳定效果槽：{string.Join(", ", definition.effectIds ?? Array.Empty<string>())}";
+                : excavationToken
+                    ? $"规则状态：{implementationLabel}\n不能从手牌主动释放 · {string.Join(", ", definition.effectIds ?? Array.Empty<string>())}"
+                    : $"规则状态：{implementationLabel}\n稳定效果槽：{string.Join(", ", definition.effectIds ?? Array.Empty<string>())}";
             CreateText(_inspectorRoot, "Implementation", new Vector2(0, implementationY), new Vector2(250, 68), implementationText,
                 definition.hasCraftingRecipe ? 11 : 12, Muted, TextAnchor.MiddleCenter, FontStyle.Normal);
         }
@@ -2299,7 +2383,7 @@ namespace BiomeRivals.Demo
         private bool IsPreviewingDeployment(bool player, out int occupiedSlots)
         {
             occupiedSlots = 1;
-            if (!player || !string.IsNullOrEmpty(_pendingTargetCardId) || MatchView.Phase != DemoTurnPhase.Main ||
+            if (MatchView.IsFinished || !player || !string.IsNullOrEmpty(_pendingTargetCardId) || MatchView.Phase != DemoTurnPhase.Main ||
                 string.IsNullOrEmpty(_selectedCardId) || !_registry.TryGetDefinition(_selectedCardId, out var definition)) return false;
             if (definition.cardType != "UNIT" && definition.cardType != "BUILDING" && definition.cardType != "STRUCTURE") return false;
             if (DemoCardTargeting.TryGetRule(definition, out var targetRule) && FindSelectedDeploymentTarget() == null &&
@@ -2310,6 +2394,11 @@ namespace BiomeRivals.Demo
 
         private void OnSlotHovered(bool player, DemoSlotKind kind, int index, bool hovered)
         {
+            if (MatchView.IsFinished)
+            {
+                _battlefield.SetSlotRangeHovered(player, kind, index, 1, false, false);
+                return;
+            }
             if (MatchView.PendingChoice != null) return;
             var preview = EvaluateSelectedDeployment(kind, index);
             var isDeployment = IsPreviewingDeployment(player, out var occupiedSlots);
@@ -2339,6 +2428,11 @@ namespace BiomeRivals.Demo
 
         private void OnSlotPressed(bool player, DemoSlotKind kind, int index, bool pressed)
         {
+            if (MatchView.IsFinished)
+            {
+                _battlefield.SetSlotRangePressed(player, kind, index, 1, false, false);
+                return;
+            }
             if (MatchView.PendingChoice != null) return;
             var preview = EvaluateSelectedDeployment(kind, index);
             var isDeployment = IsPreviewingDeployment(player, out var occupiedSlots);
@@ -2347,7 +2441,7 @@ namespace BiomeRivals.Demo
 
         private void SelectCard(string cardId)
         {
-            if (MatchView.PendingChoice != null) return;
+            if (MatchView.IsFinished || MatchView.PendingChoice != null) return;
             _pendingTargetCardId = null;
             _selectedCardTargetInstanceIds.Clear();
             _selectedDeploymentTargetInstanceId = null;
@@ -2359,6 +2453,11 @@ namespace BiomeRivals.Demo
 
         private async void OnSlotClicked(bool player, DemoSlotKind kind, int index)
         {
+            if (MatchView.IsFinished)
+            {
+                ShowStatus("对局已经结束，所有战场操作均已锁定。", true);
+                return;
+            }
             if (MatchView.PendingChoice != null)
             {
                 var choice = MatchView.PendingChoice;
@@ -2439,6 +2538,7 @@ namespace BiomeRivals.Demo
         private void HandleCombatSlotClick(bool player, DemoSlotKind kind, int index)
         {
             var match = MatchView;
+            if (match.IsFinished) return;
             if (IsOnlineBoard && !_onlineSession.CanIssueCommand)
             {
                 ShowStatus("请等待服务器确认上一条命令。", true);
@@ -2484,6 +2584,7 @@ namespace BiomeRivals.Demo
 
         private void SelectHeroAttacker()
         {
+            if (MatchView.IsFinished) return;
             if (MatchView.Phase != DemoTurnPhase.Combat) return;
             if (!MatchView.CanAttackWithHero(out var message))
             {
@@ -2498,6 +2599,7 @@ namespace BiomeRivals.Demo
 
         private void AttackOpponentHero()
         {
+            if (MatchView.IsFinished) return;
             if (MatchView.PendingChoice != null) return;
             if (MatchView.Phase != DemoTurnPhase.Combat) return;
             var selected = FindSelectedAttacker();
@@ -2542,6 +2644,7 @@ namespace BiomeRivals.Demo
             RefreshAll();
             if (result.Accepted)
             {
+                if (TryShowLocalMatchOutcome()) return;
                 var summoned = _match.PlayerBattlefield.Concat(_match.OpponentBattlefield)
                     .FirstOrDefault(value => value != null && !knownInstanceIds.Contains(value.InstanceId));
                 if (summoned != null) StartCoroutine(PulseBattlefieldObject(summoned.InstanceId));
@@ -2585,7 +2688,7 @@ namespace BiomeRivals.Demo
 
         private void SelectPaymentMethod(string paymentMethod)
         {
-            if (MatchView.PendingChoice != null) return;
+            if (MatchView.IsFinished || MatchView.PendingChoice != null) return;
             _selectedPaymentMethod = paymentMethod;
             if (_registry.TryGetDefinition(_selectedCardId, out var definition) && paymentMethod == MatchPaymentMethods.Crafting)
             {
@@ -2598,7 +2701,7 @@ namespace BiomeRivals.Demo
 
         private async void CastSelectedCard()
         {
-            if (MatchView.PendingChoice != null) return;
+            if (MatchView.IsFinished || MatchView.PendingChoice != null) return;
             if (string.IsNullOrEmpty(_selectedCardId) || !_registry.TryGetDefinition(_selectedCardId, out var definition)) return;
             if (DemoCardTargeting.TryGetRule(definition, out var targetRule))
             {
@@ -2630,6 +2733,7 @@ namespace BiomeRivals.Demo
             RefreshAll();
             if (success)
             {
+                if (TryShowLocalMatchOutcome()) return;
                 var color = MatchView.PlayerArmor > armorBefore ? Cyan : MatchView.PlayerLife < lifeBefore ? Danger : Hex("#B8E5A9");
                 StartCoroutine(PulsePlayerHud(color));
             }
@@ -2637,6 +2741,7 @@ namespace BiomeRivals.Demo
 
         private async void ResolveTargetedCard(bool player, DemoSlotKind kind, int index)
         {
+            if (MatchView.IsFinished) return;
             if (!_registry.TryGetDefinition(_pendingTargetCardId, out var definition) ||
                 !DemoCardTargeting.TryGetRule(definition, out var targetRule))
             {
@@ -2689,10 +2794,12 @@ namespace BiomeRivals.Demo
             var message = result.Message.Replace(target.CardId, GetCardName(target.CardId));
             ShowStatus(result.Accepted ? $"{message} · 状态 r{result.Revision}" : message, !result.Accepted);
             RefreshAll();
+            if (result.Accepted) TryShowLocalMatchOutcome();
         }
 
         private async void ConfirmMultiTargetCard()
         {
+            if (MatchView.IsFinished) return;
             if (!_registry.TryGetDefinition(_pendingTargetCardId, out var definition) ||
                 !DemoCardTargeting.TryGetRule(definition, out var targetRule) || targetRule.RequiredTargetCount <= 1)
             {
@@ -2740,6 +2847,7 @@ namespace BiomeRivals.Demo
             ShowStatus(result.Accepted ? $"{displayMessage} · 状态 r{result.Revision}" : displayMessage,
                 !result.Accepted);
             RefreshAll();
+            if (result.Accepted) TryShowLocalMatchOutcome();
         }
 
         private void CancelTargetSelection()
@@ -2893,26 +3001,63 @@ namespace BiomeRivals.Demo
             }
         }
 
-        private IEnumerator PulsePlayerHud(Color color)
+        private IEnumerator PulsePlayerHud(Color color) => PulseHeroHud(_playerHud, _playerEffectFlash, color);
+
+        private IEnumerator PulseOpponentHud(Color color) => PulseHeroHud(_opponentHud, _opponentEffectFlash, color);
+
+        private IEnumerator PulseBothHeroHuds(Color color)
         {
-            if (_playerEffectFlash == null || _playerHud == null) yield break;
-            _playerEffectFlash.GetComponent<Image>().color = new Color(color.r, color.g, color.b, 0.55f);
+            if (_playerHud == null || _playerEffectFlash == null || _opponentHud == null || _opponentEffectFlash == null)
+                yield break;
+            var flashColor = new Color(color.r, color.g, color.b, 0.55f);
+            _playerEffectFlash.GetComponent<Image>().color = flashColor;
+            _opponentEffectFlash.GetComponent<Image>().color = flashColor;
             for (var time = 0f; time < 0.14f; time += Time.unscaledDeltaTime)
             {
                 var progress = Mathf.Clamp01(time / 0.14f);
                 _playerEffectFlash.alpha = progress;
-                _playerHud.localScale = Vector3.one * Mathf.Lerp(1f, 1.035f, progress);
+                _opponentEffectFlash.alpha = progress;
+                var scale = Vector3.one * Mathf.Lerp(1f, 1.035f, progress);
+                _playerHud.localScale = scale;
+                _opponentHud.localScale = scale;
                 yield return null;
             }
             for (var time = 0f; time < 0.28f; time += Time.unscaledDeltaTime)
             {
                 var progress = Mathf.Clamp01(time / 0.28f);
                 _playerEffectFlash.alpha = 1f - progress;
-                _playerHud.localScale = Vector3.one * Mathf.Lerp(1.035f, 1f, progress);
+                _opponentEffectFlash.alpha = 1f - progress;
+                var scale = Vector3.one * Mathf.Lerp(1.035f, 1f, progress);
+                _playerHud.localScale = scale;
+                _opponentHud.localScale = scale;
                 yield return null;
             }
             _playerEffectFlash.alpha = 0f;
+            _opponentEffectFlash.alpha = 0f;
             _playerHud.localScale = Vector3.one;
+            _opponentHud.localScale = Vector3.one;
+        }
+
+        private static IEnumerator PulseHeroHud(RectTransform hud, CanvasGroup flash, Color color)
+        {
+            if (flash == null || hud == null) yield break;
+            flash.GetComponent<Image>().color = new Color(color.r, color.g, color.b, 0.55f);
+            for (var time = 0f; time < 0.14f; time += Time.unscaledDeltaTime)
+            {
+                var progress = Mathf.Clamp01(time / 0.14f);
+                flash.alpha = progress;
+                hud.localScale = Vector3.one * Mathf.Lerp(1f, 1.035f, progress);
+                yield return null;
+            }
+            for (var time = 0f; time < 0.28f; time += Time.unscaledDeltaTime)
+            {
+                var progress = Mathf.Clamp01(time / 0.28f);
+                flash.alpha = 1f - progress;
+                hud.localScale = Vector3.one * Mathf.Lerp(1.035f, 1f, progress);
+                yield return null;
+            }
+            flash.alpha = 0f;
+            hud.localScale = Vector3.one;
         }
 
         private IEnumerator PulseBattlefieldObject(string instanceId)
@@ -2935,6 +3080,7 @@ namespace BiomeRivals.Demo
         private async void OnEndTurn()
         {
             var match = MatchView;
+            if (match.IsFinished) return;
             if (match.PendingChoice != null) return;
             if (!match.IsPlayerTurn) return;
             _pendingTargetCardId = null;
@@ -2980,9 +3126,34 @@ namespace BiomeRivals.Demo
                 ShowStatus($"新回合：能量已补满，抽到 {GetCardName(draw.CardId)}。", false);
             else if (draw.Outcome == DemoDrawOutcome.Burned)
                 ShowStatus($"手牌已满，{GetCardName(draw.CardId)} 被公开并置入弃牌堆。", true);
+            else if (draw.Outcome == DemoDrawOutcome.MatchEnded)
+            {
+                ShowStatus("炸药机关完成出土伤害，对局已经结束。", true);
+                var playerWon = _match.OpponentLife <= 0;
+                yield return ShowTurnBanner(playerWon ? "胜利" : "战败", playerWon ? Cyan : Danger);
+                yield break;
+            }
             else
                 ShowStatus($"牌库为空，受到 {draw.FatigueDamage} 点疲劳伤害。", true);
+            if (_match.IsFinished)
+            {
+                yield return ShowTurnBanner(_match.OpponentLife <= 0 ? "胜利" : "战败",
+                    _match.OpponentLife <= 0 ? Cyan : Danger);
+                yield break;
+            }
             yield return ShowTurnBanner("你的回合", Cyan);
+        }
+
+        private bool TryShowLocalMatchOutcome()
+        {
+            if (IsOnlineBoard || !_match.IsFinished) return false;
+            ClearSelectedAttackerHighlight();
+            _selectedAttackerInstanceId = null;
+            _pendingTargetCardId = null;
+            _selectedCardTargetInstanceIds.Clear();
+            var playerWon = _match.OpponentLife <= 0;
+            StartCoroutine(ShowTurnBanner(playerWon ? "胜利" : "战败", playerWon ? Cyan : Danger));
+            return true;
         }
 
         private IEnumerator ShowTurnBanner(string value, Color color)
@@ -3089,6 +3260,11 @@ namespace BiomeRivals.Demo
                 var ready = !MatchView.HasTriggeredEffect(!enemy, battlefieldObject.InstanceId, "effect.db_004.01");
                 stats = $"尖刺反击：{(ready ? "待触发" : "本回合已触发")} · {stats}";
                 accent = ready ? Hex("#C7D65A") : accent;
+            }
+            if (battlefieldObject?.CardId == "db_007")
+            {
+                stats = $"遗迹修复：等待出土 · {stats}";
+                accent = Gold;
             }
             if (battlefieldObject?.CardId == "pf_003")
             {

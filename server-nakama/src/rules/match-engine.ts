@@ -1,7 +1,8 @@
 namespace BiomeRivalsRules {
   const HAND_LIMIT = 7;
 
-  function seedFromText(seedText: string): number {
+  // Initiative is public match metadata, so keeping its legacy deterministic ordering is safe.
+  function publicSeedFromText(seedText: string): number {
     let seed = 17;
     for (let index = 0; index < seedText.length; index += 1) {
       seed = ((seed * 31) + seedText.charCodeAt(index)) | 0;
@@ -9,21 +10,47 @@ namespace BiomeRivalsRules {
     return seed;
   }
 
-  function shuffleDeck(deck: string[], seedText: string): void {
-    let seed = seedFromText(seedText);
+  function hashSecretText(seedText: string): number {
+    let seed = 2166136261;
+    for (let index = 0; index < seedText.length; index += 1) {
+      seed ^= seedText.charCodeAt(index);
+      seed = Math.imul(seed, 16777619);
+    }
+    seed ^= seed >>> 16;
+    seed = Math.imul(seed, -2048144789);
+    seed ^= seed >>> 13;
+    seed = Math.imul(seed, -1028477387);
+    seed ^= seed >>> 16;
+    return seed >>> 0;
+  }
+
+  interface AuthoritativeRandomState {
+    authoritativeRandomSeed: string;
+    authoritativeRandomCounter: number;
+  }
+
+  function nextRandomIndex(randomState: AuthoritativeRandomState, upperBound: number): number {
+    if (upperBound <= 0 || upperBound % 1 !== 0) throw new Error('random upper bound must be a positive integer');
+    const randomValue = hashSecretText(
+      randomState.authoritativeRandomSeed + ':' + String(randomState.authoritativeRandomCounter)
+    );
+    randomState.authoritativeRandomCounter += 1;
+    return randomValue % upperBound;
+  }
+
+  function shuffleDeck(deck: string[], randomState: AuthoritativeRandomState): void {
     for (let index = deck.length - 1; index > 0; index -= 1) {
-      seed = ((seed * 1664525) + 1013904223) | 0;
-      const swapIndex = (seed >>> 0) % (index + 1);
+      const swapIndex = nextRandomIndex(randomState, index + 1);
       const value = deck[index]!;
       deck[index] = deck[swapIndex]!;
       deck[swapIndex] = value;
     }
   }
 
-  function prototypeDeck(prefix: string, seedText: string): string[] {
+  function prototypeDeck(prefix: string, randomState: AuthoritativeRandomState): string[] {
     const deck: string[] = [];
     for (let index = 0; index < 30; index += 1) deck.push(prefix + '_' + ('00' + String((index % 8) + 1)).slice(-3));
-    shuffleDeck(deck, seedText);
+    shuffleDeck(deck, randomState);
     return deck;
   }
 
@@ -37,8 +64,13 @@ namespace BiomeRivalsRules {
     return definition !== null && definition.tags.indexOf(tag) >= 0;
   }
 
-  function makePlayer(playerId: string, startingCards: number, matchId: string, factionId: FactionId): PlayerState {
-    const deck = prototypeDeck(FACTION_CARD_PREFIXES[factionId]!, matchId + ':' + playerId + ':' + factionId);
+  function makePlayer(
+    playerId: string,
+    startingCards: number,
+    factionId: FactionId,
+    randomState: AuthoritativeRandomState
+  ): PlayerState {
+    const deck = prototypeDeck(FACTION_CARD_PREFIXES[factionId]!, randomState);
     const hand: string[] = [];
     for (let index = 0; index < startingCards; index += 1) hand.push(deck.pop()!);
     return {
@@ -64,8 +96,14 @@ namespace BiomeRivalsRules {
     };
   }
 
-  export function createInitialState(matchId: string, playerIds: string[], factionIds?: FactionId[]): MatchState {
+  export function createInitialState(
+    matchId: string,
+    playerIds: string[],
+    factionIds: FactionId[] | undefined,
+    authoritativeRandomSeed: string
+  ): MatchState {
     if (!matchId) throw new Error('matchId is required');
+    if (!authoritativeRandomSeed) throw new Error('authoritativeRandomSeed is required');
     if (playerIds.length !== 2 || !playerIds[0] || !playerIds[1] || playerIds[0] === playerIds[1]) {
       throw new Error('exactly two unique player ids are required');
     }
@@ -74,11 +112,17 @@ namespace BiomeRivalsRules {
     if (selectedFactions.length !== 2 || !isFactionId(selectedFactions[0]) || !isFactionId(selectedFactions[1])) {
       throw new Error('exactly two supported faction ids are required');
     }
-    const initiativeSourceIndex = (seedFromText(matchId + ':initiative') >>> 0) % 2;
+    const randomState: AuthoritativeRandomState = {
+      authoritativeRandomSeed: authoritativeRandomSeed,
+      authoritativeRandomCounter: 0
+    };
+    const initiativeSourceIndex = (publicSeedFromText(matchId + ':initiative') >>> 0) % 2;
     const orderedPlayerIds = initiativeSourceIndex === 0 ? playerIds : [playerIds[1]!, playerIds[0]!];
     const orderedFactions = initiativeSourceIndex === 0 ? selectedFactions : [selectedFactions[1]!, selectedFactions[0]!];
     const state: MatchState = {
       matchId: matchId,
+      authoritativeRandomSeed: randomState.authoritativeRandomSeed,
+      authoritativeRandomCounter: randomState.authoritativeRandomCounter,
       protocolVersion: PROTOCOL_VERSION,
       rulesetVersion: RULESET_VERSION,
       revision: 0,
@@ -89,13 +133,14 @@ namespace BiomeRivalsRules {
       activePlayerIndex: 0,
       nextInstanceId: 1,
       players: [
-        makePlayer(orderedPlayerIds[0]!, 3, matchId, orderedFactions[0]!),
-        makePlayer(orderedPlayerIds[1]!, 4, matchId, orderedFactions[1]!)
+        makePlayer(orderedPlayerIds[0]!, 3, orderedFactions[0]!, randomState),
+        makePlayer(orderedPlayerIds[1]!, 4, orderedFactions[1]!, randomState)
       ],
       pendingChoice: null,
       winnerPlayerId: null,
       processedCommandIds: []
     };
+    state.authoritativeRandomCounter = randomState.authoritativeRandomCounter;
     const violations = validateState(state);
     if (violations.length > 0) throw new Error(violations.join('; '));
     return state;
@@ -202,6 +247,7 @@ namespace BiomeRivalsRules {
         const payload: { [key: string]: unknown } = {};
         Object.keys(event.payload).forEach(function (key): void { payload[key] = event.payload[key]; });
         if (event.type === 'CARD_DRAWN' && payload.playerId !== viewerPlayerId) payload.cardId = null;
+        if (event.type === 'CARD_BURIED' && payload.playerId !== viewerPlayerId) payload.cardId = null;
         if (event.type === 'CARD_GENERATED' && payload.playerId !== viewerPlayerId && payload.destination === 'HAND') payload.cardId = null;
         if (event.type === 'CHOICE_OFFERED' && payload.playerId !== viewerPlayerId && payload.kind !== 'MOVE_UNIT' && Array.isArray(payload.options)) {
           payload.options = (payload.options as PendingChoiceOptionState[]).map(function (option): PendingChoiceOptionSnapshot {
@@ -224,6 +270,8 @@ namespace BiomeRivalsRules {
   function cloneState(state: MatchState): MatchState {
     return {
       matchId: state.matchId,
+      authoritativeRandomSeed: state.authoritativeRandomSeed,
+      authoritativeRandomCounter: state.authoritativeRandomCounter,
       protocolVersion: state.protocolVersion,
       rulesetVersion: state.rulesetVersion,
       revision: state.revision,
@@ -362,7 +410,7 @@ namespace BiomeRivalsRules {
       }
       for (let index = 0; index < replacedCards.length; index += 1) keptCards.push(player.deck.pop()!);
       for (let index = 0; index < replacedCards.length; index += 1) player.deck.push(replacedCards[index]!);
-      if (replacedCards.length > 0) shuffleDeck(player.deck, next.matchId + ':' + player.playerId + ':mulligan');
+      if (replacedCards.length > 0) shuffleDeck(player.deck, next);
       player.hand = keptCards;
       player.mulliganCompleted = true;
       emit('MULLIGAN_COMPLETED', {
@@ -381,7 +429,9 @@ namespace BiomeRivalsRules {
           playerId: next.players[next.activePlayerIndex]!.playerId,
           phase: next.phase
         });
-        drawCard(next.players[next.activePlayerIndex]!);
+        const openingPlayer = next.players[next.activePlayerIndex]!;
+        drawCard(openingPlayer);
+        if (next.winnerPlayerId === null) finishForSelfDefeat(openingPlayer, 'FATIGUE');
       }
       return null;
     }
@@ -405,6 +455,7 @@ namespace BiomeRivalsRules {
       }
       const definition = getCardDefinition(cardId);
       if (definition === null) return reject(state, 'UNKNOWN_CARD', 'card definition is not registered');
+      if (!definition.manualPlayAllowed) return reject(state, 'CARD_NOT_PLAYABLE', 'card resolves automatically and cannot be deployed');
       const player = next.players[actorIndex]!;
       const handIndex = player.hand.indexOf(cardId);
       if (handIndex < 0) return reject(state, 'CARD_NOT_IN_HAND', 'card is not in the actor hand');
@@ -584,6 +635,10 @@ namespace BiomeRivalsRules {
       } else if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
           definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.db_003.01') {
         offerArchaeologyChoice(player, battlefieldObject, definition.effectIds[0]);
+      } else if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
+          definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.db_007.01') {
+        buryCard(player, 'tk_007', cardId, definition.effectIds[0]);
+        buryCard(player, 'tk_008', cardId, definition.effectIds[0]);
       } else if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
           definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.si_003.01') {
         if (battlecryTargetPlayer === null || battlecryTarget === null) throw new Error('validated stray target was not resolved');
@@ -1077,9 +1132,7 @@ namespace BiomeRivalsRules {
           return left.instanceId < right.instanceId ? -1 : left.instanceId > right.instanceId ? 1 : 0;
         });
         if (candidates.length > 0) {
-          const randomIndex = (seedFromText(
-            next.matchId + ':deathrattle:' + object.instanceId + ':' + next.lastEventId
-          ) >>> 0) % candidates.length;
+          const randomIndex = nextRandomIndex(next, candidates.length);
           const target = candidates[randomIndex]!;
           target.health = Math.max(0, target.health - 1);
           if (target.health === 0) killCredits[target.instanceId] = player.playerId;
@@ -1207,8 +1260,7 @@ namespace BiomeRivalsRules {
 
     function buryCard(player: PlayerState, cardId: string, sourceCardId: string, effectId: string): void {
       if (getCardDefinition(cardId) === null) throw new Error('buried card is not registered: ' + cardId);
-      const insertIndex = (seedFromText(next.matchId + ':' + player.playerId + ':bury:' + next.lastEventId + ':' + cardId) >>> 0) %
-        (player.deck.length + 1);
+      const insertIndex = nextRandomIndex(next, player.deck.length + 1);
       player.deck.splice(insertIndex, 0, cardId);
       player.buriedCardIds.push(cardId);
       emit('CARD_BURIED', {
@@ -1221,11 +1273,53 @@ namespace BiomeRivalsRules {
       });
     }
 
-    function resolveExcavatedCard(player: PlayerState, cardId: string): void {
+    function healDesertTemples(player: PlayerState): number {
+      const temples = player.battlefield.filter(function (object): boolean {
+        if (object.cardType !== 'STRUCTURE' || object.health <= 0) return false;
+        const definition = getCardDefinition(object.cardId);
+        return definition !== null && definition.effectImplementationStatus === 'IMPLEMENTED' &&
+          definition.effectIds.indexOf('effect.db_007.01') >= 0;
+      }).slice().sort(function (left, right): number {
+        if (left.slotIndex !== right.slotIndex) return left.slotIndex - right.slotIndex;
+        return left.instanceId < right.instanceId ? -1 : left.instanceId > right.instanceId ? 1 : 0;
+      });
+      for (let templeIndex = 0; templeIndex < temples.length; templeIndex += 1) {
+        const temple = temples[templeIndex]!;
+        temple.health = Math.min(temple.maxHealth, temple.health + 2);
+        emit('OBJECT_STATS_CHANGED', {
+          playerId: player.playerId,
+          instanceId: temple.instanceId,
+          sourceCardId: temple.cardId,
+          sourceInstanceId: temple.instanceId,
+          effectId: 'effect.db_007.01',
+          reason: 'HEAL',
+          attack: temple.attack,
+          health: temple.health,
+          temporaryAttackModifier: temple.temporaryAttackModifier,
+          temporaryAttackModifierExpiresOnTurn: temple.temporaryAttackModifierExpiresOnTurn
+        });
+      }
+      return temples.length;
+    }
+
+    function finishBuriedExplosion(player: PlayerState, opponent: PlayerState): boolean {
+      if (player.life > 0 && opponent.life > 0) return false;
+      next.status = 'FINISHED';
+      next.pendingChoice = null;
+      next.winnerPlayerId = opponent.life <= 0 ? player.playerId : opponent.playerId;
+      emit('MATCH_ENDED', { winnerPlayerId: next.winnerPlayerId, reason: 'BURIED_EXPLOSION' });
+      return true;
+    }
+
+    function resolveExcavatedCard(player: PlayerState, cardId: string): boolean {
       const buriedIndex = player.buriedCardIds.indexOf(cardId);
       if (buriedIndex < 0) throw new Error('excavated card does not have a buried marker: ' + cardId);
       player.buriedCardIds.splice(buriedIndex, 1);
-      if (cardId !== 'tk_006') throw new Error('buried effect handler is not registered: ' + cardId);
+      let effectId = '';
+      if (cardId === 'tk_006') effectId = 'effect.tk_006.01';
+      else if (cardId === 'tk_007') effectId = 'effect.tk_007.01';
+      else if (cardId === 'tk_008') effectId = 'effect.tk_008.01';
+      else throw new Error('buried effect handler is not registered: ' + cardId);
       const destination = player.hand.length >= HAND_LIMIT ? 'DISCARD' : 'HAND';
       if (destination === 'HAND') player.hand.push(cardId);
       else player.discardPile.push(cardId);
@@ -1233,18 +1327,40 @@ namespace BiomeRivalsRules {
       emit('CARD_EXCAVATED', {
         playerId: player.playerId,
         cardId: cardId,
-        effectId: 'effect.tk_006.01',
+        effectId: effectId,
         destination: destination,
         handCount: player.hand.length,
         deckCount: player.deck.length,
         discardCount: player.discardPile.length,
         buriedCount: player.buriedCardIds.length
       });
-      player.armor += 1;
-      emit('ARMOR_GAINED', {
-        playerId: player.playerId, sourceCardId: cardId, effectId: 'effect.tk_006.01',
-        amount: 1, armor: player.armor
-      });
+      if (cardId === 'tk_006') {
+        player.armor += 1;
+        emit('ARMOR_GAINED', {
+          playerId: player.playerId, sourceCardId: cardId, effectId: effectId,
+          amount: 1, armor: player.armor
+        });
+      } else if (cardId === 'tk_007') {
+        generateCard(player, 'tk_018', cardId, 'effect-' + String(next.lastEventId), effectId);
+      } else {
+        const opponent = next.players[0]!.playerId === player.playerId ? next.players[1]! : next.players[0]!;
+        damageHero(opponent, 3);
+        emit('HERO_DAMAGED', {
+          playerId: opponent.playerId, sourceCardId: cardId, effectId: effectId,
+          damage: 3, damageType: 'NORMAL', life: opponent.life, armor: opponent.armor
+        });
+        player.life = Math.max(0, player.life - 1);
+        emit('HERO_DAMAGED', {
+          playerId: player.playerId, sourceCardId: cardId, effectId: effectId,
+          damage: 1, damageType: 'TRUE', life: player.life, armor: player.armor
+        });
+      }
+      healDesertTemples(player);
+      if (cardId === 'tk_008') {
+        const opponent = next.players[0]!.playerId === player.playerId ? next.players[1]! : next.players[0]!;
+        return finishBuriedExplosion(player, opponent);
+      }
+      return false;
     }
 
     function drawCard(player: PlayerState): void {
@@ -1265,7 +1381,7 @@ namespace BiomeRivalsRules {
         }
         const cardId = player.deck.pop()!;
         if (player.buriedCardIds.indexOf(cardId) >= 0) {
-          resolveExcavatedCard(player, cardId);
+          if (resolveExcavatedCard(player, cardId)) return;
           continue;
         }
         if (player.hand.length >= HAND_LIMIT) {
@@ -1444,6 +1560,7 @@ namespace BiomeRivalsRules {
       if (typeof cardId !== 'string') return reject(state, 'INVALID_COMMAND', 'PLAY_CARD requires cardId');
       const definition = getCardDefinition(cardId);
       if (definition === null) return reject(state, 'UNKNOWN_CARD', 'card is not registered');
+      if (!definition.manualPlayAllowed) return reject(state, 'CARD_NOT_PLAYABLE', 'card resolves automatically and cannot be played');
       if (definition.cardType !== 'SPELL' && definition.cardType !== 'MATERIAL' && definition.cardType !== 'EQUIPMENT') {
         return reject(state, 'INVALID_TARGET', 'PLAY_CARD accepts spells, materials, and equipment');
       }
@@ -1599,7 +1716,7 @@ namespace BiomeRivalsRules {
           });
           if (finishForSelfDefeat(player, 'SELF_DAMAGE')) return null;
           drawCard(player);
-          finishForSelfDefeat(player, 'FATIGUE');
+          if (next.status !== 'FINISHED') finishForSelfDefeat(player, 'FATIGUE');
           return null;
         case 'effect.pf_006.01': {
           if (targetedObjects.length !== 2) throw new Error('validated breeding targets were not resolved');
@@ -1628,6 +1745,7 @@ namespace BiomeRivalsRules {
           for (let rallyStep = 0; rallyStep < 2; rallyStep += 1) {
             if (summonUnit(player, 'tk_004', cardId, effectSourceInstanceId, effectId, -1)) continue;
             drawCard(player);
+            if (next.status === 'FINISHED') break;
             if (finishForSelfDefeat(player, 'FATIGUE')) break;
           }
           return null;
@@ -1837,9 +1955,10 @@ namespace BiomeRivalsRules {
           throw new Error('pending archaeology choice no longer matches the authoritative deck');
         }
         player.deck.splice(deckIndex, 1);
-        resolveExcavatedCard(player, selectedOption.cardId);
-        drawCard(player);
-        finishForSelfDefeat(player, 'FATIGUE');
+        if (!resolveExcavatedCard(player, selectedOption.cardId)) {
+          drawCard(player);
+          if (next.status !== 'FINISHED') finishForSelfDefeat(player, 'FATIGUE');
+        }
       }
       return null;
     }
@@ -2083,7 +2202,7 @@ namespace BiomeRivalsRules {
           phase: next.phase
         });
         drawCard(nextPlayer);
-        if (nextPlayer.life <= 0) {
+        if (next.status !== 'FINISHED' && nextPlayer.life <= 0) {
           next.status = 'FINISHED';
           next.winnerPlayerId = next.players[actorIndex]!.playerId;
           emit('MATCH_ENDED', { winnerPlayerId: next.winnerPlayerId, reason: 'FATIGUE' });

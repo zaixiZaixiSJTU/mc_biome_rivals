@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["protocolVersion", "rulesetVersion", "revision", "acknowledgedCommandId", "events"],
   "properties": {
-    "protocolVersion": { "const": 22 },
+    "protocolVersion": { "const": 25 },
     "rulesetVersion": { "type": "string" },
     "revision": { "type": "integer", "minimum": 0 },
     "acknowledgedCommandId": { "type": "string" },
@@ -126,7 +126,7 @@
                   "properties": {
                     "playerId": { "type": "string", "minLength": 1 },
                     "sourceCardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
-                    "sourceInstanceId": { "type": "string", "pattern": "^object-[0-9]+$" },
+                    "sourceInstanceId": { "type": "string", "pattern": "^(object|effect)-[0-9]+$" },
                     "effectId": { "type": "string", "pattern": "^effect\\.[a-z0-9_]+\\.[0-9]{2}$" },
                     "cardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
                     "instanceId": { "type": "string", "pattern": "^object-[0-9]+$" },
@@ -224,7 +224,7 @@
                     "playerId": { "type": "string", "minLength": 1 },
                     "sourceCardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
                     "effectId": { "type": "string", "pattern": "^effect\\.[a-z0-9_]+\\.[0-9]{2}$" },
-                    "cardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+                    "cardId": { "type": ["string", "null"], "pattern": "^[a-z0-9_]+$" },
                     "deckCount": { "type": "integer", "minimum": 1 },
                     "buriedCount": { "type": "integer", "minimum": 1 }
                   }
@@ -482,7 +482,7 @@
                   "properties": {
                     "playerId": { "type": "string", "minLength": 1 },
                     "sourceCardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
-                    "sourceInstanceId": { "type": "string", "pattern": "^object-[0-9]+$" },
+                    "sourceInstanceId": { "type": "string", "pattern": "^(object|effect)-[0-9]+$" },
                     "effectId": { "type": "string", "pattern": "^effect\\.[a-z0-9_]+\\.[0-9]{2}$" },
                     "cardId": { "type": ["string", "null"], "pattern": "^[a-z0-9_]+$" },
                     "destination": { "enum": ["HAND", "DISCARD"] },
@@ -572,6 +572,69 @@
                     "attackerArmor": { "type": "integer", "minimum": 0 },
                     "targetHealth": { "type": "integer", "minimum": 0 },
                     "targetArmor": { "type": "integer", "minimum": 0 }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": { "properties": { "type": { "const": "TURN_ENDED" } } },
+            "then": {
+              "properties": {
+                "payload": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["playerId", "turn"],
+                  "properties": {
+                    "playerId": { "type": "string", "minLength": 1 },
+                    "turn": { "type": "integer", "minimum": 1 }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": { "properties": { "type": { "const": "TURN_STARTED" } } },
+            "then": {
+              "properties": {
+                "payload": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["playerId", "turn", "activePlayerIndex", "redstone", "redstoneCapacity", "phase"],
+                  "properties": {
+                    "playerId": { "type": "string", "minLength": 1 },
+                    "turn": { "type": "integer", "minimum": 1 },
+                    "activePlayerIndex": { "type": "integer", "minimum": 0, "maximum": 1 },
+                    "redstone": { "type": "integer", "minimum": 0, "maximum": 10 },
+                    "redstoneCapacity": { "type": "integer", "minimum": 0, "maximum": 10 },
+                    "phase": { "const": "MAIN" }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": { "properties": { "type": { "const": "PLAYER_CONCEDED" } } },
+            "then": {
+              "properties": {
+                "payload": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["playerId"],
+                  "properties": {
+                    "playerId": { "type": "string", "minLength": 1 }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": { "properties": { "type": { "const": "MATCH_ENDED" } } },
+            "then": {
+              "properties": {
+                "payload": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["winnerPlayerId", "reason"],
+                  "properties": {
+                    "winnerPlayerId": { "type": "string", "minLength": 1 },
+                    "reason": { "enum": ["FATIGUE", "SELF_DAMAGE", "HERO_DEFEATED", "CONCEDE", "BURIED_EXPLOSION"] }
                   }
                 }
               }

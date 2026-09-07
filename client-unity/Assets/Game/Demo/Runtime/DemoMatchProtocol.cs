@@ -14,7 +14,8 @@ namespace BiomeRivals.Demo
     {
         Drawn,
         Burned,
-        Fatigue
+        Fatigue,
+        MatchEnded
     }
 
     public sealed class DemoDrawResult
@@ -103,6 +104,7 @@ namespace BiomeRivals.Demo
         DemoTurnPhase Phase { get; }
         int PlayerLife { get; }
         int PlayerArmor { get; }
+        int OpponentArmor { get; }
         DemoEquipment PlayerEquipment { get; }
         DemoEquipment OpponentEquipment { get; }
         bool PlayerHeroHasAttacked { get; }
@@ -125,6 +127,7 @@ namespace BiomeRivals.Demo
         DuplicateCommand,
         NotActivePlayer,
         UnknownCard,
+        CardNotPlayable,
         CardNotInHand,
         InsufficientRedstone,
         InvalidPaymentMethod,

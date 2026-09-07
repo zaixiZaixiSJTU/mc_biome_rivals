@@ -44,6 +44,7 @@ namespace BiomeRivals.Demo
         public DemoTurnPhase Phase => Current?.phase == "COMBAT" ? DemoTurnPhase.Combat : DemoTurnPhase.Main;
         public int PlayerLife => Player?.life ?? 0;
         public int PlayerArmor => Player?.armor ?? 0;
+        public int OpponentArmor => Opponent?.armor ?? 0;
         public DemoEquipment PlayerEquipment => MapEquipment(Player?.equipment);
         public DemoEquipment OpponentEquipment => MapEquipment(Opponent?.equipment);
         public bool PlayerHeroHasAttacked => Player?.heroHasAttacked == true;
@@ -100,6 +101,8 @@ namespace BiomeRivals.Demo
 
         public bool CanAttackWith(DemoBattlefieldObject attacker, out string message)
         {
+            if (IsFinished) return Fail("对局已经结束。", out message);
+            if (PendingChoice != null) return Fail("请先完成当前战场选择。", out message);
             if (!IsPlayerTurn || Phase != DemoTurnPhase.Combat) return Fail("请先进入战斗阶段。", out message);
             if (attacker == null || !attacker.Player || attacker.SlotKind != DemoSlotKind.Unit || attacker.Health <= 0)
                 return Fail("请选择一个存活且具有攻击力的己方生物。", out message);
@@ -113,6 +116,7 @@ namespace BiomeRivals.Demo
 
         public bool CanAttackWithHero(out string message)
         {
+            if (IsFinished) return Fail("对局已经结束。", out message);
             if (PendingChoice != null) return Fail("请先完成当前战场选择。", out message);
             if (!IsPlayerTurn || Phase != DemoTurnPhase.Combat) return Fail("请先进入战斗阶段。", out message);
             if (PlayerEquipment == null || PlayerEquipment.Attack <= 0 || PlayerEquipment.Durability <= 0)
@@ -124,6 +128,8 @@ namespace BiomeRivals.Demo
 
         public bool CanAttackTarget(DemoBattlefieldObject target, string targetType, out string message)
         {
+            if (IsFinished) return Fail("对局已经结束。", out message);
+            if (PendingChoice != null) return Fail("请先完成当前战场选择。", out message);
             if (targetType != "HERO" && targetType != "UNIT" && targetType != "BUILDING")
                 return Fail("攻击目标类型无效。", out message);
             if (targetType != "HERO" && (target == null || target.Player ||

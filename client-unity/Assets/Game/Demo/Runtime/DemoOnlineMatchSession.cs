@@ -23,7 +23,8 @@ namespace BiomeRivals.Demo
             _gateway.CurrentStatus.Phase != MatchConnectionPhase.Offline &&
             _gateway.CurrentStatus.Phase != MatchConnectionPhase.Disconnecting &&
             _gateway.CurrentStatus.Phase != MatchConnectionPhase.Failed;
-        public bool CanIssueCommand => HasAuthoritativeState && _gateway.CurrentStatus.CanSendCommands && _dispatcher.PendingCount == 0;
+        public bool CanIssueCommand => HasAuthoritativeState && !View.IsFinished &&
+            _gateway.CurrentStatus.CanSendCommands && _dispatcher.PendingCount == 0;
         public bool HasPendingCommand => _dispatcher.PendingCount > 0;
 
         public DemoOnlineMatchSession(IMatchGateway gateway, MatchStateStore store)

@@ -6,7 +6,7 @@
 
 | 注册表 | 内容 |
 |---|---|
-| `card-definition-registry.v1.json` | 稳定 ID、阵营、主题、稀有度、类型、费用、属性、标签、通用关键词、卡图键和效果槽 |
+| `card-definition-registry.v1.json` | 稳定 ID、阵营、主题、稀有度、类型、费用、属性、标签、通用关键词、主动打出权限、卡图键和效果槽 |
 | `card-name-registry.zh-CN.v1.json` | 卡名与本地化键 |
 | `card-text-registry.zh-CN.v1.json` | 中文描述、类型、稀有度、标签和设计备注 |
 | `card-art-registry.v1.json` | 卡牌到 Minecraft 本地原型纹理的映射 |
@@ -21,13 +21,15 @@
 
 - 56 张可收集牌。
 - 18 张不可收集衍生物。
-- 69 张有规则文本的牌预留 `effect.<cardId>.01`；其中 18 张为 `IMPLEMENTED`，其余 51 张为 `PENDING`。
+- 69 张有规则文本的牌预留 `effect.<cardId>.01`；其中 38 张为 `IMPLEMENTED`，其余 31 张为 `PENDING`。
 - 5 张无规则文本衍生物状态为 `NONE`。
-- 卡牌定义 Schema v3 / 内容版本 v11 注册通用 `keywords`、二元支付配方、DB-003 考古选择、DB-005 本回合出土降费，以及 DB-001 / PF-002 / CD-003 / SI-003 的敌方击杀掉落；SI-003 的定向战吼与 SI-006 共用不叠加的 `SLOW` 状态。CD-003 同时验证可追溯随机亡语与连锁死亡。当前注册 4 张 `TAUNT`，并预留 `CHARGE`。首个完整材料循环为 `DB-002 → TK-006 → DB-007`。
+- 卡牌定义 Schema v4 / 内容版本 v28 注册通用 `keywords`、二元支付配方、DB-003 考古选择、DB-005 本回合出土降费、DB-007 双格神殿与掩埋链，以及 `manualPlayAllowed` 主动打出权限。当前注册 4 张 `TAUNT`，并预留 `CHARGE`。首个完整材料循环为 `DB-002 → TK-006 → DB-007`。
 
 ## 效果实现约束
 
 `PENDING` 表示卡牌身份、数值和展示文本已注册，但服务端权威规则尚未接入。实现效果时保留现有 `cardId` 和 `effectId`，将其加入 `implemented-effect-registry.v1.json`，同步脚本会生成 `IMPLEMENTED` 状态；同时必须补充服务端规则测试、协议事件与客户端表现映射。禁止客户端卡面组件直接改变对局状态。
+
+`manualPlayAllowed` 与效果是否实现分开表达。`TK-006`、`TK-007`、`TK-008` 的出土效果已经由权威规则实现，因此状态为 `IMPLEMENTED`；但它们只能在掩埋牌出土时自动结算，所以该字段为 `false`，客户端与服务端都必须拒绝从手牌主动释放。
 
 `keywords` 与卡牌专属 `effectId` 分开执行。例如铁傀儡的 `TAUNT` 已按通用规则生效，但其“控制建筑时获得 +1/+1”仍可保持 `PENDING`；不得为了启用一个通用关键词而把尚未实现的整段专属效果标记为 `IMPLEMENTED`。
 

@@ -61,7 +61,7 @@ if ($art.entries.Count -ne 74) { throw "Expected 74 art entries, found $($art.en
 if ($themes.themes.Count -ne 7) { throw "Expected 7 themes, found $($themes.themes.Count)." }
 if ($definitions.entries.Count -ne 74) { throw "Expected 74 definitions, found $($definitions.entries.Count)." }
 if ($texts.entries.Count -ne 74) { throw "Expected 74 localized texts, found $($texts.entries.Count)." }
-if ($definitions.schemaVersion -ne 3) { throw "Unsupported card definition schema version: $($definitions.schemaVersion)" }
+if ($definitions.schemaVersion -ne 4) { throw "Unsupported card definition schema version: $($definitions.schemaVersion)" }
 
 $nameIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
 $nameKeys = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
@@ -104,6 +104,10 @@ foreach ($entry in $definitions.entries) {
         if (-not $seenKeywords.Add([string]$keyword)) { throw "Duplicate keyword '$keyword' on $id" }
     }
     if ($null -eq $entry.effectIds) { throw "Definition effectIds must be an array, not null: $id" }
+    if ($entry.manualPlayAllowed -isnot [bool]) { throw "Definition manualPlayAllowed must be boolean: $id" }
+    if (-not $entry.manualPlayAllowed -and ($entry.collectible -or $id -notin @('tk_006', 'tk_007', 'tk_008'))) {
+        throw "Only registered automatic excavation tokens may disable manual play: $id"
+    }
     if ($null -eq $entry.craftingRecipe) { throw "Definition craftingRecipe must be an array, not null: $id" }
     if ($entry.hasCraftingRecipe) {
         if ($entry.recipeId -ne "recipe.$id.01") { throw "Crafting recipe id mismatch: $id" }

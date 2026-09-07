@@ -27,7 +27,14 @@ namespace BiomeRivals.Content.Tests
             Assert.That(temple.craftingRecipe[0].cardId, Is.EqualTo("db_002"));
             Assert.That(temple.craftingRecipe[1].cardId, Is.EqualTo("tk_006"));
             Assert.That(temple.craftedHealthBonus, Is.EqualTo(2));
-            Assert.That(temple.effectImplementationStatus, Is.EqualTo("PENDING"));
+            Assert.That(temple.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+            Assert.That(temple.effectIds, Is.EqualTo(new[] { "effect.db_007.01" }));
+            foreach (var tokenId in new[] { "tk_006", "tk_007", "tk_008" })
+            {
+                Assert.That(registry.TryGetDefinition(tokenId, out var excavationToken), Is.True);
+                Assert.That(excavationToken.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"), tokenId);
+                Assert.That(excavationToken.manualPlayAllowed, Is.False, tokenId);
+            }
             Assert.That(registry.TryGetDefinition("db_002", out var suspiciousSand), Is.True);
             Assert.That(suspiciousSand.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
             Assert.That(registry.TryGetDefinition("nt_006", out var sacrifice), Is.True);

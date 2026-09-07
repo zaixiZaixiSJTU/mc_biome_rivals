@@ -66,6 +66,7 @@ namespace BiomeRivals.Content
         public string designId = string.Empty;
         public int contentVersion;
         public bool collectible;
+        public bool manualPlayAllowed;
         public string nameKey = string.Empty;
         public string rulesTextKey = string.Empty;
         public string factionId = string.Empty;
@@ -178,7 +179,7 @@ namespace BiomeRivals.Content
             if (themes?.themes == null) throw new FormatException("Card theme registry has no themes.");
             if (definitions?.entries == null) throw new FormatException("Card definition registry has no entries.");
             if (texts?.entries == null) throw new FormatException("Card text registry has no entries.");
-            if (definitions.schemaVersion != 3) throw new FormatException($"Unsupported card definition schema version: {definitions.schemaVersion}.");
+            if (definitions.schemaVersion != 4) throw new FormatException($"Unsupported card definition schema version: {definitions.schemaVersion}.");
 
             foreach (var entry in names.entries)
             {

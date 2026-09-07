@@ -86,7 +86,7 @@ function biomeRivalsMatchJoin(
     const factionIds = playerIds.map(function (playerId, index): BiomeRivalsRules.FactionId {
       return state.factionByPlayerId[playerId] || (index === 0 ? 'plains_forest' : 'nether');
     });
-    state.game = BiomeRivalsRules.createInitialState(ctx.matchId || 'unknown', playerIds, factionIds);
+    state.game = BiomeRivalsRules.createInitialState(ctx.matchId || 'unknown', playerIds, factionIds, nk.uuidv4());
     snapshotRecipients = connected;
   }
   if (state.game !== null) {

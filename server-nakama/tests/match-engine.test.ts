@@ -1,3 +1,21 @@
+declare function require(moduleName: string): any;
+declare const __dirname: string;
+
+const nodeFileSystem = require('fs') as { readFileSync(path: string, encoding: string): string };
+const Ajv2020 = require('ajv/dist/2020').default as new (options?: { strict?: boolean }) => {
+  compile(schema: unknown): ((value: unknown) => boolean) & { errors?: unknown };
+};
+const eventBatchSchema = JSON.parse(nodeFileSystem.readFileSync(
+  __dirname + '/../../shared-schema/protocol/match-event-batch.schema.json',
+  'utf8'
+)) as unknown;
+const validateEventBatchSchema = new Ajv2020({ strict: false }).compile(eventBatchSchema);
+
+function assertEventBatchMatchesSchema(batch: BiomeRivalsRules.MatchEventBatch): void {
+  const valid = validateEventBatchSchema(batch);
+  TestHarness.ok(valid, 'event batch schema errors: ' + JSON.stringify(validateEventBatchSchema.errors));
+}
+
 function command(id: string, revision: number, type: BiomeRivalsRules.CommandType): BiomeRivalsRules.MatchCommand {
   return {
     protocolVersion: BiomeRivalsRules.PROTOCOL_VERSION,
@@ -79,7 +97,7 @@ function activeState(
   playerIds: string[],
   factionIds?: BiomeRivalsRules.FactionId[]
 ): BiomeRivalsRules.MatchState {
-  const state = BiomeRivalsRules.createInitialState(matchId, playerIds, factionIds);
+  const state = BiomeRivalsRules.createInitialState(matchId, playerIds, factionIds, 'test-secret:' + matchId);
   state.players[0]!.mulliganCompleted = true;
   state.players[1]!.mulliganCompleted = true;
   state.status = 'ACTIVE';
@@ -151,7 +169,7 @@ function placeBuilding(
 }
 
 TestHarness.test('creates a valid two-player initial state', function (): void {
-  const state = BiomeRivalsRules.createInitialState('match-1', ['alice', 'bob']);
+  const state = BiomeRivalsRules.createInitialState('match-1', ['alice', 'bob'], undefined, 'fixed-secret-1');
   TestHarness.equal(state.revision, 0);
   TestHarness.equal(state.protocolVersion, BiomeRivalsRules.PROTOCOL_VERSION);
   TestHarness.equal(state.status, 'MULLIGAN');
@@ -168,8 +186,31 @@ TestHarness.test('creates a valid two-player initial state', function (): void {
   TestHarness.equal(BiomeRivalsRules.validateState(state).length, 0);
 });
 
+TestHarness.test('uses injected authoritative entropy without projecting it to clients', function (): void {
+  const left = BiomeRivalsRules.createInitialState(
+    'same-public-match', ['alice', 'bob'], ['plains_forest', 'nether'], 'server-secret-left'
+  );
+  const leftReplay = BiomeRivalsRules.createInitialState(
+    'same-public-match', ['alice', 'bob'], ['plains_forest', 'nether'], 'server-secret-left'
+  );
+  const right = BiomeRivalsRules.createInitialState(
+    'same-public-match', ['alice', 'bob'], ['plains_forest', 'nether'], 'server-secret-right'
+  );
+  const hiddenOrder = function (state: BiomeRivalsRules.MatchState): string {
+    return state.players.map(function (player): string { return player.hand.concat(player.deck).join(','); }).join('|');
+  };
+
+  TestHarness.equal(hiddenOrder(left), hiddenOrder(leftReplay), 'fixed test entropy must replay deterministically');
+  TestHarness.ok(hiddenOrder(left) !== hiddenOrder(right), 'different private entropy must change hidden deck order');
+  TestHarness.equal(left.authoritativeRandomCounter, 58, 'two 30-card Fisher-Yates shuffles consume 58 values');
+  const snapshotJson = JSON.stringify(BiomeRivalsRules.createClientSnapshot(left, 'alice'));
+  TestHarness.equal(snapshotJson.indexOf('authoritativeRandomSeed'), -1);
+  TestHarness.equal(snapshotJson.indexOf('authoritativeRandomCounter'), -1);
+  TestHarness.equal(snapshotJson.indexOf('server-secret-left'), -1);
+});
+
 TestHarness.test('creates faction-specific decks and exposes both public faction ids', function (): void {
-  const state = BiomeRivalsRules.createInitialState('match-factions', ['alice', 'bob'], ['ocean_river', 'end']);
+  const state = BiomeRivalsRules.createInitialState('match-factions', ['alice', 'bob'], ['ocean_river', 'end'], 'fixed-secret-factions');
   TestHarness.equal(state.players[0]!.factionId, 'ocean_river');
   TestHarness.equal(state.players[1]!.factionId, 'end');
   TestHarness.ok(state.players[0]!.hand.concat(state.players[0]!.deck).every(function (cardId): boolean { return cardId.indexOf('or_') === 0; }));
@@ -182,7 +223,7 @@ TestHarness.test('creates faction-specific decks and exposes both public faction
 });
 
 TestHarness.test('replaces selected opening cards before returning them to the shuffled deck', function (): void {
-  const state = BiomeRivalsRules.createInitialState('match-mulligan', ['alice', 'bob']);
+  const state = BiomeRivalsRules.createInitialState('match-mulligan', ['alice', 'bob'], undefined, 'fixed-secret-mulligan');
   const originalHand = state.players[0]!.hand.slice();
   const result = BiomeRivalsRules.applyCommand(state, 'alice', mulliganCommand('mulligan-a', 0, [0, 2]));
   TestHarness.equal(result.accepted, true);
@@ -201,7 +242,7 @@ TestHarness.test('replaces selected opening cards before returning them to the s
 });
 
 TestHarness.test('starts the first turn and draws only after both players confirm', function (): void {
-  const state = BiomeRivalsRules.createInitialState('match-start', ['alice', 'bob']);
+  const state = BiomeRivalsRules.createInitialState('match-start', ['alice', 'bob'], undefined, 'fixed-secret-start');
   TestHarness.equal(state.activePlayerIndex, 0);
   TestHarness.equal(state.players[0]!.playerId, 'bob', 'recorded match seed assigns one input player to the canonical first-player slot');
   TestHarness.equal(state.players[0]!.hand.length, 3);
@@ -226,8 +267,28 @@ TestHarness.test('starts the first turn and draws only after both players confir
   TestHarness.equal(nextTurn.state.players[1]!.redstoneCapacity, 1, 'the second player does not gain round-two energy early');
 });
 
+TestHarness.test('opening draw closes an artificial empty-deck mulligan state on lethal fatigue', function (): void {
+  const state = BiomeRivalsRules.createInitialState('match-opening-fatigue', ['alice', 'bob'], undefined, 'fixed-secret-opening-fatigue');
+  const actorIndex = state.activePlayerIndex;
+  const opponentIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  state.players[opponentIndex]!.mulliganCompleted = true;
+  actor.deck = [];
+  actor.life = 1;
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId, mulliganCommand('opening-fatigue', 0, []));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.status, 'FINISHED');
+  TestHarness.equal(result.state.winnerPlayerId, state.players[opponentIndex]!.playerId);
+  TestHarness.equal(result.batch.events.map(function (event): string { return event.type; }).join(','),
+    'MULLIGAN_COMPLETED,MATCH_STARTED,FATIGUE_DAMAGE,MATCH_ENDED');
+  TestHarness.equal(result.batch.events[3]!.payload.reason, 'FATIGUE');
+});
+
 TestHarness.test('rejects gameplay and invalid or repeated selections during opening hands', function (): void {
-  const state = BiomeRivalsRules.createInitialState('match-opening-guards', ['alice', 'bob']);
+  const state = BiomeRivalsRules.createInitialState('match-opening-guards', ['alice', 'bob'], undefined, 'fixed-secret-opening-guards');
   const deploy = BiomeRivalsRules.applyCommand(state, 'alice', deployCommand('too-early', 0, state.players[0]!.hand[0]!, 'UNIT', 0));
   TestHarness.equal(deploy.accepted, false);
   if (!deploy.accepted) TestHarness.equal(deploy.code, 'MULLIGAN_REQUIRED');
@@ -244,7 +305,12 @@ TestHarness.test('rejects gameplay and invalid or repeated selections during ope
 TestHarness.test('rejects unsupported initial faction selections', function (): void {
   let rejected = false;
   try {
-    BiomeRivalsRules.createInitialState('match-factions', ['alice', 'bob'], ['plains_forest', 'invalid'] as BiomeRivalsRules.FactionId[]);
+    BiomeRivalsRules.createInitialState(
+      'match-factions',
+      ['alice', 'bob'],
+      ['plains_forest', 'invalid'] as BiomeRivalsRules.FactionId[],
+      'fixed-secret-invalid-faction'
+    );
   } catch (error) {
     rejected = String(error).indexOf('supported faction ids') >= 0;
   }
@@ -438,6 +504,41 @@ TestHarness.test('resolves an archaeology choice into excavation and a normal dr
   TestHarness.equal(BiomeRivalsRules.validateState(result.state).length, 0);
 });
 
+TestHarness.test('archaeology TNT lethal clears the choice and skips the normal draw', function (): void {
+  const state = activeState('match-choice-tnt-lethal', ['alice', 'bob'], ['desert_badlands', 'nether']);
+  const actor = state.players[state.activePlayerIndex]!;
+  const opponent = state.players[state.activePlayerIndex === 0 ? 1 : 0]!;
+  actor.hand = ['db_003'];
+  actor.deck = ['db_001', 'tk_008'];
+  actor.buriedCardIds = ['tk_008'];
+  actor.redstone = 2;
+  actor.redstoneCapacity = 2;
+  actor.life = 1;
+  opponent.life = 3;
+  const deployed = BiomeRivalsRules.applyCommand(
+    state, actor.playerId, deployCommand('deploy-choice-tnt', 0, 'db_003', 'UNIT', 0)
+  );
+  TestHarness.ok(deployed.accepted);
+  if (!deployed.accepted) return;
+
+  const result = BiomeRivalsRules.applyCommand(
+    deployed.state,
+    actor.playerId,
+    resolveChoiceCommand('resolve-choice-tnt', 1, deployed.state.pendingChoice!.choiceId, 0)
+  );
+
+  TestHarness.ok(result.accepted, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.pendingChoice, null);
+  TestHarness.equal(result.state.status, 'FINISHED');
+  TestHarness.equal(result.state.winnerPlayerId, actor.playerId, 'buried effect owner wins simultaneous lethal');
+  TestHarness.equal(result.state.players[state.activePlayerIndex]!.deck.join(','), 'db_001');
+  TestHarness.equal(result.batch.events.map(function (event): string { return event.type; }).join(','),
+    'CHOICE_RESOLVED,CARD_EXCAVATED,HERO_DAMAGED,HERO_DAMAGED,MATCH_ENDED');
+  TestHarness.equal(result.batch.events.some(function (event): boolean { return event.type === 'CARD_DRAWN'; }), false);
+  assertEventBatchMatchesSchema(result.batch);
+});
+
 TestHarness.test('discounts the Badlands Raider only after an excavation in the active turn', function (): void {
   const withoutExcavation = activeState('match-1', ['alice', 'bob'], ['desert_badlands', 'nether']);
   withoutExcavation.players[0]!.hand = ['db_005'];
@@ -513,6 +614,13 @@ TestHarness.test('deploys a structure only across consecutive free building slot
   TestHarness.equal(accepted.state.players[0]!.buildingSlots[2], 'object-1');
   TestHarness.equal(accepted.state.players[0]!.battlefield[0]!.occupiedSlots, 2);
   TestHarness.equal(accepted.batch.events[0]!.payload.occupiedSlots, 2);
+  TestHarness.equal(JSON.stringify(accepted.state.players[0]!.buriedCardIds), JSON.stringify(['tk_007', 'tk_008']));
+  TestHarness.equal(accepted.batch.events[1]!.type, 'CARD_BURIED');
+  TestHarness.equal(accepted.batch.events[1]!.payload.cardId, 'tk_007');
+  TestHarness.equal(accepted.batch.events[2]!.type, 'CARD_BURIED');
+  TestHarness.equal(accepted.batch.events[2]!.payload.cardId, 'tk_008');
+  assertEventBatchMatchesSchema(accepted.batch);
+  assertEventBatchMatchesSchema(BiomeRivalsRules.createClientEventBatch(accepted.batch, 'bob'));
 });
 
 TestHarness.test('crafts a structure from deterministic hand materials without spending redstone', function (): void {
@@ -534,13 +642,15 @@ TestHarness.test('crafts a structure from deterministic hand materials without s
   TestHarness.equal(JSON.stringify(result.state.players[0]!.discardPile), JSON.stringify(['db_002', 'tk_006']));
   TestHarness.equal(result.state.players[0]!.battlefield[0]!.health, 10);
   TestHarness.equal(result.state.players[0]!.battlefield[0]!.maxHealth, 10);
-  TestHarness.equal(result.batch.events.length, 2);
+  TestHarness.equal(result.batch.events.length, 4);
   TestHarness.equal(result.batch.events[0]!.type, 'MATERIALS_CONSUMED');
   TestHarness.equal(result.batch.events[0]!.payload.handCount, 2, 'the product remains in hand during material consumption');
   TestHarness.equal(result.batch.events[0]!.payload.discardCount, 2);
   TestHarness.equal(result.batch.events[1]!.type, 'CARD_DEPLOYED');
   TestHarness.equal(result.batch.events[1]!.payload.paymentMethod, 'CRAFTING');
   TestHarness.equal(result.batch.events[1]!.payload.health, 10);
+  TestHarness.equal(result.batch.events[2]!.payload.cardId, 'tk_007');
+  TestHarness.equal(result.batch.events[3]!.payload.cardId, 'tk_008');
   const opponentBatch = BiomeRivalsRules.createClientEventBatch(result.batch, 'bob');
   TestHarness.equal((opponentBatch.events[0]!.payload.materials as Array<{ cardId: string }>)[0]!.cardId, 'db_002');
   TestHarness.equal((opponentBatch.events[0]!.payload.materials as Array<{ cardId: string }>)[1]!.cardId, 'tk_006');
@@ -669,7 +779,124 @@ TestHarness.test('suspicious sand buries a pottery sherd and grants immediate ar
   TestHarness.equal(result.batch.events[1]!.payload.buriedCount, 1);
   TestHarness.equal(result.batch.events[2]!.type, 'ARMOR_GAINED');
   TestHarness.equal(BiomeRivalsRules.createClientSnapshot(result.state, 'bob').players[0]!.buriedCount, 1);
+  const ownerProjection = BiomeRivalsRules.createClientEventBatch(result.batch, 'alice');
+  const opponentProjection = BiomeRivalsRules.createClientEventBatch(result.batch, 'bob');
+  TestHarness.equal(ownerProjection.events[1]!.payload.cardId, 'tk_006');
+  TestHarness.equal(opponentProjection.events[1]!.payload.cardId, null, 'buried identities stay hidden from the opponent');
   TestHarness.equal(state.players[0]!.buriedCardIds.length, 0, 'accepted commands must not mutate input');
+});
+
+TestHarness.test('registers excavation token effects without allowing manual play', function (): void {
+  const state = activeState('match-auto-excavation-only', ['alice', 'bob'], ['desert_badlands', 'nether']);
+  const actor = state.players[state.activePlayerIndex]!;
+  for (let tokenIndex = 0; tokenIndex < 3; tokenIndex += 1) {
+    const cardId = ['tk_006', 'tk_007', 'tk_008'][tokenIndex]!;
+    actor.hand = [cardId];
+    const result = BiomeRivalsRules.applyCommand(
+      state,
+      actor.playerId,
+      playCommand('manual-token-' + String(tokenIndex), state.revision, cardId)
+    );
+    TestHarness.equal(result.accepted, false, cardId);
+    if (!result.accepted) TestHarness.equal(result.code, 'CARD_NOT_PLAYABLE', cardId);
+  }
+});
+
+TestHarness.test('Treasure Map generates Emerald then repairs only its owners Desert Temple', function (): void {
+  const state = activeState('match-temple-map', ['alice', 'bob'], ['plains_forest', 'desert_badlands']);
+  const actorIndex = state.activePlayerIndex;
+  const ownerIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  const owner = state.players[ownerIndex]!;
+  owner.deck = ['db_001', 'tk_007'];
+  owner.buriedCardIds = ['tk_007'];
+  placeBuilding(state, actorIndex, 'db_007', 0, 'object-10', 3);
+  placeBuilding(state, ownerIndex, 'db_007', 0, 'object-20', 4);
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId, command('turn-excavate-map', 0, 'END_TURN'));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  const ownerTemple = result.state.players[ownerIndex]!.battlefield.filter(function (value): boolean { return value.instanceId === 'object-20'; })[0]!;
+  const enemyTemple = result.state.players[actorIndex]!.battlefield.filter(function (value): boolean { return value.instanceId === 'object-10'; })[0]!;
+  TestHarness.equal(ownerTemple.health, 6);
+  TestHarness.equal(enemyTemple.health, 3);
+  TestHarness.equal(result.state.players[ownerIndex]!.hand.slice(-3).join(','), 'tk_007,tk_018,db_001');
+  TestHarness.equal(result.batch.events.slice(2).map(function (event): string { return event.type; }).join(','),
+    'CARD_EXCAVATED,CARD_GENERATED,OBJECT_STATS_CHANGED,CARD_DRAWN');
+  TestHarness.equal(result.batch.events[2]!.payload.effectId, 'effect.tk_007.01');
+  TestHarness.equal(result.batch.events[3]!.payload.cardId, 'tk_018');
+  TestHarness.equal(result.batch.events[3]!.payload.sourceInstanceId, 'effect-3');
+  TestHarness.equal(result.batch.events[4]!.payload.sourceInstanceId, 'object-20');
+  TestHarness.equal(result.batch.events[4]!.payload.effectId, 'effect.db_007.01');
+  TestHarness.equal(result.batch.events[4]!.payload.reason, 'HEAL');
+  const opponentProjection = BiomeRivalsRules.createClientEventBatch(result.batch, actor.playerId);
+  TestHarness.equal(opponentProjection.events[3]!.payload.cardId, null);
+});
+
+TestHarness.test('TNT Trap resolves both hero hits, repairs the Temple, and stops the following draw on lethal', function (): void {
+  const state = activeState('match-temple-trap-lethal', ['alice', 'bob'], ['plains_forest', 'desert_badlands']);
+  const actorIndex = state.activePlayerIndex;
+  const ownerIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  const owner = state.players[ownerIndex]!;
+  actor.life = 1;
+  actor.armor = 2;
+  owner.life = 1;
+  owner.deck = ['db_001', 'tk_008'];
+  owner.buriedCardIds = ['tk_008'];
+  placeBuilding(state, ownerIndex, 'db_007', 0, 'object-20', 4);
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId, command('turn-excavate-trap', 0, 'END_TURN'));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[actorIndex]!.life, 0);
+  TestHarness.equal(result.state.players[actorIndex]!.armor, 0);
+  TestHarness.equal(result.state.players[ownerIndex]!.life, 0);
+  TestHarness.equal(result.state.players[ownerIndex]!.battlefield[0]!.health, 6);
+  TestHarness.equal(result.state.players[ownerIndex]!.deck.join(','), 'db_001');
+  TestHarness.equal(result.state.status, 'FINISHED');
+  TestHarness.equal(result.state.winnerPlayerId, owner.playerId);
+  TestHarness.equal(result.batch.events.slice(2).map(function (event): string { return event.type; }).join(','),
+    'CARD_EXCAVATED,HERO_DAMAGED,HERO_DAMAGED,OBJECT_STATS_CHANGED,MATCH_ENDED');
+  TestHarness.equal(result.batch.events[3]!.payload.damageType, 'NORMAL');
+  TestHarness.equal(result.batch.events[4]!.payload.damageType, 'TRUE');
+  TestHarness.equal(result.batch.events[6]!.payload.reason, 'BURIED_EXPLOSION');
+  TestHarness.equal(result.batch.events.some(function (event): boolean { return event.type === 'CARD_DRAWN'; }), false);
+  assertEventBatchMatchesSchema(result.batch);
+  assertEventBatchMatchesSchema(BiomeRivalsRules.createClientEventBatch(result.batch, actor.playerId));
+});
+
+TestHarness.test('TNT Trap spends enemy armor, bypasses owner armor, repairs a full Temple, then continues drawing', function (): void {
+  const state = activeState('match-temple-trap-nonlethal', ['alice', 'bob'], ['plains_forest', 'desert_badlands']);
+  const actorIndex = state.activePlayerIndex;
+  const ownerIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  const owner = state.players[ownerIndex]!;
+  actor.life = 30;
+  actor.armor = 4;
+  owner.life = 30;
+  owner.armor = 5;
+  owner.deck = ['db_001', 'tk_008'];
+  owner.buriedCardIds = ['tk_008'];
+  placeBuilding(state, ownerIndex, 'db_007', 0, 'object-20');
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId, command('turn-excavate-trap-safe', 0, 'END_TURN'));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[actorIndex]!.life, 30);
+  TestHarness.equal(result.state.players[actorIndex]!.armor, 1);
+  TestHarness.equal(result.state.players[ownerIndex]!.life, 29);
+  TestHarness.equal(result.state.players[ownerIndex]!.armor, 5);
+  TestHarness.equal(result.state.players[ownerIndex]!.battlefield[0]!.health, 8);
+  TestHarness.equal(result.state.players[ownerIndex]!.hand.slice(-2).join(','), 'tk_008,db_001');
+  TestHarness.equal(result.batch.events.slice(2).map(function (event): string { return event.type; }).join(','),
+    'CARD_EXCAVATED,HERO_DAMAGED,HERO_DAMAGED,OBJECT_STATS_CHANGED,CARD_DRAWN');
+  TestHarness.equal(result.batch.events[5]!.payload.reason, 'HEAL');
+  TestHarness.equal(result.batch.events[5]!.payload.health, 8, 'full-health Temple still emits zero-effective repair feedback');
+  TestHarness.equal(result.batch.events.some(function (event): boolean { return event.type === 'MATCH_ENDED'; }), false);
 });
 
 TestHarness.test('excavates a public pottery sherd before the normal turn draw', function (): void {
@@ -1529,6 +1756,7 @@ TestHarness.test('ends a turn and emits an ordered event batch', function (): vo
   TestHarness.equal(result.batch.events[2]!.type, 'CARD_DRAWN');
   TestHarness.equal(result.state.players[1]!.hand.length, 5);
   TestHarness.equal(result.state.players[1]!.deck.length, 25);
+  assertEventBatchMatchesSchema(result.batch);
 });
 
 TestHarness.test('burns a public card when drawing with a full hand', function (): void {
@@ -2639,6 +2867,7 @@ TestHarness.test('records a concession and winner', function (): void {
   TestHarness.equal(result.state.status, 'FINISHED');
   TestHarness.equal(result.state.winnerPlayerId, 'bob');
   TestHarness.equal(result.batch.events[1]!.type, 'MATCH_ENDED');
+  assertEventBatchMatchesSchema(result.batch);
 });
 
 TestHarness.test('rejects duplicate command ids after acceptance', function (): void {

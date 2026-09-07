@@ -1,6 +1,6 @@
 namespace BiomeRivalsRules {
-  export const PROTOCOL_VERSION = 24;
-  export const RULESET_VERSION = 'prototype-0.35';
+  export const PROTOCOL_VERSION = 25;
+  export const RULESET_VERSION = 'prototype-0.36';
 
   export type MatchStatus = 'WAITING' | 'MULLIGAN' | 'ACTIVE' | 'FINISHED';
   export type CommandType = 'MULLIGAN' | 'DEPLOY_CARD' | 'PLAY_CARD' | 'RESOLVE_CHOICE' | 'ENTER_COMBAT' | 'ATTACK' | 'END_TURN' | 'CONCEDE';
@@ -38,6 +38,7 @@ namespace BiomeRivalsRules {
     durability: number;
     tags: string[];
     keywords: CardKeyword[];
+    manualPlayAllowed: boolean;
     hasCraftingRecipe: boolean;
     recipeId: string;
     craftingRecipe: Array<{ cardId: string; count: number }>;
@@ -148,6 +149,10 @@ namespace BiomeRivalsRules {
 
   export interface MatchState {
     matchId: string;
+    /** Authoritative-only entropy. Never include this value in snapshots or event payloads. */
+    authoritativeRandomSeed: string;
+    /** Authoritative-only PRF counter paired with authoritativeRandomSeed. */
+    authoritativeRandomCounter: number;
     protocolVersion: number;
     rulesetVersion: string;
     revision: number;
@@ -246,6 +251,7 @@ namespace BiomeRivalsRules {
     | 'CHOICE_REQUIRED'
     | 'INVALID_CHOICE'
     | 'INVALID_TARGET'
+    | 'CARD_NOT_PLAYABLE'
     | 'SLOT_OCCUPIED'
     | 'WRONG_PHASE'
     | 'INVALID_ATTACKER'

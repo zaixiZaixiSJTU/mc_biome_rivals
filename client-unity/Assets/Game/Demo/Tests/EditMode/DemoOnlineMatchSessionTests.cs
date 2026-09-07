@@ -22,6 +22,8 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(view.Hand, Is.EqualTo(new[] { "nt_001" }));
             Assert.That(view.PlayerLife, Is.EqualTo(27));
             Assert.That(view.OpponentLife, Is.EqualTo(30));
+            Assert.That(view.PlayerArmor, Is.EqualTo(3));
+            Assert.That(view.OpponentArmor, Is.EqualTo(2));
             Assert.That(view.Energy, Is.EqualTo(2));
             Assert.That(view.IsPlayerTurn, Is.True);
             Assert.That(view.PlayerFactionId, Is.EqualTo(FactionIds.End));
@@ -156,6 +158,35 @@ namespace BiomeRivals.Demo.Tests
         }
 
         [Test]
+        public void FinishedAuthoritativeMatchRejectsCombatDeploymentAndNetworkCommands()
+        {
+            var store = CreateStore(viewerIndex: 0);
+            store.Current.status = "FINISHED";
+            store.Current.phase = "COMBAT";
+            store.Current.winnerPlayerId = "alice";
+            var view = new DemoAuthoritativeMatchView(store);
+            Assert.That(CardContentLoader.Load().TryGetDefinition("pf_001", out var bee), Is.True);
+
+            Assert.That(view.CanAttackWith(null, out var attackerMessage), Is.False);
+            Assert.That(attackerMessage, Does.Contain("对局已经结束"));
+            Assert.That(view.CanAttackWithHero(out var heroMessage), Is.False);
+            Assert.That(heroMessage, Does.Contain("对局已经结束"));
+            Assert.That(view.CanAttackTarget(null, "HERO", out var targetMessage), Is.False);
+            Assert.That(targetMessage, Does.Contain("对局已经结束"));
+            var preview = DemoDeploymentRules.Evaluate(view, bee, DemoSlotKind.Unit, 0);
+            Assert.That(preview.IsLegal, Is.False);
+            Assert.That(preview.Message, Does.Contain("对局已经结束"));
+
+            var gateway = new FakeGateway();
+            using (var session = new DemoOnlineMatchSession(gateway, store))
+            {
+                Assert.That(session.CanIssueCommand, Is.False);
+                Assert.ThrowsAsync<InvalidOperationException>(async () => await session.EndTurnAsync());
+                Assert.That(gateway.LastCommand, Is.Null);
+            }
+        }
+
+        [Test]
         public void PresentationQueueCanRebaseForANewOrRejoinedMatch()
         {
             var root = new GameObject("PresentationQueueTest");
@@ -180,12 +211,12 @@ namespace BiomeRivals.Demo.Tests
             {
                 new PlayerStateDto
                 {
-                    playerId = "alice", factionId = FactionIds.OceanRiver, life = 30, redstone = 1, redstoneCapacity = 1,
+                    playerId = "alice", factionId = FactionIds.OceanRiver, life = 30, armor = 2, redstone = 1, redstoneCapacity = 1,
                     hand = new[] { "pf_001" }, unitSlots = new string[4], buildingSlots = new string[3]
                 },
                 new PlayerStateDto
                 {
-                    playerId = "bob", factionId = FactionIds.End, life = 27, redstone = 2, redstoneCapacity = 2,
+                    playerId = "bob", factionId = FactionIds.End, life = 27, armor = 3, redstone = 2, redstoneCapacity = 2,
                     hand = new[] { "nt_001" }, unitSlots = new string[4], buildingSlots = new string[3]
                 }
             };

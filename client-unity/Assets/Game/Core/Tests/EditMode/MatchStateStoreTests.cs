@@ -683,7 +683,7 @@ namespace BiomeRivals.Core.Tests
                     new MatchEventDto
                     {
                         eventId = 1, type = MatchEventTypes.CardBuried,
-                        payload = new MatchEventPayloadDto { playerId = "bob", cardId = "tk_006", deckCount = 3, buriedCount = 1 }
+                        payload = new MatchEventPayloadDto { playerId = "bob", cardId = null, deckCount = 3, buriedCount = 1 }
                     },
                     new MatchEventDto
                     {
@@ -728,6 +728,103 @@ namespace BiomeRivals.Core.Tests
                 }
             });
             Assert.That(store.Current.players[1].excavatedThisTurn, Is.False);
+        }
+
+        [Test]
+        public void Apply_ReplaysTntExcavationDamageTempleRepairAndFollowingDrawInOrder()
+        {
+            var templeSlots = new string[3];
+            templeSlots[0] = "object-20";
+            templeSlots[1] = "object-20";
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "match-temple-trap", viewerPlayerId = "alice", status = "ACTIVE",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                players = new[]
+                {
+                    new PlayerStateDto
+                    {
+                        playerId = "alice", life = 30, armor = 5, hand = Array.Empty<string>(), deckCount = 2, buriedCount = 1,
+                        unitSlots = new string[4], buildingSlots = templeSlots,
+                        battlefield = new[]
+                        {
+                            new BattlefieldObjectStateDto
+                            {
+                                instanceId = "object-20", cardId = "db_007", cardType = "STRUCTURE",
+                                slotKind = "BUILDING", slotIndex = 0, occupiedSlots = 2, health = 4, maxHealth = 8
+                            }
+                        }
+                    },
+                    new PlayerStateDto
+                    {
+                        playerId = "bob", life = 30, armor = 4, hand = Array.Empty<string>(),
+                        unitSlots = new string[4], buildingSlots = new string[3]
+                    }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 1, type = MatchEventTypes.CardExcavated,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", cardId = "tk_008", effectId = "effect.tk_008.01", destination = "HAND",
+                            handCount = 1, deckCount = 1, discardCount = 0, buriedCount = 0
+                        }
+                    },
+                    new MatchEventDto
+                    {
+                        eventId = 2, type = MatchEventTypes.HeroDamaged,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "bob", sourceCardId = "tk_008", effectId = "effect.tk_008.01",
+                            damage = 3, damageType = "NORMAL", life = 30, armor = 1
+                        }
+                    },
+                    new MatchEventDto
+                    {
+                        eventId = 3, type = MatchEventTypes.HeroDamaged,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", sourceCardId = "tk_008", effectId = "effect.tk_008.01",
+                            damage = 1, damageType = "TRUE", life = 29, armor = 5
+                        }
+                    },
+                    new MatchEventDto
+                    {
+                        eventId = 4, type = MatchEventTypes.ObjectStatsChanged,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", instanceId = "object-20", sourceCardId = "db_007",
+                            sourceInstanceId = "object-20", effectId = "effect.db_007.01", reason = "HEAL",
+                            health = 6, maxHealth = 8
+                        }
+                    },
+                    new MatchEventDto
+                    {
+                        eventId = 5, type = MatchEventTypes.CardDrawn,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", cardId = "db_001", handCount = 2, deckCount = 0
+                        }
+                    }
+                }
+            });
+
+            Assert.That(store.Current.players[0].hand, Is.EqualTo(new[] { "tk_008", "db_001" }));
+            Assert.That(store.Current.players[0].life, Is.EqualTo(29));
+            Assert.That(store.Current.players[0].armor, Is.EqualTo(5));
+            Assert.That(store.Current.players[0].battlefield[0].health, Is.EqualTo(6));
+            Assert.That(store.Current.players[0].buriedCount, Is.Zero);
+            Assert.That(store.Current.players[1].life, Is.EqualTo(30));
+            Assert.That(store.Current.players[1].armor, Is.EqualTo(1));
+            Assert.That(store.Current.lastEventId, Is.EqualTo(5));
         }
 
         [Test]

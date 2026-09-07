@@ -55,7 +55,7 @@ UGUI 样式由 `DemoUiStyleCatalog` 集中提供材质、底色、描边和交�
 
 手牌底板左下角持续显示“手牌 / 牌库 / 弃牌”三个区域计数，信息使用与 HUD 相同的低对比度浅色文字，不额外叠加 Web 风格浮层。新回合抽到的卡直接进入扇形手牌；满 7 张时卡牌公开进入弃牌堆，空牌库时状态板显示本次疲劳伤害。离线展示牌组为 5 张展示手牌加 25 张临时群系循环牌库，用于 UI 和回合测试；正式权威规则按 GDD 使用 30 张牌组与 3/4 张起手。
 
-本机原型贴图通过 `scripts/extract-minecraft-world-textures.ps1` 从已拥有的 Java 客户端 JAR 按白名单提取 20 张方块贴图和 11 张生物皮肤到 Git 忽略目录。运行时先查找 `Resources/DemoWorld/Prefabs/{cardId}`；不存在时由 `DemoMinecraftModelFactory` 为已注册的蜜蜂、绵羊、狼、村民、岩浆怪、烈焰人、流浪者、鲑鱼、海豚、溺尸与守卫者构造 Minecraft 式分件模型；珊瑚礁直接使用 `tube_coral_block`，海底神殿则组合 `prismarine_bricks`、`dark_prismarine` 与 `sea_lantern` 构成横跨三个建筑格的体素建筑，其余对象才使用通用后备模型。因此以后注册正式 Prefab 不需要改部署逻辑。
+本机原型贴图通过 `scripts/extract-minecraft-world-textures.ps1` 从已拥有的 Java 客户端 JAR 按白名单提取 26 张方块贴图和 12 张生物皮肤到 Git 忽略目录。运行时先查找 `Resources/DemoWorld/Prefabs/{cardId}`；不存在时由 `DemoMinecraftModelFactory` 为已注册的蜜蜂、绵羊、狼、村民、岩浆怪、烈焰人、流浪者、鲑鱼、海豚、溺尸与守卫者构造 Minecraft 式分件模型；珊瑚礁直接使用 `tube_coral_block`，海底神殿组合 `prismarine_bricks`、`dark_prismarine` 与 `sea_lantern`，沙漠神殿组合 `sandstone`、`cut_sandstone`、`chiseled_sandstone` 与 `orange_terracotta`，其余对象才使用通用后备模型。因此以后注册正式 Prefab 不需要改部署逻辑。
 
 部署、攻击与卡牌目标槽位不再使用屏幕空间矩形、透明 `Graphic` 或 UGUI `Button` 命中。每个槽位由一个合并的地砖顶面 Mesh、同 Mesh 的 `MeshCollider`、`DemoBattlefieldSlotTarget` 语义组件，以及一个仅在抬升时显示的合并侧壁 Mesh 组成，不为单块地砖创建 Renderer 或 Collider。`DemoBattlefieldPointerController` 使用主相机 `ScreenPointToRay` 在 3D 世界中寻找最近的双方语义槽位；UI 面板遮挡指针时停止世界命中。战斗阶段先持续高亮合法己方攻击者，选择后保持攻击者地砖的按下亮度，并点亮敌方生物/建筑目标；敌方英雄使用其实体 HUD 面板作为明确的点击目标。有目标卡牌进入独立选择态，已占用的合法地表直接发光而不抬升生物模型，右键或 Esc 可取消。
 
@@ -125,3 +125,5 @@ DB-005 的动态费用直接复用卡面左上角费用槽，不增加独立 Web
 铁傀儡建筑共鸣预览：[`assets/demo-iron-golem-preview-v1.png`](assets/demo-iron-golem-preview-v1.png)。林地苗圃在真实建筑格提供可读的条件来源，铁傀儡以 Minecraft 实体纹理和体素比例落在单位格；战吼结算后场上铭牌显示 `6/8`，同时保留嘲讽标记，右侧详情和手牌继续复用统一卡牌预制体。
 
 仙人掌围栏尖刺反击预览：[`assets/demo-cactus-fence-preview-v1.png`](assets/demo-cactus-fence-preview-v1.png)。围栏使用 Minecraft 仙人掌侧面与顶部纹理构成三柱体素建筑，并在红砂岩基座上继承远端半场透视；英雄受击后，蜜蜂铭牌从 `1/2` 更新为 `1/1`，围栏铭牌由“待触发”切换为“本回合已触发”，底部状态按攻击与反伤顺序解释结果。
+
+沙漠神殿掩埋链预览：[`assets/demo-desert-temple-preview-v1.png`](assets/demo-desert-temple-preview-v1.png)。神殿是一个横跨两个真实建筑格的砂岩体素对象，缩窄的基座边缘保留可见的沙金贴地脉冲，两格使用同一实例相位同步呼吸；炸药机关出土后双方实体 HUD 同时闪烁，神殿从 `4/8` 修复至 `6/8`。藏宝图、炸药机关与陶片在详情区明确标为“出土效果 · 自动结算”，不会被误写成尚未接入或允许从手牌主动释放。

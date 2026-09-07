@@ -3,6 +3,7 @@ using BiomeRivals.Core;
 using BiomeRivals.Demo.Editor;
 using NUnit.Framework;
 using System.Linq;
+using System.Reflection;
 using UnityEditor;
 using UnityEngine;
 
@@ -334,12 +335,35 @@ namespace BiomeRivals.Demo.Tests
             var match = new DemoLocalMatch();
             match.ResetHand(new[] { "db_007" });
             Assert.That(registry.TryGetDefinition("db_007", out var temple), Is.True);
+            Assert.That(temple.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
 
             Assert.That(match.TryDeploy(temple, DemoSlotKind.Building, 2, out var error), Is.False);
             Assert.That(error, Does.Contain("连续 2"));
-            Assert.That(match.TryDeploy(temple, DemoSlotKind.Building, 1, out _), Is.True);
+            Assert.That(match.TryDeploy(temple, DemoSlotKind.Building, 1, out var message), Is.True);
             Assert.That(match.BuildingSlots[1], Is.EqualTo("db_007"));
             Assert.That(match.BuildingSlots[2], Is.EqualTo("db_007"));
+            Assert.That(match.BuriedCount, Is.EqualTo(2));
+            Assert.That(match.Deck, Does.Contain("tk_007"));
+            Assert.That(match.Deck, Does.Contain("tk_008"));
+            Assert.That(message, Does.Contain("藏宝图与炸药机关"));
+        }
+
+        [Test]
+        public void ExcavationTokensAreImplementedButCannotBePlayedManually()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+
+            foreach (var tokenId in new[] { "tk_006", "tk_007", "tk_008" })
+            {
+                Assert.That(registry.TryGetDefinition(tokenId, out var token), Is.True);
+                Assert.That(token.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+                Assert.That(token.manualPlayAllowed, Is.False);
+                match.ResetHand(new[] { tokenId });
+                var result = match.ApplyPlayCard(token, match.CreatePlayCardCommand(tokenId));
+                Assert.That(result.Accepted, Is.False, tokenId);
+                Assert.That(result.Code, Is.EqualTo(DemoCommandRejectionCode.CardNotPlayable), tokenId);
+            }
         }
 
         [Test]
@@ -389,6 +413,112 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(match.PlayerBattlefield.Single().MaxHealth, Is.EqualTo(10));
             Assert.That(match.BuildingSlots[1], Is.EqualTo("db_007"));
             Assert.That(match.BuildingSlots[2], Is.EqualTo("db_007"));
+            Assert.That(match.BuriedCount, Is.EqualTo(2));
+            Assert.That(match.Deck, Does.Contain("tk_007"));
+            Assert.That(match.Deck, Does.Contain("tk_008"));
+        }
+
+        [Test]
+        public void TreasureMapGeneratesEmeraldThenRepairsItsDesertTempleBeforeTheNormalDraw()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { "db_007" });
+            Assert.That(registry.TryGetDefinition("db_007", out var temple), Is.True);
+            Assert.That(match.TryDeploy(temple, DemoSlotKind.Building, 0, out _), Is.True);
+            var templeObject = match.GetObject(true, DemoSlotKind.Building, 0);
+            templeObject.Health = 4;
+            match.ResetDeckAndHand(new string[0], new[] { "pf_001", "tk_007" }, new[] { "tk_007" });
+
+            match.EndPlayerTurn();
+            var draw = match.BeginNextPlayerTurn();
+
+            Assert.That(draw.Outcome, Is.EqualTo(DemoDrawOutcome.Drawn));
+            Assert.That(draw.CardId, Is.EqualTo("pf_001"));
+            Assert.That(draw.ExcavatedCardIds, Is.EqualTo(new[] { "tk_007" }));
+            Assert.That(match.Hand, Is.EqualTo(new[] { "tk_007", "tk_018", "pf_001" }));
+            Assert.That(match.BuriedCount, Is.Zero);
+            Assert.That(match.ExcavatedThisTurn, Is.True);
+            Assert.That(templeObject.Health, Is.EqualTo(6));
+        }
+
+        [Test]
+        public void TntTrapDealsNormalAndTrueDamageRepairsTempleAndContinuesTheNormalDraw()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { "db_007", "tk_016" });
+            Assert.That(registry.TryGetDefinition("db_007", out var temple), Is.True);
+            Assert.That(registry.TryGetDefinition("tk_016", out var shulkerShell), Is.True);
+            Assert.That(match.TryDeploy(temple, DemoSlotKind.Building, 0, out _), Is.True);
+            Assert.That(match.TryCast(shulkerShell, out _), Is.True);
+            var templeObject = match.GetObject(true, DemoSlotKind.Building, 0);
+            templeObject.Health = 4;
+            match.ResetDeckAndHand(new string[0], new[] { "pf_001", "tk_008" }, new[] { "tk_008" });
+
+            match.EndPlayerTurn();
+            var draw = match.BeginNextPlayerTurn();
+
+            Assert.That(draw.Outcome, Is.EqualTo(DemoDrawOutcome.Drawn));
+            Assert.That(draw.CardId, Is.EqualTo("pf_001"));
+            Assert.That(draw.ExcavatedCardIds, Is.EqualTo(new[] { "tk_008" }));
+            Assert.That(match.PlayerLife, Is.EqualTo(29));
+            Assert.That(match.PlayerArmor, Is.EqualTo(2), "TNT self-damage is true damage and must bypass armor.");
+            Assert.That(match.OpponentLife, Is.EqualTo(27));
+            Assert.That(match.OpponentArmor, Is.Zero);
+            Assert.That(templeObject.Health, Is.EqualTo(6));
+            Assert.That(match.Hand, Is.EqualTo(new[] { "tk_008", "pf_001" }));
+            Assert.That(match.IsFinished, Is.False);
+        }
+
+        [Test]
+        public void LethalTntTrapReturnsMatchEndedStopsTheNormalDrawAndLocksDeployment()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            SetPrivateProperty(match, nameof(DemoLocalMatch.PlayerLife), 1);
+            SetPrivateProperty(match, nameof(DemoLocalMatch.OpponentLife), 3);
+            match.ResetDeckAndHand(new string[0], new[] { "pf_001", "tk_008" }, new[] { "tk_008" });
+
+            match.EndPlayerTurn();
+            var draw = match.BeginNextPlayerTurn();
+
+            Assert.That(draw.Outcome, Is.EqualTo(DemoDrawOutcome.MatchEnded));
+            Assert.That(draw.ExcavatedCardIds, Is.EqualTo(new[] { "tk_008" }));
+            Assert.That(match.PlayerLife, Is.Zero);
+            Assert.That(match.OpponentLife, Is.Zero);
+            Assert.That(match.IsFinished, Is.True);
+            Assert.That(match.Deck, Is.EqualTo(new[] { "pf_001" }), "normal draw must not continue after lethal excavation");
+
+            Assert.That(registry.TryGetDefinition("pf_001", out var bee), Is.True);
+            match.ResetHand(new[] { bee.id });
+            var preview = DemoDeploymentRules.Evaluate(match, bee, DemoSlotKind.Unit, 0);
+            Assert.That(preview.IsLegal, Is.False);
+            Assert.That(preview.Message, Does.Contain("对局已经结束"));
+        }
+
+        [Test]
+        public void ArchaeologyChoiceLethalTntClearsChoiceAndDoesNotDrawAgain()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            Assert.That(registry.TryGetDefinition("db_003", out var archaeologist), Is.True);
+            SetPrivateProperty(match, nameof(DemoLocalMatch.PlayerLife), 1);
+            SetPrivateProperty(match, nameof(DemoLocalMatch.OpponentLife), 3);
+            match.ResetDeckAndHand(new[] { archaeologist.id }, new[] { "pf_001", "tk_008" }, new[] { "tk_008" });
+            Assert.That(match.TryDeploy(archaeologist, DemoSlotKind.Unit, 0, out _), Is.True);
+            Assert.That(match.PendingChoice, Is.Not.Null);
+
+            var result = match.ApplyResolveChoice(
+                match.CreateResolveChoiceCommand(match.PendingChoice.choiceId, selectedOptionIndex: 0));
+
+            Assert.That(result.Accepted, Is.True);
+            Assert.That(match.PendingChoice, Is.Null);
+            Assert.That(match.IsFinished, Is.True);
+            Assert.That(match.PlayerLife, Is.Zero);
+            Assert.That(match.OpponentLife, Is.Zero);
+            Assert.That(match.Deck, Is.EqualTo(new[] { "pf_001" }));
+            Assert.That(result.Message, Does.Contain("结束对局"));
         }
 
         [Test]
@@ -412,6 +542,14 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(match.Hand, Is.EqualTo(new[] { "db_007", "tk_006" }));
             Assert.That(match.DiscardPile, Is.Empty);
             Assert.That(match.BuildingSlots.All(string.IsNullOrEmpty), Is.True);
+        }
+
+        private static void SetPrivateProperty(DemoLocalMatch match, string propertyName, int value)
+        {
+            var property = typeof(DemoLocalMatch).GetProperty(propertyName,
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            Assert.That(property, Is.Not.Null, propertyName);
+            property.SetValue(match, value);
         }
 
         [Test]
@@ -929,7 +1067,18 @@ namespace BiomeRivals.Demo.Tests
                 var cactusHighlight = buildingMarker.GetComponent<MeshRenderer>().sharedMaterial.GetColor("_HighlightColor");
                 Assert.That(cactusHighlight, Is.Not.EqualTo(nurseryHighlight));
                 Assert.That(cactusHighlight, Is.Not.EqualTo(coralHighlight));
+                battlefield.SetSlotEngineReady(true, DemoSlotKind.Building, 0, DemoEngineReadyKind.Temple);
+                var templeHighlight = buildingMarker.GetComponent<MeshRenderer>().sharedMaterial.GetColor("_HighlightColor");
+                Assert.That(templeHighlight, Is.Not.EqualTo(cactusHighlight));
+                Assert.That(templeHighlight, Is.Not.EqualTo(coralHighlight));
+                var synchronizedMarker = root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Building_1/InteractiveGround");
+                battlefield.SetSlotEngineReady(true, DemoSlotKind.Building, 0, DemoEngineReadyKind.Temple, "object-temple");
+                battlefield.SetSlotEngineReady(true, DemoSlotKind.Building, 1, DemoEngineReadyKind.Temple, "object-temple");
+                var synchronizedColorA = buildingMarker.GetComponent<MeshRenderer>().sharedMaterial.GetColor("_HighlightColor");
+                var synchronizedColorB = synchronizedMarker.GetComponent<MeshRenderer>().sharedMaterial.GetColor("_HighlightColor");
+                Assert.That(Vector4.Distance(synchronizedColorA, synchronizedColorB), Is.LessThan(0.001f));
                 battlefield.SetSlotEngineReady(true, DemoSlotKind.Building, 0, DemoEngineReadyKind.None);
+                battlefield.SetSlotEngineReady(true, DemoSlotKind.Building, 1, DemoEngineReadyKind.None);
                 Assert.That(buildingMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.Zero);
                 battlefield.SetSlotEndPhaseThreat(false, DemoSlotKind.Unit, 0, true);
                 Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.GreaterThan(0f));
@@ -1193,6 +1342,13 @@ namespace BiomeRivals.Demo.Tests
                                                battlefield.GetSlotWorldPosition(true, DemoSlotKind.Building, 1)) * 0.5f;
                 Assert.That(structurePiece, Is.Not.Null);
                 Assert.That(structurePiece.localPosition.x, Is.EqualTo(expectedStructureCenter.x).Within(0.001f));
+                Assert.That(structurePiece.Find("TempleFoundation"), Is.Not.Null);
+                Assert.That(structurePiece.Find("TempleLeftTower"), Is.Not.Null);
+                Assert.That(structurePiece.Find("TempleRightTower"), Is.Not.Null);
+                Assert.That(structurePiece.Find("TempleCentralShrine"), Is.Not.Null);
+                Assert.That(structurePiece.Find("TempleEntrance"), Is.Not.Null);
+                Assert.That(structurePiece.Find("TempleFoundation").GetComponent<MeshRenderer>().sharedMaterial.mainTexture.name,
+                    Is.EqualTo("cut_sandstone"));
 
                 battlefield.SyncPieces(new[]
                 {

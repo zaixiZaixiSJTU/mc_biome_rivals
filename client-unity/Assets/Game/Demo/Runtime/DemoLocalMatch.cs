@@ -56,6 +56,7 @@ namespace BiomeRivals.Demo
         public DemoTurnPhase Phase { get; private set; } = DemoTurnPhase.Main;
         public int PlayerLife { get; private set; } = 30;
         public int PlayerArmor { get; private set; }
+        public int OpponentArmor { get; private set; }
         public DemoEquipment PlayerEquipment { get; private set; }
         public DemoEquipment OpponentEquipment { get; private set; }
         public bool PlayerHeroHasAttacked { get; private set; }
@@ -151,6 +152,8 @@ namespace BiomeRivals.Demo
         {
             if (!ValidateCommand(command, MatchCommandTypes.DeployCard, out var rejection)) return rejection;
             if (definition == null) return Reject(DemoCommandRejectionCode.UnknownCard, "卡牌定义不存在。");
+            if (!definition.manualPlayAllowed)
+                return Reject(DemoCommandRejectionCode.CardNotPlayable, "该卡牌只能由规则自动结算，不能主动部署。");
             if (command.payload == null || !string.Equals(command.payload.cardId, definition.id, StringComparison.Ordinal))
                 return Reject(DemoCommandRejectionCode.UnknownCard, "命令中的卡牌与注册定义不一致。");
             if (Phase != DemoTurnPhase.Main)
@@ -289,6 +292,13 @@ namespace BiomeRivals.Demo
                 deployMessage += "；查看牌库顶 3 张并选择其中的掩埋牌。";
             }
             else if (definition.effectImplementationStatus == "IMPLEMENTED" &&
+                definition.effectIds != null && definition.effectIds.Contains("effect.db_007.01"))
+            {
+                BuryCard("tk_007");
+                BuryCard("tk_008");
+                deployMessage += "；神殿战吼将藏宝图与炸药机关埋入牌库。";
+            }
+            else if (definition.effectImplementationStatus == "IMPLEMENTED" &&
                 definition.effectIds != null && definition.effectIds.Contains("effect.si_003.01"))
             {
                 ApplySlow(battlecryTarget, definition.id, deployedObject.InstanceId, "effect.si_003.01", 0);
@@ -415,13 +425,19 @@ namespace BiomeRivals.Demo
                 if (deckIndex < 0 || _deck[deckIndex] != selected.cardId || !_buriedCardIds.Contains(selected.cardId))
                     throw new InvalidOperationException("Pending archaeology choice no longer matches the local deck.");
                 _deck.RemoveAt(deckIndex);
-                ResolveExcavatedCard(selected.cardId);
-                var draw = DrawCard();
-                message = draw.Outcome == DemoDrawOutcome.Drawn
-                    ? $"出土 {selected.cardId}，随后正常抽到 {draw.CardId}。"
-                    : draw.Outcome == DemoDrawOutcome.Burned
-                        ? $"出土 {selected.cardId}，随后 {draw.CardId} 因满手爆牌。"
-                        : $"出土 {selected.cardId}，随后受到 {draw.FatigueDamage} 点疲劳伤害。";
+                var matchEnded = ResolveExcavatedCard(selected.cardId);
+                if (matchEnded) message = $"出土 {selected.cardId}，炸药机关完成结算并结束对局。";
+                else
+                {
+                    var draw = DrawCard();
+                    message = draw.Outcome == DemoDrawOutcome.Drawn
+                        ? $"出土 {selected.cardId}，随后正常抽到 {draw.CardId}。"
+                        : draw.Outcome == DemoDrawOutcome.Burned
+                            ? $"出土 {selected.cardId}，随后 {draw.CardId} 因满手爆牌。"
+                            : draw.Outcome == DemoDrawOutcome.MatchEnded
+                                ? $"出土 {selected.cardId}，炸药机关完成结算并结束对局。"
+                                : $"出土 {selected.cardId}，随后受到 {draw.FatigueDamage} 点疲劳伤害。";
+                }
             }
             AcceptCommand(command);
             return DemoCommandResult.Accept(message, Revision);
@@ -444,6 +460,8 @@ namespace BiomeRivals.Demo
         public DemoCommandResult ApplyPlayCard(CardDefinitionEntry definition, MatchCommandDto command)
         {
             if (!ValidateCommand(command, MatchCommandTypes.PlayCard, out var rejection)) return rejection;
+            if (definition != null && !definition.manualPlayAllowed)
+                return Reject(DemoCommandRejectionCode.CardNotPlayable, "该卡牌只能在出土时自动结算，不能从手牌主动释放。");
             if (!CanPlay(definition, out var message)) return RejectFromMessage(message, definition);
             if (definition.cardType == "UNIT" || definition.cardType == "BUILDING" || definition.cardType == "STRUCTURE")
                 return Reject(DemoCommandRejectionCode.InvalidTarget, "该卡牌需要对应的部署或装备目标。");
@@ -548,7 +566,9 @@ namespace BiomeRivals.Demo
                             ? $"熔岩献祭：受到 2 点真实伤害，抽到 {draw.CardId}。"
                             : draw.Outcome == DemoDrawOutcome.Burned
                                 ? $"熔岩献祭：受到 2 点真实伤害，{draw.CardId} 因满手爆牌。"
-                                : $"熔岩献祭：受到 2 点真实伤害，并受到 {draw.FatigueDamage} 点疲劳伤害。";
+                                : draw.Outcome == DemoDrawOutcome.MatchEnded
+                                    ? "熔岩献祭后出土炸药机关，对局结束。"
+                                    : $"熔岩献祭：受到 2 点真实伤害，并受到 {draw.FatigueDamage} 点疲劳伤害。";
                     }
                     break;
                 case "effect.si_001.01":
@@ -608,6 +628,7 @@ namespace BiomeRivals.Demo
                     var rallyDraws = 0;
                     var rallyBurns = 0;
                     var rallyFatigue = 0;
+                    var rallyMatchEnded = false;
                     for (var rallyStep = 0; rallyStep < 2; rallyStep++)
                     {
                         if (TrySummonUnit("tk_004", true, -1, out _))
@@ -618,13 +639,15 @@ namespace BiomeRivals.Demo
                         var rallyDraw = DrawCard();
                         if (rallyDraw.Outcome == DemoDrawOutcome.Drawn) rallyDraws++;
                         else if (rallyDraw.Outcome == DemoDrawOutcome.Burned) rallyBurns++;
-                        else rallyFatigue += rallyDraw.FatigueDamage;
+                        else if (rallyDraw.Outcome == DemoDrawOutcome.Fatigue) rallyFatigue += rallyDraw.FatigueDamage;
+                        else if (rallyDraw.Outcome == DemoDrawOutcome.MatchEnded) rallyMatchEnded = true;
                         if (IsFinished) break;
                     }
                     message = $"林间集结：召唤 {rallySummons} 个林地伙伴";
                     if (rallyDraws > 0) message += $"，抽取 {rallyDraws} 张牌";
                     if (rallyBurns > 0) message += $"，爆牌 {rallyBurns} 张";
                     if (rallyFatigue > 0) message += $"，受到 {rallyFatigue} 点疲劳伤害";
+                    if (rallyMatchEnded) message += "，炸药机关引爆并结束对局";
                     message += "。";
                     break;
                 default:
@@ -708,6 +731,7 @@ namespace BiomeRivals.Demo
 
         public bool CanAttackTarget(DemoBattlefieldObject target, string targetType, out string message)
         {
+            if (IsFinished) return Fail("对局已经结束。", out message);
             if (PendingChoice != null) return Fail("请先完成考古学家的牌库选择。", out message);
             if (targetType != "HERO" && targetType != "UNIT" && targetType != "BUILDING")
                 return Fail("攻击目标类型无效。", out message);
@@ -730,6 +754,7 @@ namespace BiomeRivals.Demo
         public DemoCommandResult ApplyEnterCombat(MatchCommandDto command)
         {
             if (!ValidateCommand(command, MatchCommandTypes.EnterCombat, out var rejection)) return rejection;
+            if (IsFinished) return Reject(DemoCommandRejectionCode.InvalidCommand, "对局已经结束。");
             if (!IsPlayerTurn) return Reject(DemoCommandRejectionCode.NotActivePlayer, "当前不是你的回合。");
             if (Phase != DemoTurnPhase.Main) return Reject(DemoCommandRejectionCode.WrongPhase, "当前已经处于战斗阶段。");
             Phase = DemoTurnPhase.Combat;
@@ -831,6 +856,7 @@ namespace BiomeRivals.Demo
         public DemoCommandResult ApplyEndTurn(MatchCommandDto command)
         {
             if (!ValidateCommand(command, MatchCommandTypes.EndTurn, out var rejection)) return rejection;
+            if (IsFinished) return Reject(DemoCommandRejectionCode.InvalidCommand, "对局已经结束。");
             if (!IsPlayerTurn) return Reject(DemoCommandRejectionCode.NotActivePlayer, "当前不是你的回合。");
             var monumentDeathMessages = new List<string>();
             var monumentDamage = ResolveOceanMonumentEndPhase(monumentDeathMessages);
@@ -849,6 +875,8 @@ namespace BiomeRivals.Demo
 
         public DemoDrawResult BeginNextPlayerTurn()
         {
+            if (IsFinished)
+                return RememberDraw(new DemoDrawResult(DemoDrawOutcome.MatchEnded, string.Empty, 0));
             ExpireStatuses(_opponentBattlefield);
             Round++;
             MaxEnergy = Math.Min(10, MaxEnergy + 1);
@@ -879,8 +907,10 @@ namespace BiomeRivals.Demo
                 _deck.RemoveAt(cardIndex);
                 if (_buriedCardIds.Contains(cardId))
                 {
-                    ResolveExcavatedCard(cardId);
+                    var matchEnded = ResolveExcavatedCard(cardId);
                     excavated.Add(cardId);
+                    if (matchEnded)
+                        return RememberDraw(new DemoDrawResult(DemoDrawOutcome.MatchEnded, string.Empty, 0, excavated.ToArray()));
                     continue;
                 }
                 if (_hand.Count >= 7)
@@ -894,14 +924,43 @@ namespace BiomeRivals.Demo
             }
         }
 
-        private void ResolveExcavatedCard(string cardId)
+        private bool ResolveExcavatedCard(string cardId)
         {
             if (!_buriedCardIds.Remove(cardId)) throw new InvalidOperationException($"Excavated card has no buried marker: {cardId}");
-            if (cardId != "tk_006") throw new InvalidOperationException($"Buried effect handler is not registered: {cardId}");
+            if (cardId != "tk_006" && cardId != "tk_007" && cardId != "tk_008")
+                throw new InvalidOperationException($"Buried effect handler is not registered: {cardId}");
             if (_hand.Count >= 7) _discardPile.Add(cardId);
             else _hand.Add(cardId);
-            PlayerArmor += 1;
             ExcavatedThisTurn = true;
+            if (cardId == "tk_006") PlayerArmor += 1;
+            else if (cardId == "tk_007") GenerateCard("tk_018");
+            else
+            {
+                var opponentArmorDamage = Math.Min(OpponentArmor, 3);
+                OpponentArmor -= opponentArmorDamage;
+                OpponentLife = Math.Max(0, OpponentLife - (3 - opponentArmorDamage));
+                PlayerLife = Math.Max(0, PlayerLife - 1);
+            }
+            HealDesertTemples();
+            if (cardId == "tk_008" && (PlayerLife == 0 || OpponentLife == 0)) IsFinished = true;
+            return IsFinished;
+        }
+
+        private void GenerateCard(string cardId)
+        {
+            if (_hand.Count >= 7) _discardPile.Add(cardId);
+            else _hand.Add(cardId);
+        }
+
+        private int HealDesertTemples()
+        {
+            var temples = _playerBattlefield
+                .Where(value => value.SlotKind == DemoSlotKind.Building && value.CardId == "db_007" && value.Health > 0)
+                .OrderBy(value => value.SlotIndex)
+                .ThenBy(value => value.InstanceId, StringComparer.Ordinal)
+                .ToArray();
+            foreach (var temple in temples) temple.Health = Math.Min(temple.MaxHealth, temple.Health + 2);
+            return temples.Length;
         }
 
         public int GetEffectiveCost(CardDefinitionEntry definition)
@@ -958,6 +1017,7 @@ namespace BiomeRivals.Demo
         private bool CanPlay(CardDefinitionEntry definition, out string message)
         {
             if (definition == null) return Fail("卡牌定义不存在。", out message);
+            if (IsFinished) return Fail("对局已经结束。", out message);
             if (PendingChoice != null) return Fail("请先完成考古学家的牌库选择。", out message);
             if (!IsPlayerTurn) return Fail("当前是对手回合。", out message);
             if (Phase != DemoTurnPhase.Main) return Fail("进入战斗阶段后不能继续打出卡牌。", out message);
@@ -970,6 +1030,7 @@ namespace BiomeRivals.Demo
         private bool CanDeploy(CardDefinitionEntry definition, string paymentMethod, out string message)
         {
             if (definition == null) return Fail("卡牌定义不存在。", out message);
+            if (IsFinished) return Fail("对局已经结束。", out message);
             if (PendingChoice != null) return Fail("请先完成考古学家的牌库选择。", out message);
             if (!IsPlayerTurn) return Fail("当前是对手回合。", out message);
             if (Phase != DemoTurnPhase.Main) return Fail("进入战斗阶段后不能继续部署卡牌。", out message);

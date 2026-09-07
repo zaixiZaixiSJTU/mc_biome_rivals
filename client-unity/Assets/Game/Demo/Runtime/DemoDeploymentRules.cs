@@ -39,6 +39,8 @@ namespace BiomeRivals.Demo
 
             if (!deploysToUnits && !deploysToBuildings)
                 return Reject(occupiedSlots, "这张牌不是战场部署牌。");
+            if (match.IsFinished) return Reject(occupiedSlots, "对局已经结束。");
+            if (!definition.manualPlayAllowed) return Reject(occupiedSlots, "该卡牌只能由规则自动结算。");
             if (!match.IsPlayerTurn) return Reject(occupiedSlots, "当前是对手回合。");
             if (match.Phase != DemoTurnPhase.Main) return Reject(occupiedSlots, "进入战斗阶段后不能继续部署卡牌。");
             if (!match.Hand.Contains(definition.id)) return Reject(occupiedSlots, "该牌不在手牌中。");

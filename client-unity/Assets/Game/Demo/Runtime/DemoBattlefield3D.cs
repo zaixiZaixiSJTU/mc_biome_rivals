@@ -12,7 +12,8 @@ namespace BiomeRivals.Demo
         None,
         Nursery,
         Coral,
-        Cactus
+        Cactus,
+        Temple
     }
 
     public sealed class DemoBattlefield3D : MonoBehaviour
@@ -155,11 +156,19 @@ namespace BiomeRivals.Demo
             UpdateSlotMarker(marker, Time.unscaledTime, 0f);
         }
 
-        public void SetSlotEngineReady(bool player, DemoSlotKind kind, int index, DemoEngineReadyKind readyKind)
+        public void SetSlotEngineReady(
+            bool player,
+            DemoSlotKind kind,
+            int index,
+            DemoEngineReadyKind readyKind,
+            string synchronizedInstanceId = null)
         {
             BuildNow();
             if (!_slotMarkers.TryGetValue(SlotKey(player, kind, index), out var marker)) return;
             marker.EngineReadyKind = readyKind;
+            marker.EnginePhase = string.IsNullOrEmpty(synchronizedInstanceId)
+                ? marker.Phase
+                : StablePulsePhase(synchronizedInstanceId);
             UpdateSlotMarker(marker, Time.unscaledTime, 0f);
         }
 
@@ -265,7 +274,8 @@ namespace BiomeRivals.Demo
         private static void UpdateSlotMarker(SlotMarker marker, float time, float deltaTime)
         {
             if (marker.Root == null || marker.SurfaceMaterial == null) return;
-            var pulse = 0.5f + Mathf.Sin(time * 4.6f + marker.Phase) * 0.5f;
+            var pulsePhase = marker.EngineReadyKind == DemoEngineReadyKind.None ? marker.Phase : marker.EnginePhase;
+            var pulse = 0.5f + Mathf.Sin(time * 4.6f + pulsePhase) * 0.5f;
             var rejectedPreview = marker.Hovered && marker.HoverRejected || marker.Pressed && marker.PressRejected;
             var actionableHover = marker.Hovered && marker.ValidTarget;
             var actionablePress = marker.Pressed && marker.ValidTarget;
@@ -274,7 +284,9 @@ namespace BiomeRivals.Demo
                 ? Color.Lerp(Hex("#41672D"), Hex("#A8D66D"), pulse)
                 : marker.EngineReadyKind == DemoEngineReadyKind.Cactus
                     ? Color.Lerp(Hex("#8A6424"), Hex("#C7D65A"), pulse)
-                    : Color.Lerp(Hex("#8E3F72"), Hex("#F08FB4"), pulse);
+                    : marker.EngineReadyKind == DemoEngineReadyKind.Temple
+                        ? Color.Lerp(Hex("#8C5B24"), Hex("#F2C66D"), pulse)
+                        : Color.Lerp(Hex("#8E3F72"), Hex("#F08FB4"), pulse);
             var highlightColor = rejectedPreview
                 ? Color.Lerp(Hex("#B41635"), Hex("#FF3157"), pulse)
                 : actionablePress || actionableHover
@@ -680,6 +692,16 @@ namespace BiomeRivals.Demo
 
         private static string SlotKey(bool player, DemoSlotKind kind, int index) => $"{player}:{kind}:{index}";
 
+        private static float StablePulsePhase(string value)
+        {
+            unchecked
+            {
+                var hash = 17;
+                foreach (var character in value) hash = hash * 31 + character;
+                return (uint)hash % 6283u / 1000f;
+            }
+        }
+
         private static void SetMaterialColor(Material material, Color color, Color emission)
         {
             if (material.HasProperty("_Color")) material.SetColor("_Color", color);
@@ -781,6 +803,7 @@ namespace BiomeRivals.Demo
                     battlefieldObject.OccupiedSlots);
                 if (cardId == "pf_005") BuildWoodlandNursery(root, footprintWidth);
                 else if (cardId == "db_004") BuildCactusFence(root, material, footprintWidth);
+                else if (cardId == "db_007") BuildDesertTemple(root, footprintWidth);
                 else if (cardId == "or_007") BuildCoralReef(root, material, footprintWidth);
                 else if (cardId == "or_008") BuildOceanMonument(root, material, footprintWidth);
                 else BuildBlockStructure(root, material, theme.Accent, footprintWidth);
@@ -912,6 +935,49 @@ namespace BiomeRivals.Demo
                 new Vector3(width * 0.78f, 0.20f, 0.20f), cactusSide);
             CreateBlock(root, "CactusRailBack", new Vector3(0f, 0.68f, 0.30f),
                 new Vector3(width * 0.78f, 0.20f, 0.20f), cactusSide);
+        }
+
+        private void BuildDesertTemple(Transform root, float footprintWidth)
+        {
+            var sandstone = GetWorldMaterial("desert_temple_sandstone", "sandstone", Hex("#D8BE78"));
+            var cutSandstone = GetWorldMaterial("desert_temple_cut", "cut_sandstone", Hex("#CDAE66"));
+            var chiseledSandstone = GetWorldMaterial("desert_temple_chiseled", "chiseled_sandstone", Hex("#E0C781"));
+            var orangeTerracotta = GetWorldMaterial("desert_temple_orange", "orange_terracotta", Hex("#A85324"));
+            var width = Mathf.Max(4.65f, footprintWidth);
+            var foundationWidth = width - 0.34f;
+            var towerOffset = width * 0.31f;
+            CreateBlock(root, "TempleFoundation", new Vector3(0f, 0.16f, 0f),
+                new Vector3(foundationWidth, 0.28f, 0.90f), cutSandstone);
+            CreateBlock(root, "TempleLowerTerrace", new Vector3(0f, 0.42f, 0f),
+                new Vector3(width - 0.70f, 0.26f, 0.78f), sandstone);
+            CreateBlock(root, "TempleUpperTerrace", new Vector3(0f, 0.67f, 0.03f),
+                new Vector3(width - 1.12f, 0.25f, 0.86f), cutSandstone);
+            CreateBlock(root, "TempleLeftTower", new Vector3(-towerOffset, 1.12f, 0.05f),
+                new Vector3(0.88f, 1.34f, 0.82f), sandstone);
+            CreateBlock(root, "TempleRightTower", new Vector3(towerOffset, 1.12f, 0.05f),
+                new Vector3(0.88f, 1.34f, 0.82f), sandstone);
+            CreateBlock(root, "TempleLeftCrown", new Vector3(-towerOffset, 1.86f, 0.05f),
+                new Vector3(1.08f, 0.18f, 0.96f), cutSandstone);
+            CreateBlock(root, "TempleRightCrown", new Vector3(towerOffset, 1.86f, 0.05f),
+                new Vector3(1.08f, 0.18f, 0.96f), cutSandstone);
+            CreateBlock(root, "TempleCentralShrine", new Vector3(0f, 1.04f, 0.07f),
+                new Vector3(1.26f, 0.92f, 0.78f), chiseledSandstone);
+            CreateBlock(root, "TempleShrineCap", new Vector3(0f, 1.57f, 0.07f),
+                new Vector3(1.52f, 0.16f, 0.90f), cutSandstone);
+            CreateBlock(root, "TempleEntrance", new Vector3(0f, 0.70f, -0.46f),
+                new Vector3(0.48f, 0.62f, 0.12f), orangeTerracotta);
+            CreateBlock(root, "TempleGlyphLeft", new Vector3(-towerOffset, 1.18f, -0.39f),
+                new Vector3(0.34f, 0.34f, 0.08f), orangeTerracotta);
+            CreateBlock(root, "TempleGlyphRight", new Vector3(towerOffset, 1.18f, -0.39f),
+                new Vector3(0.34f, 0.34f, 0.08f), orangeTerracotta);
+        }
+
+        private Material GetWorldMaterial(string key, string textureKey, Color fallback)
+        {
+            if (_materials.TryGetValue(key, out var material)) return material;
+            material = DemoWorldAssetProvider.CreateBlockMaterial("Demo_" + key, fallback, textureKey, Color.black, blockShader);
+            _materials[key] = material;
+            return material;
         }
 
         private void BuildOceanMonument(Transform root, Material prismarineBricks, float footprintWidth)
@@ -1052,6 +1118,7 @@ namespace BiomeRivals.Demo
             public readonly Material RiserMaterial;
             public readonly Vector3 BasePosition;
             public readonly float Phase;
+            public float EnginePhase;
             public bool ValidTarget;
             public bool Occupied;
             public bool PriorityTarget;
@@ -1081,6 +1148,7 @@ namespace BiomeRivals.Demo
                 RiserMaterial = riserMaterial;
                 BasePosition = basePosition;
                 Phase = phase;
+                EnginePhase = phase;
             }
         }
     }

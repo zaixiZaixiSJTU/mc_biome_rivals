@@ -2,6 +2,13 @@ namespace BiomeRivalsRules {
   export function validateState(state: MatchState): string[] {
     const violations: string[] = [];
     if (!state.matchId) violations.push('matchId is required');
+    if (typeof state.authoritativeRandomSeed !== 'string' || !state.authoritativeRandomSeed) {
+      violations.push('authoritative random seed is required');
+    }
+    if (typeof state.authoritativeRandomCounter !== 'number' || state.authoritativeRandomCounter < 0 ||
+        state.authoritativeRandomCounter % 1 !== 0) {
+      violations.push('authoritative random counter is invalid');
+    }
     if (state.protocolVersion !== PROTOCOL_VERSION) violations.push('protocolVersion is unsupported');
     if (state.players.length !== 2) violations.push('exactly two players are required');
     if (state.players.length === 2 && state.players[0]!.playerId === state.players[1]!.playerId) {

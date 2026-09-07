@@ -1,6 +1,6 @@
 # 海洋相邻站位交互规范 v1
 
-本规范对应 `protocolVersion 24`、`rulesetVersion prototype-0.35` 与内容版本 27。
+本规范已按当前组合校准为 `protocolVersion 25`、`rulesetVersion prototype-0.36` 与内容版本 28。
 
 ## 标签与相邻判定
 

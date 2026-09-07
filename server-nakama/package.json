@@ -11,6 +11,7 @@
   },
   "devDependencies": {
     "@heroiclabs/nakama-js": "^2.8.0",
+    "ajv": "8.17.1",
     "nakama-runtime": "github:heroiclabs/nakama-common#5e2f7ec02b19d998d99f19ac34956849ea7321fb",
     "typescript": "5.8.3",
     "ws": "^8.21.0"
