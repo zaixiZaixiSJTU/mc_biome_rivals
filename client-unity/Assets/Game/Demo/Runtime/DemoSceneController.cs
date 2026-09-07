@@ -168,6 +168,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewBreedingSeason")) SetupBreedingSeasonPreview();
             else if (HasCommandLineFlag("-previewWoodlandRally")) SetupWoodlandRallyPreview();
             else if (HasCommandLineFlag("-previewIronGolem")) SetupIronGolemPreview();
+            else if (HasCommandLineFlag("-previewVindicator")) SetupVindicatorPreview();
             else if (HasCommandLineFlag("-previewCactusFence")) SetupCactusFencePreview();
             else if (HasCommandLineFlag("-previewDesertTemple")) SetupDesertTemplePreview();
             else if (HasCommandLineFlag("-previewDungeonSkeleton")) SetupDungeonSkeletonPreview();
@@ -792,6 +793,15 @@ namespace BiomeRivals.Demo
                             ? "铁傀儡响应己方建筑，永久获得 +1 攻击、+1 当前与最大生命。"
                             : "敌方铁傀儡响应建筑，永久获得了 +1/+1。", false);
                         yield return ShowTurnBanner("建筑共鸣", golemFriendly ? Gold : Ember);
+                    }
+                    else if (matchEvent.payload?.effectId == "effect.cd_005.01")
+                    {
+                        var vindicatorViewerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
+                        var vindicatorFriendly = matchEvent.payload?.playerId == vindicatorViewerId;
+                        ShowStatus(vindicatorFriendly
+                            ? "林地卫道士借助己方建筑发动伏击，本回合获得 +2 攻击力。"
+                            : "敌方林地卫道士借助建筑，本回合获得了 +2 攻击力。", false);
+                        yield return ShowTurnBanner("建筑伏击", vindicatorFriendly ? Cyan : Ember);
                     }
                     else if (matchEvent.payload?.effectId == "effect.db_004.01")
                     {
@@ -1584,6 +1594,31 @@ namespace BiomeRivals.Demo
                 : !nurseryDeployed.Accepted ? nurseryDeployed.Message : golemDeployed.Message,
                 !nurseryDeployed.Accepted || !golemDeployed.Accepted || golem?.Attack != 6 || golem.MaxHealth != 8);
             if (golem != null) StartCoroutine(PulseBattlefieldObject(golem.InstanceId));
+        }
+
+        private void SetupVindicatorPreview()
+        {
+            SelectFaction("cave_dark_forest");
+            SelectOpponentFaction("plains_forest");
+            if (!_registry.TryGetDefinition("cd_004", out var sensorDefinition) ||
+                !_registry.TryGetDefinition("cd_005", out var vindicatorDefinition)) return;
+            _match.ResetDeckAndHand(new[] { sensorDefinition.id }, new[] { "pf_001" });
+            var sensorDeployed = _match.ApplyDeploy(sensorDefinition,
+                _match.CreateDeployCommand(sensorDefinition.id, DemoSlotKind.Building, 0));
+            _match.EndPlayerTurn();
+            _match.BeginNextPlayerTurn();
+            _match.ResetHand(new[] { vindicatorDefinition.id });
+            var vindicatorDeployed = _match.ApplyDeploy(vindicatorDefinition,
+                _match.CreateDeployCommand(vindicatorDefinition.id, DemoSlotKind.Unit, 1));
+            var vindicator = _match.GetObject(true, DemoSlotKind.Unit, 1);
+            _match.ResetHand(new[] { vindicatorDefinition.id });
+            _selectedCardId = vindicatorDefinition.id;
+            RefreshAll();
+            ShowStatus(sensorDeployed.Accepted && vindicatorDeployed.Accepted && vindicator?.Attack == 6
+                ? "林地卫道士响应己方幽匿感测体，战吼在当前行动回合获得 +2 攻击；回合结束后精确恢复为 4。"
+                : !sensorDeployed.Accepted ? sensorDeployed.Message : vindicatorDeployed.Message,
+                !sensorDeployed.Accepted || !vindicatorDeployed.Accepted || vindicator?.Attack != 6);
+            if (vindicator != null) StartCoroutine(PulseBattlefieldObject(vindicator.InstanceId));
         }
 
         private void SetupCactusFencePreview()

@@ -1,6 +1,6 @@
 # PF-008 铁傀儡建筑共鸣战吼规范 v1
 
-本规范已按当前组合校准为 `protocolVersion 25`、`rulesetVersion prototype-0.38` 与内容版本 30。
+本规范已按当前组合校准为 `protocolVersion 25`、`rulesetVersion prototype-0.39` 与内容版本 31。
 
 ## 权威规则
 

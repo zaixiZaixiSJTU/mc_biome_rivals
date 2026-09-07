@@ -58,6 +58,7 @@ $textures = [ordered]@{
     entity_iron_golem = 'assets/minecraft/textures/entity/iron_golem/iron_golem.png'
     entity_snow_golem = 'assets/minecraft/textures/entity/snow_golem.png'
     entity_villager = 'assets/minecraft/textures/entity/villager/villager.png'
+    entity_vindicator = 'assets/minecraft/textures/entity/illager/vindicator.png'
     entity_stray = 'assets/minecraft/textures/entity/skeleton/stray.png'
     entity_salmon = 'assets/minecraft/textures/entity/fish/salmon.png'
     entity_dolphin = 'assets/minecraft/textures/entity/dolphin.png'

@@ -633,6 +633,9 @@ namespace BiomeRivalsRules {
           definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.pf_008.01') {
         triggerIronGolemBattlecry(player, battlefieldObject);
       } else if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
+          definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.cd_005.01') {
+        triggerVindicatorBattlecry(player, battlefieldObject);
+      } else if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
           definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.db_003.01') {
         offerArchaeologyChoice(player, battlefieldObject, definition.effectIds[0]);
       } else if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
@@ -954,6 +957,31 @@ namespace BiomeRivalsRules {
         maxHealth: golem.maxHealth,
         temporaryAttackModifier: golem.temporaryAttackModifier,
         temporaryAttackModifierExpiresOnTurn: golem.temporaryAttackModifierExpiresOnTurn
+      });
+      return true;
+    }
+
+    function triggerVindicatorBattlecry(player: PlayerState, vindicator: BattlefieldObjectState): boolean {
+      if (vindicator.cardType !== 'UNIT' || vindicator.health <= 0) return false;
+      const controlsBuilding = player.battlefield.some(function (object): boolean {
+        return object.instanceId !== vindicator.instanceId && object.health > 0 &&
+          (object.cardType === 'BUILDING' || object.cardType === 'STRUCTURE');
+      });
+      if (!controlsBuilding) return false;
+      vindicator.attack += 2;
+      vindicator.temporaryAttackModifier += 2;
+      vindicator.temporaryAttackModifierExpiresOnTurn = state.turn;
+      emit('OBJECT_STATS_CHANGED', {
+        playerId: player.playerId,
+        instanceId: vindicator.instanceId,
+        sourceCardId: vindicator.cardId,
+        sourceInstanceId: vindicator.instanceId,
+        effectId: 'effect.cd_005.01',
+        reason: 'TEMPORARY_ATTACK_MODIFIER',
+        attack: vindicator.attack,
+        health: vindicator.health,
+        temporaryAttackModifier: vindicator.temporaryAttackModifier,
+        temporaryAttackModifierExpiresOnTurn: vindicator.temporaryAttackModifierExpiresOnTurn
       });
       return true;
     }

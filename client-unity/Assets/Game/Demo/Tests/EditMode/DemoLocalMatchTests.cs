@@ -1307,6 +1307,8 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(companionTexture, Is.EqualTo("entity_wolf"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("pf_008", out var golemTexture), Is.True);
                 Assert.That(golemTexture, Is.EqualTo("entity_iron_golem"));
+                Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("cd_005", out var vindicatorTexture), Is.True);
+                Assert.That(vindicatorTexture, Is.EqualTo("entity_vindicator"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("si_002", out var snowGolemTexture), Is.True);
                 Assert.That(snowGolemTexture, Is.EqualTo("entity_snow_golem"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("or_001", out var salmonTexture), Is.True);
@@ -2345,6 +2347,35 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(golem.Health, Is.EqualTo(7));
             Assert.That(golem.MaxHealth, Is.EqualTo(7));
             Assert.That(result.Message, Does.Contain("建筑共鸣战吼未触发"));
+        }
+
+        [Test]
+        public void VindicatorBuildingBattlecryExpiresAtTurnEndLocally()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("cd_004", out var sensor), Is.True);
+            Assert.That(registry.TryGetDefinition("cd_005", out var vindicatorDefinition), Is.True);
+            Assert.That(vindicatorDefinition.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { sensor.id });
+            Assert.That(match.ApplyDeploy(sensor,
+                match.CreateDeployCommand(sensor.id, DemoSlotKind.Building, 0)).Accepted, Is.True);
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            match.ResetHand(new[] { vindicatorDefinition.id });
+
+            var deployed = match.ApplyDeploy(vindicatorDefinition,
+                match.CreateDeployCommand(vindicatorDefinition.id, DemoSlotKind.Unit, 1));
+            Assert.That(deployed.Accepted, Is.True, deployed.Message);
+            var vindicator = match.GetObject(true, DemoSlotKind.Unit, 1);
+            Assert.That(vindicator.Attack, Is.EqualTo(6));
+            Assert.That(vindicator.Health, Is.EqualTo(3));
+            Assert.That(vindicator.TemporaryAttackModifier, Is.EqualTo(2));
+            Assert.That(deployed.Message, Does.Contain("建筑伏击战吼触发"));
+
+            match.EndPlayerTurn();
+            Assert.That(vindicator.Attack, Is.EqualTo(4));
+            Assert.That(vindicator.TemporaryAttackModifier, Is.Zero);
         }
 
         [Test]

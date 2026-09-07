@@ -13,6 +13,7 @@ namespace BiomeRivals.Demo
             { "tk_004", "entity_wolf" },
             { "pf_003", "entity_wolf" },
             { "pf_004", "entity_villager" },
+            { "cd_005", "entity_vindicator" },
             { "pf_008", "entity_iron_golem" },
             { "si_002", "entity_snow_golem" },
             { "nt_001", "entity_magma_cube" },
@@ -47,6 +48,7 @@ namespace BiomeRivals.Demo
                     break;
                 case "pf_003": BuildWolf(root, material); break;
                 case "pf_004": BuildVillager(root, material); break;
+                case "cd_005": BuildVindicator(root, material); break;
                 case "pf_008": BuildIronGolem(root, material); break;
                 case "si_002": BuildSnowGolem(root, material); break;
                 case "nt_001": BuildMagmaCube(root, material); break;
@@ -105,6 +107,18 @@ namespace BiomeRivals.Demo
             Cuboid(root, "Nose", new Vector3(0f, 1.55f, -0.45f), new Vector3(0.18f, 0.34f, 0.18f), material, 24, 0, 2, 4, 2, 64, 64);
             Cuboid(root, "Body", new Vector3(0f, 0.94f, 0f), new Vector3(0.72f, 0.96f, 0.48f), material, 16, 20, 8, 12, 6, 64, 64);
             Cuboid(root, "CrossedArms", new Vector3(0f, 1.06f, -0.40f), new Vector3(0.92f, 0.28f, 0.28f), material, 44, 22, 8, 4, 4, 64, 64, Quaternion.Euler(-28f, 0f, 0f));
+            Cuboid(root, "LeftLeg", new Vector3(-0.19f, 0.29f, 0f), new Vector3(0.32f, 0.72f, 0.38f), material, 0, 22, 4, 8, 4, 64, 64);
+            Cuboid(root, "RightLeg", new Vector3(0.19f, 0.29f, 0f), new Vector3(0.32f, 0.72f, 0.38f), material, 0, 22, 4, 8, 4, 64, 64);
+        }
+
+        private static void BuildVindicator(Transform root, Material material)
+        {
+            root.localScale = Vector3.one * 0.96f;
+            Cuboid(root, "Head", new Vector3(0f, 1.66f, 0f), new Vector3(0.72f, 0.78f, 0.72f), material, 0, 0, 8, 10, 8, 64, 64);
+            Cuboid(root, "Nose", new Vector3(0f, 1.55f, -0.45f), new Vector3(0.18f, 0.34f, 0.18f), material, 24, 0, 2, 4, 2, 64, 64);
+            Cuboid(root, "Body", new Vector3(0f, 0.96f, 0f), new Vector3(0.72f, 0.98f, 0.48f), material, 16, 20, 8, 12, 6, 64, 64);
+            Cuboid(root, "LeftArm", new Vector3(-0.48f, 1.03f, -0.18f), new Vector3(0.24f, 0.90f, 0.24f), material, 40, 38, 4, 12, 4, 64, 64, Quaternion.Euler(-34f, 0f, 8f));
+            Cuboid(root, "RightArm", new Vector3(0.48f, 1.03f, -0.18f), new Vector3(0.24f, 0.90f, 0.24f), material, 40, 38, 4, 12, 4, 64, 64, Quaternion.Euler(-34f, 0f, -8f));
             Cuboid(root, "LeftLeg", new Vector3(-0.19f, 0.29f, 0f), new Vector3(0.32f, 0.72f, 0.38f), material, 0, 22, 4, 8, 4, 64, 64);
             Cuboid(root, "RightLeg", new Vector3(0.19f, 0.29f, 0f), new Vector3(0.32f, 0.72f, 0.38f), material, 0, 22, 4, 8, 4, 64, 64);
         }

@@ -286,6 +286,24 @@ namespace BiomeRivals.Demo
                 }
             }
             else if (definition.effectImplementationStatus == "IMPLEMENTED" &&
+                definition.effectIds != null && definition.effectIds.Contains("effect.cd_005.01"))
+            {
+                var controlsBuilding = _playerBattlefield.Any(value =>
+                    value.InstanceId != deployedObject.InstanceId && value.Health > 0 &&
+                    value.SlotKind == DemoSlotKind.Building);
+                if (controlsBuilding)
+                {
+                    deployedObject.Attack += 2;
+                    deployedObject.TemporaryAttackModifier += 2;
+                    deployedObject.TemporaryAttackModifierExpiresOnRound = Round;
+                    deployMessage += "；建筑伏击战吼触发，本回合获得 +2 攻击力。";
+                }
+                else
+                {
+                    deployMessage += "；未控制存活建筑或结构，建筑伏击战吼未触发。";
+                }
+            }
+            else if (definition.effectImplementationStatus == "IMPLEMENTED" &&
                 definition.effectIds != null && definition.effectIds.Contains("effect.db_003.01"))
             {
                 OfferArchaeologyChoice(deployedObject);

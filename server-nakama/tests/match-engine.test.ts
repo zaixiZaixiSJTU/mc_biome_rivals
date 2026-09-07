@@ -3066,6 +3066,67 @@ TestHarness.test('Iron Golem stays at base stats when only the opponent controls
   TestHarness.equal(result.batch.events[0]!.type, 'CARD_DEPLOYED');
 });
 
+TestHarness.test('Vindicator gains temporary attack with a friendly building and expires at turn end', function (): void {
+  const state = activeState('match-vindicator-building', ['alice', 'bob'], ['cave_dark_forest', 'plains_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['cd_005'];
+  actor.redstone = 3;
+  actor.redstoneCapacity = 3;
+  placeBuilding(state, actorIndex, 'cd_004', 0, 'object-10');
+
+  const deployed = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('vindicator-building', 0, 'cd_005', 'UNIT', 1));
+  TestHarness.equal(deployed.accepted, true, JSON.stringify(deployed));
+  if (!deployed.accepted) return;
+  const vindicator = deployed.state.players[actorIndex]!.battlefield.filter(function (value): boolean {
+    return value.cardId === 'cd_005';
+  })[0]!;
+  TestHarness.equal(vindicator.attack, 6);
+  TestHarness.equal(vindicator.health, 3);
+  TestHarness.equal(vindicator.temporaryAttackModifier, 2);
+  TestHarness.equal(vindicator.temporaryAttackModifierExpiresOnTurn, deployed.state.turn);
+  TestHarness.equal(deployed.batch.events.length, 2);
+  TestHarness.equal(deployed.batch.events[0]!.type, 'CARD_DEPLOYED');
+  TestHarness.equal(deployed.batch.events[0]!.payload.attack, 4);
+  TestHarness.equal(deployed.batch.events[1]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(deployed.batch.events[1]!.payload.effectId, 'effect.cd_005.01');
+  TestHarness.equal(deployed.batch.events[1]!.payload.reason, 'TEMPORARY_ATTACK_MODIFIER');
+  assertEventBatchMatchesSchema(deployed.batch);
+
+  const ended = BiomeRivalsRules.applyCommand(deployed.state, actor.playerId,
+    command('vindicator-turn-end', 1, 'END_TURN'));
+  TestHarness.equal(ended.accepted, true, JSON.stringify(ended));
+  if (!ended.accepted) return;
+  const expired = ended.state.players[actorIndex]!.battlefield.filter(function (value): boolean {
+    return value.cardId === 'cd_005';
+  })[0]!;
+  TestHarness.equal(expired.attack, 4);
+  TestHarness.equal(expired.temporaryAttackModifier, 0);
+});
+
+TestHarness.test('Vindicator ignores buildings controlled only by the opponent', function (): void {
+  const state = activeState('match-vindicator-enemy-building', ['alice', 'bob'], ['cave_dark_forest', 'plains_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const opponentIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['cd_005'];
+  actor.redstone = 3;
+  actor.redstoneCapacity = 3;
+  placeBuilding(state, opponentIndex, 'pf_005', 0, 'object-10');
+
+  const deployed = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('vindicator-enemy-building', 0, 'cd_005', 'UNIT', 1));
+  TestHarness.equal(deployed.accepted, true, JSON.stringify(deployed));
+  if (!deployed.accepted) return;
+  const vindicator = deployed.state.players[actorIndex]!.battlefield.filter(function (value): boolean {
+    return value.cardId === 'cd_005';
+  })[0]!;
+  TestHarness.equal(vindicator.attack, 4);
+  TestHarness.equal(vindicator.temporaryAttackModifier, 0);
+  TestHarness.equal(deployed.batch.events.length, 1);
+});
+
 TestHarness.test('Cactus Fence damages the first enemy unit that attacks its hero each turn', function (): void {
   const state = activeState('match-cactus-fence-reaction', ['alice', 'bob'], ['plains_forest', 'desert_badlands']);
   const actorIndex = state.activePlayerIndex;

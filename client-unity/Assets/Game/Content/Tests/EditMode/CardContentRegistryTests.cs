@@ -49,6 +49,9 @@ namespace BiomeRivals.Content.Tests
             Assert.That(registry.TryGetDefinition("tk_002", out var wheat), Is.True);
             Assert.That(wheat.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
             Assert.That(wheat.effectIds, Is.EqualTo(new[] { "effect.tk_002.01" }));
+            Assert.That(registry.TryGetDefinition("cd_005", out var vindicator), Is.True);
+            Assert.That(vindicator.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+            Assert.That(vindicator.effectIds, Is.EqualTo(new[] { "effect.cd_005.01" }));
             Assert.That(registry.TryGetDefinition("pf_008", out var ironGolem), Is.True);
             Assert.That(ironGolem.keywords, Is.EqualTo(new[] { "TAUNT" }));
             Assert.That(registry.TryGetDefinition("pf_001", out var bee), Is.True);

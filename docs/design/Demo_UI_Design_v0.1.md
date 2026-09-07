@@ -55,7 +55,7 @@ UGUI 样式由 `DemoUiStyleCatalog` 集中提供材质、底色、描边和交�
 
 手牌底板左下角持续显示“手牌 / 牌库 / 弃牌”三个区域计数，信息使用与 HUD 相同的低对比度浅色文字，不额外叠加 Web 风格浮层。新回合抽到的卡直接进入扇形手牌；满 7 张时卡牌公开进入弃牌堆，空牌库时状态板显示本次疲劳伤害。离线展示牌组为 5 张展示手牌加 25 张临时群系循环牌库，用于 UI 和回合测试；正式权威规则按 GDD 使用 30 张牌组与 3/4 张起手。
 
-本机原型贴图通过 `scripts/extract-minecraft-world-textures.ps1` 从已拥有的 Java 客户端 JAR 按白名单提取 26 张方块贴图和 12 张生物皮肤到 Git 忽略目录。运行时先查找 `Resources/DemoWorld/Prefabs/{cardId}`；不存在时由 `DemoMinecraftModelFactory` 为已注册的蜜蜂、绵羊、狼、村民、岩浆怪、烈焰人、流浪者、鲑鱼、海豚、溺尸与守卫者构造 Minecraft 式分件模型；珊瑚礁直接使用 `tube_coral_block`，海底神殿组合 `prismarine_bricks`、`dark_prismarine` 与 `sea_lantern`，沙漠神殿组合 `sandstone`、`cut_sandstone`、`chiseled_sandstone` 与 `orange_terracotta`，其余对象才使用通用后备模型。因此以后注册正式 Prefab 不需要改部署逻辑。
+本机原型贴图通过 `scripts/extract-minecraft-world-textures.ps1` 从已拥有的 Java 客户端 JAR 按白名单提取 27 张方块贴图和 13 张生物皮肤到 Git 忽略目录。运行时先查找 `Resources/DemoWorld/Prefabs/{cardId}`；不存在时由 `DemoMinecraftModelFactory` 为已注册的蜜蜂、绵羊、狼、村民、卫道士、铁傀儡、雪傀儡、岩浆怪、烈焰人、流浪者、鲑鱼、海豚、溺尸与守卫者构造 Minecraft 式分件模型；珊瑚礁直接使用 `tube_coral_block`，海底神殿组合 `prismarine_bricks`、`dark_prismarine` 与 `sea_lantern`，沙漠神殿组合 `sandstone`、`cut_sandstone`、`chiseled_sandstone` 与 `orange_terracotta`，其余对象才使用通用后备模型。因此以后注册正式 Prefab 不需要改部署逻辑。
 
 部署、攻击与卡牌目标槽位不再使用屏幕空间矩形、透明 `Graphic` 或 UGUI `Button` 命中。每个槽位由一个合并的地砖顶面 Mesh、同 Mesh 的 `MeshCollider`、`DemoBattlefieldSlotTarget` 语义组件，以及一个仅在抬升时显示的合并侧壁 Mesh 组成，不为单块地砖创建 Renderer 或 Collider。`DemoBattlefieldPointerController` 使用主相机 `ScreenPointToRay` 在 3D 世界中寻找最近的双方语义槽位；UI 面板遮挡指针时停止世界命中。战斗阶段先持续高亮合法己方攻击者，选择后保持攻击者地砖的按下亮度，并点亮敌方生物/建筑目标；敌方英雄使用其实体 HUD 面板作为明确的点击目标。有目标卡牌进入独立选择态，已占用的合法地表直接发光而不抬升生物模型，右键或 Esc 可取消。
 
@@ -119,6 +119,8 @@ DB-005 的动态费用直接复用卡面左上角费用槽，不增加独立 Web
 驯服的狼相邻战吼预览：[`assets/demo-tamed-wolf-preview-v1.png`](assets/demo-tamed-wolf-preview-v1.png)。已成长的狼铭牌显示永久生命；选中另一张狼时，与动物相邻的可部署地块以金色贴地材质和轻微抬升反馈显示，远离动物的合法格继续使用普通青绿色，从落位前即可读出战吼结果。
 
 村民农夫小麦战吼预览：[`assets/demo-villager-farmer-preview-v1.png`](assets/demo-villager-farmer-preview-v1.png)。村民农夫部署后保留 Minecraft 村民模型，并将小麦生成至己方手牌；预览会放置一只受伤绵羊，并让小麦进入目标选择态，所有合法友方单位都由贴合战场透视的 3D 地表亮块标记。新牌直接复用手牌与右侧详情的统一卡牌预制体。联机事件只向拥有者公开小麦身份；部署前达到七张手牌时，农夫先离手再生成小麦，因此合法流程仍保持七张而不会误判为爆牌。
+
+林地卫道士建筑战吼预览：[`assets/demo-vindicator-preview-v1.png`](assets/demo-vindicator-preview-v1.png)。深暗主场先放置幽匿感测体，再部署使用 Minecraft 卫道士皮肤的体素实体；场上铭牌直接显示本回合 6/3，底部状态说明回合结束恢复为 4/3，权威事件到达时复用“建筑伏击”横幅与实体脉冲。
 
 林地苗圃动物成长预览：[`assets/demo-woodland-nursery-preview-v1.png`](assets/demo-woodland-nursery-preview-v1.png)。苗圃使用橡木花床、泥土和橡树叶构成低矮体素建筑，不再使用通用双塔占位模型；上一回合获得永久生命的放牧绵羊以 `2/4` 留在真实单位格。当前回合重新就绪后，苗圃建筑格以叶绿色贴地材质脉冲提示持续效果，与珊瑚礁的粉紫色状态明确区分。
 
