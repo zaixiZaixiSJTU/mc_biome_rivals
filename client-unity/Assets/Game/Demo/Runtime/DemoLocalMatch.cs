@@ -479,7 +479,7 @@ namespace BiomeRivals.Demo
             var effectId = definition.effectIds[0];
             if (effectId != "effect.db_002.01" && effectId != "effect.db_006.01" && effectId != "effect.nt_006.01" &&
                 effectId != "effect.si_001.01" && effectId != "effect.si_006.01" && effectId != "effect.tk_005.01" &&
-                effectId != "effect.tk_009.01" && effectId != "effect.tk_010.01" && effectId != "effect.or_006.01" &&
+                effectId != "effect.tk_002.01" && effectId != "effect.tk_009.01" && effectId != "effect.tk_010.01" && effectId != "effect.or_006.01" &&
                 effectId != "effect.tk_012.01" && effectId != "effect.tk_016.01" && effectId != "effect.pf_006.01" &&
                 effectId != "effect.pf_007.01")
                 return Reject(DemoCommandRejectionCode.EffectNotImplemented, "找不到该 effectId 的规则处理器。");
@@ -597,6 +597,19 @@ namespace BiomeRivals.Demo
                     PlayerLife = Math.Min(30, PlayerLife + 2);
                     PlayerLife = Math.Max(0, PlayerLife - 1);
                     message = "腐肉：先恢复 2 点生命，再受到 1 点真实伤害。";
+                    break;
+                case "effect.tk_002.01":
+                    var wheatHealthBefore = targetedObject.Health;
+                    targetedObject.Health = Math.Min(targetedObject.MaxHealth, targetedObject.Health + 1);
+                    var wheatHealing = targetedObject.Health - wheatHealthBefore;
+                    if (targetedObject.HasTag("animal"))
+                    {
+                        targetedObject.Attack += 1;
+                        targetedObject.TemporaryAttackModifier += 1;
+                        targetedObject.TemporaryAttackModifierExpiresOnRound = Round;
+                        message = $"小麦：{targetedObject.CardId} 恢复 {wheatHealing} 点生命，并在本回合获得 +1 攻击力。";
+                    }
+                    else message = $"小麦：{targetedObject.CardId} 恢复 {wheatHealing} 点生命。";
                     break;
                 case "effect.tk_009.01":
                     targetedObject.Attack += 1;

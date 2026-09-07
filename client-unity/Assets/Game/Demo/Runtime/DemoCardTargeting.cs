@@ -71,6 +71,10 @@ namespace BiomeRivals.Demo
             "effect.tk_009.01", DemoTargetOwner.Friendly, DemoSlotKind.Unit, "UNIT",
             "选择己方目标", "请选择一个发光的己方生物；右键或 Esc 取消。", "当前没有可选择的己方生物。");
 
+        private static readonly DemoCardTargetRule Wheat = new DemoCardTargetRule(
+            "effect.tk_002.01", DemoTargetOwner.Friendly, DemoSlotKind.Unit, "UNIT",
+            "选择喂食目标", "请选择一个发出麦金色光芒的己方生物；动物还会获得本回合 +1 攻击。", "当前没有可喂食的己方生物。");
+
         private static readonly DemoCardTargetRule Cobblestone = new DemoCardTargetRule(
             "effect.tk_010.01", DemoTargetOwner.Friendly, DemoSlotKind.Building, "BUILDING",
             "选择己方建筑", "请选择一个发光的己方建筑或结构；右键或 Esc 取消。", "当前没有可选择的己方建筑或结构。");
@@ -97,6 +101,7 @@ namespace BiomeRivals.Demo
                     case "effect.si_003.01": rule = Stray; return true;
                     case "effect.si_006.01": rule = PowderSnowBucket; return true;
                     case "effect.or_003.01": rule = Drowned; return true;
+                    case "effect.tk_002.01": rule = Wheat; return true;
                     case "effect.tk_009.01": rule = Bone; return true;
                     case "effect.tk_010.01": rule = Cobblestone; return true;
                     case "effect.tk_012.01": rule = PrismarineShard; return true;

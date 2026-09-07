@@ -593,6 +593,10 @@ namespace BiomeRivals.Demo
                             ShowStatus("沙尘暴席卷战场：所有生物受到 2 点伤害。", false);
                             yield return ShowTurnBanner("沙尘暴", Ember);
                             break;
+                        case "effect.tk_002.01":
+                            ShowStatus(ownEffect ? "小麦已喂给己方生物；若目标是动物，它本回合还会获得 +1 攻击。" : "对手使用小麦喂食了一个生物。", false);
+                            yield return ShowTurnBanner("喂食", ownEffect ? Gold : Ember);
+                            break;
                         case "effect.tk_009.01":
                             ShowStatus(ownEffect ? "骨头已生效：己方目标本回合获得 +1 攻击力。" : "对手使用骨头强化了一个生物。", false);
                             break;
@@ -1072,15 +1076,25 @@ namespace BiomeRivals.Demo
             SelectFaction("plains_forest");
             SelectOpponentFaction("plains_forest");
             if (!_registry.TryGetDefinition("pf_004", out var farmerDefinition) ||
-                !_registry.TryGetDefinition("tk_002", out var wheatDefinition)) return;
-            _match.ResetHand(new[] { farmerDefinition.id });
+                !_registry.TryGetDefinition("tk_002", out var wheatDefinition) ||
+                !_registry.TryGetDefinition("pf_002", out var sheepDefinition)) return;
+            _match.ResetHand(new[] { sheepDefinition.id, farmerDefinition.id });
+            var sheepDeployed = _match.ApplyDeploy(sheepDefinition,
+                _match.CreateDeployCommand(sheepDefinition.id, DemoSlotKind.Unit, 0));
+            var sheep = _match.GetObject(true, DemoSlotKind.Unit, 0);
+            if (sheep != null) sheep.Health = Math.Max(1, sheep.Health - 1);
             var deployed = _match.ApplyDeploy(farmerDefinition,
                 _match.CreateDeployCommand(farmerDefinition.id, DemoSlotKind.Unit, 1));
-            _selectedCardId = wheatDefinition.id;
             RefreshAll();
-            ShowStatus(deployed.Accepted && _match.Hand.Contains(wheatDefinition.id)
-                ? "村民农夫已在战场站稳，并将小麦生成到手牌；右侧详情与手牌复用同一张材料卡预制体。"
-                : deployed.Message, !deployed.Accepted || !_match.Hand.Contains(wheatDefinition.id));
+            if (deployed.Accepted && _match.Hand.Contains(wheatDefinition.id))
+            {
+                SelectCard(wheatDefinition.id);
+                CastSelectedCard();
+            }
+            ShowStatus(sheepDeployed.Accepted && deployed.Accepted && _match.Hand.Contains(wheatDefinition.id)
+                ? "小麦已进入手牌并等待目标：选择受伤绵羊会恢复 1 点生命，并让动物本回合获得 +1 攻击。"
+                : !sheepDeployed.Accepted ? sheepDeployed.Message : deployed.Message,
+                !sheepDeployed.Accepted || !deployed.Accepted || !_match.Hand.Contains(wheatDefinition.id));
         }
 
         private void SetupDeathrattlePreview()

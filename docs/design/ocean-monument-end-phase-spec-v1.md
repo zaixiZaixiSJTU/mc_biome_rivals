@@ -1,6 +1,6 @@
 # 海底神殿结束阶段规范 v1
 
-本规范已按当前组合校准为 `protocolVersion 25`、`rulesetVersion prototype-0.37` 与内容版本 29。
+本规范已按当前组合校准为 `protocolVersion 25`、`rulesetVersion prototype-0.38` 与内容版本 30。
 
 ## OR-008 海底神殿
 

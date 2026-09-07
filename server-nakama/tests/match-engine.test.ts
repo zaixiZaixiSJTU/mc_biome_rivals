@@ -1216,6 +1216,75 @@ TestHarness.test('bone buffs a friendly unit for the current turn only', functio
   TestHarness.equal(ended.state.players[0]!.battlefield[0]!.temporaryAttackModifier, 0);
 });
 
+TestHarness.test('wheat heals a friendly Animal and grants temporary attack', function (): void {
+  const state = activeState('match-wheat-animal', ['alice', 'bob'], ['plains_forest', 'nether']);
+  const actorIndex = state.activePlayerIndex;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['tk_002'];
+  placeUnit(state, actorIndex, 'pf_002', 0, 'object-1', 1);
+  actor.battlefield[0]!.health = 2;
+  state.nextInstanceId = 2;
+
+  const played = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('play-wheat-animal', 0, 'tk_002', 'UNIT', 'object-1'));
+  TestHarness.ok(played.accepted);
+  if (!played.accepted) return;
+  const sheep = played.state.players[actorIndex]!.battlefield[0]!;
+  TestHarness.equal(sheep.health, 3);
+  TestHarness.equal(sheep.attack, 3);
+  TestHarness.equal(sheep.temporaryAttackModifier, 1);
+  TestHarness.equal(sheep.temporaryAttackModifierExpiresOnTurn, played.state.turn);
+  TestHarness.equal(played.batch.events.map(function (event): string { return event.type; }).join(','),
+    'CARD_PLAYED,OBJECT_STATS_CHANGED,OBJECT_STATS_CHANGED');
+  TestHarness.equal(played.batch.events[1]!.payload.reason, 'HEAL');
+  TestHarness.equal(played.batch.events[2]!.payload.reason, 'TEMPORARY_ATTACK_MODIFIER');
+  assertEventBatchMatchesSchema(played.batch);
+
+  const ended = BiomeRivalsRules.applyCommand(played.state, actor.playerId, command('end-wheat-animal', 1, 'END_TURN'));
+  TestHarness.ok(ended.accepted);
+  if (!ended.accepted) return;
+  TestHarness.equal(ended.state.players[actorIndex]!.battlefield[0]!.attack, 2);
+  TestHarness.equal(ended.state.players[actorIndex]!.battlefield[0]!.temporaryAttackModifier, 0);
+});
+
+TestHarness.test('wheat heals a friendly non-Animal without granting attack', function (): void {
+  const state = activeState('match-wheat-non-animal', ['alice', 'bob'], ['plains_forest', 'nether']);
+  const actorIndex = state.activePlayerIndex;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['tk_002'];
+  placeUnit(state, actorIndex, 'pf_004', 0, 'object-1', 1);
+  actor.battlefield[0]!.health = 3;
+
+  const played = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('play-wheat-non-animal', 0, 'tk_002', 'UNIT', 'object-1'));
+  TestHarness.ok(played.accepted);
+  if (!played.accepted) return;
+  TestHarness.equal(played.state.players[actorIndex]!.battlefield[0]!.health, 4);
+  TestHarness.equal(played.state.players[actorIndex]!.battlefield[0]!.attack, 2);
+  TestHarness.equal(played.batch.events.length, 2);
+  TestHarness.equal(played.batch.events[1]!.payload.reason, 'HEAL');
+});
+
+TestHarness.test('wheat rejects an enemy unit atomically before payment', function (): void {
+  const state = activeState('match-wheat-enemy', ['alice', 'bob'], ['plains_forest', 'nether']);
+  const actorIndex = state.activePlayerIndex;
+  const enemyIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['tk_002'];
+  placeUnit(state, enemyIndex, 'nt_001', 0, 'enemy-object', 1);
+  const revisionBefore = state.revision;
+  const redstoneBefore = actor.redstone;
+
+  const rejected = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('play-wheat-enemy', revisionBefore, 'tk_002', 'UNIT', 'enemy-object'));
+  TestHarness.equal(rejected.accepted, false);
+  if (!rejected.accepted) TestHarness.equal(rejected.code, 'INVALID_TARGET');
+  TestHarness.equal(state.revision, revisionBefore);
+  TestHarness.equal(actor.redstone, redstoneBefore);
+  TestHarness.equal(actor.hand.join(','), 'tk_002');
+  TestHarness.equal(actor.discardPile.length, 0);
+});
+
 TestHarness.test('cobblestone heals only a friendly building or structure', function (): void {
   const state = activeState('match-1', ['alice', 'bob']);
   state.players[0]!.hand = ['tk_010'];

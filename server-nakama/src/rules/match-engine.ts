@@ -1574,7 +1574,7 @@ namespace BiomeRivalsRules {
       if (effectId !== 'effect.db_002.01' && effectId !== 'effect.db_006.01' && effectId !== 'effect.nt_006.01' &&
           effectId !== 'effect.pf_006.01' && effectId !== 'effect.pf_007.01' &&
           effectId !== 'effect.si_001.01' && effectId !== 'effect.si_006.01' && effectId !== 'effect.tk_005.01' &&
-          effectId !== 'effect.tk_009.01' && effectId !== 'effect.tk_010.01' && effectId !== 'effect.tk_012.01' && effectId !== 'effect.or_006.01' &&
+          effectId !== 'effect.tk_002.01' && effectId !== 'effect.tk_009.01' && effectId !== 'effect.tk_010.01' && effectId !== 'effect.tk_012.01' && effectId !== 'effect.or_006.01' &&
           effectId !== 'effect.tk_016.01') {
         return reject(state, 'EFFECT_NOT_IMPLEMENTED', 'effect handler is not registered');
       }
@@ -1602,16 +1602,16 @@ namespace BiomeRivalsRules {
           return left.instanceId < right.instanceId ? -1 : left.instanceId > right.instanceId ? 1 : 0;
         });
       } else if (effectId === 'effect.si_001.01' || effectId === 'effect.si_006.01' ||
-          effectId === 'effect.tk_009.01' || effectId === 'effect.tk_012.01') {
+          effectId === 'effect.tk_002.01' || effectId === 'effect.tk_009.01' || effectId === 'effect.tk_012.01') {
         if (command.payload.targetType !== 'UNIT' || typeof command.payload.targetInstanceId !== 'string') {
-          return reject(state, 'INVALID_TARGET', effectId === 'effect.tk_009.01' || effectId === 'effect.tk_012.01'
+          return reject(state, 'INVALID_TARGET', effectId === 'effect.tk_002.01' || effectId === 'effect.tk_009.01' || effectId === 'effect.tk_012.01'
             ? 'material requires a friendly unit target'
             : 'snow spell requires an enemy unit target');
         }
-        targetedPlayer = effectId === 'effect.tk_009.01' || effectId === 'effect.tk_012.01' ? player : opponent;
+        targetedPlayer = effectId === 'effect.tk_002.01' || effectId === 'effect.tk_009.01' || effectId === 'effect.tk_012.01' ? player : opponent;
         targetedObject = findObject(targetedPlayer, command.payload.targetInstanceId);
-        if (targetedObject === null || targetedObject.cardType !== 'UNIT') {
-          return reject(state, 'INVALID_TARGET', effectId === 'effect.tk_009.01' || effectId === 'effect.tk_012.01'
+        if (targetedObject === null || targetedObject.cardType !== 'UNIT' || targetedObject.health <= 0) {
+          return reject(state, 'INVALID_TARGET', effectId === 'effect.tk_002.01' || effectId === 'effect.tk_009.01' || effectId === 'effect.tk_012.01'
             ? 'material target must be a living friendly unit'
             : 'snow spell target must be a living enemy unit');
         }
@@ -1791,6 +1791,38 @@ namespace BiomeRivalsRules {
             damage: 1, damageType: 'TRUE', life: player.life, armor: player.armor
           });
           finishForSelfDefeat(player, 'SELF_DAMAGE');
+          return null;
+        }
+        case 'effect.tk_002.01': {
+          if (targetedObject === null || targetedPlayer === null) throw new Error('validated wheat target was not resolved');
+          targetedObject.health = Math.min(targetedObject.maxHealth, targetedObject.health + 1);
+          emit('OBJECT_STATS_CHANGED', {
+            playerId: targetedPlayer.playerId,
+            instanceId: targetedObject.instanceId,
+            sourceCardId: cardId,
+            effectId: effectId,
+            reason: 'HEAL',
+            attack: targetedObject.attack,
+            health: targetedObject.health,
+            temporaryAttackModifier: targetedObject.temporaryAttackModifier,
+            temporaryAttackModifierExpiresOnTurn: targetedObject.temporaryAttackModifierExpiresOnTurn
+          });
+          if (cardHasTag(targetedObject.cardId, 'animal')) {
+            targetedObject.attack += 1;
+            targetedObject.temporaryAttackModifier += 1;
+            targetedObject.temporaryAttackModifierExpiresOnTurn = state.turn;
+            emit('OBJECT_STATS_CHANGED', {
+              playerId: targetedPlayer.playerId,
+              instanceId: targetedObject.instanceId,
+              sourceCardId: cardId,
+              effectId: effectId,
+              reason: 'TEMPORARY_ATTACK_MODIFIER',
+              attack: targetedObject.attack,
+              health: targetedObject.health,
+              temporaryAttackModifier: targetedObject.temporaryAttackModifier,
+              temporaryAttackModifierExpiresOnTurn: targetedObject.temporaryAttackModifierExpiresOnTurn
+            });
+          }
           return null;
         }
         case 'effect.tk_009.01': {

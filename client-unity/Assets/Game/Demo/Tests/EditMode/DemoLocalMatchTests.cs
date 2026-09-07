@@ -309,6 +309,7 @@ namespace BiomeRivals.Demo.Tests
         {
             var registry = CardContentLoader.Load();
             Assert.That(registry.TryGetDefinition("si_001", out var snowball), Is.True);
+            Assert.That(registry.TryGetDefinition("tk_002", out var wheat), Is.True);
             Assert.That(registry.TryGetDefinition("tk_009", out var bone), Is.True);
             Assert.That(registry.TryGetDefinition("tk_010", out var cobblestone), Is.True);
             Assert.That(registry.TryGetDefinition("pf_006", out var breeding), Is.True);
@@ -316,6 +317,9 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(DemoCardTargeting.TryGetRule(snowball, out var snowballRule), Is.True);
             Assert.That(snowballRule.Owner, Is.EqualTo(DemoTargetOwner.Enemy));
             Assert.That(snowballRule.SlotKind, Is.EqualTo(DemoSlotKind.Unit));
+            Assert.That(DemoCardTargeting.TryGetRule(wheat, out var wheatRule), Is.True);
+            Assert.That(wheatRule.Owner, Is.EqualTo(DemoTargetOwner.Friendly));
+            Assert.That(wheatRule.TargetType, Is.EqualTo("UNIT"));
             Assert.That(DemoCardTargeting.TryGetRule(bone, out var boneRule), Is.True);
             Assert.That(boneRule.Owner, Is.EqualTo(DemoTargetOwner.Friendly));
             Assert.That(boneRule.TargetType, Is.EqualTo("UNIT"));
@@ -2221,6 +2225,35 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(played.Accepted, Is.True);
             Assert.That(target.Attack, Is.Zero);
             Assert.That(match.Hand, Is.Empty);
+        }
+
+        [Test]
+        public void WheatHealsFriendlyAnimalAndItsAttackExpiresAtTurnEndLocally()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("pf_002", out var sheep), Is.True);
+            Assert.That(registry.TryGetDefinition("tk_002", out var wheat), Is.True);
+            Assert.That(wheat.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { sheep.id });
+            Assert.That(match.ApplyDeploy(sheep,
+                match.CreateDeployCommand(sheep.id, DemoSlotKind.Unit, 1)).Accepted, Is.True);
+            var target = match.GetObject(true, DemoSlotKind.Unit, 1);
+            target.Health = 2;
+            match.ResetHand(new[] { wheat.id });
+
+            var played = match.ApplyPlayCard(wheat,
+                match.CreatePlayCardCommand(wheat.id, "UNIT", target.InstanceId));
+            Assert.That(played.Accepted, Is.True);
+            Assert.That(played.Message, Does.Contain("恢复 1 点生命"));
+            Assert.That(played.Message, Does.Contain("+1 攻击力"));
+            Assert.That(target.Health, Is.EqualTo(3));
+            Assert.That(target.Attack, Is.EqualTo(3));
+            Assert.That(target.TemporaryAttackModifier, Is.EqualTo(1));
+
+            match.EndPlayerTurn();
+            Assert.That(target.Attack, Is.EqualTo(2));
+            Assert.That(target.TemporaryAttackModifier, Is.Zero);
         }
 
         [Test]
