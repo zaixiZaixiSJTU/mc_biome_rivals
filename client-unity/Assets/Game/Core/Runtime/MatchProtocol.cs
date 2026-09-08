@@ -46,6 +46,7 @@ namespace BiomeRivals.Core
         public const string ArmorGained = "ARMOR_GAINED";
         public const string ObjectStatsChanged = "OBJECT_STATS_CHANGED";
         public const string ObjectStatusApplied = "OBJECT_STATUS_APPLIED";
+        public const string ObjectStatusTicked = "OBJECT_STATUS_TICKED";
         public const string ObjectStatusRemoved = "OBJECT_STATUS_REMOVED";
         public const string ObjectMoved = "OBJECT_MOVED";
         public const string PhaseChanged = "PHASE_CHANGED";

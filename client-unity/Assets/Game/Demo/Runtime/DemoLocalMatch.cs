@@ -895,6 +895,19 @@ namespace BiomeRivals.Demo
             var combatKillCredits = new Dictionary<string, bool>(StringComparer.Ordinal);
             if (targetDied) combatKillCredits[target.InstanceId] = true;
             if (!heroAttack && attacker.Health == 0 && retaliation > 0) combatKillCredits[attacker.InstanceId] = false;
+            var poisonApplications = 0;
+            if (!heroAttack && attackValue > 0 && target.SlotKind == DemoSlotKind.Unit && target.Health > 0 &&
+                attacker.CardId == "cd_002")
+            {
+                ApplyPoison(target, attacker);
+                poisonApplications++;
+            }
+            if (!heroAttack && retaliation > 0 && attacker.Health > 0 && target.SlotKind == DemoSlotKind.Unit &&
+                target.CardId == "cd_002")
+            {
+                ApplyPoison(attacker, target);
+                poisonApplications++;
+            }
             var deathrattleMessages = SettleDeaths(combatKillCredits);
             if (heroAttack)
             {
@@ -911,6 +924,7 @@ namespace BiomeRivals.Demo
             AcceptCommand(command);
             return DemoCommandResult.Accept(
                 $"造成 {attackValue} 点伤害，受到 {retaliation} 点反击" + (targetDied ? "；目标死亡。" : "。") +
+                (poisonApplications > 0 ? $" 洞穴蜘蛛施加了 {poisonApplications} 次中毒。" : string.Empty) +
                 (deathrattleMessages.Count > 0 ? " " + string.Join(" ", deathrattleMessages) : string.Empty),
                 Revision);
         }
@@ -928,6 +942,8 @@ namespace BiomeRivals.Demo
             if (!IsPlayerTurn) return Reject(DemoCommandRejectionCode.NotActivePlayer, "当前不是你的回合。");
             var monumentDeathMessages = new List<string>();
             var monumentDamage = ResolveOceanMonumentEndPhase(monumentDeathMessages);
+            var poisonDeathMessages = new List<string>();
+            var poisonDamage = ResolveEndPhaseStatuses(_playerBattlefield, poisonDeathMessages);
             RestoreExpiredAttackModifiers(_playerBattlefield);
             RestoreExpiredAttackModifiers(_opponentBattlefield);
             _triggeredEffectKeysThisTurn.Clear();
@@ -938,6 +954,8 @@ namespace BiomeRivals.Demo
                 ? $"海底神殿对 {monumentDamage} 个孤立敌方生物各造成 1 点伤害。"
                 : string.Empty;
             if (monumentDeathMessages.Count > 0) monumentMessage += " " + string.Join(" ", monumentDeathMessages);
+            if (poisonDamage > 0) monumentMessage += $" 中毒造成 {poisonDamage} 点伤害。";
+            if (poisonDeathMessages.Count > 0) monumentMessage += " " + string.Join(" ", poisonDeathMessages);
             return DemoCommandResult.Accept(string.IsNullOrEmpty(monumentMessage) ? "已结束回合。" : monumentMessage + " 已结束回合。", Revision);
         }
 
@@ -945,7 +963,7 @@ namespace BiomeRivals.Demo
         {
             if (IsFinished)
                 return RememberDraw(new DemoDrawResult(DemoDrawOutcome.MatchEnded, string.Empty, 0));
-            ExpireStatuses(_opponentBattlefield);
+            ResolveEndPhaseStatuses(_opponentBattlefield, null);
             Round++;
             MaxEnergy = Math.Min(10, MaxEnergy + 1);
             Energy = MaxEnergy;
@@ -1547,21 +1565,79 @@ namespace BiomeRivals.Demo
             target.Statuses = statuses.ToArray();
         }
 
-        private static void ExpireStatuses(List<DemoBattlefieldObject> battlefield)
+        private static void ApplyPoison(DemoBattlefieldObject target, DemoBattlefieldObject source)
         {
-            foreach (var value in battlefield)
+            if (target == null) throw new ArgumentNullException(nameof(target));
+            if (source == null) throw new ArgumentNullException(nameof(source));
+            var statuses = new List<BattlefieldStatusStateDto>(target.Statuses ?? Array.Empty<BattlefieldStatusStateDto>());
+            var status = statuses.Find(value => value != null && value.statusId == "POISON");
+            if (status == null)
             {
+                status = new BattlefieldStatusStateDto
+                {
+                    statusId = "POISON",
+                    remainingDuration = 3,
+                    sourcePlayerId = source.Player ? "local-player" : "opponent",
+                    sourceCardId = source.CardId,
+                    sourceInstanceId = source.InstanceId,
+                    effectId = "effect.cd_002.01",
+                    attackModifier = 0,
+                    boundAttackModifier = 0
+                };
+                statuses.Add(status);
+            }
+            else if (status.remainingDuration < 3)
+            {
+                status.remainingDuration = 3;
+                status.sourcePlayerId = source.Player ? "local-player" : "opponent";
+                status.sourceCardId = source.CardId;
+                status.sourceInstanceId = source.InstanceId;
+                status.effectId = "effect.cd_002.01";
+            }
+            target.Statuses = statuses.ToArray();
+        }
+
+        private int ResolveEndPhaseStatuses(List<DemoBattlefieldObject> battlefield, List<string> deathMessages)
+        {
+            var totalPoisonDamage = 0;
+            var objects = battlefield.OrderBy(value => value.SlotIndex)
+                .ThenBy(value => value.InstanceId, StringComparer.Ordinal).ToArray();
+            foreach (var value in objects)
+            {
+                if (!battlefield.Contains(value) || value.Health <= 0) continue;
                 var statuses = new List<BattlefieldStatusStateDto>(value.Statuses ?? Array.Empty<BattlefieldStatusStateDto>());
-                for (var index = statuses.Count - 1; index >= 0; index--)
+                var index = 0;
+                while (index < statuses.Count)
                 {
                     var status = statuses[index];
+                    if (status.statusId == "POISON")
+                    {
+                        value.Health = Math.Max(0, value.Health - 1);
+                        totalPoisonDamage++;
+                        if (value.Health == 0)
+                        {
+                            value.Statuses = statuses.ToArray();
+                            var killCredits = new Dictionary<string, bool>(StringComparer.Ordinal)
+                            {
+                                [value.InstanceId] = status.sourcePlayerId == "local-player"
+                            };
+                            var resolvedDeaths = SettleDeaths(killCredits);
+                            if (deathMessages != null) deathMessages.AddRange(resolvedDeaths);
+                            break;
+                        }
+                    }
                     status.remainingDuration--;
-                    if (status.remainingDuration > 0) continue;
+                    if (status.remainingDuration > 0)
+                    {
+                        index++;
+                        continue;
+                    }
                     value.Attack = Math.Max(0, value.Attack - status.attackModifier);
                     statuses.RemoveAt(index);
                 }
-                value.Statuses = statuses.ToArray();
+                if (battlefield.Contains(value)) value.Statuses = statuses.ToArray();
             }
+            return totalPoisonDamage;
         }
 
         private bool HasLivingOpponentTaunt() =>

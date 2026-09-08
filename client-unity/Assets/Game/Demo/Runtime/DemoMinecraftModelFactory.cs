@@ -17,6 +17,7 @@ namespace BiomeRivals.Demo
             { "pf_008", "entity_iron_golem" },
             { "si_002", "entity_snow_golem" },
             { "cd_001", "entity_bat" },
+            { "cd_002", "entity_cave_spider" },
             { "nt_001", "entity_magma_cube" },
             { "tk_014", "entity_magma_cube" },
             { "nt_003", "entity_blaze" },
@@ -53,6 +54,7 @@ namespace BiomeRivals.Demo
                 case "pf_008": BuildIronGolem(root, material); break;
                 case "si_002": BuildSnowGolem(root, material); break;
                 case "cd_001": BuildBat(root, material); break;
+                case "cd_002": BuildCaveSpider(root, material); break;
                 case "nt_001": BuildMagmaCube(root, material); break;
                 case "tk_014":
                     root.localScale = Vector3.one * 0.62f;
@@ -168,6 +170,29 @@ namespace BiomeRivals.Demo
             Cuboid(root, "RightWing", new Vector3(0.65f, 0.82f, 0.08f), new Vector3(0.92f, 0.08f, 0.56f), material, 24, 16, 10, 1, 6, 64, 64, Quaternion.Euler(0f, 8f, 18f));
             Cuboid(root, "LeftFoot", new Vector3(-0.11f, 0.26f, 0.03f), new Vector3(0.08f, 0.20f, 0.08f), material, 0, 34, 1, 2, 1, 64, 64);
             Cuboid(root, "RightFoot", new Vector3(0.11f, 0.26f, 0.03f), new Vector3(0.08f, 0.20f, 0.08f), material, 0, 34, 1, 2, 1, 64, 64);
+        }
+
+        private static void BuildCaveSpider(Transform root, Material material)
+        {
+            root.localScale = Vector3.one * 0.86f;
+            Cuboid(root, "Head", new Vector3(0f, 0.58f, -0.74f), new Vector3(0.66f, 0.64f, 0.64f), material, 32, 4, 8, 8, 8, 64, 32);
+            Cuboid(root, "Thorax", new Vector3(0f, 0.58f, -0.08f), new Vector3(0.52f, 0.50f, 0.54f), material, 0, 0, 6, 6, 6, 64, 32);
+            Cuboid(root, "Abdomen", new Vector3(0f, 0.60f, 0.70f), new Vector3(0.82f, 0.66f, 1.02f), material, 0, 12, 10, 8, 12, 64, 32);
+            SpiderLeg(root, "FrontLeftLeg", -1f, -0.42f, -34f, 22f, material);
+            SpiderLeg(root, "FrontRightLeg", 1f, -0.42f, 34f, -22f, material);
+            SpiderLeg(root, "MidFrontLeftLeg", -1f, -0.06f, -12f, 12f, material);
+            SpiderLeg(root, "MidFrontRightLeg", 1f, -0.06f, 12f, -12f, material);
+            SpiderLeg(root, "MidRearLeftLeg", -1f, 0.30f, 12f, 12f, material);
+            SpiderLeg(root, "MidRearRightLeg", 1f, 0.30f, -12f, -12f, material);
+            SpiderLeg(root, "RearLeftLeg", -1f, 0.60f, 34f, 22f, material);
+            SpiderLeg(root, "RearRightLeg", 1f, 0.60f, -34f, -22f, material);
+        }
+
+        private static void SpiderLeg(
+            Transform root, string name, float side, float z, float yaw, float roll, Material material)
+        {
+            Cuboid(root, name, new Vector3(side * 0.74f, 0.43f, z), new Vector3(1.18f, 0.13f, 0.13f),
+                material, 18, 0, 16, 2, 2, 64, 32, Quaternion.Euler(0f, yaw, roll));
         }
 
         private static void BuildBlaze(Transform root, Material material)

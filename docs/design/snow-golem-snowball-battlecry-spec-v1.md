@@ -1,6 +1,6 @@
 # 雪傀儡雪球战吼规范 v1
 
-本规范对应 `protocolVersion 26`、`rulesetVersion prototype-0.40` 与内容版本 32。
+本规范对应 `protocolVersion 27`、`rulesetVersion prototype-0.41` 与内容版本 33。
 
 ## SI-002 雪傀儡
 

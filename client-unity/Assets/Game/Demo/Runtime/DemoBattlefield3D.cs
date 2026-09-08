@@ -180,6 +180,14 @@ namespace BiomeRivals.Demo
             UpdateSlotMarker(marker, Time.unscaledTime, 0f);
         }
 
+        public void SetSlotPoisoned(bool player, DemoSlotKind kind, int index, bool poisoned)
+        {
+            BuildNow();
+            if (!_slotMarkers.TryGetValue(SlotKey(player, kind, index), out var marker)) return;
+            marker.Poisoned = poisoned;
+            UpdateSlotMarker(marker, Time.unscaledTime, 0f);
+        }
+
         public void SetSlotHovered(bool player, DemoSlotKind kind, int index, bool hovered)
         {
             BuildNow();
@@ -297,6 +305,8 @@ namespace BiomeRivals.Demo
                              : Color.Lerp(Hex("#3D9E8F"), Hex("#79E0CB"), pulse)
                     : marker.EndPhaseThreat
                         ? Color.Lerp(Hex("#8A2E24"), Hex("#FF8865"), pulse)
+                     : marker.Poisoned
+                         ? Color.Lerp(Hex("#00883D"), Hex("#00FF70"), pulse)
                      : marker.AuraLayers > 0
                          ? Color.Lerp(Hex("#216F72"), Hex("#69D7C7"), pulse)
                     : engineReady
@@ -314,6 +324,8 @@ namespace BiomeRivals.Demo
                              : (marker.Occupied ? 0.48f + pulse * 0.18f : 0.18f + pulse * 0.12f)
                         : marker.EndPhaseThreat
                             ? 0.22f + pulse * 0.10f
+                         : marker.Poisoned
+                             ? 0.62f + pulse * 0.20f
                          : marker.AuraLayers > 0
                              ? 0.10f + Mathf.Min(2, marker.AuraLayers) * 0.05f + pulse * 0.05f
                         : engineReady
@@ -1125,6 +1137,7 @@ namespace BiomeRivals.Demo
             public int AuraLayers;
             public DemoEngineReadyKind EngineReadyKind;
             public bool EndPhaseThreat;
+            public bool Poisoned;
             public bool Hovered;
             public bool Pressed;
             public bool HoverRejected;

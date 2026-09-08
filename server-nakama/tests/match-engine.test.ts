@@ -3321,3 +3321,155 @@ TestHarness.test('Cactus Fences stop after a lethal reaction and award the enemy
   TestHarness.equal(result.batch.events[3]!.payload.cardId, 'tk_005');
   TestHarness.equal(result.batch.events[3]!.payload.playerId, defender.playerId);
 });
+
+TestHarness.test('Cave Spider poisons a surviving creature after ordinary attack damage', function (): void {
+  const state = activeState('match-cave-spider-attack', ['alice', 'bob'], ['cave_dark_forest', 'plains_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const defenderIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  state.turn = 2;
+  state.phase = 'COMBAT';
+  placeUnit(state, actorIndex, 'cd_002', 0, 'object-10', 1);
+  placeUnit(state, defenderIndex, 'or_005', 0, 'object-20', 1);
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    attackCommand('cave-spider-attack', 0, 'object-10', 'UNIT', 'object-20'));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  const target = result.state.players[defenderIndex]!.battlefield[0]!;
+  TestHarness.equal(target.health, 4);
+  TestHarness.equal(target.statuses.length, 1);
+  TestHarness.equal(target.statuses[0]!.statusId, 'POISON');
+  TestHarness.equal(target.statuses[0]!.remainingDuration, 3);
+  TestHarness.equal(target.statuses[0]!.sourcePlayerId, actor.playerId);
+  TestHarness.equal(target.statuses[0]!.sourceCardId, 'cd_002');
+  TestHarness.equal(result.batch.events[0]!.type, 'ATTACK_RESOLVED');
+  TestHarness.equal(result.batch.events[1]!.type, 'OBJECT_STATUS_APPLIED');
+  assertEventBatchMatchesSchema(result.batch);
+});
+
+TestHarness.test('Cave Spider retaliation poisons the surviving attacker even when the Spider dies', function (): void {
+  const state = activeState('match-cave-spider-retaliation', ['alice', 'bob'], ['plains_forest', 'cave_dark_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const defenderIndex = actorIndex === 0 ? 1 : 0;
+  const actorPlayer = state.players[actorIndex]!;
+  const defenderPlayer = state.players[defenderIndex]!;
+  state.turn = 2;
+  state.phase = 'COMBAT';
+  placeUnit(state, actorIndex, 'pf_008', 0, 'object-10', 1);
+  placeUnit(state, defenderIndex, 'cd_002', 0, 'object-20', 1);
+
+  const result = BiomeRivalsRules.applyCommand(state, actorPlayer.playerId,
+    attackCommand('cave-spider-retaliation', 0, 'object-10', 'UNIT', 'object-20'));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  const attacker = result.state.players[actorIndex]!.battlefield[0]!;
+  TestHarness.equal(attacker.health, 5);
+  TestHarness.equal(attacker.statuses.length, 1);
+  TestHarness.equal(attacker.statuses[0]!.statusId, 'POISON');
+  TestHarness.equal(attacker.statuses[0]!.sourcePlayerId, defenderPlayer.playerId);
+  TestHarness.equal(result.state.players[defenderIndex]!.battlefield.length, 0);
+  TestHarness.equal(result.batch.events[1]!.type, 'OBJECT_STATUS_APPLIED');
+  TestHarness.equal(result.batch.events[2]!.type, 'OBJECT_DIED');
+});
+
+TestHarness.test('Cave Spider poison refreshes to three without creating a duplicate status', function (): void {
+  const state = activeState('match-cave-spider-refresh', ['alice', 'bob'], ['cave_dark_forest', 'plains_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const defenderIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  state.turn = 2;
+  state.phase = 'COMBAT';
+  placeUnit(state, actorIndex, 'cd_002', 0, 'object-10', 1);
+  placeUnit(state, actorIndex, 'cd_002', 1, 'object-11', 1);
+  placeUnit(state, defenderIndex, 'pf_008', 0, 'object-20', 1);
+
+  const first = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    attackCommand('cave-spider-refresh-one', 0, 'object-10', 'UNIT', 'object-20'));
+  TestHarness.ok(first.accepted);
+  if (!first.accepted) return;
+  first.state.players[defenderIndex]!.battlefield[0]!.statuses[0]!.remainingDuration = 1;
+  const second = BiomeRivalsRules.applyCommand(first.state, actor.playerId,
+    attackCommand('cave-spider-refresh-two', 1, 'object-11', 'UNIT', 'object-20'));
+
+  TestHarness.equal(second.accepted, true, JSON.stringify(second));
+  if (!second.accepted) return;
+  const statuses = second.state.players[defenderIndex]!.battlefield[0]!.statuses;
+  TestHarness.equal(statuses.length, 1);
+  TestHarness.equal(statuses[0]!.remainingDuration, 3);
+  TestHarness.equal(statuses[0]!.sourceInstanceId, 'object-11');
+});
+
+TestHarness.test('Poison deals normal damage for three controller end phases and then expires', function (): void {
+  const state = activeState('match-poison-duration', ['alice', 'bob'], ['plains_forest', 'cave_dark_forest']);
+  state.turn = 2;
+  state.phase = 'COMBAT';
+  placeUnit(state, 0, 'pf_008', 0, 'object-10', 1);
+  placeUnit(state, 1, 'cd_002', 0, 'object-20', 1);
+  const attacked = BiomeRivalsRules.applyCommand(state, 'alice',
+    attackCommand('poison-duration-attack', 0, 'object-10', 'UNIT', 'object-20'));
+  TestHarness.ok(attacked.accepted);
+  if (!attacked.accepted) return;
+
+  const firstTick = BiomeRivalsRules.applyCommand(attacked.state, 'alice', command('poison-first-tick', 1, 'END_TURN'));
+  TestHarness.ok(firstTick.accepted);
+  if (!firstTick.accepted) return;
+  TestHarness.equal(firstTick.state.players[0]!.battlefield[0]!.health, 4);
+  TestHarness.equal(firstTick.state.players[0]!.battlefield[0]!.statuses[0]!.remainingDuration, 2);
+  TestHarness.equal(firstTick.batch.events[0]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(firstTick.batch.events[0]!.payload.damageType, 'NORMAL');
+  TestHarness.equal(firstTick.batch.events[0]!.payload.sourcePlayerId, 'bob');
+  TestHarness.equal(firstTick.batch.events[1]!.type, 'OBJECT_STATUS_TICKED');
+  TestHarness.equal(firstTick.batch.events[1]!.payload.remainingDuration, 2);
+  assertEventBatchMatchesSchema(firstTick.batch);
+
+  const passOne = BiomeRivalsRules.applyCommand(firstTick.state, 'bob', command('poison-pass-one', 2, 'END_TURN'));
+  TestHarness.ok(passOne.accepted);
+  if (!passOne.accepted) return;
+  const secondTick = BiomeRivalsRules.applyCommand(passOne.state, 'alice', command('poison-second-tick', 3, 'END_TURN'));
+  TestHarness.ok(secondTick.accepted);
+  if (!secondTick.accepted) return;
+  TestHarness.equal(secondTick.state.players[0]!.battlefield[0]!.health, 3);
+  TestHarness.equal(secondTick.state.players[0]!.battlefield[0]!.statuses[0]!.remainingDuration, 1);
+
+  const passTwo = BiomeRivalsRules.applyCommand(secondTick.state, 'bob', command('poison-pass-two', 4, 'END_TURN'));
+  TestHarness.ok(passTwo.accepted);
+  if (!passTwo.accepted) return;
+  const thirdTick = BiomeRivalsRules.applyCommand(passTwo.state, 'alice', command('poison-third-tick', 5, 'END_TURN'));
+  TestHarness.ok(thirdTick.accepted);
+  if (!thirdTick.accepted) return;
+  TestHarness.equal(thirdTick.state.players[0]!.battlefield[0]!.health, 2);
+  TestHarness.equal(thirdTick.state.players[0]!.battlefield[0]!.statuses.length, 0);
+  TestHarness.equal(thirdTick.batch.events[0]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(thirdTick.batch.events[1]!.type, 'OBJECT_STATUS_REMOVED');
+  assertEventBatchMatchesSchema(thirdTick.batch);
+});
+
+TestHarness.test('Lethal poison credits its source controller for enemy drops', function (): void {
+  const state = activeState('match-poison-kill-credit', ['alice', 'bob'], ['cave_dark_forest', 'cave_dark_forest']);
+  state.activePlayerIndex = 1;
+  placeUnit(state, 0, 'cd_002', 0, 'object-10', 1);
+  placeUnit(state, 1, 'cd_003', 0, 'object-20', 1);
+  const poisoned = state.players[1]!.battlefield[0]!;
+  poisoned.health = 1;
+  poisoned.statuses.push({
+    statusId: 'POISON', remainingDuration: 2, sourcePlayerId: 'alice', sourceCardId: 'cd_002',
+    sourceInstanceId: 'object-10', effectId: 'effect.cd_002.01', attackModifier: 0, boundAttackModifier: 0
+  });
+
+  const result = BiomeRivalsRules.applyCommand(state, 'bob', command('poison-lethal', 0, 'END_TURN'));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[1]!.battlefield.length, 0);
+  TestHarness.equal(result.state.players[0]!.hand.indexOf('tk_009') >= 0, true);
+  TestHarness.equal(result.batch.events[0]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(result.batch.events[1]!.type, 'OBJECT_DIED');
+  const generated = result.batch.events.filter(function (event): boolean { return event.type === 'CARD_GENERATED'; });
+  TestHarness.equal(generated.length, 1);
+  TestHarness.equal(generated[0]!.payload.playerId, 'alice');
+  TestHarness.equal(generated[0]!.payload.cardId, 'tk_009');
+  assertEventBatchMatchesSchema(result.batch);
+});

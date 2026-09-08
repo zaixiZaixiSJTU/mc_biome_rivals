@@ -128,11 +128,13 @@ namespace BiomeRivals.Core
                     var seenStatuses = new HashSet<string>(StringComparer.Ordinal);
                     foreach (var status in battlefieldObject.statuses ?? Array.Empty<BattlefieldStatusStateDto>())
                     {
-                        if (status == null || status.statusId != "SLOW" || status.remainingDuration < 1 ||
+                        if (status == null || (status.statusId != "SLOW" && status.statusId != "POISON") || status.remainingDuration < 1 ||
                             string.IsNullOrWhiteSpace(status.sourcePlayerId) || string.IsNullOrWhiteSpace(status.sourceCardId) ||
                             string.IsNullOrWhiteSpace(status.effectId) || status.attackModifier > 0 ||
                             status.boundAttackModifier > 0 || status.attackModifier < status.boundAttackModifier ||
-                            !seenStatuses.Add(status.statusId))
+                            !seenStatuses.Add(status.statusId) ||
+                            (status.statusId == "POISON" && (status.remainingDuration > 3 ||
+                                status.attackModifier != 0 || status.boundAttackModifier != 0)))
                             throw new InvalidOperationException("Snapshot contains an invalid battlefield status.");
                     }
                 }
@@ -414,6 +416,22 @@ namespace BiomeRivals.Core
                     statusObject.statuses = statuses.ToArray();
                     statusObject.attack = payload.attack;
                     statusObject.health = payload.health;
+                    break;
+                case MatchEventTypes.ObjectStatusTicked:
+                    var tickedObject = FindObject(FindPlayer(payload.playerId), payload.instanceId);
+                    var tickedStatuses = new List<BattlefieldStatusStateDto>(tickedObject.statuses ?? Array.Empty<BattlefieldStatusStateDto>());
+                    var tickedStatus = tickedStatuses.SingleOrDefault(value => value != null && value.statusId == payload.statusId);
+                    if (tickedStatus == null)
+                        throw new InvalidOperationException("Status tick does not match exactly one projected status.");
+                    tickedStatus.remainingDuration = payload.remainingDuration;
+                    tickedStatus.sourcePlayerId = payload.sourcePlayerId;
+                    tickedStatus.sourceCardId = payload.sourceCardId;
+                    tickedStatus.sourceInstanceId = payload.sourceInstanceId;
+                    tickedStatus.effectId = payload.effectId;
+                    tickedStatus.attackModifier = payload.statusAttackModifier;
+                    tickedStatus.boundAttackModifier = payload.boundAttackModifier;
+                    tickedObject.attack = payload.attack;
+                    tickedObject.health = payload.health;
                     break;
                 case MatchEventTypes.ObjectStatusRemoved:
                     var clearedObject = FindObject(FindPlayer(payload.playerId), payload.instanceId);

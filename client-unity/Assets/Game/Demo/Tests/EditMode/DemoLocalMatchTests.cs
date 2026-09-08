@@ -209,6 +209,70 @@ namespace BiomeRivals.Demo.Tests
         }
 
         [Test]
+        public void LocalCaveSpiderPoisonsAfterAttackingAndTicksAtTheTargetsEndPhase()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("cd_002", out var caveSpider), Is.True);
+            Assert.That(registry.TryGetDefinition("or_005", out var turtle), Is.True);
+            Assert.That(caveSpider.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(new[] { caveSpider.id }, new[] { "cd_001", "cd_003", "cd_005" });
+            match.ResetOpponent(new[] { turtle });
+            Assert.That(match.ApplyDeploy(caveSpider,
+                match.CreateDeployCommand(caveSpider.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            Assert.That(match.ApplyEnterCombat(match.CreateEnterCombatCommand()).Accepted, Is.True);
+            var attacker = match.GetObject(true, DemoSlotKind.Unit, 0);
+            var target = match.GetObject(false, DemoSlotKind.Unit, 0);
+
+            var attacked = match.ApplyAttack(match.CreateAttackCommand(attacker.InstanceId, "UNIT", target.InstanceId));
+
+            Assert.That(attacked.Accepted, Is.True, attacked.Message);
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 0), Is.Null, "The Spider still applies poison after simultaneous retaliation kills it.");
+            Assert.That(target.Health, Is.EqualTo(4));
+            Assert.That(target.Statuses.Single().statusId, Is.EqualTo("POISON"));
+            Assert.That(target.Statuses.Single().remainingDuration, Is.EqualTo(3));
+            Assert.That(target.Statuses.Single().sourcePlayerId, Is.EqualTo("local-player"));
+            Assert.That(attacked.Message, Does.Contain("中毒"));
+
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            Assert.That(target.Health, Is.EqualTo(3));
+            Assert.That(target.Statuses.Single().remainingDuration, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void LocalCaveSpiderRetaliationPoisonsTheAttackerBeforeItsEndPhase()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("or_005", out var turtle), Is.True);
+            Assert.That(registry.TryGetDefinition("cd_002", out var caveSpider), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(new[] { turtle.id }, new[] { "or_001", "or_002" });
+            match.ResetOpponent(new[] { caveSpider });
+            Assert.That(match.ApplyDeploy(turtle,
+                match.CreateDeployCommand(turtle.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            Assert.That(match.ApplyEnterCombat(match.CreateEnterCombatCommand()).Accepted, Is.True);
+            var attacker = match.GetObject(true, DemoSlotKind.Unit, 0);
+            var defender = match.GetObject(false, DemoSlotKind.Unit, 0);
+
+            var attacked = match.ApplyAttack(match.CreateAttackCommand(attacker.InstanceId, "UNIT", defender.InstanceId));
+
+            Assert.That(attacked.Accepted, Is.True, attacked.Message);
+            Assert.That(attacker.Health, Is.EqualTo(4));
+            Assert.That(attacker.Statuses.Single().statusId, Is.EqualTo("POISON"));
+            Assert.That(attacker.Statuses.Single().sourcePlayerId, Is.EqualTo("opponent"));
+            var ended = match.ApplyEndTurn(match.CreateEndTurnCommand());
+            Assert.That(ended.Accepted, Is.True, ended.Message);
+            Assert.That(attacker.Health, Is.EqualTo(3));
+            Assert.That(attacker.Statuses.Single().remainingDuration, Is.EqualTo(2));
+            Assert.That(ended.Message, Does.Contain("中毒造成 1 点伤害"));
+        }
+
+        [Test]
         public void LocalArchaeologistRequiresAChoiceAndExcavatesTheSelectedBuriedCard()
         {
             var registry = CardContentLoader.Load();
@@ -1132,6 +1196,12 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.GreaterThan(0f));
                 battlefield.SetSlotEndPhaseThreat(false, DemoSlotKind.Unit, 0, false);
                 Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.Zero);
+                battlefield.SetSlotPoisoned(false, DemoSlotKind.Unit, 0, true);
+                Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.GreaterThan(0f));
+                Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetColor("_HighlightColor").g,
+                    Is.GreaterThan(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetColor("_HighlightColor").r));
+                battlefield.SetSlotPoisoned(false, DemoSlotKind.Unit, 0, false);
+                Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.Zero);
                 battlefield.SetSlotState(false, DemoSlotKind.Unit, 0, true, false, true);
                 Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.GreaterThanOrEqualTo(0.32f));
                 battlefield.SetSlotState(false, DemoSlotKind.Unit, 0, false, false);
@@ -1355,6 +1425,8 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(vindicatorTexture, Is.EqualTo("entity_vindicator"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("cd_001", out var batTexture), Is.True);
                 Assert.That(batTexture, Is.EqualTo("entity_bat"));
+                Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("cd_002", out var caveSpiderTexture), Is.True);
+                Assert.That(caveSpiderTexture, Is.EqualTo("entity_cave_spider"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("si_002", out var snowGolemTexture), Is.True);
                 Assert.That(snowGolemTexture, Is.EqualTo("entity_snow_golem"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("or_001", out var salmonTexture), Is.True);

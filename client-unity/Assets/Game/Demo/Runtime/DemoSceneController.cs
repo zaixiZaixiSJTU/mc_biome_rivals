@@ -163,6 +163,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewRaiderDiscount")) SetupRaiderDiscountPreview();
             else if (HasCommandLineFlag("-previewArchaeology")) SetupArchaeologyPreview();
             else if (HasCommandLineFlag("-previewBatScry")) SetupBatScryPreview();
+            else if (HasCommandLineFlag("-previewCaveSpiderPoison")) SetupCaveSpiderPoisonPreview();
             else if (HasCommandLineFlag("-previewLoot")) SetupLootPreview();
             else if (HasCommandLineFlag("-previewTamedWolf")) SetupTamedWolfPreview();
             else if (HasCommandLineFlag("-previewVillagerFarmer")) SetupVillagerFarmerPreview();
@@ -518,7 +519,7 @@ namespace BiomeRivals.Demo
                 MatchEventTypes.CardExcavated, MatchEventTypes.CardDrawn,
                 MatchEventTypes.CardBurned, MatchEventTypes.CardGenerated, MatchEventTypes.FatigueDamage, MatchEventTypes.HeroDamaged,
                 MatchEventTypes.HeroHealed, MatchEventTypes.ArmorGained, MatchEventTypes.ObjectStatsChanged,
-                MatchEventTypes.ObjectStatusApplied, MatchEventTypes.ObjectStatusRemoved, MatchEventTypes.ObjectMoved,
+                MatchEventTypes.ObjectStatusApplied, MatchEventTypes.ObjectStatusTicked, MatchEventTypes.ObjectStatusRemoved, MatchEventTypes.ObjectMoved,
                 MatchEventTypes.PhaseChanged, MatchEventTypes.AttackResolved, MatchEventTypes.ObjectDied,
                 MatchEventTypes.TurnEnded, MatchEventTypes.TurnStarted, MatchEventTypes.PlayerConceded,
                 MatchEventTypes.MatchEnded
@@ -781,7 +782,16 @@ namespace BiomeRivals.Demo
                     yield return healedViewer ? PulsePlayerHud(Cyan) : PulseOpponentHud(Cyan);
                     break;
                 case MatchEventTypes.ObjectStatsChanged:
-                    if (matchEvent.payload?.effectId == "effect.cd_003.01")
+                    if (matchEvent.payload?.effectId == "effect.cd_002.01" && matchEvent.payload?.reason == "DAMAGE")
+                    {
+                        var poisonViewerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
+                        var poisonedFriendly = matchEvent.payload?.playerId == poisonViewerId;
+                        ShowStatus(poisonedFriendly
+                            ? "己方生物的毒素发作，受到 1 点普通伤害。"
+                            : "敌方生物的毒素发作，受到 1 点普通伤害。", false);
+                        yield return ShowTurnBanner("毒素发作", Hex("#A6F04D"));
+                    }
+                    else if (matchEvent.payload?.effectId == "effect.cd_003.01")
                     {
                         var damageViewerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
                         var hitFriendly = matchEvent.payload?.playerId == damageViewerId;
@@ -908,13 +918,22 @@ namespace BiomeRivals.Demo
                     yield return PulseBattlefieldObject(matchEvent.payload?.instanceId);
                     break;
                 case MatchEventTypes.ObjectStatusApplied:
-                    ShowStatus($"粉雪覆盖目标：缓慢 {matchEvent.payload?.remainingDuration}，期间不能普通攻击。", false);
-                    yield return ShowTurnBanner("缓慢", Cyan);
+                    var poisonApplied = matchEvent.payload?.statusId == "POISON";
+                    ShowStatus(poisonApplied
+                        ? $"洞穴蜘蛛的毒素附着目标：中毒 {matchEvent.payload?.remainingDuration}；目标控制者每次结束阶段受到 1 点普通伤害。"
+                        : $"粉雪覆盖目标：缓慢 {matchEvent.payload?.remainingDuration}，期间不能普通攻击。", false);
+                    yield return ShowTurnBanner(poisonApplied ? "中毒" : "缓慢", poisonApplied ? Hex("#A6F04D") : Cyan);
                     yield return PulseBattlefieldObject(matchEvent.payload?.instanceId);
                     break;
                 case MatchEventTypes.ObjectStatusRemoved:
-                    ShowStatus("目标控制者的结束阶段已结算，缓慢与绑定的攻击修正已移除。", false);
+                    var poisonRemoved = matchEvent.payload?.statusId == "POISON";
+                    ShowStatus(poisonRemoved
+                        ? "第三次毒伤已经结算，中毒状态移除。"
+                        : "目标控制者的结束阶段已结算，缓慢与绑定的攻击修正已移除。", false);
                     yield return PulseBattlefieldObject(matchEvent.payload?.instanceId);
+                    break;
+                case MatchEventTypes.ObjectStatusTicked:
+                    yield return null;
                     break;
                 default:
                     yield return null;
@@ -1663,6 +1682,32 @@ namespace BiomeRivals.Demo
             if (bat != null) StartCoroutine(PulseBattlefieldObject(bat.InstanceId));
         }
 
+        private void SetupCaveSpiderPoisonPreview()
+        {
+            SelectFaction("cave_dark_forest");
+            SelectOpponentFaction("snow_ice");
+            if (!_registry.TryGetDefinition("cd_002", out var spiderDefinition) ||
+                !_registry.TryGetDefinition("si_002", out var snowGolemDefinition)) return;
+            _match.ResetDeckAndHand(new[] { spiderDefinition.id }, new[] { "cd_001", "cd_003", "cd_005" });
+            _match.ResetOpponent(new[] { snowGolemDefinition });
+            var deployed = _match.ApplyDeploy(spiderDefinition,
+                _match.CreateDeployCommand(spiderDefinition.id, DemoSlotKind.Unit, 0));
+            _match.EndPlayerTurn();
+            _match.BeginNextPlayerTurn();
+            _match.ApplyEnterCombat(_match.CreateEnterCombatCommand());
+            var spider = _match.GetObject(true, DemoSlotKind.Unit, 0);
+            var target = _match.GetObject(false, DemoSlotKind.Unit, 0);
+            var attacked = spider == null || target == null
+                ? DemoCommandResult.Reject(DemoCommandRejectionCode.InvalidTarget, "预览目标初始化失败。", _match.Revision)
+                : _match.ApplyAttack(_match.CreateAttackCommand(spider.InstanceId, "UNIT", target.InstanceId));
+            _selectedCardId = spiderDefinition.id;
+            RefreshAll();
+            ShowStatus(attacked.Accepted
+                ? "洞穴蜘蛛造成普通攻击伤害后施加中毒；绿色发光直接作用于目标脚下的 3D 地表材质。"
+                : deployed.Accepted ? attacked.Message : deployed.Message, !deployed.Accepted || !attacked.Accepted);
+            if (target != null) StartCoroutine(PulseBattlefieldObject(target.InstanceId));
+        }
+
         private void SetupCactusFencePreview()
         {
             SelectFaction("plains_forest");
@@ -2277,6 +2322,8 @@ namespace BiomeRivals.Demo
                 engineReadyKind == DemoEngineReadyKind.None ? null : battlefieldObject?.InstanceId);
             _battlefield.SetSlotEndPhaseThreat(player, view.Kind, view.Index,
                 IsOceanMonumentThreat(player, battlefieldObject));
+            _battlefield.SetSlotPoisoned(player, view.Kind, view.Index,
+                battlefieldObject?.HasStatus("POISON") == true);
             _battlefield.SetSlotState(player, view.Kind, view.Index, valid, !empty, priorityTarget);
 
             if (!empty)
@@ -3428,6 +3475,13 @@ namespace BiomeRivals.Demo
             {
                 stats = $"缓慢 {slow.remainingDuration} · {stats}";
                 accent = Cyan;
+            }
+            var poison = (battlefieldObject?.Statuses ?? Array.Empty<BattlefieldStatusStateDto>())
+                .FirstOrDefault(value => value != null && value.statusId == "POISON");
+            if (poison != null)
+            {
+                stats = $"中毒 {poison.remainingDuration} · {stats}";
+                accent = Hex("#A6F04D");
             }
             var labelY = -size.y * 0.34f;
             var plate = CreatePanel(parent, "WorldLabel", new Vector2(0, labelY), new Vector2(size.x - 8, 30), new Color(Ink.r, Ink.g, Ink.b, 0.84f));

@@ -1402,6 +1402,88 @@ namespace BiomeRivals.Core.Tests
         }
 
         [Test]
+        public void Apply_ReplaysPoisonDamageDurationTickAndRemoval()
+        {
+            var target = new BattlefieldObjectStateDto
+            {
+                instanceId = "object-7", cardId = "or_005", cardType = "UNIT", attack = 3,
+                health = 4, maxHealth = 6, slotKind = "UNIT", slotIndex = 1, occupiedSlots = 1, summonedTurn = 1,
+                statuses = new[]
+                {
+                    new BattlefieldStatusStateDto
+                    {
+                        statusId = "POISON", remainingDuration = 3, sourcePlayerId = "alice", sourceCardId = "cd_002",
+                        sourceInstanceId = "object-1", effectId = "effect.cd_002.01"
+                    }
+                }
+            };
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "poison-replay", protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice" },
+                    new PlayerStateDto
+                    {
+                        playerId = "bob", unitSlots = new[] { null, "object-7", null, null },
+                        battlefield = new[] { target }
+                    }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 1, type = MatchEventTypes.ObjectStatsChanged,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "bob", instanceId = "object-7", sourcePlayerId = "alice", sourceCardId = "cd_002",
+                            sourceInstanceId = "object-1", effectId = "effect.cd_002.01", reason = "DAMAGE",
+                            damageType = "NORMAL", attack = 3, health = 3
+                        }
+                    },
+                    new MatchEventDto
+                    {
+                        eventId = 2, type = MatchEventTypes.ObjectStatusTicked,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "bob", instanceId = "object-7", statusId = "POISON", remainingDuration = 2,
+                            sourcePlayerId = "alice", sourceCardId = "cd_002", sourceInstanceId = "object-1",
+                            effectId = "effect.cd_002.01", attack = 3, health = 3
+                        }
+                    }
+                }
+            });
+            Assert.That(target.health, Is.EqualTo(3));
+            Assert.That(target.statuses.Single().remainingDuration, Is.EqualTo(2));
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 2,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 3, type = MatchEventTypes.ObjectStatusRemoved,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "bob", instanceId = "object-7", statusId = "POISON",
+                            sourcePlayerId = "alice", sourceCardId = "cd_002", sourceInstanceId = "object-1",
+                            effectId = "effect.cd_002.01", reason = "DURATION_EXPIRED", attack = 3, health = 1
+                        }
+                    }
+                }
+            });
+            Assert.That(target.statuses, Is.Empty);
+            Assert.That(target.health, Is.EqualTo(1));
+        }
+
+        [Test]
         public void Apply_ReplaysHeroEquipmentAttackAndTridentMovementChoice()
         {
             var target = new BattlefieldObjectStateDto

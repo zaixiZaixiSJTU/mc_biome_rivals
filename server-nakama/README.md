@@ -16,7 +16,7 @@
 
 协议 opcode：`1` 命令、`2` 事件批次、`3` 命令拒绝、`4` 权威快照。协议结构以 `shared-schema/protocol` 为准。
 
-当前基础对局纵向切片使用 `protocolVersion: 26` 与 `rulesetVersion: prototype-0.40`。`protocolVersion 25` 允许非拥有者投影中的 `CARD_BURIED.payload.cardId` 为 `null`，并允许生成/召唤事件使用 `effect-*` 虚拟来源实例；`protocolVersion 26` 新增私有 `TOP_CARD_SCRY` 选择，并在非拥有者事件投影中隐藏 `selectedCardId`。`prototype-0.40` 接入 CD-001 洞穴蝙蝠的牌库顶保留/置底链路，并保留 CD-005 林地卫道士、TK-002 小麦、SI-002 雪傀儡及 DB-007 沙漠神殿的完整规则。`ATTACK.attackerInstanceId = "HERO"` 继续表示英雄发起的装备攻击。旧协议或规则集客户端不能静默兼容。
+当前基础对局纵向切片使用 `protocolVersion: 27` 与 `rulesetVersion: prototype-0.41`。`protocolVersion 25` 允许非拥有者投影中的 `CARD_BURIED.payload.cardId` 为 `null`，并允许生成/召唤事件使用 `effect-*` 虚拟来源实例；`protocolVersion 26` 新增私有 `TOP_CARD_SCRY` 选择，并在非拥有者事件投影中隐藏 `selectedCardId`；`protocolVersion 27` 新增 `POISON` 状态与可回放的 `OBJECT_STATUS_TICKED` 计时事件。`prototype-0.41` 接入 CD-002 洞穴蜘蛛的攻击伤害施毒、控制者结束阶段毒伤与击杀归属，并保留 CD-001 洞穴蝙蝠、CD-005 林地卫道士、TK-002 小麦、SI-002 雪傀儡及 DB-007 沙漠神殿的完整规则。`ATTACK.attackerInstanceId = "HERO"` 继续表示英雄发起的装备攻击。旧协议或规则集客户端不能静默兼容。
 
 运行：
 

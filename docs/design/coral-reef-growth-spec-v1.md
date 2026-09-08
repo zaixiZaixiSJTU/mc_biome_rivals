@@ -1,6 +1,6 @@
 # 珊瑚礁水生成长规范 v1
 
-本规范已按当前组合校准为 `protocolVersion 26`、`rulesetVersion prototype-0.40` 与内容版本 32。
+本规范已按当前组合校准为 `protocolVersion 27`、`rulesetVersion prototype-0.41` 与内容版本 33。
 
 ## OR-007 珊瑚礁
 

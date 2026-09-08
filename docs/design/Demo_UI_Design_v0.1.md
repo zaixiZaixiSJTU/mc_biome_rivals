@@ -55,7 +55,7 @@ UGUI 样式由 `DemoUiStyleCatalog` 集中提供材质、底色、描边和交�
 
 手牌底板左下角持续显示“手牌 / 牌库 / 弃牌”三个区域计数，信息使用与 HUD 相同的低对比度浅色文字，不额外叠加 Web 风格浮层。新回合抽到的卡直接进入扇形手牌；满 7 张时卡牌公开进入弃牌堆，空牌库时状态板显示本次疲劳伤害。离线展示牌组为 5 张展示手牌加 25 张临时群系循环牌库，用于 UI 和回合测试；正式权威规则按 GDD 使用 30 张牌组与 3/4 张起手。
 
-本机原型贴图通过 `scripts/extract-minecraft-world-textures.ps1` 从已拥有的 Java 客户端 JAR 按白名单提取 27 张方块贴图和 14 张生物皮肤到 Git 忽略目录。运行时先查找 `Resources/DemoWorld/Prefabs/{cardId}`；不存在时由 `DemoMinecraftModelFactory` 为已注册的蜜蜂、绵羊、狼、村民、蝙蝠、卫道士、铁傀儡、雪傀儡、岩浆怪、烈焰人、流浪者、鲑鱼、海豚、溺尸与守卫者构造 Minecraft 式分件模型；珊瑚礁直接使用 `tube_coral_block`，海底神殿组合 `prismarine_bricks`、`dark_prismarine` 与 `sea_lantern`，沙漠神殿组合 `sandstone`、`cut_sandstone`、`chiseled_sandstone` 与 `orange_terracotta`，其余对象才使用通用后备模型。因此以后注册正式 Prefab 不需要改部署逻辑。
+本机原型贴图通过 `scripts/extract-minecraft-world-textures.ps1` 从已拥有的 Java 客户端 JAR 按白名单提取 27 张方块贴图和 15 张生物皮肤到 Git 忽略目录。运行时先查找 `Resources/DemoWorld/Prefabs/{cardId}`；不存在时由 `DemoMinecraftModelFactory` 为已注册的蜜蜂、绵羊、狼、村民、蝙蝠、洞穴蜘蛛、卫道士、铁傀儡、雪傀儡、岩浆怪、烈焰人、流浪者、鲑鱼、海豚、溺尸与守卫者构造 Minecraft 式分件模型；珊瑚礁直接使用 `tube_coral_block`，海底神殿组合 `prismarine_bricks`、`dark_prismarine` 与 `sea_lantern`，沙漠神殿组合 `sandstone`、`cut_sandstone`、`chiseled_sandstone` 与 `orange_terracotta`，其余对象才使用通用后备模型。因此以后注册正式 Prefab 不需要改部署逻辑。
 
 部署、攻击与卡牌目标槽位不再使用屏幕空间矩形、透明 `Graphic` 或 UGUI `Button` 命中。每个槽位由一个合并的地砖顶面 Mesh、同 Mesh 的 `MeshCollider`、`DemoBattlefieldSlotTarget` 语义组件，以及一个仅在抬升时显示的合并侧壁 Mesh 组成，不为单块地砖创建 Renderer 或 Collider。`DemoBattlefieldPointerController` 使用主相机 `ScreenPointToRay` 在 3D 世界中寻找最近的双方语义槽位；UI 面板遮挡指针时停止世界命中。战斗阶段先持续高亮合法己方攻击者，选择后保持攻击者地砖的按下亮度，并点亮敌方生物/建筑目标；敌方英雄使用其实体 HUD 面板作为明确的点击目标。有目标卡牌进入独立选择态，已占用的合法地表直接发光而不抬升生物模型，右键或 Esc 可取消。
 
@@ -66,6 +66,8 @@ UGUI 样式由 `DemoUiStyleCatalog` 集中提供材质、底色、描边和交�
 DB-003 的牌库查看使用全屏阻断式 `ChoiceOverlay`，容器、按钮与卡槽继续复用暗色石砖 `BasePanel` / `PrimaryActionButton`，只用沙漠暖金表示“可出土”和选中态。拥有者看到三张真实卡面；不可选卡仍可阅读，但标记为“保持牌库顺序”，只有带掩埋状态的卡能点击。若没有掩埋牌，主按钮明确显示“确认未发现”。非拥有者只看到三张保密卡背和等待文案，客户端不会获得真实 `cardId` 或 `selectable`。选择存在期间，手牌、世界空间战场、阵营切换与回合按钮均锁定；可用 `-previewArchaeology` 生成确定性视觉回归图 `demo-archaeology-choice-preview-v1.png`。
 
 CD-001 复用同一个 `ChoiceOverlay`，但标题、规则文案和交互色切换为洞穴青色。拥有者只看到真实牌库顶一张牌：直接确认表示保留，点击卡牌再确认表示置底，再次点击可取消置底；对手端只显示一张保密卡背。`-previewBatScry` 生成[确定性视觉回归图](assets/demo-cave-bat-scry-preview-v1.png)。
+
+CD-002 的中毒不增加屏幕空间图框。状态目标脚下的既有 3D 地砖材质直接切换为高饱和像素绿脉冲，并继续继承战场相机的 MVP 透视、遮挡和射线交互；世界标签显示“中毒 N”。洞穴蜘蛛使用原版皮肤驱动的头、胸、腹与八腿分件模型。`-previewCaveSpiderPoison` 生成[确定性视觉回归图](assets/demo-cave-spider-poison-preview-v1.png)。
 
 DB-005 的动态费用直接复用卡面左上角费用槽，不增加独立 Web 风格提示框。当前回合出土后，手牌与右侧详情中的数字同步从 3 变为高可读性的浅绿色 2，费用槽右下角显示小型 `-1` 像素标记，详情区补充“考古触发”说明；回合结束后全部恢复。`-previewRaiderDiscount` 用于生成确定性视觉回归图 `demo-raider-discount-preview-v1.png`。
 

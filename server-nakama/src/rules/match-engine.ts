@@ -772,13 +772,106 @@ namespace BiomeRivalsRules {
       });
     }
 
-    function expireStatuses(player: PlayerState): void {
-      for (let objectIndex = 0; objectIndex < player.battlefield.length; objectIndex += 1) {
-        const object = player.battlefield[objectIndex]!;
-        for (let statusIndex = object.statuses.length - 1; statusIndex >= 0; statusIndex -= 1) {
+    function applyPoison(
+      targetPlayer: PlayerState,
+      target: BattlefieldObjectState,
+      sourcePlayer: PlayerState,
+      sourceCardId: string,
+      sourceInstanceId: string,
+      effectId: string
+    ): void {
+      let status: BattlefieldStatusState | null = null;
+      for (let index = 0; index < target.statuses.length; index += 1) {
+        if (target.statuses[index]!.statusId === 'POISON') status = target.statuses[index]!;
+      }
+      if (status === null) {
+        status = {
+          statusId: 'POISON',
+          remainingDuration: 3,
+          sourcePlayerId: sourcePlayer.playerId,
+          sourceCardId: sourceCardId,
+          sourceInstanceId: sourceInstanceId,
+          effectId: effectId,
+          attackModifier: 0,
+          boundAttackModifier: 0
+        };
+        target.statuses.push(status);
+      } else if (status.remainingDuration < 3) {
+        status.remainingDuration = 3;
+        status.sourcePlayerId = sourcePlayer.playerId;
+        status.sourceCardId = sourceCardId;
+        status.sourceInstanceId = sourceInstanceId;
+        status.effectId = effectId;
+      }
+      emit('OBJECT_STATUS_APPLIED', {
+        playerId: targetPlayer.playerId,
+        instanceId: target.instanceId,
+        statusId: status.statusId,
+        remainingDuration: status.remainingDuration,
+        sourcePlayerId: status.sourcePlayerId,
+        sourceCardId: status.sourceCardId,
+        sourceInstanceId: status.sourceInstanceId,
+        effectId: status.effectId,
+        statusAttackModifier: status.attackModifier,
+        boundAttackModifier: status.boundAttackModifier,
+        attack: target.attack,
+        health: target.health
+      });
+    }
+
+    function resolveEndPhaseStatuses(player: PlayerState, opponent: PlayerState): void {
+      const objects = player.battlefield.slice().sort(function (left, right): number {
+        if (left.slotIndex !== right.slotIndex) return left.slotIndex - right.slotIndex;
+        return left.instanceId < right.instanceId ? -1 : left.instanceId > right.instanceId ? 1 : 0;
+      });
+      for (let objectIndex = 0; objectIndex < objects.length; objectIndex += 1) {
+        const object = objects[objectIndex]!;
+        if (findObject(player, object.instanceId) === null || object.health <= 0) continue;
+        let statusIndex = 0;
+        while (statusIndex < object.statuses.length) {
           const status = object.statuses[statusIndex]!;
+          if (status.statusId === 'POISON') {
+            object.health = Math.max(0, object.health - 1);
+            emit('OBJECT_STATS_CHANGED', {
+              playerId: player.playerId,
+              instanceId: object.instanceId,
+              sourcePlayerId: status.sourcePlayerId,
+              sourceCardId: status.sourceCardId,
+              sourceInstanceId: status.sourceInstanceId,
+              effectId: status.effectId,
+              reason: 'DAMAGE',
+              damageType: 'NORMAL',
+              attack: object.attack,
+              health: object.health,
+              temporaryAttackModifier: object.temporaryAttackModifier,
+              temporaryAttackModifierExpiresOnTurn: object.temporaryAttackModifierExpiresOnTurn
+            });
+            if (object.health === 0) {
+              const killCredits: { [instanceId: string]: string } = {};
+              killCredits[object.instanceId] = status.sourcePlayerId;
+              settleDeaths(player, opponent, killCredits);
+              break;
+            }
+          }
           status.remainingDuration -= 1;
-          if (status.remainingDuration > 0) continue;
+          if (status.remainingDuration > 0) {
+            emit('OBJECT_STATUS_TICKED', {
+              playerId: player.playerId,
+              instanceId: object.instanceId,
+              statusId: status.statusId,
+              remainingDuration: status.remainingDuration,
+              sourcePlayerId: status.sourcePlayerId,
+              sourceCardId: status.sourceCardId,
+              sourceInstanceId: status.sourceInstanceId,
+              effectId: status.effectId,
+              statusAttackModifier: status.attackModifier,
+              boundAttackModifier: status.boundAttackModifier,
+              attack: object.attack,
+              health: object.health
+            });
+            statusIndex += 1;
+            continue;
+          }
           object.attack = Math.max(0, object.attack - status.attackModifier);
           object.statuses.splice(statusIndex, 1);
           emit('OBJECT_STATUS_REMOVED', {
@@ -2192,6 +2285,14 @@ namespace BiomeRivalsRules {
           targetHealth: target.health,
           targetArmor: 0
         });
+        if (!heroAttack && attackValue > 0 && target.cardType === 'UNIT' && target.health > 0 &&
+            attacker!.cardId === 'cd_002') {
+          applyPoison(defenderPlayer, target, attackerPlayer, attacker!.cardId, attacker!.instanceId, 'effect.cd_002.01');
+        }
+        if (!heroAttack && retaliation > 0 && attacker!.health > 0 && target.cardType === 'UNIT' &&
+            target.cardId === 'cd_002') {
+          applyPoison(attackerPlayer, attacker!, defenderPlayer, target.cardId, target.instanceId, 'effect.cd_002.01');
+        }
         settleDeaths(attackerPlayer, defenderPlayer, combatKillCredits);
         if (heroAttack && attackingEquipment !== null) {
           attackingEquipment.durability -= 1;
@@ -2288,7 +2389,7 @@ namespace BiomeRivalsRules {
         if (state.status !== 'ACTIVE') return reject(state, 'MULLIGAN_REQUIRED', 'both players must confirm their opening hands first');
         if (actorIndex !== state.activePlayerIndex) return reject(state, 'NOT_ACTIVE_PLAYER', 'only the active player may end the turn');
         resolveOceanMonumentEndPhase(next.players[actorIndex]!, next.players[actorIndex === 0 ? 1 : 0]!);
-        expireStatuses(next.players[actorIndex]!);
+        resolveEndPhaseStatuses(next.players[actorIndex]!, next.players[actorIndex === 0 ? 1 : 0]!);
         for (let playerIndex = 0; playerIndex < next.players.length; playerIndex += 1) {
           const effectPlayer = next.players[playerIndex]!;
           for (let objectIndex = 0; objectIndex < effectPlayer.battlefield.length; objectIndex += 1) {

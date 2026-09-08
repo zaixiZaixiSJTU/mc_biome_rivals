@@ -67,7 +67,7 @@ Shader "BiomeRivals/Demo/GroundSurface"
                 float edge = 1.0 - smoothstep(_EdgeWidth, _EdgeWidth * 2.0, edgeDistance);
                 float strength = saturate(_HighlightStrength);
                 float surfaceMask = strength * lerp(0.84, 1.0, edge);
-                fixed3 activated = ground.rgb * (1.0 + strength * 0.18) + _HighlightColor.rgb * (0.30 + edge * 0.12);
+                fixed3 activated = lerp(ground.rgb, _HighlightColor.rgb, 0.44 + edge * 0.18) * (1.0 + strength * 0.10);
                 return fixed4(lerp(ground.rgb, activated, surfaceMask), 1.0);
             }
             ENDCG
