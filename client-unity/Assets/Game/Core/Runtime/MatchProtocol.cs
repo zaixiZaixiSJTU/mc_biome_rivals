@@ -48,6 +48,9 @@ namespace BiomeRivals.Core
         public const string ObjectStatusApplied = "OBJECT_STATUS_APPLIED";
         public const string ObjectStatusTicked = "OBJECT_STATUS_TICKED";
         public const string ObjectStatusRemoved = "OBJECT_STATUS_REMOVED";
+        public const string PlayerStatusApplied = "PLAYER_STATUS_APPLIED";
+        public const string PlayerStatusTicked = "PLAYER_STATUS_TICKED";
+        public const string PlayerStatusRemoved = "PLAYER_STATUS_REMOVED";
         public const string ObjectMoved = "OBJECT_MOVED";
         public const string PhaseChanged = "PHASE_CHANGED";
         public const string AttackResolved = "ATTACK_RESOLVED";
@@ -314,6 +317,8 @@ namespace BiomeRivals.Core
         public string sourcePlayerId = string.Empty;
         public int statusAttackModifier;
         public int boundAttackModifier;
+        public int cardsPlayedThisTurn;
+        public bool hasTargetedEnemyObjectThisTurn;
         public int durability;
         public int maxDurability;
         public int fromSlotIndex = -1;

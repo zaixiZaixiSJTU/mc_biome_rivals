@@ -135,3 +135,5 @@ DB-005 的动态费用直接复用卡面左上角费用槽，不增加独立 Web
 仙人掌围栏尖刺反击预览：[`assets/demo-cactus-fence-preview-v1.png`](assets/demo-cactus-fence-preview-v1.png)。围栏使用 Minecraft 仙人掌侧面与顶部纹理构成三柱体素建筑，并在红砂岩基座上继承远端半场透视；英雄受击后，蜜蜂铭牌从 `1/2` 更新为 `1/1`，围栏铭牌由“待触发”切换为“本回合已触发”，底部状态按攻击与反伤顺序解释结果。
 
 沙漠神殿掩埋链预览：[`assets/demo-desert-temple-preview-v1.png`](assets/demo-desert-temple-preview-v1.png)。神殿是一个横跨两个真实建筑格的砂岩体素对象，缩窄的基座边缘保留可见的沙金贴地脉冲，两格使用同一实例相位同步呼吸；炸药机关出土后双方实体 HUD 同时闪烁，神殿从 `4/8` 修复至 `6/8`。藏宝图、炸药机关与陶片在详情区明确标为“出土效果 · 自动结算”，不会被误写成尚未接入或允许从手牌主动释放。
+
+黑暗目标限制预览：[`assets/demo-darkness-targeting-preview-v1.png`](assets/demo-darkness-targeting-preview-v1.png)。幽匿感测体改用本机 Minecraft `sculk_sensor_*` 方块纹理构造低矮 3D 感测器及四根触须；敌方打出第一张牌后，其建筑格以幽匿青色低强度脉冲表示待触发。第二张牌完成结算后，受影响一方的英雄 HUD 显示“黑暗”，目标选择只点亮当前基础规则过滤后的左右边缘 3D 地表，中间对象不显示交互光效且不能点击；英雄目标不受影响。选择合法战场对象后，同回合后续目标恢复普通高亮。

@@ -3473,3 +3473,192 @@ TestHarness.test('Lethal poison credits its source controller for enemy drops', 
   TestHarness.equal(generated[0]!.payload.cardId, 'tk_009');
   assertEventBatchMatchesSchema(result.batch);
 });
+
+TestHarness.test('Echoing Darkness applies one public player status and draws a card', function (): void {
+  const state = activeState('match-echoing-darkness', ['alice', 'bob'], ['cave_dark_forest', 'plains_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const opponentIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['cd_006'];
+  actor.deck = ['cd_001'];
+  actor.redstone = 2;
+  actor.redstoneCapacity = 2;
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('echoing-darkness', 0, 'cd_006'));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[opponentIndex]!.statuses.length, 1);
+  TestHarness.equal(result.state.players[opponentIndex]!.statuses[0]!.statusId, 'DARK');
+  TestHarness.equal(result.state.players[opponentIndex]!.statuses[0]!.remainingDuration, 1);
+  TestHarness.equal(result.state.players[opponentIndex]!.statuses[0]!.sourceCardId, 'cd_006');
+  TestHarness.equal(result.state.players[actorIndex]!.hand.join(','), 'cd_001');
+  TestHarness.equal(result.state.players[actorIndex]!.cardsPlayedThisTurn, 1);
+  TestHarness.equal(result.batch.events.map(function (event): string { return event.type; }).join(','),
+    'CARD_PLAYED,PLAYER_STATUS_APPLIED,CARD_DRAWN');
+  const opponentSnapshot = BiomeRivalsRules.createClientSnapshot(result.state, result.state.players[opponentIndex]!.playerId);
+  TestHarness.equal(opponentSnapshot.players[opponentIndex]!.statuses[0]!.statusId, 'DARK');
+  assertEventBatchMatchesSchema(result.batch);
+});
+
+TestHarness.test('Darkness rejects a middle targeted unit until a legal row edge is selected', function (): void {
+  const state = activeState('match-dark-target-spell', ['alice', 'bob'], ['snow_ice', 'cave_dark_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const opponentIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  const opponent = state.players[opponentIndex]!;
+  actor.hand = ['si_001', 'si_001'];
+  actor.redstone = 2;
+  actor.redstoneCapacity = 2;
+  actor.statuses.push({
+    statusId: 'DARK', remainingDuration: 1, sourcePlayerId: opponent.playerId,
+    sourceCardId: 'cd_006', sourceInstanceId: 'effect-8', effectId: 'effect.cd_006.01'
+  });
+  placeUnit(state, opponentIndex, 'pf_001', 0, 'object-20', 1);
+  placeUnit(state, opponentIndex, 'pf_002', 1, 'object-21', 1);
+  placeUnit(state, opponentIndex, 'pf_003', 3, 'object-22', 1);
+
+  const rejected = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('dark-middle-rejected', 0, 'si_001', 'UNIT', 'object-21'));
+  TestHarness.equal(rejected.accepted, false);
+  if (!rejected.accepted) TestHarness.equal(rejected.code, 'INVALID_TARGET');
+  TestHarness.equal(state.players[actorIndex]!.hand.length, 2, 'rejected darkness targeting must remain atomic');
+
+  const edge = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('dark-edge-accepted', 0, 'si_001', 'UNIT', 'object-20'));
+  TestHarness.equal(edge.accepted, true, JSON.stringify(edge));
+  if (!edge.accepted) return;
+  TestHarness.equal(edge.state.players[actorIndex]!.hasTargetedEnemyObjectThisTurn, true);
+  const middleAfterConsumption = BiomeRivalsRules.applyCommand(edge.state, actor.playerId,
+    playCommand('dark-middle-after-edge', 1, 'si_001', 'UNIT', 'object-21'));
+  TestHarness.equal(middleAfterConsumption.accepted, true, JSON.stringify(middleAfterConsumption));
+  if (!middleAfterConsumption.accepted) return;
+  TestHarness.equal(middleAfterConsumption.state.players[opponentIndex]!.battlefield.filter(function (value): boolean {
+    return value.instanceId === 'object-21';
+  })[0]!.attack, 1);
+});
+
+TestHarness.test('Darkness uses attack-legal row edges and respects TAUNT', function (): void {
+  const state = activeState('match-dark-attack-edges', ['alice', 'bob'], ['plains_forest', 'cave_dark_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const opponentIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  const opponent = state.players[opponentIndex]!;
+  state.turn = 2;
+  state.phase = 'COMBAT';
+  actor.statuses.push({
+    statusId: 'DARK', remainingDuration: 1, sourcePlayerId: opponent.playerId,
+    sourceCardId: 'cd_006', sourceInstanceId: 'effect-9', effectId: 'effect.cd_006.01'
+  });
+  placeUnit(state, actorIndex, 'pf_008', 0, 'object-10', 1);
+  placeUnit(state, actorIndex, 'pf_001', 1, 'object-11', 1);
+  placeUnit(state, opponentIndex, 'pf_001', 0, 'object-20', 1);
+  placeUnit(state, opponentIndex, 'pf_008', 1, 'object-21', 1);
+  placeUnit(state, opponentIndex, 'pf_008', 3, 'object-22', 1);
+
+  const heroRejectedByTaunt = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    attackCommand('dark-hero-taunt', 0, 'object-10', 'HERO'));
+  TestHarness.equal(heroRejectedByTaunt.accepted, false);
+  if (!heroRejectedByTaunt.accepted) TestHarness.equal(heroRejectedByTaunt.code, 'TAUNT_TARGET_REQUIRED');
+  const nonTauntRejected = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    attackCommand('dark-non-taunt', 0, 'object-10', 'UNIT', 'object-20'));
+  TestHarness.equal(nonTauntRejected.accepted, false);
+  if (!nonTauntRejected.accepted) TestHarness.equal(nonTauntRejected.code, 'TAUNT_TARGET_REQUIRED');
+  const rightTaunt = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    attackCommand('dark-right-taunt', 0, 'object-10', 'UNIT', 'object-22'));
+  TestHarness.equal(rightTaunt.accepted, true, JSON.stringify(rightTaunt));
+  if (!rightTaunt.accepted) return;
+  TestHarness.equal(rightTaunt.state.players[actorIndex]!.hasTargetedEnemyObjectThisTurn, true);
+  TestHarness.equal(rightTaunt.batch.events[0]!.payload.hasTargetedEnemyObjectThisTurn, true);
+  assertEventBatchMatchesSchema(rightTaunt.batch);
+});
+
+TestHarness.test('Darkness does not restrict hero targeting or consume its battlefield-object gate', function (): void {
+  const state = activeState('match-dark-hero-target', ['alice', 'bob'], ['plains_forest', 'cave_dark_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const opponentIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  const opponent = state.players[opponentIndex]!;
+  state.turn = 2;
+  state.phase = 'COMBAT';
+  actor.statuses.push({
+    statusId: 'DARK', remainingDuration: 1, sourcePlayerId: opponent.playerId,
+    sourceCardId: 'cd_006', sourceInstanceId: 'effect-hero', effectId: 'effect.cd_006.01'
+  });
+  placeUnit(state, actorIndex, 'pf_001', 0, 'object-10', 1);
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    attackCommand('dark-hero-allowed', 0, 'object-10', 'HERO'));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[actorIndex]!.hasTargetedEnemyObjectThisTurn, false);
+  TestHarness.equal(result.state.players[opponentIndex]!.life, 29);
+  TestHarness.equal(result.batch.events[0]!.payload.hasTargetedEnemyObjectThisTurn, false);
+  assertEventBatchMatchesSchema(result.batch);
+});
+
+TestHarness.test('Sculk Sensor applies Darkness exactly after the enemy second card', function (): void {
+  const state = activeState('match-sculk-sensor-second-card', ['alice', 'bob'], ['plains_forest', 'cave_dark_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const opponentIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['db_002', 'db_002', 'db_002'];
+  actor.redstone = 3;
+  actor.redstoneCapacity = 3;
+  placeBuilding(state, opponentIndex, 'cd_004', 0, 'object-20');
+
+  const first = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('sensor-first-card', 0, 'db_002'));
+  TestHarness.equal(first.accepted, true, JSON.stringify(first));
+  if (!first.accepted) return;
+  TestHarness.equal(first.state.players[actorIndex]!.cardsPlayedThisTurn, 1);
+  TestHarness.equal(first.state.players[actorIndex]!.statuses.length, 0);
+
+  const second = BiomeRivalsRules.applyCommand(first.state, actor.playerId,
+    playCommand('sensor-second-card', 1, 'db_002'));
+  TestHarness.equal(second.accepted, true, JSON.stringify(second));
+  if (!second.accepted) return;
+  TestHarness.equal(second.state.players[actorIndex]!.cardsPlayedThisTurn, 2);
+  TestHarness.equal(second.state.players[actorIndex]!.statuses.length, 1);
+  TestHarness.equal(second.state.players[actorIndex]!.statuses[0]!.sourceInstanceId, 'object-20');
+  TestHarness.equal(second.batch.events[second.batch.events.length - 1]!.type, 'PLAYER_STATUS_APPLIED');
+
+  const third = BiomeRivalsRules.applyCommand(second.state, actor.playerId,
+    playCommand('sensor-third-card', 2, 'db_002'));
+  TestHarness.equal(third.accepted, true, JSON.stringify(third));
+  if (!third.accepted) return;
+  TestHarness.equal(third.state.players[actorIndex]!.cardsPlayedThisTurn, 3);
+  TestHarness.equal(third.state.players[actorIndex]!.statuses.length, 1);
+  TestHarness.equal(third.batch.events.filter(function (event): boolean {
+    return event.type === 'PLAYER_STATUS_APPLIED';
+  }).length, 0);
+  assertEventBatchMatchesSchema(second.batch);
+});
+
+TestHarness.test('Darkness expires at its controllers end phase and resets action markers', function (): void {
+  const state = activeState('match-dark-expiry', ['alice', 'bob'], ['plains_forest', 'cave_dark_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const opponentIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  const opponent = state.players[opponentIndex]!;
+  actor.cardsPlayedThisTurn = 2;
+  actor.hasTargetedEnemyObjectThisTurn = true;
+  actor.statuses.push({
+    statusId: 'DARK', remainingDuration: 1, sourcePlayerId: opponent.playerId,
+    sourceCardId: 'cd_006', sourceInstanceId: 'effect-10', effectId: 'effect.cd_006.01'
+  });
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    command('dark-expiry', 0, 'END_TURN'));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[actorIndex]!.statuses.length, 0);
+  TestHarness.equal(result.state.players[actorIndex]!.cardsPlayedThisTurn, 0);
+  TestHarness.equal(result.state.players[actorIndex]!.hasTargetedEnemyObjectThisTurn, false);
+  TestHarness.equal(result.batch.events[0]!.type, 'PLAYER_STATUS_REMOVED');
+  TestHarness.equal(result.batch.events[0]!.payload.statusId, 'DARK');
+  assertEventBatchMatchesSchema(result.batch);
+});

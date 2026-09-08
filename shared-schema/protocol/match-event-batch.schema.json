@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["protocolVersion", "rulesetVersion", "revision", "acknowledgedCommandId", "events"],
   "properties": {
-    "protocolVersion": { "const": 27 },
+    "protocolVersion": { "const": 28 },
     "rulesetVersion": { "type": "string" },
     "revision": { "type": "integer", "minimum": 0 },
     "acknowledgedCommandId": { "type": "string" },
@@ -18,7 +18,7 @@
         "required": ["eventId", "type", "payload"],
         "properties": {
           "eventId": { "type": "integer", "minimum": 1 },
-          "type": { "enum": ["MULLIGAN_COMPLETED", "MATCH_STARTED", "MATERIALS_CONSUMED", "CARD_DEPLOYED", "OBJECT_SUMMONED", "CARD_PLAYED", "CARD_EQUIPPED", "EQUIPMENT_DURABILITY_CHANGED", "EQUIPMENT_DESTROYED", "CARD_BURIED", "CHOICE_OFFERED", "CHOICE_RESOLVED", "CARD_EXCAVATED", "CARD_DRAWN", "CARD_BURNED", "CARD_GENERATED", "FATIGUE_DAMAGE", "HERO_DAMAGED", "HERO_HEALED", "ARMOR_GAINED", "OBJECT_STATS_CHANGED", "OBJECT_STATUS_APPLIED", "OBJECT_STATUS_TICKED", "OBJECT_STATUS_REMOVED", "OBJECT_MOVED", "PHASE_CHANGED", "ATTACK_RESOLVED", "OBJECT_DIED", "TURN_ENDED", "TURN_STARTED", "PLAYER_CONCEDED", "MATCH_ENDED"] },
+          "type": { "enum": ["MULLIGAN_COMPLETED", "MATCH_STARTED", "MATERIALS_CONSUMED", "CARD_DEPLOYED", "OBJECT_SUMMONED", "CARD_PLAYED", "CARD_EQUIPPED", "EQUIPMENT_DURABILITY_CHANGED", "EQUIPMENT_DESTROYED", "CARD_BURIED", "CHOICE_OFFERED", "CHOICE_RESOLVED", "CARD_EXCAVATED", "CARD_DRAWN", "CARD_BURNED", "CARD_GENERATED", "FATIGUE_DAMAGE", "HERO_DAMAGED", "HERO_HEALED", "ARMOR_GAINED", "OBJECT_STATS_CHANGED", "OBJECT_STATUS_APPLIED", "OBJECT_STATUS_TICKED", "OBJECT_STATUS_REMOVED", "PLAYER_STATUS_APPLIED", "PLAYER_STATUS_TICKED", "PLAYER_STATUS_REMOVED", "OBJECT_MOVED", "PHASE_CHANGED", "ATTACK_RESOLVED", "OBJECT_DIED", "TURN_ENDED", "TURN_STARTED", "PLAYER_CONCEDED", "MATCH_ENDED"] },
           "payload": { "type": "object" }
         },
         "allOf": [
@@ -93,7 +93,7 @@
                 "payload": {
                   "type": "object",
                   "additionalProperties": false,
-                  "required": ["playerId", "instanceId", "cardId", "cardType", "slotKind", "slotIndex", "occupiedSlots", "paymentMethod", "redstone", "attack", "health", "maxHealth", "summonedTurn", "keywords", "nextInstanceId"],
+                  "required": ["playerId", "instanceId", "cardId", "cardType", "slotKind", "slotIndex", "occupiedSlots", "paymentMethod", "redstone", "attack", "health", "maxHealth", "summonedTurn", "keywords", "cardsPlayedThisTurn", "hasTargetedEnemyObjectThisTurn", "nextInstanceId"],
                   "properties": {
                     "playerId": { "type": "string", "minLength": 1 },
                     "instanceId": { "type": "string", "pattern": "^object-[0-9]+$" },
@@ -109,6 +109,8 @@
                     "maxHealth": { "type": "integer", "minimum": 1 },
                     "summonedTurn": { "type": "integer", "minimum": 1 },
                     "keywords": { "type": "array", "items": { "enum": ["TAUNT", "CHARGE"] }, "uniqueItems": true },
+                    "cardsPlayedThisTurn": { "type": "integer", "minimum": 1 },
+                    "hasTargetedEnemyObjectThisTurn": { "type": "boolean" },
                     "nextInstanceId": { "type": "integer", "minimum": 1 }
                   }
                 }
@@ -151,7 +153,7 @@
               "properties": {
                 "payload": {
                   "type": "object", "additionalProperties": false,
-                  "required": ["playerId", "cardId", "cardType", "effectId", "redstone", "handCount", "discardCount"],
+                  "required": ["playerId", "cardId", "cardType", "effectId", "redstone", "handCount", "discardCount", "cardsPlayedThisTurn", "hasTargetedEnemyObjectThisTurn"],
                   "properties": {
                     "playerId": { "type": "string", "minLength": 1 },
                     "cardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
@@ -160,6 +162,8 @@
                     "redstone": { "type": "integer", "minimum": 0, "maximum": 10 },
                     "handCount": { "type": "integer", "minimum": 0, "maximum": 7 },
                     "discardCount": { "type": "integer", "minimum": 1 }
+                    ,"cardsPlayedThisTurn": { "type": "integer", "minimum": 1 }
+                    ,"hasTargetedEnemyObjectThisTurn": { "type": "boolean" }
                   }
                 }
               }
@@ -169,7 +173,7 @@
             "if": { "properties": { "type": { "const": "CARD_EQUIPPED" } } },
             "then": { "properties": { "payload": {
               "type": "object", "additionalProperties": false,
-              "required": ["playerId", "instanceId", "cardId", "attack", "durability", "maxDurability", "effectId", "redstone", "handCount", "discardCount", "nextInstanceId"],
+              "required": ["playerId", "instanceId", "cardId", "attack", "durability", "maxDurability", "effectId", "redstone", "handCount", "discardCount", "cardsPlayedThisTurn", "hasTargetedEnemyObjectThisTurn", "nextInstanceId"],
               "properties": {
                 "playerId": { "type": "string", "minLength": 1 },
                 "instanceId": { "type": "string", "pattern": "^equipment-[0-9]+$" },
@@ -181,6 +185,8 @@
                 "redstone": { "type": "integer", "minimum": 0, "maximum": 10 },
                 "handCount": { "type": "integer", "minimum": 0, "maximum": 7 },
                 "discardCount": { "type": "integer", "minimum": 0 },
+                "cardsPlayedThisTurn": { "type": "integer", "minimum": 1 },
+                "hasTargetedEnemyObjectThisTurn": { "type": "boolean" },
                 "nextInstanceId": { "type": "integer", "minimum": 1 }
               }
             } } }
@@ -440,6 +446,34 @@
             }
           },
           {
+            "if": { "properties": { "type": { "enum": ["PLAYER_STATUS_APPLIED", "PLAYER_STATUS_TICKED", "PLAYER_STATUS_REMOVED"] } } },
+            "then": {
+              "properties": {
+                "payload": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["playerId", "statusId", "sourcePlayerId", "sourceCardId", "sourceInstanceId", "effectId", "hasTargetedEnemyObjectThisTurn"],
+                  "properties": {
+                    "playerId": { "type": "string", "minLength": 1 },
+                    "statusId": { "const": "DARK" },
+                    "remainingDuration": { "const": 1 },
+                    "sourcePlayerId": { "type": "string", "minLength": 1 },
+                    "sourceCardId": { "enum": ["cd_004", "cd_006"] },
+                    "sourceInstanceId": { "type": "string", "pattern": "^(object|effect)-[0-9]+$" },
+                    "effectId": { "enum": ["effect.cd_004.01", "effect.cd_006.01"] },
+                    "reason": { "const": "DURATION_EXPIRED" },
+                    "hasTargetedEnemyObjectThisTurn": { "type": "boolean" }
+                  },
+                  "allOf": [
+                    {
+                      "if": { "required": ["remainingDuration"] },
+                      "else": { "required": ["reason"] }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
             "if": { "properties": { "type": { "const": "CARD_DRAWN" } } },
             "then": {
               "properties": {
@@ -561,7 +595,7 @@
               "properties": {
                 "payload": {
                   "type": "object", "additionalProperties": false,
-                  "required": ["attackerPlayerId", "attackerInstanceId", "targetPlayerId", "targetType", "targetInstanceId", "damageToTarget", "damageToAttacker", "attackerHealth", "attackerArmor", "targetHealth", "targetArmor"],
+                  "required": ["attackerPlayerId", "attackerInstanceId", "targetPlayerId", "targetType", "targetInstanceId", "damageToTarget", "damageToAttacker", "attackerHealth", "attackerArmor", "targetHealth", "targetArmor", "hasTargetedEnemyObjectThisTurn"],
                   "properties": {
                     "attackerPlayerId": { "type": "string", "minLength": 1 },
                     "attackerInstanceId": { "type": "string", "pattern": "^(object-[0-9]+|HERO)$" },
@@ -573,7 +607,8 @@
                     "attackerHealth": { "type": "integer", "minimum": 0 },
                     "attackerArmor": { "type": "integer", "minimum": 0 },
                     "targetHealth": { "type": "integer", "minimum": 0 },
-                    "targetArmor": { "type": "integer", "minimum": 0 }
+                    "targetArmor": { "type": "integer", "minimum": 0 },
+                    "hasTargetedEnemyObjectThisTurn": { "type": "boolean" }
                   }
                 }
               }

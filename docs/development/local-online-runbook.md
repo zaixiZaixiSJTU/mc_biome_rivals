@@ -48,6 +48,7 @@ Windows Development Player 支持以下仅用于自动验证的参数：
 - `-previewOpponentFaction <ID>`：只用于离线预览远端半场；权威联机后会被服务器快照覆盖。
 - `-previewMulligan`：离线显示真实卡面与材质化起手调度层，用于视觉回归，不提交规则命令。
 - `-previewTaunt`：离线建立已选攻击者、一个嘲讽目标与一个普通目标，用于检查金色地表强制目标和英雄禁用反馈。
+- `-previewDarkness`：离线建立敌方幽匿感测体与三单位行，结算第二张牌后让雪球进入目标选择，用于检查黑暗状态、左右边缘贴地高亮和中间目标禁用。
 - `-previewDeathrattle`：离线结算潜影贝死亡并选中生成的潜影壳，用于检查亡语提示、私有手牌卡面和区域计数。
 - `-previewSummon`：离线结算岩浆怪死亡，并在来源释放格生成小型岩浆怪，用于检查公开召唤事件、Minecraft 模型和出生地表脉冲。
 - `-autoOnlineAction`：双方先自动保留全部起手牌；当前行动方随后发送 `ENTER_COMBAT` 与 `END_TURN`，两端等待相同的最终 revision。

@@ -164,6 +164,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewArchaeology")) SetupArchaeologyPreview();
             else if (HasCommandLineFlag("-previewBatScry")) SetupBatScryPreview();
             else if (HasCommandLineFlag("-previewCaveSpiderPoison")) SetupCaveSpiderPoisonPreview();
+            else if (HasCommandLineFlag("-previewDarkness")) SetupDarknessPreview();
             else if (HasCommandLineFlag("-previewLoot")) SetupLootPreview();
             else if (HasCommandLineFlag("-previewTamedWolf")) SetupTamedWolfPreview();
             else if (HasCommandLineFlag("-previewVillagerFarmer")) SetupVillagerFarmerPreview();
@@ -520,6 +521,7 @@ namespace BiomeRivals.Demo
                 MatchEventTypes.CardBurned, MatchEventTypes.CardGenerated, MatchEventTypes.FatigueDamage, MatchEventTypes.HeroDamaged,
                 MatchEventTypes.HeroHealed, MatchEventTypes.ArmorGained, MatchEventTypes.ObjectStatsChanged,
                 MatchEventTypes.ObjectStatusApplied, MatchEventTypes.ObjectStatusTicked, MatchEventTypes.ObjectStatusRemoved, MatchEventTypes.ObjectMoved,
+                MatchEventTypes.PlayerStatusApplied, MatchEventTypes.PlayerStatusTicked, MatchEventTypes.PlayerStatusRemoved,
                 MatchEventTypes.PhaseChanged, MatchEventTypes.AttackResolved, MatchEventTypes.ObjectDied,
                 MatchEventTypes.TurnEnded, MatchEventTypes.TurnStarted, MatchEventTypes.PlayerConceded,
                 MatchEventTypes.MatchEnded
@@ -933,6 +935,22 @@ namespace BiomeRivals.Demo
                     yield return PulseBattlefieldObject(matchEvent.payload?.instanceId);
                     break;
                 case MatchEventTypes.ObjectStatusTicked:
+                    yield return null;
+                    break;
+                case MatchEventTypes.PlayerStatusApplied:
+                    var darkViewerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
+                    var darkFriendly = matchEvent.payload?.playerId == darkViewerId;
+                    ShowStatus(darkFriendly
+                        ? "黑暗笼罩：本回合第一次指定敌方战场对象时，只能选择各排最外侧的发光目标。"
+                        : "敌方陷入黑暗：其第一次主动指定将受到边缘目标限制。", false);
+                    yield return darkFriendly ? PulsePlayerHud(Hex("#25D7C6")) : PulseOpponentHud(Hex("#25D7C6"));
+                    yield return ShowTurnBanner("黑暗", Hex("#25D7C6"));
+                    break;
+                case MatchEventTypes.PlayerStatusRemoved:
+                    ShowStatus("黑暗持续时间结束，目标限制已解除。", false);
+                    yield return null;
+                    break;
+                case MatchEventTypes.PlayerStatusTicked:
                     yield return null;
                     break;
                 default:
@@ -1663,6 +1681,32 @@ namespace BiomeRivals.Demo
             if (vindicator != null) StartCoroutine(PulseBattlefieldObject(vindicator.InstanceId));
         }
 
+        private void SetupDarknessPreview()
+        {
+            SelectFaction("plains_forest");
+            SelectOpponentFaction("cave_dark_forest");
+            if (!_registry.TryGetDefinition("cd_004", out var sensor) ||
+                !_registry.TryGetDefinition("db_002", out var sand) ||
+                !_registry.TryGetDefinition("si_001", out var snowball) ||
+                !_registry.TryGetDefinition("pf_001", out var bee) ||
+                !_registry.TryGetDefinition("pf_002", out var sheep) ||
+                !_registry.TryGetDefinition("pf_003", out var wolf)) return;
+
+            _match.ResetDeckAndHand(new[] { sand.id, sand.id }, Array.Empty<string>());
+            _match.ResetOpponent(new[] { bee, sheep, wolf, sensor }, new[] { 0, 1, 3 });
+            var first = _match.ApplyPlayCard(sand, _match.CreatePlayCardCommand(sand.id));
+            var second = _match.ApplyPlayCard(sand, _match.CreatePlayCardCommand(sand.id));
+            _match.ResetHand(new[] { snowball.id });
+            _selectedCardId = snowball.id;
+            RefreshAll();
+            CastSelectedCard();
+            var darkActive = _match.HasPlayerStatus(true, "DARK");
+            ShowStatus(first.Accepted && second.Accepted && darkActive
+                ? "幽匿感测体已在第二张牌结算后施加黑暗：本次只能点击敌方单位行左右边缘的发光地表；中间目标不可交互，英雄目标不受影响。"
+                : !first.Accepted ? first.Message : second.Message,
+                !first.Accepted || !second.Accepted || !darkActive);
+        }
+
         private void SetupBatScryPreview()
         {
             SelectFaction("cave_dark_forest");
@@ -1935,6 +1979,10 @@ namespace BiomeRivals.Demo
                 ? $"❤ {match.OpponentLife}  ◈ {match.OpponentArmor}"
                 : $"❤ {match.OpponentLife}";
             _playerHealthText.text = match.PlayerArmor > 0 ? $"❤ {match.PlayerLife}  ◈ {match.PlayerArmor}" : $"❤ {match.PlayerLife}";
+            if (match.HasPlayerStatus(false, "DARK")) _opponentHealthText.text += "  ◉ 黑暗";
+            if (match.HasPlayerStatus(true, "DARK")) _playerHealthText.text += "  ◉ 黑暗";
+            _opponentHealthText.color = match.HasPlayerStatus(false, "DARK") ? Hex("#62E3D4") : Hex("#F4C18A");
+            _playerHealthText.color = match.HasPlayerStatus(true, "DARK") ? Hex("#62E3D4") : Hex("#B8E5A9");
             _playerEquipmentText.text = FormatEquipment(match.PlayerEquipment);
             _playerEquipmentText.color = match.PlayerEquipment == null ? Muted : Cyan;
             _opponentEquipmentText.text = FormatEquipment(match.OpponentEquipment);
@@ -2312,6 +2360,9 @@ namespace BiomeRivals.Demo
             else if (view.Kind == DemoSlotKind.Building && battlefieldObject?.CardId == "db_004" &&
                 !match.HasTriggeredEffect(player, battlefieldObject.InstanceId, "effect.db_004.01"))
                 engineReadyKind = DemoEngineReadyKind.Cactus;
+            else if (view.Kind == DemoSlotKind.Building && battlefieldObject?.CardId == "cd_004" &&
+                match.IsPlayerTurn != player && match.CardsPlayedThisTurn(!player) == 1)
+                engineReadyKind = DemoEngineReadyKind.Sculk;
             else if (view.Kind == DemoSlotKind.Building && battlefieldObject?.CardId == "db_007")
                 engineReadyKind = DemoEngineReadyKind.Temple;
             _battlefield.SetSlotEngineReady(
@@ -2417,6 +2468,8 @@ namespace BiomeRivals.Demo
                     : attacker == null ? "选择发光的己方生物\n或点击左下角英雄" : $"攻击者：{GetCardName(attacker.CardId)}\n{attacker.Attack}/{attacker.Health}";
                 CreateText(_inspectorRoot, "CombatTitle", new Vector2(0, 100), new Vector2(245, 130), title, 19, Cyan, TextAnchor.MiddleCenter, FontStyle.Bold);
                 var combatHint = "再点击敌方生物、建筑，\n或左上角敌方英雄面板。\n单位会同步反击，建筑不会反击。";
+                if (match.HasPlayerStatus(true, "DARK") && !match.HasTargetedEnemyObjectThisTurn(true))
+                    combatHint = "黑暗笼罩：第一次指定战场对象\n只能选择每排最左或最右的青色目标。\n敌方英雄不受此限制。";
                 if ((attacker != null || heroSelected) && !match.CanAttackTarget(null, "HERO", out var tauntMessage))
                     combatHint = tauntMessage + "\n只有金色地表目标可被攻击。";
                 CreateText(_inspectorRoot, "CombatHint", new Vector2(0, -25), new Vector2(245, 120), combatHint, 15, Pale, TextAnchor.MiddleCenter, FontStyle.Normal);
@@ -2937,7 +2990,7 @@ namespace BiomeRivals.Demo
                 return;
             }
             var target = MatchView.GetObject(player, kind, index);
-            if (!targetRule.IsLegal(MatchView, player, kind, target))
+            if (!DemoCardTargeting.IsLegalTarget(MatchView, targetRule, player, kind, target))
             {
                 ShowStatus(targetRule.SelectionPrompt, true);
                 return;
@@ -3000,7 +3053,7 @@ namespace BiomeRivals.Demo
                 .ToArray();
             if (targets.Length != targetRule.RequiredTargetCount || targets.Any(target => target == null) ||
                 targets.Distinct().Count() != targetRule.RequiredTargetCount ||
-                targets.Any(target => !targetRule.IsLegal(MatchView, target.Player, target.SlotKind, target)))
+                targets.Any(target => !DemoCardTargeting.IsLegalTarget(MatchView, targetRule, target.Player, target.SlotKind, target)))
             {
                 ShowStatus(targetRule.MissingTargetMessage, true);
                 return;
@@ -3051,7 +3104,7 @@ namespace BiomeRivals.Demo
         {
             if (!_registry.TryGetDefinition(_pendingTargetCardId, out var definition) ||
                 !DemoCardTargeting.TryGetRule(definition, out var targetRule)) return false;
-            return targetRule.IsLegal(MatchView, player, kind, target);
+            return DemoCardTargeting.IsLegalTarget(MatchView, targetRule, player, kind, target);
         }
 
         private DemoBattlefieldObject FindSelectedDeploymentTarget()

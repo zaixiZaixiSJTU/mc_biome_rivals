@@ -60,6 +60,20 @@ namespace BiomeRivals.Demo
                 $"{sourceInstanceId}:{effectId}") >= 0;
         }
 
+        public bool HasPlayerStatus(bool player, string statusId)
+        {
+            if (string.IsNullOrEmpty(statusId)) return false;
+            var owner = player ? Player : Opponent;
+            return Array.Exists(owner?.statuses ?? Array.Empty<PlayerStatusStateDto>(),
+                value => value != null && value.statusId == statusId && value.remainingDuration > 0);
+        }
+
+        public bool HasTargetedEnemyObjectThisTurn(bool player) =>
+            (player ? Player : Opponent)?.hasTargetedEnemyObjectThisTurn == true;
+
+        public int CardsPlayedThisTurn(bool player) =>
+            (player ? Player : Opponent)?.cardsPlayedThisTurn ?? 0;
+
         public int GetEffectiveCost(CardDefinitionEntry definition)
         {
             if (definition == null) return 0;
@@ -139,6 +153,16 @@ namespace BiomeRivals.Demo
             var taunts = OpponentBattlefield.Where(value => value.Health > 0 && value.HasKeyword("TAUNT")).ToArray();
             if (taunts.Length > 0 && (targetType == "HERO" || target == null || !target.HasKeyword("TAUNT")))
                 return Fail("敌方存在嘲讽单位，必须先攻击一个发出金光的嘲讽目标。", out message);
+            if (target != null && HasPlayerStatus(true, "DARK") && !HasTargetedEnemyObjectThisTurn(true))
+            {
+                var candidates = taunts.Length > 0
+                    ? taunts
+                    : OpponentBattlefield.Where(value => value.Health > 0).ToArray();
+                var row = candidates.Where(value => value.SlotKind == target.SlotKind)
+                    .OrderBy(value => value.SlotIndex).ThenBy(value => value.InstanceId, StringComparer.Ordinal).ToArray();
+                if (row.Length == 0 || row[0].InstanceId != target.InstanceId && row[row.Length - 1].InstanceId != target.InstanceId)
+                    return Fail("黑暗笼罩视野：本回合第一次指定敌方战场对象时，只能选择该排最左或最右的发光目标。", out message);
+            }
             message = string.Empty;
             return true;
         }

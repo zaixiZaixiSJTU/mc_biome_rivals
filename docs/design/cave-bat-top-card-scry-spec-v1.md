@@ -1,6 +1,6 @@
 # 洞穴蝙蝠牌库顶窥视规范 v1
 
-本规范对应 `protocolVersion 27`、`rulesetVersion prototype-0.41` 与内容版本 33。
+本规范对应 `protocolVersion 28`、`rulesetVersion prototype-0.42` 与内容版本 34。
 
 ## 规则语义
 

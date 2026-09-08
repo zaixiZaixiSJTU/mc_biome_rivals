@@ -1893,5 +1893,69 @@ namespace BiomeRivals.Core.Tests
             Assert.That(store.Current.players[0].triggeredEffectKeysThisTurn, Is.Empty);
             Assert.That(store.Current.players[1].triggeredEffectKeysThisTurn, Is.Empty);
         }
+
+        [Test]
+        public void Apply_ReplaysDarkPlayerStatusAndTurnActionMarkers()
+        {
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "dark-replay", viewerPlayerId = "alice", protocolVersion = GameVersions.Protocol,
+                rulesetVersion = GameVersions.Ruleset, status = "ACTIVE", phase = "MAIN", turn = 2, activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto
+                    {
+                        playerId = "alice", life = 30, redstone = 2, hand = new[] { "cd_006" },
+                        discardPile = Array.Empty<string>()
+                    },
+                    new PlayerStateDto { playerId = "bob", life = 30 }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 1, type = MatchEventTypes.CardPlayed, payload = new MatchEventPayloadDto
+                    {
+                        playerId = "alice", cardId = "cd_006", cardType = "SPELL", effectId = "effect.cd_006.01",
+                        redstone = 0, handCount = 0, discardCount = 1, cardsPlayedThisTurn = 1,
+                        hasTargetedEnemyObjectThisTurn = false
+                    }},
+                    new MatchEventDto { eventId = 2, type = MatchEventTypes.PlayerStatusApplied, payload = new MatchEventPayloadDto
+                    {
+                        playerId = "bob", statusId = "DARK", remainingDuration = 1, sourcePlayerId = "alice",
+                        sourceCardId = "cd_006", sourceInstanceId = "effect-1", effectId = "effect.cd_006.01",
+                        hasTargetedEnemyObjectThisTurn = false
+                    }}
+                }
+            });
+
+            Assert.That(store.Current.players[0].cardsPlayedThisTurn, Is.EqualTo(1));
+            Assert.That(store.Current.players[0].discardPile, Is.EqualTo(new[] { "cd_006" }));
+            Assert.That(store.Current.players[1].statuses.Single().statusId, Is.EqualTo("DARK"));
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 2,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 3, type = MatchEventTypes.PlayerStatusRemoved, payload = new MatchEventPayloadDto
+                    {
+                        playerId = "bob", statusId = "DARK", sourcePlayerId = "alice", sourceCardId = "cd_006",
+                        sourceInstanceId = "effect-1", effectId = "effect.cd_006.01", reason = "DURATION_EXPIRED",
+                        hasTargetedEnemyObjectThisTurn = true
+                    }},
+                    new MatchEventDto { eventId = 4, type = MatchEventTypes.TurnEnded,
+                        payload = new MatchEventPayloadDto { playerId = "bob" } }
+                }
+            });
+
+            Assert.That(store.Current.players[1].statuses, Is.Empty);
+            Assert.That(store.Current.players[1].hasTargetedEnemyObjectThisTurn, Is.False);
+            Assert.That(store.Current.players[1].cardsPlayedThisTurn, Is.Zero);
+        }
     }
 }

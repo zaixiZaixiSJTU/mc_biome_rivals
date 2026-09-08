@@ -20,11 +20,17 @@ namespace BiomeRivals.Demo
         private readonly List<string> _discardPile = new List<string>();
         private readonly List<DemoBattlefieldObject> _playerBattlefield = new List<DemoBattlefieldObject>();
         private readonly List<DemoBattlefieldObject> _opponentBattlefield = new List<DemoBattlefieldObject>();
+        private readonly List<PlayerStatusStateDto> _playerStatuses = new List<PlayerStatusStateDto>();
+        private readonly List<PlayerStatusStateDto> _opponentStatuses = new List<PlayerStatusStateDto>();
         private readonly HashSet<string> _processedCommandIds = new HashSet<string>(StringComparer.Ordinal);
         private readonly HashSet<string> _triggeredEffectKeysThisTurn = new HashSet<string>(StringComparer.Ordinal);
         private int _nextLocalCommandId = 1;
         private int _nextBattlefieldInstanceId = 1;
         private int _opponentHandCount = 5;
+        private int _playerCardsPlayedThisTurn;
+        private int _opponentCardsPlayedThisTurn;
+        private bool _playerHasTargetedEnemyObjectThisTurn;
+        private bool _opponentHasTargetedEnemyObjectThisTurn;
 
         public IReadOnlyList<string> Hand => _hand;
         public IReadOnlyList<string> Deck => _deck;
@@ -69,6 +75,16 @@ namespace BiomeRivals.Demo
         public bool HasTriggeredEffect(bool player, string sourceInstanceId, string effectId) =>
             !string.IsNullOrEmpty(sourceInstanceId) && !string.IsNullOrEmpty(effectId) &&
             _triggeredEffectKeysThisTurn.Contains($"{sourceInstanceId}:{effectId}");
+
+        public bool HasPlayerStatus(bool player, string statusId) =>
+            !string.IsNullOrEmpty(statusId) && (player ? _playerStatuses : _opponentStatuses)
+                .Exists(value => value != null && value.statusId == statusId && value.remainingDuration > 0);
+
+        public bool HasTargetedEnemyObjectThisTurn(bool player) =>
+            player ? _playerHasTargetedEnemyObjectThisTurn : _opponentHasTargetedEnemyObjectThisTurn;
+
+        public int CardsPlayedThisTurn(bool player) =>
+            player ? _playerCardsPlayedThisTurn : _opponentCardsPlayedThisTurn;
 
         public void SetPlayerFaction(string factionId)
         {
@@ -116,6 +132,9 @@ namespace BiomeRivals.Demo
             }
             PendingChoice = null;
             ExcavatedThisTurn = false;
+            _playerStatuses.Clear();
+            _playerCardsPlayedThisTurn = 0;
+            _playerHasTargetedEnemyObjectThisTurn = false;
             _discardPile.Clear();
             FatigueCount = 0;
             LastDrawResult = null;
@@ -197,10 +216,13 @@ namespace BiomeRivals.Demo
                     var playerTarget = targetRule.Owner == DemoTargetOwner.Friendly;
                     var targetBattlefield = playerTarget ? _playerBattlefield : _opponentBattlefield;
                     battlecryTarget = targetBattlefield.Find(value => value.InstanceId == command.payload.targetInstanceId);
-                    if (!targetRule.IsLegal(this, playerTarget, targetRule.SlotKind, battlecryTarget))
+                    if (!DemoCardTargeting.IsLegalTarget(this, targetRule, playerTarget, targetRule.SlotKind, battlecryTarget))
                         return Reject(DemoCommandRejectionCode.InvalidTarget, targetRule.MissingTargetMessage);
                 }
             }
+
+            if (battlecryTarget != null && !battlecryTarget.Player)
+                _playerHasTargetedEnemyObjectThisTurn = true;
 
             ConsumeDeployment(definition, command.payload.paymentMethod);
             var crafted = command.payload.paymentMethod == MatchPaymentMethods.Crafting;
@@ -359,6 +381,9 @@ namespace BiomeRivals.Demo
                 OfferUnitMove(deployedObject, true, definition.id, deployedObject.InstanceId, "effect.or_001.01");
                 if (PendingChoice != null) deployMessage += "；水流：选择一个相邻空格移动，或保持原位。";
             }
+            var sensorTriggers = CompletePlayerCardPlay();
+            if (sensorTriggers > 0)
+                deployMessage += $"；幽匿感测体触发 {sensorTriggers} 次，你陷入黑暗。";
             AcceptCommand(command);
             return DemoCommandResult.Accept(deployMessage, Revision);
         }
@@ -524,7 +549,7 @@ namespace BiomeRivals.Demo
                 return Reject(DemoCommandRejectionCode.EffectNotImplemented, "该卡牌效果已注册，但尚未接入规则执行器。");
 
             var effectId = definition.effectIds[0];
-            if (effectId != "effect.db_002.01" && effectId != "effect.db_006.01" && effectId != "effect.nt_006.01" &&
+            if (effectId != "effect.cd_006.01" && effectId != "effect.db_002.01" && effectId != "effect.db_006.01" && effectId != "effect.nt_006.01" &&
                 effectId != "effect.si_001.01" && effectId != "effect.si_006.01" && effectId != "effect.tk_005.01" &&
                 effectId != "effect.tk_002.01" && effectId != "effect.tk_009.01" && effectId != "effect.tk_010.01" && effectId != "effect.or_006.01" &&
                 effectId != "effect.tk_012.01" && effectId != "effect.tk_016.01" && effectId != "effect.pf_006.01" &&
@@ -547,7 +572,7 @@ namespace BiomeRivals.Demo
                     foreach (var targetId in targetIds)
                     {
                         var target = battlefield.Find(value => value.InstanceId == targetId);
-                        if (!targetRule.IsLegal(this, playerTarget, targetRule.SlotKind, target))
+                        if (!DemoCardTargeting.IsLegalTarget(this, targetRule, playerTarget, targetRule.SlotKind, target))
                             return Reject(DemoCommandRejectionCode.InvalidTarget, targetRule.MissingTargetMessage);
                         targetedObjects.Add(target);
                     }
@@ -557,10 +582,12 @@ namespace BiomeRivals.Demo
                 else
                 {
                     targetedObject = battlefield.Find(value => value.InstanceId == command.payload.targetInstanceId);
-                    if (!targetRule.IsLegal(this, playerTarget, targetRule.SlotKind, targetedObject))
+                    if (!DemoCardTargeting.IsLegalTarget(this, targetRule, playerTarget, targetRule.SlotKind, targetedObject))
                         return Reject(DemoCommandRejectionCode.InvalidTarget, targetRule.MissingTargetMessage);
                 }
             }
+            if (targetedObject != null && !targetedObject.Player)
+                _playerHasTargetedEnemyObjectThisTurn = true;
             Consume(definition);
             if (definition.cardType == "EQUIPMENT")
             {
@@ -570,12 +597,25 @@ namespace BiomeRivals.Demo
                     InstanceId = $"equipment-{_nextBattlefieldInstanceId++}", CardId = definition.id,
                     Attack = definition.attack, Durability = definition.durability, MaxDurability = definition.durability
                 };
+                var equipmentSensorTriggers = CompletePlayerCardPlay();
                 AcceptCommand(command);
-                return DemoCommandResult.Accept($"已装备：{definition.designId}（{definition.attack} 攻击 / {definition.durability} 耐久）。", Revision);
+                return DemoCommandResult.Accept($"已装备：{definition.designId}（{definition.attack} 攻击 / {definition.durability} 耐久）。" +
+                    (equipmentSensorTriggers > 0 ? $" 幽匿感测体触发 {equipmentSensorTriggers} 次，你陷入黑暗。" : string.Empty), Revision);
             }
             _discardPile.Add(definition.id);
             switch (effectId)
             {
+                case "effect.cd_006.01":
+                    ApplyDark(_opponentStatuses, "local-player", definition.id, $"effect-{Revision + 1}", effectId);
+                    var darkDraw = DrawCard();
+                    message = darkDraw.Outcome == DemoDrawOutcome.Drawn
+                        ? $"回响的黑暗：敌方陷入黑暗，抽到 {darkDraw.CardId}。"
+                        : darkDraw.Outcome == DemoDrawOutcome.Burned
+                            ? $"回响的黑暗：敌方陷入黑暗，{darkDraw.CardId} 因满手爆牌。"
+                            : darkDraw.Outcome == DemoDrawOutcome.MatchEnded
+                                ? "回响的黑暗结算抽牌时结束了对局。"
+                                : $"回响的黑暗：敌方陷入黑暗，并受到 {darkDraw.FatigueDamage} 点疲劳伤害。";
+                    break;
                 case "effect.db_002.01":
                     BuryCard("tk_006");
                     PlayerArmor += 1;
@@ -722,6 +762,9 @@ namespace BiomeRivals.Demo
                     throw new InvalidOperationException("Validated effect handler was not dispatched.");
             }
 
+            var playSensorTriggers = CompletePlayerCardPlay();
+            if (playSensorTriggers > 0)
+                message += $" 幽匿感测体触发 {playSensorTriggers} 次，你陷入黑暗。";
             AcceptCommand(command);
             return DemoCommandResult.Accept(message, Revision);
         }
@@ -733,8 +776,11 @@ namespace BiomeRivals.Demo
             Array.Clear(OpponentUnitSlots, 0, OpponentUnitSlots.Length);
             Array.Clear(OpponentBuildingSlots, 0, OpponentBuildingSlots.Length);
             _opponentBattlefield.Clear();
+            _opponentStatuses.Clear();
             OpponentLife = 30;
             _opponentHandCount = 5;
+            _opponentCardsPlayedThisTurn = 0;
+            _opponentHasTargetedEnemyObjectThisTurn = false;
             var unitIndex = 0;
             var unitOrdinal = 0;
             var buildingIndex = 0;
@@ -809,6 +855,16 @@ namespace BiomeRivals.Demo
                 return Fail("攻击目标无效或已经离场。", out message);
             if (HasLivingOpponentTaunt() && (targetType == "HERO" || target == null || !target.HasKeyword("TAUNT")))
                 return Fail("敌方存在嘲讽单位，必须先攻击一个发出金光的嘲讽目标。", out message);
+            if (target != null && HasPlayerStatus(true, "DARK") && !_playerHasTargetedEnemyObjectThisTurn)
+            {
+                var candidates = HasLivingOpponentTaunt()
+                    ? _opponentBattlefield.Where(value => value.Health > 0 && value.HasKeyword("TAUNT"))
+                    : _opponentBattlefield.Where(value => value.Health > 0);
+                var row = candidates.Where(value => value.SlotKind == target.SlotKind)
+                    .OrderBy(value => value.SlotIndex).ThenBy(value => value.InstanceId, StringComparer.Ordinal).ToArray();
+                if (row.Length == 0 || row[0].InstanceId != target.InstanceId && row[row.Length - 1].InstanceId != target.InstanceId)
+                    return Fail("黑暗笼罩视野：本回合第一次指定敌方战场对象时，只能选择该排最左或最右的发光目标。", out message);
+            }
             message = string.Empty;
             return true;
         }
@@ -882,6 +938,7 @@ namespace BiomeRivals.Demo
                 else attacker.HasAttacked = false;
                 return Reject(DemoCommandRejectionCode.InvalidTarget, "攻击目标无效或已经离场。");
             }
+            _playerHasTargetedEnemyObjectThisTurn = true;
             var retaliation = target.SlotKind == DemoSlotKind.Unit ? target.Attack : 0;
             target.Health = Math.Max(0, target.Health - attackValue);
             if (heroAttack)
@@ -944,10 +1001,13 @@ namespace BiomeRivals.Demo
             var monumentDamage = ResolveOceanMonumentEndPhase(monumentDeathMessages);
             var poisonDeathMessages = new List<string>();
             var poisonDamage = ResolveEndPhaseStatuses(_playerBattlefield, poisonDeathMessages);
+            ResolvePlayerStatuses(_playerStatuses);
             RestoreExpiredAttackModifiers(_playerBattlefield);
             RestoreExpiredAttackModifiers(_opponentBattlefield);
             _triggeredEffectKeysThisTurn.Clear();
             ExcavatedThisTurn = false;
+            _playerCardsPlayedThisTurn = 0;
+            _playerHasTargetedEnemyObjectThisTurn = false;
             IsPlayerTurn = false;
             AcceptCommand(command);
             var monumentMessage = monumentDamage > 0
@@ -964,6 +1024,9 @@ namespace BiomeRivals.Demo
             if (IsFinished)
                 return RememberDraw(new DemoDrawResult(DemoDrawOutcome.MatchEnded, string.Empty, 0));
             ResolveEndPhaseStatuses(_opponentBattlefield, null);
+            ResolvePlayerStatuses(_opponentStatuses);
+            _opponentCardsPlayedThisTurn = 0;
+            _opponentHasTargetedEnemyObjectThisTurn = false;
             Round++;
             MaxEnergy = Math.Min(10, MaxEnergy + 1);
             Energy = MaxEnergy;
@@ -971,6 +1034,8 @@ namespace BiomeRivals.Demo
             IsPlayerTurn = true;
             Phase = DemoTurnPhase.Main;
             PlayerHeroHasAttacked = false;
+            _playerCardsPlayedThisTurn = 0;
+            _playerHasTargetedEnemyObjectThisTurn = false;
             foreach (var battlefieldObject in _playerBattlefield) battlefieldObject.HasAttacked = false;
             return DrawCard();
         }
@@ -1241,6 +1306,55 @@ namespace BiomeRivals.Demo
             if (message.Contains("支付方式") || message.Contains("合成配方")) return Reject(DemoCommandRejectionCode.InvalidPaymentMethod, message);
             if (GetEffectiveCost(definition) > Energy) return Reject(DemoCommandRejectionCode.InsufficientRedstone, message);
             return Reject(DemoCommandRejectionCode.InvalidCommand, message);
+        }
+
+        private int CompletePlayerCardPlay()
+        {
+            _playerCardsPlayedThisTurn++;
+            if (IsFinished || _playerCardsPlayedThisTurn != 2) return 0;
+            var sensors = _opponentBattlefield
+                .Where(value => value != null && value.Health > 0 && value.SlotKind == DemoSlotKind.Building && value.CardId == "cd_004")
+                .OrderBy(value => value.SlotIndex)
+                .ThenBy(value => value.InstanceId, StringComparer.Ordinal)
+                .ToArray();
+            foreach (var sensor in sensors)
+                ApplyDark(_playerStatuses, "local-opponent", sensor.CardId, sensor.InstanceId, "effect.cd_004.01");
+            return sensors.Length;
+        }
+
+        private static void ApplyDark(
+            List<PlayerStatusStateDto> statuses,
+            string sourcePlayerId,
+            string sourceCardId,
+            string sourceInstanceId,
+            string effectId)
+        {
+            var existing = statuses.Find(value => value != null && value.statusId == "DARK");
+            if (existing != null) return;
+            statuses.Add(new PlayerStatusStateDto
+            {
+                statusId = "DARK",
+                remainingDuration = 1,
+                sourcePlayerId = sourcePlayerId,
+                sourceCardId = sourceCardId,
+                sourceInstanceId = sourceInstanceId,
+                effectId = effectId
+            });
+        }
+
+        private static void ResolvePlayerStatuses(List<PlayerStatusStateDto> statuses)
+        {
+            for (var index = statuses.Count - 1; index >= 0; index--)
+            {
+                var status = statuses[index];
+                if (status == null)
+                {
+                    statuses.RemoveAt(index);
+                    continue;
+                }
+                status.remainingDuration--;
+                if (status.remainingDuration <= 0) statuses.RemoveAt(index);
+            }
         }
 
         private void SeedOpponent(CardDefinitionEntry definition, DemoSlotKind kind, int slotIndex)

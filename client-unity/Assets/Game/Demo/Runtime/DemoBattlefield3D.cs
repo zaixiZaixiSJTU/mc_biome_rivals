@@ -13,6 +13,7 @@ namespace BiomeRivals.Demo
         Nursery,
         Coral,
         Cactus,
+        Sculk,
         Temple
     }
 
@@ -292,6 +293,8 @@ namespace BiomeRivals.Demo
                 ? Color.Lerp(Hex("#41672D"), Hex("#A8D66D"), pulse)
                 : marker.EngineReadyKind == DemoEngineReadyKind.Cactus
                     ? Color.Lerp(Hex("#8A6424"), Hex("#C7D65A"), pulse)
+                    : marker.EngineReadyKind == DemoEngineReadyKind.Sculk
+                        ? Color.Lerp(Hex("#07596A"), Hex("#36E0CF"), pulse)
                     : marker.EngineReadyKind == DemoEngineReadyKind.Temple
                         ? Color.Lerp(Hex("#8C5B24"), Hex("#F2C66D"), pulse)
                         : Color.Lerp(Hex("#8E3F72"), Hex("#F08FB4"), pulse);
@@ -816,6 +819,7 @@ namespace BiomeRivals.Demo
                 if (cardId == "pf_005") BuildWoodlandNursery(root, footprintWidth);
                 else if (cardId == "db_004") BuildCactusFence(root, material, footprintWidth);
                 else if (cardId == "db_007") BuildDesertTemple(root, footprintWidth);
+                else if (cardId == "cd_004") BuildSculkSensor(root, footprintWidth);
                 else if (cardId == "or_007") BuildCoralReef(root, material, footprintWidth);
                 else if (cardId == "or_008") BuildOceanMonument(root, material, footprintWidth);
                 else BuildBlockStructure(root, material, theme.Accent, footprintWidth);
@@ -862,6 +866,48 @@ namespace BiomeRivals.Demo
             CreateBlock(root, "TowerL", new Vector3(-towerOffset, 0.9f, 0), new Vector3(0.48f, 1.25f, 0.55f), material);
             CreateBlock(root, "TowerR", new Vector3(towerOffset, 0.9f, 0), new Vector3(0.48f, 1.25f, 0.55f), material);
             CreateBlock(root, "Core", new Vector3(0, 0.82f, 0), new Vector3(0.50f, 0.50f, 0.60f), accentMaterial);
+        }
+
+        private void BuildSculkSensor(Transform root, float footprintWidth)
+        {
+            var width = Mathf.Min(Mathf.Max(1.52f, footprintWidth - 0.56f), 1.90f);
+            var bottom = GetWorldMaterial("sculk_sensor_bottom", "sculk_sensor_bottom", Hex("#20343A"));
+            var side = GetWorldMaterial("sculk_sensor_side", "sculk_sensor_side", Hex("#173E48"));
+            var topColor = Hex("#167E82");
+            if (!_materials.TryGetValue("sculk_sensor_top", out var top))
+            {
+                top = DemoWorldAssetProvider.CreateBlockMaterial(
+                    "Demo_SculkSensor_Top", topColor, "sculk_sensor_top", Hex("#073E43"), blockShader);
+                _materials["sculk_sensor_top"] = top;
+            }
+            var tendrilColor = Hex("#58D6C3");
+            if (!_materials.TryGetValue("sculk_sensor_tendril", out var tendril))
+            {
+                tendril = DemoWorldAssetProvider.CreateBlockMaterial(
+                    "Demo_SculkSensor_Tendril", tendrilColor, "sculk_sensor_tendril_inactive", Hex("#167E82"), blockShader);
+                _materials["sculk_sensor_tendril"] = tendril;
+            }
+
+            CreateBlock(root, "SensorFoot", new Vector3(0f, 0.12f, 0f), new Vector3(width, 0.18f, 0.82f), bottom);
+            CreateBlock(root, "SensorBody", new Vector3(0f, 0.37f, 0f), new Vector3(width * 0.90f, 0.38f, 0.74f), side);
+            CreateBlock(root, "SensorTop", new Vector3(0f, 0.60f, 0f), new Vector3(width * 0.86f, 0.10f, 0.70f), top);
+            CreateSculkTendril(root, "FrontLeftTendril", -width * 0.34f, -0.25f, -17f, tendril);
+            CreateSculkTendril(root, "FrontRightTendril", width * 0.34f, -0.25f, 17f, tendril);
+            CreateSculkTendril(root, "BackLeftTendril", -width * 0.34f, 0.25f, -17f, tendril);
+            CreateSculkTendril(root, "BackRightTendril", width * 0.34f, 0.25f, 17f, tendril);
+        }
+
+        private static void CreateSculkTendril(
+            Transform root,
+            string name,
+            float x,
+            float z,
+            float roll,
+            Material material)
+        {
+            var stem = CreateBlock(root, name, new Vector3(x, 0.93f, z), new Vector3(0.12f, 0.68f, 0.12f), material);
+            stem.transform.localRotation = Quaternion.Euler(0f, 0f, roll);
+            CreateBlock(stem.transform, "Tip", new Vector3(0f, 0.48f, 0f), new Vector3(2.15f, 0.24f, 2.15f), material);
         }
 
         private void BuildWoodlandNursery(Transform root, float footprintWidth)

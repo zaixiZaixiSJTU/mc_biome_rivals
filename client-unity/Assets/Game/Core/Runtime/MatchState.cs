@@ -18,6 +18,17 @@ namespace BiomeRivals.Core
     }
 
     [Serializable]
+    public sealed class PlayerStatusStateDto
+    {
+        public string statusId = string.Empty;
+        public int remainingDuration;
+        public string sourcePlayerId = string.Empty;
+        public string sourceCardId = string.Empty;
+        public string sourceInstanceId = string.Empty;
+        public string effectId = string.Empty;
+    }
+
+    [Serializable]
     public sealed class BattlefieldObjectStateDto
     {
         public string instanceId = string.Empty;
@@ -66,7 +77,10 @@ namespace BiomeRivals.Core
         public int fatigueCount;
         public EquipmentStateDto equipment;
         public bool heroHasAttacked;
+        public int cardsPlayedThisTurn;
+        public bool hasTargetedEnemyObjectThisTurn;
         public string[] triggeredEffectKeysThisTurn = Array.Empty<string>();
+        public PlayerStatusStateDto[] statuses = Array.Empty<PlayerStatusStateDto>();
         public string[] unitSlots = Array.Empty<string>();
         public string[] buildingSlots = Array.Empty<string>();
         public BattlefieldObjectStateDto[] battlefield = Array.Empty<BattlefieldObjectStateDto>();
@@ -107,6 +121,22 @@ namespace BiomeRivals.Core
             {
                 if (player == null || !FactionIds.IsSupported(player.factionId))
                     throw new InvalidOperationException("Snapshot contains an unsupported player faction.");
+                if (player.cardsPlayedThisTurn < 0)
+                    throw new InvalidOperationException("Snapshot contains an invalid card play counter.");
+                if (player.statuses == null) player.statuses = Array.Empty<PlayerStatusStateDto>();
+                var seenPlayerStatuses = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var status in player.statuses)
+                {
+                    if (status == null || status.statusId != "DARK" || status.remainingDuration != 1 ||
+                        string.IsNullOrWhiteSpace(status.sourcePlayerId) ||
+                        status.sourcePlayerId == player.playerId ||
+                        string.IsNullOrWhiteSpace(status.sourceInstanceId) ||
+                        (status.sourceCardId != "cd_004" && status.sourceCardId != "cd_006") ||
+                        (status.effectId != "effect.cd_004.01" && status.effectId != "effect.cd_006.01") ||
+                        ((status.sourceCardId == "cd_004") != (status.effectId == "effect.cd_004.01")) ||
+                        !seenPlayerStatuses.Add(status.statusId))
+                        throw new InvalidOperationException("Snapshot contains an invalid player status.");
+                }
                 if (player.triggeredEffectKeysThisTurn == null) player.triggeredEffectKeysThisTurn = Array.Empty<string>();
                 if (player.triggeredEffectKeysThisTurn.Any(value => string.IsNullOrWhiteSpace(value) ||
                     !System.Text.RegularExpressions.Regex.IsMatch(value, "^object-[0-9]+:effect\\.(db_004|pf_005|or_(002|004|007))\\.01$")) ||
@@ -202,6 +232,8 @@ namespace BiomeRivals.Core
                     var player = FindPlayer(payload.playerId);
                     player.hand = RemoveFirst(player.hand, payload.cardId);
                     player.redstone = payload.redstone;
+                    player.cardsPlayedThisTurn = payload.cardsPlayedThisTurn;
+                    player.hasTargetedEnemyObjectThisTurn = payload.hasTargetedEnemyObjectThisTurn;
                     AddBattlefieldObject(player, payload, "Deployment");
                     break;
                 case MatchEventTypes.MaterialsConsumed:
@@ -233,6 +265,8 @@ namespace BiomeRivals.Core
                     playingPlayer.hand = RemoveFirst(playingPlayer.hand, payload.cardId);
                     if (playingPlayer.hand.Length != payload.handCount) throw new InvalidOperationException("Play event hand count does not match projected hand.");
                     playingPlayer.redstone = payload.redstone;
+                    playingPlayer.cardsPlayedThisTurn = payload.cardsPlayedThisTurn;
+                    playingPlayer.hasTargetedEnemyObjectThisTurn = payload.hasTargetedEnemyObjectThisTurn;
                     var playedDiscard = new List<string>(playingPlayer.discardPile ?? Array.Empty<string>()) { payload.cardId };
                     if (playedDiscard.Count != payload.discardCount) throw new InvalidOperationException("Play event discard count does not match projected discard pile.");
                     playingPlayer.discardPile = playedDiscard.ToArray();
@@ -243,6 +277,8 @@ namespace BiomeRivals.Core
                     if (equippingPlayer.hand.Length != payload.handCount)
                         throw new InvalidOperationException("Equipment event hand count does not match projected hand.");
                     equippingPlayer.redstone = payload.redstone;
+                    equippingPlayer.cardsPlayedThisTurn = payload.cardsPlayedThisTurn;
+                    equippingPlayer.hasTargetedEnemyObjectThisTurn = payload.hasTargetedEnemyObjectThisTurn;
                     equippingPlayer.equipment = new EquipmentStateDto
                     {
                         instanceId = payload.instanceId, cardId = payload.cardId, attack = payload.attack,
@@ -442,6 +478,43 @@ namespace BiomeRivals.Core
                     clearedObject.attack = payload.attack;
                     clearedObject.health = payload.health;
                     break;
+                case MatchEventTypes.PlayerStatusApplied:
+                    var statusPlayer = FindPlayer(payload.playerId);
+                    var playerStatuses = new List<PlayerStatusStateDto>(statusPlayer.statuses ?? Array.Empty<PlayerStatusStateDto>());
+                    playerStatuses.RemoveAll(value => value != null && value.statusId == payload.statusId);
+                    playerStatuses.Add(new PlayerStatusStateDto
+                    {
+                        statusId = payload.statusId,
+                        remainingDuration = payload.remainingDuration,
+                        sourcePlayerId = payload.sourcePlayerId,
+                        sourceCardId = payload.sourceCardId,
+                        sourceInstanceId = payload.sourceInstanceId,
+                        effectId = payload.effectId
+                    });
+                    statusPlayer.statuses = playerStatuses.ToArray();
+                    statusPlayer.hasTargetedEnemyObjectThisTurn = payload.hasTargetedEnemyObjectThisTurn;
+                    break;
+                case MatchEventTypes.PlayerStatusTicked:
+                    var tickedPlayer = FindPlayer(payload.playerId);
+                    var tickedPlayerStatus = (tickedPlayer.statuses ?? Array.Empty<PlayerStatusStateDto>())
+                        .SingleOrDefault(value => value != null && value.statusId == payload.statusId);
+                    if (tickedPlayerStatus == null)
+                        throw new InvalidOperationException("Player status tick does not match exactly one projected status.");
+                    tickedPlayerStatus.remainingDuration = payload.remainingDuration;
+                    tickedPlayerStatus.sourcePlayerId = payload.sourcePlayerId;
+                    tickedPlayerStatus.sourceCardId = payload.sourceCardId;
+                    tickedPlayerStatus.sourceInstanceId = payload.sourceInstanceId;
+                    tickedPlayerStatus.effectId = payload.effectId;
+                    tickedPlayer.hasTargetedEnemyObjectThisTurn = payload.hasTargetedEnemyObjectThisTurn;
+                    break;
+                case MatchEventTypes.PlayerStatusRemoved:
+                    var clearedPlayer = FindPlayer(payload.playerId);
+                    var remainingPlayerStatuses = new List<PlayerStatusStateDto>(clearedPlayer.statuses ?? Array.Empty<PlayerStatusStateDto>());
+                    if (remainingPlayerStatuses.RemoveAll(value => value != null && value.statusId == payload.statusId) != 1)
+                        throw new InvalidOperationException("Player status removal does not match exactly one projected status.");
+                    clearedPlayer.statuses = remainingPlayerStatuses.ToArray();
+                    clearedPlayer.hasTargetedEnemyObjectThisTurn = payload.hasTargetedEnemyObjectThisTurn;
+                    break;
                 case MatchEventTypes.ObjectMoved:
                     var movedPlayer = FindPlayer(payload.playerId);
                     var movedObject = FindObject(movedPlayer, payload.instanceId);
@@ -458,6 +531,7 @@ namespace BiomeRivals.Core
                     break;
                 case MatchEventTypes.AttackResolved:
                     var attackerPlayer = FindPlayer(payload.attackerPlayerId);
+                    attackerPlayer.hasTargetedEnemyObjectThisTurn = payload.hasTargetedEnemyObjectThisTurn;
                     if (payload.attackerInstanceId == MatchAttackerIds.Hero)
                     {
                         attackerPlayer.life = payload.attackerHealth;
@@ -498,13 +572,18 @@ namespace BiomeRivals.Core
                     Current.activePlayerIndex = payload.activePlayerIndex;
                     activePlayer.excavatedThisTurn = false;
                     activePlayer.heroHasAttacked = false;
+                    activePlayer.cardsPlayedThisTurn = 0;
+                    activePlayer.hasTargetedEnemyObjectThisTurn = false;
                     activePlayer.redstone = payload.redstone;
                     activePlayer.redstoneCapacity = payload.redstoneCapacity;
                     foreach (var battlefieldObject in activePlayer.battlefield ?? Array.Empty<BattlefieldObjectStateDto>())
                         if (battlefieldObject != null) battlefieldObject.hasAttacked = false;
                     break;
                 case MatchEventTypes.TurnEnded:
-                    FindPlayer(payload.playerId).excavatedThisTurn = false;
+                    var endedPlayer = FindPlayer(payload.playerId);
+                    endedPlayer.excavatedThisTurn = false;
+                    endedPlayer.cardsPlayedThisTurn = 0;
+                    endedPlayer.hasTargetedEnemyObjectThisTurn = false;
                     foreach (var turnPlayer in Current.players) turnPlayer.triggeredEffectKeysThisTurn = Array.Empty<string>();
                     break;
                 case MatchEventTypes.MatchEnded:

@@ -1,10 +1,10 @@
 namespace BiomeRivalsRules {
-  export const PROTOCOL_VERSION = 27;
-  export const RULESET_VERSION = 'prototype-0.41';
+  export const PROTOCOL_VERSION = 28;
+  export const RULESET_VERSION = 'prototype-0.42';
 
   export type MatchStatus = 'WAITING' | 'MULLIGAN' | 'ACTIVE' | 'FINISHED';
   export type CommandType = 'MULLIGAN' | 'DEPLOY_CARD' | 'PLAY_CARD' | 'RESOLVE_CHOICE' | 'ENTER_COMBAT' | 'ATTACK' | 'END_TURN' | 'CONCEDE';
-  export type EventType = 'MULLIGAN_COMPLETED' | 'MATCH_STARTED' | 'MATERIALS_CONSUMED' | 'CARD_DEPLOYED' | 'OBJECT_SUMMONED' | 'CARD_PLAYED' | 'CARD_EQUIPPED' | 'EQUIPMENT_DURABILITY_CHANGED' | 'EQUIPMENT_DESTROYED' | 'CARD_BURIED' | 'CHOICE_OFFERED' | 'CHOICE_RESOLVED' | 'CARD_EXCAVATED' | 'CARD_DRAWN' | 'CARD_BURNED' | 'CARD_GENERATED' | 'FATIGUE_DAMAGE' | 'HERO_DAMAGED' | 'HERO_HEALED' | 'ARMOR_GAINED' | 'OBJECT_STATS_CHANGED' | 'OBJECT_STATUS_APPLIED' | 'OBJECT_STATUS_TICKED' | 'OBJECT_STATUS_REMOVED' | 'OBJECT_MOVED' | 'PHASE_CHANGED' | 'ATTACK_RESOLVED' | 'OBJECT_DIED' | 'TURN_ENDED' | 'TURN_STARTED' | 'PLAYER_CONCEDED' | 'MATCH_ENDED';
+  export type EventType = 'MULLIGAN_COMPLETED' | 'MATCH_STARTED' | 'MATERIALS_CONSUMED' | 'CARD_DEPLOYED' | 'OBJECT_SUMMONED' | 'CARD_PLAYED' | 'CARD_EQUIPPED' | 'EQUIPMENT_DURABILITY_CHANGED' | 'EQUIPMENT_DESTROYED' | 'CARD_BURIED' | 'CHOICE_OFFERED' | 'CHOICE_RESOLVED' | 'CARD_EXCAVATED' | 'CARD_DRAWN' | 'CARD_BURNED' | 'CARD_GENERATED' | 'FATIGUE_DAMAGE' | 'HERO_DAMAGED' | 'HERO_HEALED' | 'ARMOR_GAINED' | 'OBJECT_STATS_CHANGED' | 'OBJECT_STATUS_APPLIED' | 'OBJECT_STATUS_TICKED' | 'OBJECT_STATUS_REMOVED' | 'PLAYER_STATUS_APPLIED' | 'PLAYER_STATUS_TICKED' | 'PLAYER_STATUS_REMOVED' | 'OBJECT_MOVED' | 'PHASE_CHANGED' | 'ATTACK_RESOLVED' | 'OBJECT_DIED' | 'TURN_ENDED' | 'TURN_STARTED' | 'PLAYER_CONCEDED' | 'MATCH_ENDED';
   export type DeploySlotKind = 'UNIT' | 'BUILDING';
   export type PaymentMethod = 'REDSTONE' | 'CRAFTING';
   export type TurnPhase = 'MAIN' | 'COMBAT';
@@ -12,6 +12,7 @@ namespace BiomeRivalsRules {
   export type CardType = 'UNIT' | 'SPELL' | 'BUILDING' | 'STRUCTURE' | 'EQUIPMENT' | 'MATERIAL';
   export type CardKeyword = 'TAUNT' | 'CHARGE';
   export type BattlefieldStatusId = 'SLOW' | 'POISON';
+  export type PlayerStatusId = 'DARK';
   export type FactionId = 'plains_forest' | 'desert_badlands' | 'snow_ice' | 'cave_dark_forest' | 'ocean_river' | 'nether' | 'end';
 
   export const FACTION_CARD_PREFIXES: { [factionId: string]: string } = {
@@ -79,6 +80,15 @@ namespace BiomeRivalsRules {
     statuses: BattlefieldStatusState[];
   }
 
+  export interface PlayerStatusState {
+    statusId: PlayerStatusId;
+    remainingDuration: number;
+    sourcePlayerId: string;
+    sourceCardId: string;
+    sourceInstanceId: string;
+    effectId: string;
+  }
+
   export interface PendingChoiceOptionState {
     optionIndex: number;
     cardId: string;
@@ -133,7 +143,10 @@ namespace BiomeRivalsRules {
     fatigueCount: number;
     equipment: EquipmentState | null;
     heroHasAttacked: boolean;
+    cardsPlayedThisTurn: number;
+    hasTargetedEnemyObjectThisTurn: boolean;
     triggeredEffectKeysThisTurn: string[];
+    statuses: PlayerStatusState[];
     unitSlots: Array<string | null>;
     buildingSlots: Array<string | null>;
     battlefield: BattlefieldObjectState[];
@@ -184,7 +197,10 @@ namespace BiomeRivalsRules {
     fatigueCount: number;
     equipment: EquipmentState | null;
     heroHasAttacked: boolean;
+    cardsPlayedThisTurn: number;
+    hasTargetedEnemyObjectThisTurn: boolean;
     triggeredEffectKeysThisTurn: string[];
+    statuses: PlayerStatusState[];
     unitSlots: Array<string | null>;
     buildingSlots: Array<string | null>;
     battlefield: BattlefieldObjectState[];

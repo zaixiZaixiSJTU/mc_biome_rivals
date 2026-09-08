@@ -89,7 +89,10 @@ namespace BiomeRivalsRules {
       fatigueCount: 0,
       equipment: null,
       heroHasAttacked: false,
+      cardsPlayedThisTurn: 0,
+      hasTargetedEnemyObjectThisTurn: false,
       triggeredEffectKeysThisTurn: [],
+      statuses: [],
       unitSlots: [null, null, null, null],
       buildingSlots: [null, null, null],
       battlefield: []
@@ -184,7 +187,19 @@ namespace BiomeRivalsRules {
             maxDurability: player.equipment.maxDurability
           },
           heroHasAttacked: player.heroHasAttacked,
+          cardsPlayedThisTurn: player.cardsPlayedThisTurn,
+          hasTargetedEnemyObjectThisTurn: player.hasTargetedEnemyObjectThisTurn,
           triggeredEffectKeysThisTurn: player.triggeredEffectKeysThisTurn.slice(),
+          statuses: player.statuses.map(function (status): PlayerStatusState {
+            return {
+              statusId: status.statusId,
+              remainingDuration: status.remainingDuration,
+              sourcePlayerId: status.sourcePlayerId,
+              sourceCardId: status.sourceCardId,
+              sourceInstanceId: status.sourceInstanceId,
+              effectId: status.effectId
+            };
+          }),
           unitSlots: player.unitSlots.slice(),
           buildingSlots: player.buildingSlots.slice(),
           battlefield: player.battlefield.map(function (object): BattlefieldObjectState {
@@ -305,7 +320,19 @@ namespace BiomeRivalsRules {
             maxDurability: player.equipment.maxDurability
           },
           heroHasAttacked: player.heroHasAttacked,
+          cardsPlayedThisTurn: player.cardsPlayedThisTurn,
+          hasTargetedEnemyObjectThisTurn: player.hasTargetedEnemyObjectThisTurn,
           triggeredEffectKeysThisTurn: player.triggeredEffectKeysThisTurn.slice(),
+          statuses: player.statuses.map(function (status): PlayerStatusState {
+            return {
+              statusId: status.statusId,
+              remainingDuration: status.remainingDuration,
+              sourcePlayerId: status.sourcePlayerId,
+              sourceCardId: status.sourceCardId,
+              sourceInstanceId: status.sourceInstanceId,
+              effectId: status.effectId
+            };
+          }),
           unitSlots: player.unitSlots.slice(),
           buildingSlots: player.buildingSlots.slice(),
           battlefield: player.battlefield.map(function (object): BattlefieldObjectState {
@@ -460,6 +487,7 @@ namespace BiomeRivalsRules {
       if (definition === null) return reject(state, 'UNKNOWN_CARD', 'card definition is not registered');
       if (!definition.manualPlayAllowed) return reject(state, 'CARD_NOT_PLAYABLE', 'card resolves automatically and cannot be deployed');
       const player = next.players[actorIndex]!;
+      const opponentPlayer = next.players[actorIndex === 0 ? 1 : 0]!;
       const handIndex = player.hand.indexOf(cardId);
       if (handIndex < 0) return reject(state, 'CARD_NOT_IN_HAND', 'card is not in the actor hand');
       let battlecryTargetPlayer: PlayerState | null = null;
@@ -526,6 +554,15 @@ namespace BiomeRivalsRules {
         }
       }
 
+      if (battlecryTargetPlayer === opponentPlayer && battlecryTarget !== null) {
+        const legalCandidates = opponentPlayer.battlefield.filter(function (object): boolean {
+          return object.cardType === 'UNIT' && object.health > 0;
+        });
+        if (!isLegalDarkTarget(player, battlecryTarget, legalCandidates)) {
+          return reject(state, 'INVALID_TARGET', 'darkness restricts the first enemy battlefield target to a legal row edge');
+        }
+      }
+
       const materialIndices: number[] = [];
       const consumedMaterials: string[] = [];
       const effectiveCost = getEffectiveCardCost(player, definition);
@@ -554,6 +591,10 @@ namespace BiomeRivalsRules {
 
       const instanceId = 'object-' + String(next.nextInstanceId);
       next.nextInstanceId += 1;
+      if (battlecryTargetPlayer === opponentPlayer && battlecryTarget !== null) {
+        player.hasTargetedEnemyObjectThisTurn = true;
+      }
+      player.cardsPlayedThisTurn += 1;
       const battlefieldObject: BattlefieldObjectState = {
         instanceId: instanceId,
         cardId: cardId,
@@ -609,6 +650,8 @@ namespace BiomeRivalsRules {
         maxHealth: battlefieldObject.maxHealth,
         summonedTurn: battlefieldObject.summonedTurn,
         keywords: battlefieldObject.keywords.slice(),
+        cardsPlayedThisTurn: player.cardsPlayedThisTurn,
+        hasTargetedEnemyObjectThisTurn: player.hasTargetedEnemyObjectThisTurn,
         nextInstanceId: next.nextInstanceId
       });
       recalculateAdjacencyHealthAuras();
@@ -687,7 +730,7 @@ namespace BiomeRivalsRules {
           definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.or_001.01') {
         offerMoveChoice(player, cardId, battlefieldObject.instanceId, player, battlefieldObject, definition.effectIds[0]);
       }
-      return null;
+      return completePlayedCard(player, opponentPlayer);
     }
 
     function enterCombat(): CommandRejected | null {
@@ -704,6 +747,117 @@ namespace BiomeRivalsRules {
       for (let index = 0; index < player.battlefield.length; index += 1) {
         if (player.battlefield[index]!.instanceId === instanceId) return player.battlefield[index]!;
       }
+      return null;
+    }
+
+    function hasUnconsumedDark(player: PlayerState): boolean {
+      return !player.hasTargetedEnemyObjectThisTurn && player.statuses.some(function (status): boolean {
+        return status.statusId === 'DARK' && status.remainingDuration > 0;
+      });
+    }
+
+    function isLegalDarkTarget(
+      player: PlayerState,
+      target: BattlefieldObjectState,
+      legalCandidates: BattlefieldObjectState[]
+    ): boolean {
+      if (!hasUnconsumedDark(player)) return true;
+      const row = legalCandidates.filter(function (candidate): boolean {
+        return candidate.health > 0 && candidate.slotKind === target.slotKind;
+      }).slice().sort(function (left, right): number {
+        if (left.slotIndex !== right.slotIndex) return left.slotIndex - right.slotIndex;
+        return left.instanceId < right.instanceId ? -1 : left.instanceId > right.instanceId ? 1 : 0;
+      });
+      return row.length > 0 &&
+        (row[0]!.instanceId === target.instanceId || row[row.length - 1]!.instanceId === target.instanceId);
+    }
+
+    function applyDark(
+      targetPlayer: PlayerState,
+      sourcePlayer: PlayerState,
+      sourceCardId: string,
+      sourceInstanceId: string,
+      effectId: string
+    ): void {
+      let status: PlayerStatusState | null = null;
+      for (let index = 0; index < targetPlayer.statuses.length; index += 1) {
+        if (targetPlayer.statuses[index]!.statusId === 'DARK') status = targetPlayer.statuses[index]!;
+      }
+      if (status === null) {
+        status = {
+          statusId: 'DARK',
+          remainingDuration: 1,
+          sourcePlayerId: sourcePlayer.playerId,
+          sourceCardId: sourceCardId,
+          sourceInstanceId: sourceInstanceId,
+          effectId: effectId
+        };
+        targetPlayer.statuses.push(status);
+      }
+      emit('PLAYER_STATUS_APPLIED', {
+        playerId: targetPlayer.playerId,
+        statusId: status.statusId,
+        remainingDuration: status.remainingDuration,
+        sourcePlayerId: status.sourcePlayerId,
+        sourceCardId: status.sourceCardId,
+        sourceInstanceId: status.sourceInstanceId,
+        effectId: status.effectId,
+        hasTargetedEnemyObjectThisTurn: targetPlayer.hasTargetedEnemyObjectThisTurn
+      });
+    }
+
+    function resolveEndPhasePlayerStatuses(player: PlayerState): void {
+      let statusIndex = 0;
+      while (statusIndex < player.statuses.length) {
+        const status = player.statuses[statusIndex]!;
+        status.remainingDuration -= 1;
+        if (status.remainingDuration > 0) {
+          emit('PLAYER_STATUS_TICKED', {
+            playerId: player.playerId,
+            statusId: status.statusId,
+            remainingDuration: status.remainingDuration,
+            sourcePlayerId: status.sourcePlayerId,
+            sourceCardId: status.sourceCardId,
+            sourceInstanceId: status.sourceInstanceId,
+            effectId: status.effectId,
+            hasTargetedEnemyObjectThisTurn: player.hasTargetedEnemyObjectThisTurn
+          });
+          statusIndex += 1;
+          continue;
+        }
+        player.statuses.splice(statusIndex, 1);
+        emit('PLAYER_STATUS_REMOVED', {
+          playerId: player.playerId,
+          statusId: status.statusId,
+          sourcePlayerId: status.sourcePlayerId,
+          sourceCardId: status.sourceCardId,
+          sourceInstanceId: status.sourceInstanceId,
+          effectId: status.effectId,
+          reason: 'DURATION_EXPIRED',
+          hasTargetedEnemyObjectThisTurn: player.hasTargetedEnemyObjectThisTurn
+        });
+      }
+    }
+
+    function triggerSculkSensors(sensorPlayer: PlayerState, cardPlayer: PlayerState): void {
+      if (next.status !== 'ACTIVE' || cardPlayer.cardsPlayedThisTurn !== 2) return;
+      const sensors = sensorPlayer.battlefield.filter(function (object): boolean {
+        if (object.cardId !== 'cd_004' || object.cardType !== 'BUILDING' || object.health <= 0) return false;
+        const definition = getCardDefinition(object.cardId);
+        return definition !== null && definition.effectImplementationStatus === 'IMPLEMENTED' &&
+          definition.effectIds.indexOf('effect.cd_004.01') >= 0;
+      }).slice().sort(function (left, right): number {
+        if (left.slotIndex !== right.slotIndex) return left.slotIndex - right.slotIndex;
+        return left.instanceId < right.instanceId ? -1 : left.instanceId > right.instanceId ? 1 : 0;
+      });
+      for (let index = 0; index < sensors.length; index += 1) {
+        const sensor = sensors[index]!;
+        applyDark(cardPlayer, sensorPlayer, sensor.cardId, sensor.instanceId, 'effect.cd_004.01');
+      }
+    }
+
+    function completePlayedCard(cardPlayer: PlayerState, opponentPlayer: PlayerState): null {
+      triggerSculkSensors(opponentPlayer, cardPlayer);
       return null;
     }
 
@@ -1734,7 +1888,7 @@ namespace BiomeRivalsRules {
         return reject(state, 'EFFECT_NOT_IMPLEMENTED', 'card effect is registered but not implemented');
       }
       const effectId = definition.effectIds[0]!;
-      if (effectId !== 'effect.db_002.01' && effectId !== 'effect.db_006.01' && effectId !== 'effect.nt_006.01' &&
+      if (effectId !== 'effect.cd_006.01' && effectId !== 'effect.db_002.01' && effectId !== 'effect.db_006.01' && effectId !== 'effect.nt_006.01' &&
           effectId !== 'effect.pf_006.01' && effectId !== 'effect.pf_007.01' &&
           effectId !== 'effect.si_001.01' && effectId !== 'effect.si_006.01' && effectId !== 'effect.tk_005.01' &&
           effectId !== 'effect.tk_002.01' && effectId !== 'effect.tk_009.01' && effectId !== 'effect.tk_010.01' && effectId !== 'effect.tk_012.01' && effectId !== 'effect.or_006.01' &&
@@ -1796,10 +1950,20 @@ namespace BiomeRivalsRules {
           return reject(state, 'INVALID_TARGET', 'cobblestone target must be a living friendly building or structure');
         }
       }
+      if (targetedPlayer === opponent && targetedObject !== null) {
+        const legalCandidates = opponent.battlefield.filter(function (object): boolean {
+          return object.cardType === targetedObject!.cardType && object.health > 0;
+        });
+        if (!isLegalDarkTarget(player, targetedObject, legalCandidates)) {
+          return reject(state, 'INVALID_TARGET', 'darkness restricts the first enemy battlefield target to a legal row edge');
+        }
+      }
       const handIndex = player.hand.indexOf(cardId);
       if (handIndex < 0) return reject(state, 'CARD_NOT_IN_HAND', 'card is not in the active players hand');
       if (definition.cost > player.redstone) return reject(state, 'INSUFFICIENT_REDSTONE', 'not enough redstone');
 
+      if (targetedPlayer === opponent && targetedObject !== null) player.hasTargetedEnemyObjectThisTurn = true;
+      player.cardsPlayedThisTurn += 1;
       player.hand.splice(handIndex, 1);
       player.redstone -= definition.cost;
       if (definition.cardType === 'EQUIPMENT') {
@@ -1823,9 +1987,11 @@ namespace BiomeRivalsRules {
           playerId: player.playerId, instanceId: equipment.instanceId, cardId: equipment.cardId,
           attack: equipment.attack, durability: equipment.durability, maxDurability: equipment.maxDurability,
           effectId: effectId, redstone: player.redstone, handCount: player.hand.length,
-          discardCount: player.discardPile.length, nextInstanceId: next.nextInstanceId
+          discardCount: player.discardPile.length, nextInstanceId: next.nextInstanceId,
+          cardsPlayedThisTurn: player.cardsPlayedThisTurn,
+          hasTargetedEnemyObjectThisTurn: player.hasTargetedEnemyObjectThisTurn
         });
-        return null;
+        return completePlayedCard(player, opponent);
       }
       player.discardPile.push(cardId);
       emit('CARD_PLAYED', {
@@ -1835,11 +2001,18 @@ namespace BiomeRivalsRules {
         effectId: effectId,
         redstone: player.redstone,
         handCount: player.hand.length,
-        discardCount: player.discardPile.length
+        discardCount: player.discardPile.length,
+        cardsPlayedThisTurn: player.cardsPlayedThisTurn,
+        hasTargetedEnemyObjectThisTurn: player.hasTargetedEnemyObjectThisTurn
       });
       const effectSourceInstanceId = 'effect-' + String(next.lastEventId);
 
       switch (effectId) {
+        case 'effect.cd_006.01':
+          applyDark(opponent, player, cardId, effectSourceInstanceId, effectId);
+          drawCard(player);
+          if (next.status !== 'FINISHED') finishForSelfDefeat(player, 'FATIGUE');
+          return completePlayedCard(player, opponent);
         case 'effect.db_002.01':
           buryCard(player, 'tk_006', cardId, effectId);
           player.armor += 1;
@@ -1847,7 +2020,7 @@ namespace BiomeRivalsRules {
             playerId: player.playerId, sourceCardId: cardId, effectId: effectId,
             amount: 1, armor: player.armor
           });
-          return null;
+          return completePlayedCard(player, opponent);
         case 'effect.db_006.01':
           const sandstormKillCredits: { [instanceId: string]: string } = {};
           for (let playerIndex = 0; playerIndex < next.players.length; playerIndex += 1) {
@@ -1873,17 +2046,17 @@ namespace BiomeRivalsRules {
             }
           }
           settleDeaths(player, opponent, sandstormKillCredits);
-          return null;
+          return completePlayedCard(player, opponent);
         case 'effect.nt_006.01':
           player.life = Math.max(0, player.life - 2);
           emit('HERO_DAMAGED', {
             playerId: player.playerId, sourceCardId: cardId, effectId: effectId,
             damage: 2, damageType: 'TRUE', life: player.life, armor: player.armor
           });
-          if (finishForSelfDefeat(player, 'SELF_DAMAGE')) return null;
+          if (finishForSelfDefeat(player, 'SELF_DAMAGE')) return completePlayedCard(player, opponent);
           drawCard(player);
           if (next.status !== 'FINISHED') finishForSelfDefeat(player, 'FATIGUE');
-          return null;
+          return completePlayedCard(player, opponent);
         case 'effect.pf_006.01': {
           if (targetedObjects.length !== 2) throw new Error('validated breeding targets were not resolved');
           for (let targetIndex = 0; targetIndex < targetedObjects.length; targetIndex += 1) {
@@ -1905,7 +2078,7 @@ namespace BiomeRivalsRules {
             });
           }
           summonUnit(player, 'tk_003', cardId, effectSourceInstanceId, effectId, -1);
-          return null;
+          return completePlayedCard(player, opponent);
         }
         case 'effect.pf_007.01': {
           for (let rallyStep = 0; rallyStep < 2; rallyStep += 1) {
@@ -1914,7 +2087,7 @@ namespace BiomeRivalsRules {
             if (next.status === 'FINISHED') break;
             if (finishForSelfDefeat(player, 'FATIGUE')) break;
           }
-          return null;
+          return completePlayedCard(player, opponent);
         }
         case 'effect.si_001.01': {
           if (targetedObject === null || targetedPlayer === null) throw new Error('validated snowball target was not resolved');
@@ -1933,12 +2106,12 @@ namespace BiomeRivalsRules {
             temporaryAttackModifier: targetedObject.temporaryAttackModifier,
             temporaryAttackModifierExpiresOnTurn: targetedObject.temporaryAttackModifierExpiresOnTurn
           });
-          return null;
+          return completePlayedCard(player, opponent);
         }
         case 'effect.si_006.01': {
           if (targetedObject === null || targetedPlayer === null) throw new Error('validated powder snow target was not resolved');
           applySlow(targetedPlayer, targetedObject, player, cardId, '', effectId, -2);
-          return null;
+          return completePlayedCard(player, opponent);
         }
         case 'effect.tk_005.01': {
           const healedLife = Math.min(30, player.life + 2);
@@ -1954,7 +2127,7 @@ namespace BiomeRivalsRules {
             damage: 1, damageType: 'TRUE', life: player.life, armor: player.armor
           });
           finishForSelfDefeat(player, 'SELF_DAMAGE');
-          return null;
+          return completePlayedCard(player, opponent);
         }
         case 'effect.tk_002.01': {
           if (targetedObject === null || targetedPlayer === null) throw new Error('validated wheat target was not resolved');
@@ -1986,7 +2159,7 @@ namespace BiomeRivalsRules {
               temporaryAttackModifierExpiresOnTurn: targetedObject.temporaryAttackModifierExpiresOnTurn
             });
           }
-          return null;
+          return completePlayedCard(player, opponent);
         }
         case 'effect.tk_009.01': {
           if (targetedObject === null || targetedPlayer === null) throw new Error('validated bone target was not resolved');
@@ -2004,7 +2177,7 @@ namespace BiomeRivalsRules {
             temporaryAttackModifier: targetedObject.temporaryAttackModifier,
             temporaryAttackModifierExpiresOnTurn: targetedObject.temporaryAttackModifierExpiresOnTurn
           });
-          return null;
+          return completePlayedCard(player, opponent);
         }
         case 'effect.tk_010.01': {
           if (targetedObject === null || targetedPlayer === null) throw new Error('validated cobblestone target was not resolved');
@@ -2020,13 +2193,13 @@ namespace BiomeRivalsRules {
             temporaryAttackModifier: targetedObject.temporaryAttackModifier,
             temporaryAttackModifierExpiresOnTurn: targetedObject.temporaryAttackModifierExpiresOnTurn
           });
-          return null;
+          return completePlayedCard(player, opponent);
         }
         case 'effect.tk_012.01': {
           if (targetedObject === null || targetedPlayer === null) throw new Error('validated prismarine shard target was not resolved');
           offerMoveChoice(player, cardId, 'effect-' + String(next.lastEventId), targetedPlayer, targetedObject, effectId);
           if (next.pendingChoice === null) throw new Error('validated prismarine movement did not create a choice');
-          return null;
+          return completePlayedCard(player, opponent);
         }
         case 'effect.tk_016.01':
           player.armor += 2;
@@ -2034,7 +2207,7 @@ namespace BiomeRivalsRules {
             playerId: player.playerId, sourceCardId: cardId, effectId: effectId,
             amount: 2, armor: player.armor
           });
-          return null;
+          return completePlayedCard(player, opponent);
         default:
           throw new Error('validated effect handler was not dispatched');
       }
@@ -2256,7 +2429,8 @@ namespace BiomeRivalsRules {
           attackerHealth: heroAttack ? attackerPlayer.life : attacker!.health,
           attackerArmor: heroAttack ? attackerPlayer.armor : 0,
           targetHealth: defenderPlayer.life,
-          targetArmor: defenderPlayer.armor
+          targetArmor: defenderPlayer.armor,
+          hasTargetedEnemyObjectThisTurn: attackerPlayer.hasTargetedEnemyObjectThisTurn
         });
         if (!heroAttack) triggerCactusFenceReaction(defenderPlayer, attackerPlayer, attacker!);
       } else {
@@ -2265,6 +2439,13 @@ namespace BiomeRivalsRules {
         if (target === null || target.slotKind !== expectedSlotKind) {
           return reject(state, 'INVALID_TARGET', 'target is not a living enemy object of the requested type');
         }
+        const legalAttackCandidates = tauntTargets.length > 0 ? tauntTargets : defenderPlayer.battlefield.filter(function (object): boolean {
+          return object.health > 0;
+        });
+        if (!isLegalDarkTarget(attackerPlayer, target, legalAttackCandidates)) {
+          return reject(state, 'INVALID_TARGET', 'darkness restricts the first enemy battlefield target to a legal row edge');
+        }
+        attackerPlayer.hasTargetedEnemyObjectThisTurn = true;
         const retaliation = target.cardType === 'UNIT' ? target.attack : 0;
         target.health = Math.max(0, target.health - attackValue);
         if (heroAttack) damageHero(attackerPlayer, retaliation);
@@ -2283,7 +2464,8 @@ namespace BiomeRivalsRules {
           attackerHealth: heroAttack ? attackerPlayer.life : attacker!.health,
           attackerArmor: heroAttack ? attackerPlayer.armor : 0,
           targetHealth: target.health,
-          targetArmor: 0
+          targetArmor: 0,
+          hasTargetedEnemyObjectThisTurn: attackerPlayer.hasTargetedEnemyObjectThisTurn
         });
         if (!heroAttack && attackValue > 0 && target.cardType === 'UNIT' && target.health > 0 &&
             attacker!.cardId === 'cd_002') {
@@ -2390,6 +2572,7 @@ namespace BiomeRivalsRules {
         if (actorIndex !== state.activePlayerIndex) return reject(state, 'NOT_ACTIVE_PLAYER', 'only the active player may end the turn');
         resolveOceanMonumentEndPhase(next.players[actorIndex]!, next.players[actorIndex === 0 ? 1 : 0]!);
         resolveEndPhaseStatuses(next.players[actorIndex]!, next.players[actorIndex === 0 ? 1 : 0]!);
+        resolveEndPhasePlayerStatuses(next.players[actorIndex]!);
         for (let playerIndex = 0; playerIndex < next.players.length; playerIndex += 1) {
           const effectPlayer = next.players[playerIndex]!;
           for (let objectIndex = 0; objectIndex < effectPlayer.battlefield.length; objectIndex += 1) {
@@ -2412,6 +2595,8 @@ namespace BiomeRivalsRules {
           }
         }
         next.players[actorIndex]!.excavatedThisTurn = false;
+        next.players[actorIndex]!.cardsPlayedThisTurn = 0;
+        next.players[actorIndex]!.hasTargetedEnemyObjectThisTurn = false;
         for (let playerIndex = 0; playerIndex < next.players.length; playerIndex += 1) {
           next.players[playerIndex]!.triggeredEffectKeysThisTurn = [];
         }
@@ -2421,6 +2606,8 @@ namespace BiomeRivalsRules {
         const nextPlayer = next.players[next.activePlayerIndex]!;
         nextPlayer.excavatedThisTurn = false;
         nextPlayer.heroHasAttacked = false;
+        nextPlayer.cardsPlayedThisTurn = 0;
+        nextPlayer.hasTargetedEnemyObjectThisTurn = false;
         next.phase = 'MAIN';
         if (next.turn > 1) nextPlayer.redstoneCapacity = Math.min(10, nextPlayer.redstoneCapacity + 1);
         nextPlayer.redstone = nextPlayer.redstoneCapacity;

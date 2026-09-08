@@ -120,6 +120,42 @@ namespace BiomeRivalsRules {
       const player = state.players[playerIndex]!;
       if (typeof player.excavatedThisTurn !== 'boolean') violations.push('player excavation turn marker is invalid');
       if (typeof player.heroHasAttacked !== 'boolean') violations.push('player hero attack marker is invalid');
+      if (typeof player.cardsPlayedThisTurn !== 'number' || player.cardsPlayedThisTurn < 0 ||
+          player.cardsPlayedThisTurn % 1 !== 0) violations.push('player card play counter is invalid');
+      if (typeof player.hasTargetedEnemyObjectThisTurn !== 'boolean') {
+        violations.push('player enemy targeting marker is invalid');
+      }
+      if (state.status === 'ACTIVE' && playerIndex !== state.activePlayerIndex &&
+          (player.cardsPlayedThisTurn !== 0 || player.hasTargetedEnemyObjectThisTurn)) {
+        violations.push('inactive player cannot retain active turn action markers');
+      }
+      if (!Array.isArray(player.statuses)) violations.push('player statuses must be an array');
+      else {
+        const seenPlayerStatuses: { [statusId: string]: boolean } = {};
+        for (let statusIndex = 0; statusIndex < player.statuses.length; statusIndex += 1) {
+          const status = player.statuses[statusIndex]!;
+          if (status.statusId !== 'DARK') violations.push('player status is unsupported');
+          if (seenPlayerStatuses[status.statusId]) violations.push('player statuses must be unique');
+          seenPlayerStatuses[status.statusId] = true;
+          if (status.remainingDuration !== 1) violations.push('dark status duration is invalid');
+          if (!status.sourcePlayerId || !status.sourceCardId || !status.sourceInstanceId || !status.effectId) {
+            violations.push('player status source is incomplete');
+          }
+          if (status.sourcePlayerId === player.playerId) violations.push('dark source must be the opposing player');
+          if (!state.players.some(function (candidate): boolean { return candidate.playerId === status.sourcePlayerId; })) {
+            violations.push('player status source player is not in the match');
+          }
+          const sourceDefinition = getCardDefinition(status.sourceCardId);
+          if (sourceDefinition === null || sourceDefinition.effectImplementationStatus !== 'IMPLEMENTED' ||
+              sourceDefinition.effectIds.indexOf(status.effectId) < 0 ||
+              (status.effectId !== 'effect.cd_004.01' && status.effectId !== 'effect.cd_006.01')) {
+            violations.push('player status source card or effect is invalid');
+          }
+          if ((status.sourceCardId === 'cd_004') !== (status.effectId === 'effect.cd_004.01')) {
+            violations.push('player status source card and effect do not match');
+          }
+        }
+      }
       if (!Array.isArray(player.triggeredEffectKeysThisTurn) ||
           player.triggeredEffectKeysThisTurn.some(function (key): boolean {
             return typeof key !== 'string' ||

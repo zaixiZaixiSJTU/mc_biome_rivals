@@ -98,10 +98,10 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(fleshMatch.PlayerLife, Is.EqualTo(29));
 
             var pendingMatch = new DemoLocalMatch();
-            pendingMatch.ResetDeckAndHand(new[] { "cd_006" }, new string[0]);
-            Assert.That(registry.TryGetDefinition("cd_006", out var pending), Is.True);
+            pendingMatch.ResetDeckAndHand(new[] { "ed_005" }, new string[0]);
+            Assert.That(registry.TryGetDefinition("ed_005", out var pending), Is.True);
             Assert.That(pendingMatch.TryCast(pending, out var pendingMessage), Is.False);
-            Assert.That(pendingMatch.Hand, Does.Contain("cd_006"));
+            Assert.That(pendingMatch.Hand, Does.Contain("ed_005"));
             Assert.That(pendingMatch.Energy, Is.EqualTo(6));
             Assert.That(pendingMessage, Does.Contain("尚未接入"));
         }
@@ -1491,6 +1491,22 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(cactusPiece.Find("CactusPost_2"), Is.Not.Null);
                 Assert.That(cactusPiece.Find("CactusFenceFoundation"), Is.Not.Null);
 
+                battlefield.SyncPieces(new[]
+                {
+                    new DemoBattlefieldObject
+                    {
+                        InstanceId = "object-render-5", CardId = "cd_004", Player = true,
+                        SlotKind = DemoSlotKind.Building, SlotIndex = 0, OccupiedSlots = 1, Health = 4, MaxHealth = 4
+                    }
+                }, System.Array.Empty<DemoBattlefieldObject>(), registry);
+                var sensorPiece = piecesRoot.Find("Piece_object-render-5_cd_004");
+                Assert.That(sensorPiece, Is.Not.Null);
+                Assert.That(sensorPiece.Find("SensorBody"), Is.Not.Null);
+                Assert.That(sensorPiece.Find("SensorTop"), Is.Not.Null);
+                Assert.That(sensorPiece.Find("FrontLeftTendril/Tip"), Is.Not.Null);
+                Assert.That(sensorPiece.Find("SensorTop").GetComponent<MeshRenderer>().sharedMaterial.mainTexture.name,
+                    Is.EqualTo("sculk_sensor_top"));
+
                 var buildingMarker1 = root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Building_1/InteractiveGround");
                 var buildingMarker2 = root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Building_2/InteractiveGround");
                 battlefield.SetSlotState(true, DemoSlotKind.Building, 0, true, false);
@@ -2580,6 +2596,69 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(match.HasTriggeredEffect(false, firstFence.InstanceId, "effect.db_004.01"), Is.True);
             Assert.That(match.HasTriggeredEffect(false, secondFence.InstanceId, "effect.db_004.01"), Is.False);
             Assert.That(result.Message, Does.Contain("对手获得一张腐肉"));
+        }
+
+        [Test]
+        public void EchoingDarknessAppliesOpponentStatusAndDrawsLocally()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("cd_006", out var darkness), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(new[] { darkness.id }, new[] { "pf_001" });
+
+            var result = match.ApplyPlayCard(darkness, match.CreatePlayCardCommand(darkness.id));
+
+            Assert.That(result.Accepted, Is.True, result.Message);
+            Assert.That(match.HasPlayerStatus(false, "DARK"), Is.True);
+            Assert.That(match.Hand, Does.Contain("pf_001"));
+            Assert.That(match.CardsPlayedThisTurn(true), Is.EqualTo(1));
+        }
+
+        [Test]
+        public void SculkSensorAppliesDarknessAfterSecondCardAndOnlyRowEdgesAreInitiallyLegal()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("cd_004", out var sensor), Is.True);
+            Assert.That(registry.TryGetDefinition("db_002", out var sand), Is.True);
+            Assert.That(registry.TryGetDefinition("si_001", out var snowball), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_001", out var bee), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_002", out var sheep), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_003", out var wolf), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(new[] { sand.id, sand.id }, System.Array.Empty<string>());
+            match.ResetOpponent(new[] { bee, sheep, wolf, sensor }, new[] { 0, 1, 3 });
+
+            Assert.That(match.ApplyPlayCard(sand, match.CreatePlayCardCommand(sand.id)).Accepted, Is.True);
+            Assert.That(match.CardsPlayedThisTurn(true), Is.EqualTo(1));
+            Assert.That(match.HasPlayerStatus(true, "DARK"), Is.False);
+            var second = match.ApplyPlayCard(sand, match.CreatePlayCardCommand(sand.id));
+            Assert.That(second.Accepted, Is.True, second.Message);
+            Assert.That(match.CardsPlayedThisTurn(true), Is.EqualTo(2));
+            Assert.That(match.HasPlayerStatus(true, "DARK"), Is.True);
+
+            match.ResetHand(new[] { snowball.id, snowball.id });
+            var left = match.GetObject(false, DemoSlotKind.Unit, 0);
+            var middle = match.GetObject(false, DemoSlotKind.Unit, 1);
+            var right = match.GetObject(false, DemoSlotKind.Unit, 3);
+            Assert.That(DemoCardTargeting.TryGetRule(snowball, out var rule), Is.True);
+            Assert.That(DemoCardTargeting.IsLegalTarget(match, rule, false, DemoSlotKind.Unit, left), Is.True);
+            Assert.That(DemoCardTargeting.IsLegalTarget(match, rule, false, DemoSlotKind.Unit, middle), Is.False);
+            Assert.That(DemoCardTargeting.IsLegalTarget(match, rule, false, DemoSlotKind.Unit, right), Is.True);
+
+            var rejected = match.ApplyPlayCard(snowball,
+                match.CreatePlayCardCommand(snowball.id, "UNIT", middle.InstanceId));
+            Assert.That(rejected.Accepted, Is.False);
+            Assert.That(match.HasTargetedEnemyObjectThisTurn(true), Is.False);
+            var accepted = match.ApplyPlayCard(snowball,
+                match.CreatePlayCardCommand(snowball.id, "UNIT", left.InstanceId));
+            Assert.That(accepted.Accepted, Is.True, accepted.Message);
+            Assert.That(match.HasTargetedEnemyObjectThisTurn(true), Is.True);
+            Assert.That(DemoCardTargeting.IsLegalTarget(match, rule, false, DemoSlotKind.Unit, middle), Is.True);
+
+            match.EndPlayerTurn();
+            Assert.That(match.HasPlayerStatus(true, "DARK"), Is.False);
+            Assert.That(match.CardsPlayedThisTurn(true), Is.Zero);
+            Assert.That(match.HasTargetedEnemyObjectThisTurn(true), Is.False);
         }
 
         private static float ProjectedWidth(Camera camera, Transform surface, Vector3[] vertices)

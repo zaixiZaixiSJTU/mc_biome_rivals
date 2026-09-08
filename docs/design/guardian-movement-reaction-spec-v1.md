@@ -1,6 +1,6 @@
 # 守卫者移动反应规范 v1
 
-本规范已按当前组合校准为 `protocolVersion 27`、`rulesetVersion prototype-0.41` 与内容版本 33。
+本规范已按当前组合校准为 `protocolVersion 28`、`rulesetVersion prototype-0.42` 与内容版本 34。
 
 ## OR-004 守卫者
 

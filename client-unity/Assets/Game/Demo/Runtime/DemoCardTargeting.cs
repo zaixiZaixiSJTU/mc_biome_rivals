@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using BiomeRivals.Content;
 
 namespace BiomeRivals.Demo
@@ -119,11 +120,30 @@ namespace BiomeRivals.Demo
             var legalTargetCount = 0;
             foreach (var target in battlefield)
             {
-                if (!rule.IsLegal(match, rule.Owner == DemoTargetOwner.Friendly, rule.SlotKind, target)) continue;
+                if (!IsLegalTarget(match, rule, rule.Owner == DemoTargetOwner.Friendly, rule.SlotKind, target)) continue;
                 legalTargetCount++;
                 if (legalTargetCount >= rule.RequiredTargetCount) return true;
             }
             return false;
+        }
+
+        public static bool IsLegalTarget(
+            IDemoMatchView match,
+            DemoCardTargetRule rule,
+            bool player,
+            DemoSlotKind kind,
+            DemoBattlefieldObject target)
+        {
+            if (match == null) throw new ArgumentNullException(nameof(match));
+            if (rule == null || !rule.IsLegal(match, player, kind, target)) return false;
+            if (rule.Owner != DemoTargetOwner.Enemy || player || !match.HasPlayerStatus(true, "DARK") ||
+                match.HasTargetedEnemyObjectThisTurn(true)) return true;
+            var row = match.OpponentBattlefield
+                .Where(value => rule.IsLegal(match, false, rule.SlotKind, value) && value.SlotKind == target.SlotKind)
+                .OrderBy(value => value.SlotIndex)
+                .ThenBy(value => value.InstanceId, StringComparer.Ordinal)
+                .ToArray();
+            return row.Length > 0 && (row[0].InstanceId == target.InstanceId || row[row.Length - 1].InstanceId == target.InstanceId);
         }
 
         private static bool HasRegisteredTag(DemoBattlefieldObject target, string tag)
