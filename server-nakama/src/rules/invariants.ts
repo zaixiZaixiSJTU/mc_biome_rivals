@@ -33,17 +33,32 @@ namespace BiomeRivalsRules {
       const riptideMove = choice.kind === 'MOVE_UNIT' && choice.effectId === 'effect.or_006.01' && choice.sourceCardId === 'or_006';
       const salmonMove = choice.kind === 'MOVE_UNIT' && choice.effectId === 'effect.or_001.01' && choice.sourceCardId === 'or_001';
       const prismarineMove = choice.kind === 'MOVE_UNIT' && choice.effectId === 'effect.tk_012.01' && choice.sourceCardId === 'tk_012';
-      if (state.status !== 'ACTIVE' || (choice.kind === 'ARCHAEOLOGY_TOP_3' && state.phase !== 'MAIN') ||
+      const topCardScry = choice.kind === 'TOP_CARD_SCRY' && choice.effectId === 'effect.cd_001.01' && choice.sourceCardId === 'cd_001';
+      if (state.status !== 'ACTIVE' || ((choice.kind === 'ARCHAEOLOGY_TOP_3' || choice.kind === 'TOP_CARD_SCRY') && state.phase !== 'MAIN') ||
           (riptideMove && state.phase !== 'COMBAT') || ((salmonMove || prismarineMove) && state.phase !== 'MAIN')) violations.push('pending choice phase is invalid');
       if (choicePlayerIndex < 0 || choicePlayerIndex !== state.activePlayerIndex) violations.push('pending choice owner must be the active player');
       if (!/^choice-[0-9]+$/.test(choice.choiceId)) violations.push('pending choice id is invalid');
       const archaeologyChoice = choice.kind === 'ARCHAEOLOGY_TOP_3' && choice.effectId === 'effect.db_003.01' && choice.sourceCardId === 'db_003';
       const moveChoice = riptideMove || salmonMove || prismarineMove;
-      if (!archaeologyChoice && !moveChoice) violations.push('pending choice kind or source is unsupported');
-      if (!Array.isArray(choice.options) || choice.options.length > (moveChoice ? 2 : 3)) violations.push('pending choice options are invalid');
+      if (!archaeologyChoice && !topCardScry && !moveChoice) violations.push('pending choice kind or source is unsupported');
+      if (!Array.isArray(choice.options) || choice.options.length > (moveChoice ? 2 : topCardScry ? 1 : 3)) violations.push('pending choice options are invalid');
       if (choicePlayerIndex >= 0) {
         const choicePlayer = state.players[choicePlayerIndex]!;
-        if (archaeologyChoice) {
+        if (topCardScry) {
+          const sourceExists = choicePlayer.battlefield.some(function (object): boolean {
+            return object.instanceId === choice.sourceInstanceId && object.cardId === choice.sourceCardId;
+          });
+          if (!sourceExists) violations.push('pending choice source object is missing');
+          if (choicePlayer.deck.length === 0 || choice.options.length !== 1) {
+            violations.push('top-card scry must inspect exactly one card');
+          } else {
+            const option = choice.options[0]!;
+            if (option.optionIndex !== 0 || option.cardId !== choicePlayer.deck[choicePlayer.deck.length - 1] ||
+                option.slotIndex !== -1 || !option.selectable) {
+              violations.push('top-card scry option no longer matches the deck top');
+            }
+          }
+        } else if (archaeologyChoice) {
           const expectedCount = Math.min(3, choicePlayer.deck.length);
           if (choice.options.length !== expectedCount) violations.push('archaeology choice must inspect the complete top-three range');
           const sourceExists = choicePlayer.battlefield.some(function (object): boolean {

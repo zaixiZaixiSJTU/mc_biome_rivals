@@ -84,6 +84,7 @@ namespace BiomeRivals.Demo
         private Button _mulliganConfirmButton;
         private RectTransform _choiceOverlay;
         private RectTransform _choiceCardsRoot;
+        private Text _choiceTitleText;
         private Text _choiceRuleText;
         private Text _choiceStatusText;
         private Text _choiceConfirmLabel;
@@ -161,6 +162,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewCrafting")) SetupCraftingPreview(true);
             else if (HasCommandLineFlag("-previewRaiderDiscount")) SetupRaiderDiscountPreview();
             else if (HasCommandLineFlag("-previewArchaeology")) SetupArchaeologyPreview();
+            else if (HasCommandLineFlag("-previewBatScry")) SetupBatScryPreview();
             else if (HasCommandLineFlag("-previewLoot")) SetupLootPreview();
             else if (HasCommandLineFlag("-previewTamedWolf")) SetupTamedWolfPreview();
             else if (HasCommandLineFlag("-previewVillagerFarmer")) SetupVillagerFarmerPreview();
@@ -657,6 +659,14 @@ namespace BiomeRivals.Demo
                         yield return ShowTurnBanner(prismarineShard ? "碎片涌流" : salmonCurrent ? "水流" : "激流位移", ownChoice ? Gold : Ember);
                         break;
                     }
+                    if (matchEvent.payload?.kind == "TOP_CARD_SCRY")
+                    {
+                        ShowStatus(ownChoice
+                            ? "洞穴蝙蝠带回了牌库顶的回声：可保留，或将它置于牌库底。"
+                            : "对手的洞穴蝙蝠正在窥视一张牌库顶牌。", false);
+                        yield return ShowTurnBanner("洞穴回声", ownChoice ? Cyan : Ember);
+                        break;
+                    }
                     ShowStatus(ownChoice
                         ? "沙漠考古学家发现了牌库顶三张牌，请选择可出土的掩埋牌。"
                         : "对手的沙漠考古学家正在查看牌库。", false);
@@ -664,6 +674,19 @@ namespace BiomeRivals.Demo
                     break;
                 }
                 case MatchEventTypes.ChoiceResolved:
+                    if (matchEvent.payload?.kind == "TOP_CARD_SCRY")
+                    {
+                        var scryViewerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
+                        var ownScry = matchEvent.payload?.playerId == scryViewerId;
+                        var movedToBottom = matchEvent.payload?.selectedOptionIndex == 0;
+                        var revealedName = ownScry && movedToBottom && !string.IsNullOrEmpty(matchEvent.payload?.selectedCardId)
+                            ? GetCardName(matchEvent.payload.selectedCardId)
+                            : "该牌";
+                        ShowStatus(movedToBottom
+                            ? ownScry ? $"洞穴回声：已将 {revealedName} 置于牌库底。" : "对手将窥视到的牌置于了牌库底。"
+                            : ownScry ? "洞穴回声：牌库顶保持不变。" : "对手保留了牌库顶牌。", false);
+                        yield return ShowTurnBanner(movedToBottom ? "沉入牌底" : "保留牌顶", ownScry ? Cyan : Ember);
+                    }
                     yield return null;
                     break;
                 case MatchEventTypes.ObjectMoved:
@@ -1000,8 +1023,8 @@ namespace BiomeRivals.Demo
             dim.color = new Color(0.025f, 0.03f, 0.035f, 0.84f);
             dim.raycastTarget = true;
 
-            var panel = CreateBasePanel(_choiceOverlay, "ArchaeologyPanel", new Vector2(0, 10), new Vector2(1080, 670));
-            CreateText(panel, "Title", new Vector2(0, 282), new Vector2(940, 54), "沙漠考古", 30, Gold, TextAnchor.MiddleCenter, FontStyle.Bold);
+            var panel = CreateBasePanel(_choiceOverlay, "ChoicePanel", new Vector2(0, 10), new Vector2(1080, 670));
+            _choiceTitleText = CreateText(panel, "Title", new Vector2(0, 282), new Vector2(940, 54), "牌库选择", 30, Gold, TextAnchor.MiddleCenter, FontStyle.Bold);
             _choiceRuleText = CreateText(panel, "Rule", new Vector2(0, 235), new Vector2(920, 44), string.Empty, 16, Muted, TextAnchor.MiddleCenter, FontStyle.Normal);
             _choiceCardsRoot = CreateRect(panel, "InspectedCards", new Vector2(0, 20), new Vector2(780, 390));
             _choiceStatusText = CreateText(panel, "ChoiceStatus", new Vector2(0, -218), new Vector2(780, 44), string.Empty, 16, Gold, TextAnchor.MiddleCenter, FontStyle.Bold);
@@ -1621,6 +1644,25 @@ namespace BiomeRivals.Demo
             if (vindicator != null) StartCoroutine(PulseBattlefieldObject(vindicator.InstanceId));
         }
 
+        private void SetupBatScryPreview()
+        {
+            SelectFaction("cave_dark_forest");
+            SelectOpponentFaction("plains_forest");
+            if (!_registry.TryGetDefinition("cd_001", out var batDefinition)) return;
+            _match.ResetDeckAndHand(new[] { batDefinition.id }, new[] { "cd_002", "cd_005" });
+            _selectedCardId = batDefinition.id;
+            var deployed = _match.ApplyDeploy(batDefinition,
+                _match.CreateDeployCommand(batDefinition.id, DemoSlotKind.Unit, 0));
+            _selectedCardId = _match.Hand.FirstOrDefault();
+            RefreshAll();
+            if (deployed.Accepted && _match.PendingChoice != null) SelectChoiceOption(0);
+            ShowStatus(deployed.Accepted
+                ? "洞穴蝙蝠已查看牌库顶牌；当前选中操作会将该牌置于牌库底，也可再次点击取消并保留牌库顶。"
+                : deployed.Message, !deployed.Accepted);
+            var bat = _match.GetObject(true, DemoSlotKind.Unit, 0);
+            if (bat != null) StartCoroutine(PulseBattlefieldObject(bat.InstanceId));
+        }
+
         private void SetupCactusFencePreview()
         {
             SelectFaction("plains_forest");
@@ -1869,7 +1911,9 @@ namespace BiomeRivals.Demo
                 : match.IsMulligan ? "等待起手确认"
                 : match.PendingChoice != null ? match.PendingChoice.kind == "MOVE_UNIT"
                     ? match.IsChoiceOwner ? "选择移动地块" : "对手正在移动"
-                    : match.IsChoiceOwner ? "完成考古选择" : "对手正在选择"
+                    : match.PendingChoice.kind == "TOP_CARD_SCRY"
+                        ? match.IsChoiceOwner ? "决定牌库顶" : "对手正在窥视"
+                        : match.IsChoiceOwner ? "完成考古选择" : "对手正在选择"
                 : match.IsFinished ? "对局结束" : !match.IsPlayerTurn ? "对手行动中" : match.Phase == DemoTurnPhase.Main ? "进入战斗" :
                     monumentThreatCount > 0 ? $"结束回合 · 神殿 {monumentThreatCount}" : "结束回合";
         }
@@ -1898,8 +1942,13 @@ namespace BiomeRivals.Demo
 
             if (!match.IsChoiceOwner)
             {
-                _choiceRuleText.text = "对手正在查看自己的牌库顶三张牌；牌面信息对你保密";
-                _choiceStatusText.text = "等待对手完成考古选择…";
+                var opponentScry = choice.kind == "TOP_CARD_SCRY";
+                _choiceTitleText.text = opponentScry ? "洞穴回声" : "沙漠考古";
+                _choiceTitleText.color = opponentScry ? Ember : Gold;
+                _choiceRuleText.text = opponentScry
+                    ? "对手正在查看自己的牌库顶牌；牌面信息对你保密"
+                    : "对手正在查看自己的牌库顶三张牌；牌面信息对你保密";
+                _choiceStatusText.text = opponentScry ? "等待对手决定保留或置底…" : "等待对手完成考古选择…";
                 _choiceConfirmButton.gameObject.SetActive(false);
                 var hiddenCount = choice.options?.Length ?? 0;
                 for (var index = 0; index < hiddenCount; index++) CreateHiddenChoiceCard(index, hiddenCount);
@@ -1907,11 +1956,23 @@ namespace BiomeRivals.Demo
             }
 
             _choiceConfirmButton.gameObject.SetActive(true);
-            _choiceRuleText.text = "查看牌库顶 3 张；选择一张带“掩埋”标记的牌立即出土；若对局未结束，再正常抽一张牌";
+            var topCardScry = choice.kind == "TOP_CARD_SCRY";
+            _choiceTitleText.text = topCardScry ? "洞穴回声" : "沙漠考古";
+            _choiceTitleText.color = topCardScry ? Cyan : Gold;
+            _choiceRuleText.text = topCardScry
+                ? "查看牌库顶牌；直接确认可保留，选中卡牌后确认则将它置于牌库底"
+                : "查看牌库顶 3 张；选择一张带“掩埋”标记的牌立即出土；若对局未结束，再正常抽一张牌";
             var options = (choice.options ?? Array.Empty<PendingChoiceOptionDto>()).Where(option => option != null).ToArray();
             var hasSelectable = options.Any(option => option.selectable);
             foreach (var option in options) CreateChoiceCard(option, options.Length);
-            if (hasSelectable)
+            if (topCardScry)
+            {
+                _choiceStatusText.text = _selectedChoiceOptionIndex < 0
+                    ? "当前将保留这张牌；点击卡牌可改为置底"
+                    : "已选择将这张牌置于牌库底";
+                _choiceConfirmLabel.text = _selectedChoiceOptionIndex < 0 ? "保留牌库顶" : "置于牌库底";
+            }
+            else if (hasSelectable)
             {
                 _choiceStatusText.text = _selectedChoiceOptionIndex < 0 ? "请选择一张金色标记的掩埋牌" : "已选择出土目标";
                 _choiceConfirmLabel.text = _selectedChoiceOptionIndex < 0 ? "选择一张掩埋牌" : "确认出土";
@@ -1922,7 +1983,8 @@ namespace BiomeRivals.Demo
                 _choiceConfirmLabel.text = "确认未发现";
             }
             _choiceConfirmButton.interactable = !match.IsFinished &&
-                (!IsOnlineBoard || _onlineSession.CanIssueCommand) && (!hasSelectable || _selectedChoiceOptionIndex >= 0);
+                (!IsOnlineBoard || _onlineSession.CanIssueCommand) &&
+                (topCardScry || !hasSelectable || _selectedChoiceOptionIndex >= 0);
         }
 
         private void CreateChoiceCard(PendingChoiceOptionDto option, int optionCount)
@@ -1930,9 +1992,10 @@ namespace BiomeRivals.Demo
             var selected = option.optionIndex == _selectedChoiceOptionIndex;
             var x = (option.optionIndex - (optionCount - 1) * 0.5f) * 244f;
             var slot = CreateBasePanel(_choiceCardsRoot, "ChoiceSlot" + option.optionIndex, new Vector2(x, selected ? 18f : 0f), new Vector2(220, 350));
-            var accent = option.selectable ? Gold : Muted;
+            var topCardScry = MatchView.PendingChoice?.kind == "TOP_CARD_SCRY";
+            var accent = option.selectable ? topCardScry ? Cyan : Gold : Muted;
             slot.GetComponent<Image>().color = selected
-                ? Color.Lerp(DemoUiStyleCatalog.GetRootFill(DemoUiStyleClass.BasePanel), Gold, 0.46f)
+                ? Color.Lerp(DemoUiStyleCatalog.GetRootFill(DemoUiStyleClass.BasePanel), accent, 0.46f)
                 : DemoUiStyleCatalog.GetRootFill(DemoUiStyleClass.BasePanel);
             var materialFill = slot.Find("MaterialFill")?.GetComponent<Image>();
             if (materialFill != null && (option.selectable || selected))
@@ -1944,7 +2007,9 @@ namespace BiomeRivals.Demo
             card.RectTransform.anchoredPosition = new Vector2(0, 18);
             if (option.selectable) card.gameObject.AddComponent<DemoHoverScale>().Configure(1.045f, 16f);
             CreateText(slot, "ChoiceLabel", new Vector2(0, -151), new Vector2(188, 30),
-                option.selectable ? selected ? "◆ 已选中" : "◆ 可出土" : "保持牌库顺序",
+                topCardScry
+                    ? selected ? "◆ 将置于牌库底" : "点击选择置底"
+                    : option.selectable ? selected ? "◆ 已选中" : "◆ 可出土" : "保持牌库顺序",
                 14, accent, TextAnchor.MiddleCenter, FontStyle.Bold);
         }
 
@@ -1963,7 +2028,9 @@ namespace BiomeRivals.Demo
             var option = (choice.options ?? Array.Empty<PendingChoiceOptionDto>())
                 .FirstOrDefault(value => value != null && value.optionIndex == optionIndex && value.selectable);
             if (option == null) return;
-            _selectedChoiceOptionIndex = optionIndex;
+            _selectedChoiceOptionIndex = choice.kind == "TOP_CARD_SCRY" && _selectedChoiceOptionIndex == optionIndex
+                ? -1
+                : optionIndex;
             RefreshPendingChoice();
         }
 
@@ -1973,8 +2040,9 @@ namespace BiomeRivals.Demo
             if (MatchView.IsFinished || choice == null || !MatchView.IsChoiceOwner) return;
             var options = choice.options ?? Array.Empty<PendingChoiceOptionDto>();
             var hasSelectable = options.Any(option => option != null && option.selectable);
-            if (hasSelectable && _selectedChoiceOptionIndex < 0) return;
-            var selectedOptionIndex = hasSelectable ? _selectedChoiceOptionIndex : -1;
+            var topCardScry = choice.kind == "TOP_CARD_SCRY";
+            if (!topCardScry && hasSelectable && _selectedChoiceOptionIndex < 0) return;
+            var selectedOptionIndex = topCardScry ? _selectedChoiceOptionIndex : hasSelectable ? _selectedChoiceOptionIndex : -1;
             if (IsOnlineBoard)
             {
                 if (!_onlineSession.CanIssueCommand) return;
@@ -1991,7 +2059,9 @@ namespace BiomeRivals.Demo
                 message = message.Replace(_match.LastDrawResult.CardId, GetCardName(_match.LastDrawResult.CardId));
             ShowStatus(result.Accepted ? $"{message} · 状态 r{result.Revision}" : message, !result.Accepted);
             if (result.Accepted && !TryShowLocalMatchOutcome())
-                StartCoroutine(ShowTurnBanner(hasSelectable ? "出土" : "未发现", hasSelectable ? Gold : Muted));
+                StartCoroutine(ShowTurnBanner(topCardScry
+                    ? selectedOptionIndex < 0 ? "保留牌顶" : "沉入牌底"
+                    : hasSelectable ? "出土" : "未发现", topCardScry ? Cyan : hasSelectable ? Gold : Muted));
             RefreshAll();
         }
 

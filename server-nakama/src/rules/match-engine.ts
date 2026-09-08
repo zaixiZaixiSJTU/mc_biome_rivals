@@ -259,6 +259,9 @@ namespace BiomeRivalsRules {
             return { optionIndex: option.optionIndex, cardId: option.cardId, slotIndex: option.slotIndex, selectable: false };
           });
         }
+        if (event.type === 'CHOICE_RESOLVED' && payload.playerId !== viewerPlayerId && payload.kind === 'TOP_CARD_SCRY') {
+          payload.selectedCardId = null;
+        }
         if (event.type === 'MULLIGAN_COMPLETED' && payload.playerId !== viewerPlayerId && Array.isArray(payload.hand)) {
           payload.hand = (payload.hand as string[]).map(function (): null { return null; });
         }
@@ -632,6 +635,9 @@ namespace BiomeRivalsRules {
       } else if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
           definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.pf_008.01') {
         triggerIronGolemBattlecry(player, battlefieldObject);
+      } else if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
+          definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.cd_001.01') {
+        offerTopCardScry(player, battlefieldObject, definition.effectIds[0]);
       } else if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
           definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.cd_005.01') {
         triggerVindicatorBattlecry(player, battlefieldObject);
@@ -1476,6 +1482,42 @@ namespace BiomeRivalsRules {
       });
     }
 
+    function offerTopCardScry(player: PlayerState, source: BattlefieldObjectState, effectId: string): boolean {
+      if (next.pendingChoice !== null) throw new Error('cannot offer a second choice while one is pending');
+      if (player.deck.length === 0) return false;
+      const options: PendingChoiceOptionState[] = [{
+        optionIndex: 0,
+        cardId: player.deck[player.deck.length - 1]!,
+        slotIndex: -1,
+        selectable: true
+      }];
+      next.pendingChoice = {
+        choiceId: 'choice-' + String(next.lastEventId + 1),
+        playerId: player.playerId,
+        sourceCardId: source.cardId,
+        sourceInstanceId: source.instanceId,
+        effectId: effectId,
+        kind: 'TOP_CARD_SCRY',
+        targetPlayerId: '',
+        targetInstanceId: '',
+        options: options
+      };
+      emit('CHOICE_OFFERED', {
+        choiceId: next.pendingChoice.choiceId,
+        playerId: player.playerId,
+        sourceCardId: source.cardId,
+        sourceInstanceId: source.instanceId,
+        effectId: effectId,
+        kind: next.pendingChoice.kind,
+        targetPlayerId: '',
+        targetInstanceId: '',
+        options: options.map(function (option): PendingChoiceOptionState {
+          return { optionIndex: option.optionIndex, cardId: option.cardId, slotIndex: option.slotIndex, selectable: option.selectable };
+        })
+      });
+      return true;
+    }
+
     function offerMoveChoice(player: PlayerState, sourceCardId: string, sourceInstanceId: string, targetPlayer: PlayerState,
       target: BattlefieldObjectState, effectId: string): void {
       const options: PendingChoiceOptionState[] = [];
@@ -1985,6 +2027,34 @@ namespace BiomeRivalsRules {
           }
           triggerSuccessfulMovement(targetPlayer, target);
         }
+        return null;
+      }
+      if (pendingChoice.kind === 'TOP_CARD_SCRY') {
+        const option = pendingChoice.options[0];
+        if (option === undefined || option.optionIndex !== 0 || !option.selectable ||
+            (selectedOptionIndex !== -1 && selectedOptionIndex !== 0)) {
+          return reject(state, 'INVALID_CHOICE', 'top-card scry must keep the card or move it to the deck bottom');
+        }
+        const player = next.players[actorIndex]!;
+        if (player.deck.length === 0 || player.deck[player.deck.length - 1] !== option.cardId) {
+          throw new Error('pending top-card scry no longer matches the authoritative deck');
+        }
+        next.pendingChoice = null;
+        if (selectedOptionIndex === 0) {
+          const topCard = player.deck.pop()!;
+          player.deck.unshift(topCard);
+        }
+        emit('CHOICE_RESOLVED', {
+          choiceId: pendingChoice.choiceId,
+          playerId: player.playerId,
+          sourceCardId: pendingChoice.sourceCardId,
+          sourceInstanceId: pendingChoice.sourceInstanceId,
+          effectId: pendingChoice.effectId,
+          kind: pendingChoice.kind,
+          selectedOptionIndex: selectedOptionIndex,
+          selectedCardId: selectedOptionIndex === 0 ? option.cardId : null,
+          selectedSlotIndex: -1
+        });
         return null;
       }
       const selectableOptions = pendingChoice.options.filter(function (option): boolean { return option.selectable; });

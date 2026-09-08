@@ -16,6 +16,7 @@ namespace BiomeRivals.Demo
             { "cd_005", "entity_vindicator" },
             { "pf_008", "entity_iron_golem" },
             { "si_002", "entity_snow_golem" },
+            { "cd_001", "entity_bat" },
             { "nt_001", "entity_magma_cube" },
             { "tk_014", "entity_magma_cube" },
             { "nt_003", "entity_blaze" },
@@ -51,6 +52,7 @@ namespace BiomeRivals.Demo
                 case "cd_005": BuildVindicator(root, material); break;
                 case "pf_008": BuildIronGolem(root, material); break;
                 case "si_002": BuildSnowGolem(root, material); break;
+                case "cd_001": BuildBat(root, material); break;
                 case "nt_001": BuildMagmaCube(root, material); break;
                 case "tk_014":
                     root.localScale = Vector3.one * 0.62f;
@@ -152,6 +154,20 @@ namespace BiomeRivals.Demo
                 Cuboid(root, "BodySlice_" + slice, new Vector3(0f, 0.24f + slice * 0.135f, 0f), new Vector3(1.18f, 0.135f, 1.18f), material, 0, slice, 8, 1, 8, 64, 32);
             }
             Cuboid(root, "InnerCore", new Vector3(0f, 0.70f, 0f), new Vector3(0.58f, 0.58f, 0.58f), material, 24, 10, 4, 4, 4, 64, 32);
+        }
+
+        private static void BuildBat(Transform root, Material material)
+        {
+            root.localPosition += new Vector3(0f, 0.42f, 0f);
+            root.localScale = Vector3.one * 0.92f;
+            Cuboid(root, "Head", new Vector3(0f, 1.08f, -0.12f), new Vector3(0.52f, 0.48f, 0.46f), material, 0, 0, 6, 6, 6, 64, 64);
+            Cuboid(root, "LeftEar", new Vector3(-0.20f, 1.43f, -0.10f), new Vector3(0.16f, 0.34f, 0.12f), material, 24, 0, 2, 4, 1, 64, 64, Quaternion.Euler(0f, 0f, -10f));
+            Cuboid(root, "RightEar", new Vector3(0.20f, 1.43f, -0.10f), new Vector3(0.16f, 0.34f, 0.12f), material, 24, 0, 2, 4, 1, 64, 64, Quaternion.Euler(0f, 0f, 10f));
+            Cuboid(root, "Body", new Vector3(0f, 0.68f, 0.06f), new Vector3(0.42f, 0.68f, 0.36f), material, 0, 16, 6, 8, 6, 64, 64);
+            Cuboid(root, "LeftWing", new Vector3(-0.65f, 0.82f, 0.08f), new Vector3(0.92f, 0.08f, 0.56f), material, 24, 16, 10, 1, 6, 64, 64, Quaternion.Euler(0f, -8f, -18f));
+            Cuboid(root, "RightWing", new Vector3(0.65f, 0.82f, 0.08f), new Vector3(0.92f, 0.08f, 0.56f), material, 24, 16, 10, 1, 6, 64, 64, Quaternion.Euler(0f, 8f, 18f));
+            Cuboid(root, "LeftFoot", new Vector3(-0.11f, 0.26f, 0.03f), new Vector3(0.08f, 0.20f, 0.08f), material, 0, 34, 1, 2, 1, 64, 64);
+            Cuboid(root, "RightFoot", new Vector3(0.11f, 0.26f, 0.03f), new Vector3(0.08f, 0.20f, 0.08f), material, 0, 34, 1, 2, 1, 64, 64);
         }
 
         private static void BuildBlaze(Transform root, Material material)

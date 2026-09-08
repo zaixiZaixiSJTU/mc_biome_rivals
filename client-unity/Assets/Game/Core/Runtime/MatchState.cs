@@ -514,6 +514,8 @@ namespace BiomeRivals.Core
         {
             var archaeology = choice != null && choice.kind == "ARCHAEOLOGY_TOP_3" &&
                 choice.effectId == "effect.db_003.01" && choice.sourceCardId == "db_003";
+            var topCardScry = choice != null && choice.kind == "TOP_CARD_SCRY" &&
+                choice.effectId == "effect.cd_001.01" && choice.sourceCardId == "cd_001";
             var riptideMovement = choice != null && choice.kind == "MOVE_UNIT" &&
                 choice.effectId == "effect.or_006.01" && choice.sourceCardId == "or_006";
             var salmonMovement = choice != null && choice.kind == "MOVE_UNIT" &&
@@ -521,14 +523,16 @@ namespace BiomeRivals.Core
             var prismarineMovement = choice != null && choice.kind == "MOVE_UNIT" &&
                 choice.effectId == "effect.tk_012.01" && choice.sourceCardId == "tk_012";
             var movement = riptideMovement || salmonMovement || prismarineMovement;
-            if (choice == null || (!archaeology && !movement) || string.IsNullOrWhiteSpace(choice.choiceId) ||
+            if (choice == null || (!archaeology && !topCardScry && !movement) || string.IsNullOrWhiteSpace(choice.choiceId) ||
                 string.IsNullOrWhiteSpace(choice.sourceInstanceId) || choice.options == null ||
-                choice.options.Length > (movement ? 2 : 3) || state.status != "ACTIVE" ||
-                (archaeology && state.phase != "MAIN") || (riptideMovement && state.phase != "COMBAT") ||
+                choice.options.Length > (movement ? 2 : archaeology ? 3 : 1) || state.status != "ACTIVE" ||
+                ((archaeology || topCardScry) && state.phase != "MAIN") || (riptideMovement && state.phase != "COMBAT") ||
                 ((salmonMovement || prismarineMovement) && state.phase != "MAIN"))
                 throw new InvalidOperationException($"{source} contains an invalid pending card choice.");
+            if (topCardScry && choice.options.Length != 1)
+                throw new InvalidOperationException($"{source} top-card scry must contain exactly one option.");
             var owner = FindPlayer(state, choice.playerId);
-            var sourceValid = archaeology
+            var sourceValid = archaeology || topCardScry
                 ? (owner?.battlefield ?? Array.Empty<BattlefieldObjectStateDto>()).Any(value =>
                     value != null && value.instanceId == choice.sourceInstanceId && value.cardId == choice.sourceCardId)
                 : prismarineMovement
@@ -551,8 +555,10 @@ namespace BiomeRivals.Core
                 var option = choice.options[index];
                 if (option == null || option.optionIndex != index ||
                     (isOwnerProjection && string.IsNullOrWhiteSpace(option.cardId)) ||
-                    (archaeology && !isOwnerProjection && (!string.IsNullOrEmpty(option.cardId) || option.selectable)) ||
-                    (archaeology && option.slotIndex != -1) || (movement && option.slotIndex < 0) ||
+                    ((archaeology || topCardScry) && !isOwnerProjection && (!string.IsNullOrEmpty(option.cardId) || option.selectable)) ||
+                    ((archaeology || topCardScry) && option.slotIndex != -1) ||
+                    (topCardScry && isOwnerProjection && (choice.options.Length != 1 || !option.selectable)) ||
+                    (movement && option.slotIndex < 0) ||
                     (movement && !isOwnerProjection && option.selectable))
                     throw new InvalidOperationException($"{source} pending choice violates option ordering or privacy projection.");
             }

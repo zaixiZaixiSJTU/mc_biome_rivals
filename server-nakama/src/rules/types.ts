@@ -1,6 +1,6 @@
 namespace BiomeRivalsRules {
-  export const PROTOCOL_VERSION = 25;
-  export const RULESET_VERSION = 'prototype-0.39';
+  export const PROTOCOL_VERSION = 26;
+  export const RULESET_VERSION = 'prototype-0.40';
 
   export type MatchStatus = 'WAITING' | 'MULLIGAN' | 'ACTIVE' | 'FINISHED';
   export type CommandType = 'MULLIGAN' | 'DEPLOY_CARD' | 'PLAY_CARD' | 'RESOLVE_CHOICE' | 'ENTER_COMBAT' | 'ATTACK' | 'END_TURN' | 'CONCEDE';
@@ -92,7 +92,7 @@ namespace BiomeRivalsRules {
     sourceCardId: string;
     sourceInstanceId: string;
     effectId: string;
-    kind: 'ARCHAEOLOGY_TOP_3' | 'MOVE_UNIT';
+    kind: 'ARCHAEOLOGY_TOP_3' | 'TOP_CARD_SCRY' | 'MOVE_UNIT';
     targetPlayerId: string;
     targetInstanceId: string;
     options: PendingChoiceOptionState[];
@@ -111,7 +111,7 @@ namespace BiomeRivalsRules {
     sourceCardId: string;
     sourceInstanceId: string;
     effectId: string;
-    kind: 'ARCHAEOLOGY_TOP_3' | 'MOVE_UNIT';
+    kind: 'ARCHAEOLOGY_TOP_3' | 'TOP_CARD_SCRY' | 'MOVE_UNIT';
     targetPlayerId: string;
     targetInstanceId: string;
     options: PendingChoiceOptionSnapshot[];

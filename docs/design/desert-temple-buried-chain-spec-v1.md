@@ -1,6 +1,6 @@
 # DB-007 沙漠神殿掩埋链规范 v1
 
-本规范对应 `protocolVersion 25`、`rulesetVersion prototype-0.39` 与内容版本 31。
+本规范对应 `protocolVersion 26`、`rulesetVersion prototype-0.40` 与内容版本 32。
 
 ## 权威规则
 
@@ -23,7 +23,7 @@
 
 ## 隐私与 Unity 表现
 
-- `protocolVersion 25` 将投影给非拥有者的 `CARD_BURIED.payload.cardId` 改为 `null`；拥有者与权威状态仍保留真实牌名，牌库只公开总数与掩埋数量。
+- `protocolVersion 25` 将投影给非拥有者的 `CARD_BURIED.payload.cardId` 改为 `null`；拥有者与权威状态仍保留真实牌名，牌库只公开总数与掩埋数量。当前协议 26 继续保留这一隐私约束。
 - 沙漠神殿使用贴合双建筑格的 Minecraft 砂岩、切制砂岩与橙色陶瓦体素模型，不使用通用双塔占位结构。
 - 神殿作为持续响应引擎显示低强度沙金地表脉冲；出土触发治疗时脉冲真实神殿对象并显示“遗迹修复”，炸药机关同时脉冲双方英雄 HUD。
 

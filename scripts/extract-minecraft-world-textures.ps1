@@ -51,6 +51,7 @@ $textures = [ordered]@{
     tube_coral_block = 'assets/minecraft/textures/block/tube_coral_block.png'
     purpur_block = 'assets/minecraft/textures/block/purpur_block.png'
     entity_magma_cube = 'assets/minecraft/textures/entity/slime/magmacube.png'
+    entity_bat = 'assets/minecraft/textures/entity/bat.png'
     entity_blaze = 'assets/minecraft/textures/entity/blaze.png'
     entity_bee = 'assets/minecraft/textures/entity/bee/bee.png'
     entity_sheep = 'assets/minecraft/textures/entity/sheep/sheep.png'

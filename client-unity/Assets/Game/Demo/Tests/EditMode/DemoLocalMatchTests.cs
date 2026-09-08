@@ -165,6 +165,50 @@ namespace BiomeRivals.Demo.Tests
         }
 
         [Test]
+        public void LocalCaveBatMayMoveTheRevealedTopCardToTheDeckBottom()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(new[] { "cd_001" }, new[] { "cd_002", "cd_005" });
+            Assert.That(registry.TryGetDefinition("cd_001", out var caveBat), Is.True);
+            Assert.That(caveBat.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+
+            var deployed = match.ApplyDeploy(caveBat, match.CreateDeployCommand(caveBat.id, DemoSlotKind.Unit, 0));
+
+            Assert.That(deployed.Accepted, Is.True);
+            Assert.That(match.PendingChoice, Is.Not.Null);
+            Assert.That(match.PendingChoice.kind, Is.EqualTo("TOP_CARD_SCRY"));
+            Assert.That(match.PendingChoice.options.Single().cardId, Is.EqualTo("cd_005"));
+            var resolved = match.ApplyResolveChoice(
+                match.CreateResolveChoiceCommand(match.PendingChoice.choiceId, 0));
+
+            Assert.That(resolved.Accepted, Is.True);
+            Assert.That(match.PendingChoice, Is.Null);
+            Assert.That(match.Deck, Is.EqualTo(new[] { "cd_005", "cd_002" }));
+        }
+
+        [Test]
+        public void LocalCaveBatMayKeepTheTopCardAndSkipsAnEmptyDeck()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("cd_001", out var caveBat), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(new[] { caveBat.id }, new[] { "cd_002", "cd_005" });
+            Assert.That(match.TryDeploy(caveBat, DemoSlotKind.Unit, 0, out _), Is.True);
+
+            var kept = match.ApplyResolveChoice(
+                match.CreateResolveChoiceCommand(match.PendingChoice.choiceId, -1));
+
+            Assert.That(kept.Accepted, Is.True);
+            Assert.That(match.Deck, Is.EqualTo(new[] { "cd_002", "cd_005" }));
+
+            var emptyMatch = new DemoLocalMatch();
+            emptyMatch.ResetDeckAndHand(new[] { caveBat.id }, System.Array.Empty<string>());
+            Assert.That(emptyMatch.TryDeploy(caveBat, DemoSlotKind.Unit, 0, out _), Is.True);
+            Assert.That(emptyMatch.PendingChoice, Is.Null);
+        }
+
+        [Test]
         public void LocalArchaeologistRequiresAChoiceAndExcavatesTheSelectedBuriedCard()
         {
             var registry = CardContentLoader.Load();
@@ -1186,7 +1230,7 @@ namespace BiomeRivals.Demo.Tests
                 var choiceOverlay = root.transform.Find("DemoCanvas/ChoiceOverlay");
                 Assert.That(choiceOverlay, Is.Not.Null);
                 Assert.That(choiceOverlay.gameObject.activeSelf, Is.False, "Card choices stay hidden until an effect offers one.");
-                Assert.That(choiceOverlay.Find("ArchaeologyPanel/ConfirmChoice").GetComponent<PrimaryActionButton>(), Is.Not.Null);
+                Assert.That(choiceOverlay.Find("ChoicePanel/ConfirmChoice").GetComponent<PrimaryActionButton>(), Is.Not.Null);
                 var factionButtons = root.GetComponentsInChildren<SecondaryButton>(true)
                     .Where(style => style.name.StartsWith("Faction_", System.StringComparison.Ordinal))
                     .ToArray();
@@ -1309,6 +1353,8 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(golemTexture, Is.EqualTo("entity_iron_golem"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("cd_005", out var vindicatorTexture), Is.True);
                 Assert.That(vindicatorTexture, Is.EqualTo("entity_vindicator"));
+                Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("cd_001", out var batTexture), Is.True);
+                Assert.That(batTexture, Is.EqualTo("entity_bat"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("si_002", out var snowGolemTexture), Is.True);
                 Assert.That(snowGolemTexture, Is.EqualTo("entity_snow_golem"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("or_001", out var salmonTexture), Is.True);

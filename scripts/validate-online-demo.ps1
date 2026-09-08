@@ -33,6 +33,13 @@ $argumentsB = @(
     '-previewPlayerFaction','desert_badlands','-nakamaDeviceId',"online-probe-b-$runId",
     '-onlineProbe',$reportB,'-quitAfterOnlineProbe','-logFile',$logB)
 
+$proxyVariables = @('HTTP_PROXY','HTTPS_PROXY','ALL_PROXY')
+$savedProxyValues = @{}
+foreach ($name in $proxyVariables) {
+    $savedProxyValues[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+    [Environment]::SetEnvironmentVariable($name, $null, 'Process')
+}
+
 $processA = Start-Process -FilePath $ExecutablePath -ArgumentList $argumentsA -WindowStyle Hidden -PassThru
 $processB = Start-Process -FilePath $ExecutablePath -ArgumentList $argumentsB -WindowStyle Hidden -PassThru
 try {
@@ -61,5 +68,8 @@ try {
 finally {
     foreach ($process in @($processA,$processB)) {
         if ($process -and -not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+    }
+    foreach ($name in $proxyVariables) {
+        [Environment]::SetEnvironmentVariable($name, $savedProxyValues[$name], 'Process')
     }
 }

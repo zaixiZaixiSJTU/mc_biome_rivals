@@ -286,6 +286,13 @@ namespace BiomeRivals.Demo
                 }
             }
             else if (definition.effectImplementationStatus == "IMPLEMENTED" &&
+                definition.effectIds != null && definition.effectIds.Contains("effect.cd_001.01"))
+            {
+                deployMessage += OfferTopCardScry(deployedObject)
+                    ? "；查看牌库顶牌：可将其置于牌库底，或保持原位。"
+                    : "；牌库为空，没有可查看的牌。";
+            }
+            else if (definition.effectImplementationStatus == "IMPLEMENTED" &&
                 definition.effectIds != null && definition.effectIds.Contains("effect.cd_005.01"))
             {
                 var controlsBuilding = _playerBattlefield.Any(value =>
@@ -429,6 +436,28 @@ namespace BiomeRivals.Demo
                 return DemoCommandResult.Accept(move == null
                     ? $"{sourceName}：目标保持原位，未触发移动反应。"
                     : $"{sourceName}：移动成功。{auraLossMessage}{healingMessage}{guideMessage}{guardianMessage}{deathMessage}", Revision);
+            }
+            if (PendingChoice.kind == "TOP_CARD_SCRY")
+            {
+                var option = (PendingChoice.options ?? Array.Empty<PendingChoiceOptionDto>()).SingleOrDefault();
+                if (option == null || option.optionIndex != 0 || !option.selectable)
+                    return Reject(DemoCommandRejectionCode.InvalidChoice, "窥视选项已经失效。");
+                if (command.payload.selectedOptionIndex != -1 && command.payload.selectedOptionIndex != 0)
+                    return Reject(DemoCommandRejectionCode.InvalidChoice, "请选择保留牌库顶，或将该牌置于牌库底。");
+                if (_deck.Count == 0 || _deck[_deck.Count - 1] != option.cardId)
+                    throw new InvalidOperationException("Pending top-card scry no longer matches the local deck.");
+                var movedToBottom = command.payload.selectedOptionIndex == 0;
+                if (movedToBottom)
+                {
+                    var topCard = _deck[_deck.Count - 1];
+                    _deck.RemoveAt(_deck.Count - 1);
+                    _deck.Insert(0, topCard);
+                }
+                PendingChoice = null;
+                AcceptCommand(command);
+                return DemoCommandResult.Accept(movedToBottom
+                    ? $"洞穴回声：已将 {option.cardId} 置于牌库底。"
+                    : $"洞穴回声：{option.cardId} 保持在牌库顶。", Revision);
             }
             var selectable = (PendingChoice.options ?? Array.Empty<PendingChoiceOptionDto>()).Where(option => option != null && option.selectable).ToArray();
             PendingChoiceOptionDto selected = null;
@@ -744,7 +773,7 @@ namespace BiomeRivals.Demo
         public bool CanAttackWith(DemoBattlefieldObject attacker, out string message)
         {
             if (IsFinished) return Fail("对局已经结束。", out message);
-            if (PendingChoice != null) return Fail("请先完成考古学家的牌库选择。", out message);
+            if (PendingChoice != null) return Fail("请先完成当前牌库或战场选择。", out message);
             if (!IsPlayerTurn || Phase != DemoTurnPhase.Combat) return Fail("请先进入战斗阶段。", out message);
             if (attacker == null || !attacker.Player || attacker.SlotKind != DemoSlotKind.Unit)
                 return Fail("请选择一个可攻击的己方生物。", out message);
@@ -771,7 +800,7 @@ namespace BiomeRivals.Demo
         public bool CanAttackTarget(DemoBattlefieldObject target, string targetType, out string message)
         {
             if (IsFinished) return Fail("对局已经结束。", out message);
-            if (PendingChoice != null) return Fail("请先完成考古学家的牌库选择。", out message);
+            if (PendingChoice != null) return Fail("请先完成当前牌库或战场选择。", out message);
             if (targetType != "HERO" && targetType != "UNIT" && targetType != "BUILDING")
                 return Fail("攻击目标类型无效。", out message);
             if (targetType != "HERO" && (target == null || target.Player ||
@@ -1042,6 +1071,32 @@ namespace BiomeRivals.Demo
             };
         }
 
+        private bool OfferTopCardScry(DemoBattlefieldObject source)
+        {
+            if (PendingChoice != null) throw new InvalidOperationException("Cannot offer a second choice while one is pending.");
+            if (_deck.Count == 0) return false;
+            PendingChoice = new PendingChoiceDto
+            {
+                choiceId = $"choice-{Revision + 1}",
+                playerId = "local-player",
+                sourceCardId = source.CardId,
+                sourceInstanceId = source.InstanceId,
+                effectId = "effect.cd_001.01",
+                kind = "TOP_CARD_SCRY",
+                options = new[]
+                {
+                    new PendingChoiceOptionDto
+                    {
+                        optionIndex = 0,
+                        cardId = _deck[_deck.Count - 1],
+                        slotIndex = -1,
+                        selectable = true
+                    }
+                }
+            };
+            return true;
+        }
+
         private void BuryCard(string cardId)
         {
             var hash = 17;
@@ -1062,7 +1117,7 @@ namespace BiomeRivals.Demo
         {
             if (definition == null) return Fail("卡牌定义不存在。", out message);
             if (IsFinished) return Fail("对局已经结束。", out message);
-            if (PendingChoice != null) return Fail("请先完成考古学家的牌库选择。", out message);
+            if (PendingChoice != null) return Fail("请先完成当前牌库或战场选择。", out message);
             if (!IsPlayerTurn) return Fail("当前是对手回合。", out message);
             if (Phase != DemoTurnPhase.Main) return Fail("进入战斗阶段后不能继续打出卡牌。", out message);
             if (!_hand.Contains(definition.id)) return Fail("该牌不在手牌中。", out message);
@@ -1075,7 +1130,7 @@ namespace BiomeRivals.Demo
         {
             if (definition == null) return Fail("卡牌定义不存在。", out message);
             if (IsFinished) return Fail("对局已经结束。", out message);
-            if (PendingChoice != null) return Fail("请先完成考古学家的牌库选择。", out message);
+            if (PendingChoice != null) return Fail("请先完成当前牌库或战场选择。", out message);
             if (!IsPlayerTurn) return Fail("当前是对手回合。", out message);
             if (Phase != DemoTurnPhase.Main) return Fail("进入战斗阶段后不能继续部署卡牌。", out message);
             if (!_hand.Contains(definition.id)) return Fail("该牌不在手牌中。", out message);
@@ -1152,7 +1207,7 @@ namespace BiomeRivals.Demo
             }
             if (PendingChoice != null && expectedType != MatchCommandTypes.ResolveChoice)
             {
-                rejection = Reject(DemoCommandRejectionCode.ChoiceRequired, "请先完成考古学家的牌库选择。");
+                rejection = Reject(DemoCommandRejectionCode.ChoiceRequired, "请先完成当前牌库或战场选择。");
                 return false;
             }
             rejection = null;

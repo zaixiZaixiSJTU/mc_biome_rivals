@@ -9,7 +9,7 @@ namespace BiomeRivals.Networking
         private const string ResourcePath = "Networking/nakama-connection.v1";
 
         public string scheme = "http";
-        public string host = "127.0.0.1";
+        public string host = "localhost";
         public int port = 17350;
         public string serverKey = "local_only_change_me";
         public int requestTimeoutSeconds = 10;

@@ -1,6 +1,6 @@
 {
   "scheme": "http",
-  "host": "127.0.0.1",
+  "host": "localhost",
   "port": 17350,
   "serverKey": "local_only_change_me",
   "requestTimeoutSeconds": 10,

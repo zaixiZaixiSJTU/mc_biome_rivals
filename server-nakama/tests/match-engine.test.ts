@@ -449,6 +449,82 @@ TestHarness.test('Snow Golem generates a private Snowball after deployment', fun
   assertEventBatchMatchesSchema(opponentEvents);
 });
 
+TestHarness.test('Cave Bat offers one private top-card choice and moves it to the deck bottom', function (): void {
+  const state = activeState('match-bat-scry-bottom', ['alice', 'bob'], ['cave_dark_forest', 'plains_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const opponentIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['cd_001'];
+  actor.deck = ['cd_002', 'cd_005'];
+  actor.redstone = 1;
+  actor.redstoneCapacity = 1;
+
+  const deployed = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('deploy-bat-scry', 0, 'cd_001', 'UNIT', 0));
+  TestHarness.ok(deployed.accepted, JSON.stringify(deployed));
+  if (!deployed.accepted) return;
+  TestHarness.equal(deployed.batch.events.map(function (event): string { return event.type; }).join(','),
+    'CARD_DEPLOYED,CHOICE_OFFERED');
+  TestHarness.equal(deployed.state.pendingChoice!.kind, 'TOP_CARD_SCRY');
+  TestHarness.equal(JSON.stringify(deployed.state.pendingChoice!.options), JSON.stringify([
+    { optionIndex: 0, cardId: 'cd_005', slotIndex: -1, selectable: true }
+  ]));
+  const ownerSnapshot = BiomeRivalsRules.createClientSnapshot(deployed.state, actor.playerId);
+  const opponentSnapshot = BiomeRivalsRules.createClientSnapshot(deployed.state, deployed.state.players[opponentIndex]!.playerId);
+  TestHarness.equal(ownerSnapshot.pendingChoice!.options[0]!.cardId, 'cd_005');
+  TestHarness.equal(opponentSnapshot.pendingChoice!.options[0]!.cardId, null);
+  TestHarness.equal(opponentSnapshot.pendingChoice!.options[0]!.selectable, false);
+
+  const resolved = BiomeRivalsRules.applyCommand(deployed.state, actor.playerId,
+    resolveChoiceCommand('resolve-bat-bottom', 1, deployed.state.pendingChoice!.choiceId, 0));
+  TestHarness.ok(resolved.accepted, JSON.stringify(resolved));
+  if (!resolved.accepted) return;
+  TestHarness.equal(resolved.state.players[actorIndex]!.deck.join(','), 'cd_005,cd_002');
+  TestHarness.equal(resolved.batch.events.length, 1);
+  TestHarness.equal(resolved.batch.events[0]!.type, 'CHOICE_RESOLVED');
+  TestHarness.equal(resolved.batch.events[0]!.payload.selectedCardId, 'cd_005');
+  const opponentBatch = BiomeRivalsRules.createClientEventBatch(
+    resolved.batch, resolved.state.players[opponentIndex]!.playerId);
+  TestHarness.equal(opponentBatch.events[0]!.payload.selectedOptionIndex, 0);
+  TestHarness.equal(opponentBatch.events[0]!.payload.selectedCardId, null);
+  assertEventBatchMatchesSchema(resolved.batch);
+  assertEventBatchMatchesSchema(opponentBatch);
+});
+
+TestHarness.test('Cave Bat may keep the top card and does nothing with an empty deck', function (): void {
+  const state = activeState('match-bat-scry-keep', ['alice', 'bob'], ['cave_dark_forest', 'plains_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['cd_001'];
+  actor.deck = ['cd_002', 'cd_005'];
+  actor.redstone = 1;
+  actor.redstoneCapacity = 1;
+  const deployed = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('deploy-bat-keep', 0, 'cd_001', 'UNIT', 0));
+  TestHarness.ok(deployed.accepted);
+  if (!deployed.accepted) return;
+  const kept = BiomeRivalsRules.applyCommand(deployed.state, actor.playerId,
+    resolveChoiceCommand('resolve-bat-keep', 1, deployed.state.pendingChoice!.choiceId, -1));
+  TestHarness.ok(kept.accepted);
+  if (!kept.accepted) return;
+  TestHarness.equal(kept.state.players[actorIndex]!.deck.join(','), 'cd_002,cd_005');
+  TestHarness.equal(kept.batch.events[0]!.payload.selectedCardId, null);
+
+  const empty = activeState('match-bat-empty', ['alice', 'bob'], ['cave_dark_forest', 'plains_forest']);
+  const emptyActor = empty.players[empty.activePlayerIndex]!;
+  emptyActor.hand = ['cd_001'];
+  emptyActor.deck = [];
+  emptyActor.redstone = 1;
+  emptyActor.redstoneCapacity = 1;
+  const emptyResult = BiomeRivalsRules.applyCommand(empty, emptyActor.playerId,
+    deployCommand('deploy-bat-empty', 0, 'cd_001', 'UNIT', 0));
+  TestHarness.ok(emptyResult.accepted);
+  if (!emptyResult.accepted) return;
+  TestHarness.equal(emptyResult.state.pendingChoice, null);
+  TestHarness.equal(emptyResult.batch.events.length, 1);
+  TestHarness.equal(emptyResult.batch.events[0]!.type, 'CARD_DEPLOYED');
+});
+
 TestHarness.test('offers the archaeologists top-three choice privately after deployment', function (): void {
   const state = activeState('match-1', ['alice', 'bob'], ['desert_badlands', 'nether']);
   state.players[0]!.hand = ['db_003'];

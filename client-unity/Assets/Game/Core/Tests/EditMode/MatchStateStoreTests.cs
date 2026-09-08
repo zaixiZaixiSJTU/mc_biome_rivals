@@ -1046,6 +1046,133 @@ namespace BiomeRivals.Core.Tests
         }
 
         [Test]
+        public void Apply_ReplaysPrivateCaveBatScryWithoutLeakingTheCardToAnOpponent()
+        {
+            var ownerStore = new MatchStateStore();
+            ownerStore.Replace(new MatchStateDto
+            {
+                matchId = "match-bat", viewerPlayerId = "alice", protocolVersion = GameVersions.Protocol,
+                rulesetVersion = GameVersions.Ruleset, status = "ACTIVE", phase = "MAIN",
+                players = new[]
+                {
+                    new PlayerStateDto
+                    {
+                        playerId = "alice", deckCount = 2,
+                        battlefield = new[]
+                        {
+                            new BattlefieldObjectStateDto
+                            {
+                                instanceId = "object-1", cardId = "cd_001", cardType = "UNIT", slotKind = "UNIT",
+                                slotIndex = 0, occupiedSlots = 1, attack = 1, health = 2, maxHealth = 2
+                            }
+                        }
+                    },
+                    new PlayerStateDto { playerId = "bob" }
+                }
+            });
+            ownerStore.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 1, type = MatchEventTypes.ChoiceOffered,
+                        payload = new MatchEventPayloadDto
+                        {
+                            choiceId = "choice-1", playerId = "alice", sourceCardId = "cd_001",
+                            sourceInstanceId = "object-1", effectId = "effect.cd_001.01", kind = "TOP_CARD_SCRY",
+                            options = new[]
+                            {
+                                new PendingChoiceOptionDto
+                                {
+                                    optionIndex = 0, cardId = "cd_005", slotIndex = -1, selectable = true
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            Assert.That(ownerStore.Current.pendingChoice.options.Single().cardId, Is.EqualTo("cd_005"));
+            Assert.That(ownerStore.Current.pendingChoice.options.Single().selectable, Is.True);
+            ownerStore.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 2,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 2, type = MatchEventTypes.ChoiceResolved,
+                        payload = new MatchEventPayloadDto
+                        {
+                            choiceId = "choice-1", playerId = "alice", sourceCardId = "cd_001",
+                            sourceInstanceId = "object-1", effectId = "effect.cd_001.01", kind = "TOP_CARD_SCRY",
+                            selectedOptionIndex = 0, selectedCardId = "cd_005", selectedSlotIndex = -1
+                        }
+                    }
+                }
+            });
+            Assert.That(ownerStore.Current.pendingChoice, Is.Null);
+
+            var opponentStore = new MatchStateStore();
+            opponentStore.Replace(new MatchStateDto
+            {
+                matchId = "match-bat", viewerPlayerId = "bob", protocolVersion = GameVersions.Protocol,
+                rulesetVersion = GameVersions.Ruleset, status = "ACTIVE", phase = "MAIN",
+                players = new[]
+                {
+                    new PlayerStateDto
+                    {
+                        playerId = "alice", deckCount = 2,
+                        battlefield = new[]
+                        {
+                            new BattlefieldObjectStateDto
+                            {
+                                instanceId = "object-1", cardId = "cd_001", cardType = "UNIT", slotKind = "UNIT",
+                                slotIndex = 0, occupiedSlots = 1, attack = 1, health = 2, maxHealth = 2
+                            }
+                        }
+                    },
+                    new PlayerStateDto { playerId = "bob" }
+                },
+                pendingChoice = new PendingChoiceDto
+                {
+                    choiceId = "choice-1", playerId = "alice", sourceCardId = "cd_001",
+                    sourceInstanceId = "object-1", effectId = "effect.cd_001.01", kind = "TOP_CARD_SCRY",
+                    options = new[]
+                    {
+                        new PendingChoiceOptionDto
+                        {
+                            optionIndex = 0, cardId = string.Empty, slotIndex = -1, selectable = false
+                        }
+                    }
+                }
+            });
+
+            Assert.That(opponentStore.Current.pendingChoice.options.Single().cardId, Is.Empty);
+            Assert.That(opponentStore.Current.pendingChoice.options.Single().selectable, Is.False);
+            opponentStore.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 1, type = MatchEventTypes.ChoiceResolved,
+                        payload = new MatchEventPayloadDto
+                        {
+                            choiceId = "choice-1", playerId = "alice", sourceCardId = "cd_001",
+                            sourceInstanceId = "object-1", effectId = "effect.cd_001.01", kind = "TOP_CARD_SCRY",
+                            selectedOptionIndex = 0, selectedCardId = string.Empty, selectedSlotIndex = -1
+                        }
+                    }
+                }
+            });
+            Assert.That(opponentStore.Current.pendingChoice, Is.Null);
+        }
+
+        [Test]
         public void Apply_ReplaysPrivateArchaeologyChoiceAndItsResolution()
         {
             var store = new MatchStateStore();

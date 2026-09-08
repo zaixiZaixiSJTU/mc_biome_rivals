@@ -1,6 +1,6 @@
 # 村民农夫小麦战吼规范 v1
 
-本规范已按当前组合校准为 `protocolVersion 25`、`rulesetVersion prototype-0.39` 与内容版本 31。
+本规范已按当前组合校准为 `protocolVersion 26`、`rulesetVersion prototype-0.40` 与内容版本 32。
 
 ## PF-004 村民农夫
 
