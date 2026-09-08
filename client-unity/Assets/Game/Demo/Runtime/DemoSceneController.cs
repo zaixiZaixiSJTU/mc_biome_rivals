@@ -165,6 +165,8 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewBatScry")) SetupBatScryPreview();
             else if (HasCommandLineFlag("-previewCaveSpiderPoison")) SetupCaveSpiderPoisonPreview();
             else if (HasCommandLineFlag("-previewDarkness")) SetupDarknessPreview();
+            else if (HasCommandLineFlag("-previewAbandonedMine")) SetupAbandonedMinePreview();
+            else if (HasCommandLineFlag("-previewWoodlandMansion")) SetupWoodlandMansionPreview();
             else if (HasCommandLineFlag("-previewLoot")) SetupLootPreview();
             else if (HasCommandLineFlag("-previewTamedWolf")) SetupTamedWolfPreview();
             else if (HasCommandLineFlag("-previewVillagerFarmer")) SetupVillagerFarmerPreview();
@@ -583,10 +585,13 @@ namespace BiomeRivals.Demo
                         : GetCardName(matchEvent.payload.cardId);
                     var summonTriggerName = matchEvent.payload?.effectId == "effect.nt_001.01" ? "亡语" :
                         matchEvent.payload?.effectId == "effect.pf_006.01" ? "繁殖" :
-                        matchEvent.payload?.effectId == "effect.pf_007.01" ? "集结" : "效果";
+                        matchEvent.payload?.effectId == "effect.pf_007.01" ? "集结" :
+                        matchEvent.payload?.effectId == "effect.cd_008.01" ? "府邸增援" : "效果";
                     ShowStatus(ownSummon
                         ? $"{summonSourceName}{summonTriggerName}：{summonedName}已在单位格 {matchEvent.payload.slotIndex + 1} 召唤。"
                         : $"敌方{summonSourceName}{summonTriggerName}：{summonedName}已在单位格 {matchEvent.payload.slotIndex + 1} 召唤。", false);
+                    if (matchEvent.payload?.effectId == "effect.cd_008.01")
+                        yield return ShowTurnBanner("府邸增援", ownSummon ? Leaf : Ember);
                     yield return PulseBattlefieldObject(matchEvent.payload?.instanceId);
                     break;
                 }
@@ -729,8 +734,10 @@ namespace BiomeRivals.Demo
                         matchEvent.payload?.effectId == "effect.or_004.01";
                     var isFarmerBattlecry = matchEvent.payload?.effectId == "effect.pf_004.01";
                     var isSnowGolemBattlecry = matchEvent.payload?.effectId == "effect.si_002.01";
+                    var isMineProduction = matchEvent.payload?.effectId == "effect.cd_007.01";
                     var triggerName = isLoot ? "掉落" : matchEvent.payload?.effectId == "effect.ed_004.01" ? "亡语" :
-                        isFarmerBattlecry || isSnowGolemBattlecry ? "战吼" : "效果";
+                        isFarmerBattlecry || isSnowGolemBattlecry ? "战吼" :
+                        isMineProduction ? "产出" : "效果";
                     if (generatedToHand)
                     {
                         ShowStatus(ownGeneration
@@ -746,6 +753,7 @@ namespace BiomeRivals.Demo
                     if (isLoot) yield return ShowTurnBanner("战利品", Gold);
                     else if (isFarmerBattlecry) yield return ShowTurnBanner("收获小麦", Gold);
                     else if (isSnowGolemBattlecry) yield return ShowTurnBanner("凝聚雪球", Cyan);
+                    else if (isMineProduction) yield return ShowTurnBanner("矿井产出", Gold);
                     if (ownGeneration) yield return PulsePlayerHud(generatedToHand ? Gold : Ember);
                     else yield return null;
                     break;
@@ -1752,6 +1760,53 @@ namespace BiomeRivals.Demo
             if (target != null) StartCoroutine(PulseBattlefieldObject(target.InstanceId));
         }
 
+        private void SetupAbandonedMinePreview()
+        {
+            SelectFaction("cave_dark_forest");
+            SelectOpponentFaction("plains_forest");
+            if (!_registry.TryGetDefinition("cd_007", out var mineDefinition)) return;
+            _match.ResetDeckAndHand(new[] { mineDefinition.id }, new[] { "cd_001" });
+            var deployed = _match.ApplyDeploy(mineDefinition,
+                _match.CreateDeployCommand(mineDefinition.id, DemoSlotKind.Building, 0));
+            var ended = deployed.Accepted
+                ? _match.ApplyEndTurn(_match.CreateEndTurnCommand())
+                : DemoCommandResult.Reject(DemoCommandRejectionCode.InvalidCommand, deployed.Message, _match.Revision);
+            _selectedCardId = _match.Hand.Contains("tk_010") ? "tk_010" : mineDefinition.id;
+            RefreshAll();
+            var mine = _match.GetObject(true, DemoSlotKind.Building, 0);
+            var resolved = deployed.Accepted && ended.Accepted && _match.Hand.Contains("tk_010");
+            ShowStatus(resolved
+                ? "废弃矿井横跨两个建筑格：本回合恰好打出矿井这一张牌，结束阶段已产出一张圆石。"
+                : deployed.Accepted ? ended.Message : deployed.Message, !resolved);
+            if (mine != null) StartCoroutine(PulseBattlefieldObject(mine.InstanceId));
+        }
+
+        private void SetupWoodlandMansionPreview()
+        {
+            SelectFaction("cave_dark_forest");
+            SelectOpponentFaction("plains_forest");
+            if (!_registry.TryGetDefinition("cd_008", out var mansionDefinition)) return;
+            _match.ResetDeckAndHand(Array.Empty<string>(), new[] { "cd_001" });
+            _match.EndPlayerTurn();
+            _match.BeginNextPlayerTurn();
+            _match.ResetHand(new[] { mansionDefinition.id });
+            var deployed = _match.ApplyDeploy(mansionDefinition,
+                _match.CreateDeployCommand(mansionDefinition.id, DemoSlotKind.Building, 0));
+            var ended = deployed.Accepted
+                ? _match.ApplyEndTurn(_match.CreateEndTurnCommand())
+                : DemoCommandResult.Reject(DemoCommandRejectionCode.InvalidCommand, deployed.Message, _match.Revision);
+            _selectedCardId = mansionDefinition.id;
+            RefreshAll();
+            var mansion = _match.GetObject(true, DemoSlotKind.Building, 0);
+            var recruit = _match.GetObject(true, DemoSlotKind.Unit, 0);
+            var resolved = deployed.Accepted && ended.Accepted && recruit?.CardId == "tk_011";
+            ShowStatus(resolved
+                ? "林地府邸横跨全部三个建筑格：结束阶段检测到空单位格，已在最左侧召唤 2/2 卫道士新兵。"
+                : deployed.Accepted ? ended.Message : deployed.Message, !resolved);
+            if (mansion != null) StartCoroutine(PulseBattlefieldObject(mansion.InstanceId));
+            if (recruit != null) StartCoroutine(PulseBattlefieldObject(recruit.InstanceId));
+        }
+
         private void SetupCactusFencePreview()
         {
             SelectFaction("plains_forest");
@@ -2365,6 +2420,12 @@ namespace BiomeRivals.Demo
                 engineReadyKind = DemoEngineReadyKind.Sculk;
             else if (view.Kind == DemoSlotKind.Building && battlefieldObject?.CardId == "db_007")
                 engineReadyKind = DemoEngineReadyKind.Temple;
+            else if (view.Kind == DemoSlotKind.Building && battlefieldObject?.CardId == "cd_007" &&
+                match.IsPlayerTurn == player && match.CardsPlayedThisTurn(player) == 1)
+                engineReadyKind = DemoEngineReadyKind.Mine;
+            else if (view.Kind == DemoSlotKind.Building && battlefieldObject?.CardId == "cd_008" &&
+                match.IsPlayerTurn == player && HasEmptyUnitSlot(player))
+                engineReadyKind = DemoEngineReadyKind.Mansion;
             _battlefield.SetSlotEngineReady(
                 player,
                 view.Kind,
@@ -2399,6 +2460,13 @@ namespace BiomeRivals.Demo
             return !targetBattlefield.Any(value => value != null && value.Health > 0 &&
                 value.SlotKind == DemoSlotKind.Unit && value.InstanceId != target.InstanceId &&
                 Mathf.Abs(value.SlotIndex - target.SlotIndex) == 1);
+        }
+
+        private bool HasEmptyUnitSlot(bool player)
+        {
+            var battlefield = player ? MatchView.PlayerBattlefield : MatchView.OpponentBattlefield;
+            return Enumerable.Range(0, 4).Any(index => !battlefield.Any(value => value != null &&
+                value.Health > 0 && value.SlotKind == DemoSlotKind.Unit && value.SlotIndex == index));
         }
 
         private int CountOceanMonumentThreats(bool sourcePlayer)
@@ -3506,6 +3574,18 @@ namespace BiomeRivals.Demo
             {
                 stats = $"遗迹修复：等待出土 · {stats}";
                 accent = Gold;
+            }
+            if (battlefieldObject?.CardId == "cd_007")
+            {
+                var ready = MatchView.IsPlayerTurn == !enemy && MatchView.CardsPlayedThisTurn(!enemy) == 1;
+                stats = $"矿井产出：{(ready ? "结束阶段就绪" : "需恰好打出一张牌")} · {stats}";
+                if (ready) accent = Gold;
+            }
+            if (battlefieldObject?.CardId == "cd_008")
+            {
+                var ready = MatchView.IsPlayerTurn == !enemy && HasEmptyUnitSlot(!enemy);
+                stats = $"府邸增援：{(ready ? "结束阶段就绪" : "单位格已满")} · {stats}";
+                if (ready) accent = Leaf;
             }
             if (battlefieldObject?.CardId == "pf_003")
             {

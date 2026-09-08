@@ -1423,6 +1423,8 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(golemTexture, Is.EqualTo("entity_iron_golem"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("cd_005", out var vindicatorTexture), Is.True);
                 Assert.That(vindicatorTexture, Is.EqualTo("entity_vindicator"));
+                Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("tk_011", out var recruitTexture), Is.True);
+                Assert.That(recruitTexture, Is.EqualTo("entity_vindicator"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("cd_001", out var batTexture), Is.True);
                 Assert.That(batTexture, Is.EqualTo("entity_bat"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("cd_002", out var caveSpiderTexture), Is.True);
@@ -1506,6 +1508,38 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(sensorPiece.Find("FrontLeftTendril/Tip"), Is.Not.Null);
                 Assert.That(sensorPiece.Find("SensorTop").GetComponent<MeshRenderer>().sharedMaterial.mainTexture.name,
                     Is.EqualTo("sculk_sensor_top"));
+
+                battlefield.SyncPieces(new[]
+                {
+                    new DemoBattlefieldObject
+                    {
+                        InstanceId = "object-render-6", CardId = "cd_007", Player = true,
+                        SlotKind = DemoSlotKind.Building, SlotIndex = 0, OccupiedSlots = 2, Health = 7, MaxHealth = 7
+                    }
+                }, System.Array.Empty<DemoBattlefieldObject>(), registry);
+                var minePiece = piecesRoot.Find("Piece_object-render-6_cd_007");
+                Assert.That(minePiece, Is.Not.Null);
+                Assert.That(minePiece.Find("MineEntrance"), Is.Not.Null);
+                Assert.That(minePiece.Find("MineLeftSupport"), Is.Not.Null);
+                Assert.That(minePiece.Find("MineCart"), Is.Not.Null);
+                Assert.That(minePiece.Find("MineFoundation").GetComponent<MeshRenderer>().sharedMaterial.mainTexture.name,
+                    Is.EqualTo("cobblestone"));
+
+                battlefield.SyncPieces(new[]
+                {
+                    new DemoBattlefieldObject
+                    {
+                        InstanceId = "object-render-7", CardId = "cd_008", Player = true,
+                        SlotKind = DemoSlotKind.Building, SlotIndex = 0, OccupiedSlots = 3, Health = 11, MaxHealth = 11
+                    }
+                }, System.Array.Empty<DemoBattlefieldObject>(), registry);
+                var mansionPiece = piecesRoot.Find("Piece_object-render-7_cd_008");
+                Assert.That(mansionPiece, Is.Not.Null);
+                Assert.That(mansionPiece.Find("MansionCentralHall"), Is.Not.Null);
+                Assert.That(mansionPiece.Find("MansionLeftWing"), Is.Not.Null);
+                Assert.That(mansionPiece.Find("MansionEntrance"), Is.Not.Null);
+                Assert.That(mansionPiece.Find("MansionCentralHall").GetComponent<MeshRenderer>().sharedMaterial.mainTexture.name,
+                    Is.EqualTo("dark_oak_planks"));
 
                 var buildingMarker1 = root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Building_1/InteractiveGround");
                 var buildingMarker2 = root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Building_2/InteractiveGround");
@@ -2659,6 +2693,87 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(match.HasPlayerStatus(true, "DARK"), Is.False);
             Assert.That(match.CardsPlayedThisTurn(true), Is.Zero);
             Assert.That(match.HasTargetedEnemyObjectThisTurn(true), Is.False);
+        }
+
+        [Test]
+        public void AbandonedMineGeneratesCobblestoneOnlyAfterExactlyOneCardWasPlayed()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("cd_007", out var mine), Is.True);
+            Assert.That(mine.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(new[] { mine.id }, System.Array.Empty<string>());
+
+            var deployed = match.ApplyDeploy(mine,
+                match.CreateDeployCommand(mine.id, DemoSlotKind.Building, 0));
+            Assert.That(deployed.Accepted, Is.True, deployed.Message);
+            Assert.That(match.CardsPlayedThisTurn(true), Is.EqualTo(1));
+
+            var ended = match.ApplyEndTurn(match.CreateEndTurnCommand());
+            Assert.That(ended.Accepted, Is.True, ended.Message);
+            Assert.That(match.Hand, Does.Contain("tk_010"));
+            Assert.That(ended.Message, Does.Contain("废弃矿井生成了 1 张圆石"));
+        }
+
+        [Test]
+        public void AbandonedMineSendsCobblestoneToDiscardWhenTheHandIsFull()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("cd_007", out var mine), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { mine.id });
+            Assert.That(match.ApplyDeploy(mine,
+                match.CreateDeployCommand(mine.id, DemoSlotKind.Building, 0)).Accepted, Is.True);
+            match.ResetHand(new[] { "pf_001", "pf_002", "pf_003", "pf_004", "db_001", "cd_001", "or_001" });
+
+            var ended = match.ApplyEndTurn(match.CreateEndTurnCommand());
+
+            Assert.That(ended.Accepted, Is.True, ended.Message);
+            Assert.That(match.Hand, Has.Count.EqualTo(7));
+            Assert.That(match.DiscardPile, Does.Contain("tk_010"));
+        }
+
+        [Test]
+        public void WoodlandMansionSummonsVindicatorRecruitIntoTheLeftmostFreeUnitSlot()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("cd_008", out var mansion), Is.True);
+            Assert.That(registry.TryGetDefinition("tk_011", out var recruit), Is.True);
+            Assert.That(mansion.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(System.Array.Empty<string>(), new[] { "pf_001" });
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            match.ResetHand(new[] { mansion.id });
+            Assert.That(match.ApplyDeploy(mansion,
+                match.CreateDeployCommand(mansion.id, DemoSlotKind.Building, 0)).Accepted, Is.True);
+
+            var ended = match.ApplyEndTurn(match.CreateEndTurnCommand());
+
+            Assert.That(ended.Accepted, Is.True, ended.Message);
+            var summoned = match.GetObject(true, DemoSlotKind.Unit, 0);
+            Assert.That(summoned, Is.Not.Null);
+            Assert.That(summoned.CardId, Is.EqualTo(recruit.id));
+            Assert.That(summoned.Attack, Is.EqualTo(2));
+            Assert.That(summoned.Health, Is.EqualTo(2));
+            Assert.That(ended.Message, Does.Contain("林地府邸召唤了 1 个卫道士新兵"));
+        }
+
+        [Test]
+        public void OpponentWoodlandMansionResolvesDuringTheSimulatedOpponentEndPhase()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("cd_008", out var mansion), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(System.Array.Empty<string>(), new[] { "pf_001" });
+            match.ResetOpponent(new[] { mansion });
+
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+
+            var summoned = match.GetObject(false, DemoSlotKind.Unit, 0);
+            Assert.That(summoned, Is.Not.Null);
+            Assert.That(summoned.CardId, Is.EqualTo("tk_011"));
         }
 
         private static float ProjectedWidth(Camera camera, Transform surface, Vector3[] vertices)

@@ -1282,6 +1282,32 @@ namespace BiomeRivalsRules {
       return triggered;
     }
 
+    function resolveCaveStructureEndPhase(player: PlayerState): void {
+      const structures = player.battlefield.filter(function (object): boolean {
+        if (object.cardType !== 'STRUCTURE' || object.health <= 0) return false;
+        const definition = getCardDefinition(object.cardId);
+        return definition !== null && definition.effectImplementationStatus === 'IMPLEMENTED' &&
+          (definition.effectIds.indexOf('effect.cd_007.01') >= 0 ||
+            definition.effectIds.indexOf('effect.cd_008.01') >= 0);
+      }).slice().sort(function (left, right): number {
+        if (left.slotIndex !== right.slotIndex) return left.slotIndex - right.slotIndex;
+        return left.instanceId < right.instanceId ? -1 : left.instanceId > right.instanceId ? 1 : 0;
+      });
+      for (let structureIndex = 0; structureIndex < structures.length; structureIndex += 1) {
+        const structure = structures[structureIndex]!;
+        if (player.battlefield.indexOf(structure) < 0 || structure.health <= 0) continue;
+        if (structure.cardId === 'cd_007') {
+          if (player.cardsPlayedThisTurn === 1) {
+            generateCard(player, 'tk_010', structure.cardId, structure.instanceId, 'effect.cd_007.01');
+          }
+          continue;
+        }
+        if (structure.cardId === 'cd_008') {
+          summonUnit(player, 'tk_011', structure.cardId, structure.instanceId, 'effect.cd_008.01', -1);
+        }
+      }
+    }
+
     function resolveOceanMonumentEndPhase(player: PlayerState, opponent: PlayerState): number {
       const monuments = player.battlefield.filter(function (object): boolean {
         if (object.cardType !== 'STRUCTURE' || object.health <= 0) return false;
@@ -2571,6 +2597,7 @@ namespace BiomeRivalsRules {
         if (state.status !== 'ACTIVE') return reject(state, 'MULLIGAN_REQUIRED', 'both players must confirm their opening hands first');
         if (actorIndex !== state.activePlayerIndex) return reject(state, 'NOT_ACTIVE_PLAYER', 'only the active player may end the turn');
         resolveOceanMonumentEndPhase(next.players[actorIndex]!, next.players[actorIndex === 0 ? 1 : 0]!);
+        resolveCaveStructureEndPhase(next.players[actorIndex]!);
         resolveEndPhaseStatuses(next.players[actorIndex]!, next.players[actorIndex === 0 ? 1 : 0]!);
         resolveEndPhasePlayerStatuses(next.players[actorIndex]!);
         for (let playerIndex = 0; playerIndex < next.players.length; playerIndex += 1) {

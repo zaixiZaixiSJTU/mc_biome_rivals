@@ -14,6 +14,7 @@ namespace BiomeRivals.Demo
             { "pf_003", "entity_wolf" },
             { "pf_004", "entity_villager" },
             { "cd_005", "entity_vindicator" },
+            { "tk_011", "entity_vindicator" },
             { "pf_008", "entity_iron_golem" },
             { "si_002", "entity_snow_golem" },
             { "cd_001", "entity_bat" },
@@ -51,6 +52,10 @@ namespace BiomeRivals.Demo
                 case "pf_003": BuildWolf(root, material); break;
                 case "pf_004": BuildVillager(root, material); break;
                 case "cd_005": BuildVindicator(root, material); break;
+                case "tk_011":
+                    root.localScale = Vector3.one * 0.82f;
+                    BuildVindicator(root, material);
+                    break;
                 case "pf_008": BuildIronGolem(root, material); break;
                 case "si_002": BuildSnowGolem(root, material); break;
                 case "cd_001": BuildBat(root, material); break;

@@ -14,7 +14,9 @@ namespace BiomeRivals.Demo
         Coral,
         Cactus,
         Sculk,
-        Temple
+        Temple,
+        Mine,
+        Mansion
     }
 
     public sealed class DemoBattlefield3D : MonoBehaviour
@@ -297,6 +299,10 @@ namespace BiomeRivals.Demo
                         ? Color.Lerp(Hex("#07596A"), Hex("#36E0CF"), pulse)
                     : marker.EngineReadyKind == DemoEngineReadyKind.Temple
                         ? Color.Lerp(Hex("#8C5B24"), Hex("#F2C66D"), pulse)
+                    : marker.EngineReadyKind == DemoEngineReadyKind.Mine
+                        ? Color.Lerp(Hex("#4A4238"), Hex("#E1B96A"), pulse)
+                    : marker.EngineReadyKind == DemoEngineReadyKind.Mansion
+                        ? Color.Lerp(Hex("#3D4C37"), Hex("#9CCF70"), pulse)
                         : Color.Lerp(Hex("#8E3F72"), Hex("#F08FB4"), pulse);
             var highlightColor = rejectedPreview
                 ? Color.Lerp(Hex("#B41635"), Hex("#FF3157"), pulse)
@@ -820,6 +826,8 @@ namespace BiomeRivals.Demo
                 else if (cardId == "db_004") BuildCactusFence(root, material, footprintWidth);
                 else if (cardId == "db_007") BuildDesertTemple(root, footprintWidth);
                 else if (cardId == "cd_004") BuildSculkSensor(root, footprintWidth);
+                else if (cardId == "cd_007") BuildAbandonedMine(root, footprintWidth);
+                else if (cardId == "cd_008") BuildWoodlandMansion(root, footprintWidth);
                 else if (cardId == "or_007") BuildCoralReef(root, material, footprintWidth);
                 else if (cardId == "or_008") BuildOceanMonument(root, material, footprintWidth);
                 else BuildBlockStructure(root, material, theme.Accent, footprintWidth);
@@ -1036,6 +1044,50 @@ namespace BiomeRivals.Demo
             material = DemoWorldAssetProvider.CreateBlockMaterial("Demo_" + key, fallback, textureKey, Color.black, blockShader);
             _materials[key] = material;
             return material;
+        }
+
+        private void BuildAbandonedMine(Transform root, float footprintWidth)
+        {
+            var cobblestone = GetWorldMaterial("abandoned_mine_cobble", "cobblestone", Hex("#77746E"));
+            var darkOak = GetWorldMaterial("abandoned_mine_dark_oak", "dark_oak_planks", Hex("#4A3424"));
+            var deepslate = GetWorldMaterial("abandoned_mine_deepslate", "deepslate_bricks", Hex("#343438"));
+            var metal = GetAccentMaterial("abandoned_mine_rail", Hex("#A99E82"));
+            var width = Mathf.Max(4.65f, footprintWidth);
+            var supportOffset = width * 0.34f;
+
+            CreateBlock(root, "MineFoundation", new Vector3(0f, 0.14f, 0f), new Vector3(width, 0.24f, 0.94f), cobblestone);
+            CreateBlock(root, "MineTunnel", new Vector3(0f, 0.73f, 0.18f), new Vector3(width - 0.48f, 1.06f, 0.52f), deepslate);
+            CreateBlock(root, "MineLeftSupport", new Vector3(-supportOffset, 0.88f, -0.18f), new Vector3(0.30f, 1.48f, 0.30f), darkOak);
+            CreateBlock(root, "MineRightSupport", new Vector3(supportOffset, 0.88f, -0.18f), new Vector3(0.30f, 1.48f, 0.30f), darkOak);
+            CreateBlock(root, "MineHeaderBeam", new Vector3(0f, 1.52f, -0.18f), new Vector3(width * 0.76f, 0.30f, 0.34f), darkOak);
+            CreateBlock(root, "MineEntrance", new Vector3(0f, 0.79f, -0.47f), new Vector3(width * 0.42f, 0.94f, 0.08f), GetAccentMaterial("abandoned_mine_void", Hex("#17171A")));
+            CreateBlock(root, "MineRailLeft", new Vector3(-0.24f, 0.32f, -0.38f), new Vector3(0.09f, 0.06f, 0.92f), metal);
+            CreateBlock(root, "MineRailRight", new Vector3(0.24f, 0.32f, -0.38f), new Vector3(0.09f, 0.06f, 0.92f), metal);
+            CreateBlock(root, "MineCart", new Vector3(width * 0.28f, 0.56f, -0.30f), new Vector3(0.70f, 0.48f, 0.62f), cobblestone);
+            CreateBlock(root, "MineCartLoad", new Vector3(width * 0.28f, 0.87f, -0.30f), new Vector3(0.48f, 0.24f, 0.42f), deepslate);
+        }
+
+        private void BuildWoodlandMansion(Transform root, float footprintWidth)
+        {
+            var cobblestone = GetWorldMaterial("mansion_cobble", "cobblestone", Hex("#77746E"));
+            var darkOak = GetWorldMaterial("mansion_dark_oak", "dark_oak_planks", Hex("#4A3424"));
+            var window = GetAccentMaterial("mansion_window", Hex("#789E91"));
+            var shadow = GetAccentMaterial("mansion_shadow", Hex("#211D1B"));
+            var width = Mathf.Max(6.15f, footprintWidth);
+            var wingOffset = width * 0.31f;
+
+            CreateBlock(root, "MansionFoundation", new Vector3(0f, 0.16f, 0f), new Vector3(width, 0.28f, 0.98f), cobblestone);
+            CreateBlock(root, "MansionLowerHall", new Vector3(0f, 0.70f, 0.04f), new Vector3(width - 0.46f, 0.92f, 0.86f), darkOak);
+            CreateBlock(root, "MansionLeftWing", new Vector3(-wingOffset, 1.28f, 0.05f), new Vector3(width * 0.29f, 0.80f, 0.82f), darkOak);
+            CreateBlock(root, "MansionRightWing", new Vector3(wingOffset, 1.28f, 0.05f), new Vector3(width * 0.29f, 0.80f, 0.82f), darkOak);
+            CreateBlock(root, "MansionCentralHall", new Vector3(0f, 1.42f, 0.05f), new Vector3(width * 0.28f, 1.20f, 0.86f), darkOak);
+            CreateBlock(root, "MansionLeftRoof", new Vector3(-wingOffset, 1.78f, 0.05f), new Vector3(width * 0.34f, 0.20f, 1.00f), cobblestone);
+            CreateBlock(root, "MansionRightRoof", new Vector3(wingOffset, 1.78f, 0.05f), new Vector3(width * 0.34f, 0.20f, 1.00f), cobblestone);
+            CreateBlock(root, "MansionCentralRoof", new Vector3(0f, 2.10f, 0.05f), new Vector3(width * 0.34f, 0.22f, 1.02f), cobblestone);
+            CreateBlock(root, "MansionEntrance", new Vector3(0f, 0.70f, -0.46f), new Vector3(0.62f, 0.76f, 0.08f), shadow);
+            CreateBlock(root, "MansionLeftWindow", new Vector3(-wingOffset, 1.29f, -0.43f), new Vector3(0.44f, 0.42f, 0.07f), window);
+            CreateBlock(root, "MansionRightWindow", new Vector3(wingOffset, 1.29f, -0.43f), new Vector3(0.44f, 0.42f, 0.07f), window);
+            CreateBlock(root, "MansionCentralWindow", new Vector3(0f, 1.58f, -0.43f), new Vector3(0.52f, 0.46f, 0.07f), window);
         }
 
         private void BuildOceanMonument(Transform root, Material prismarineBricks, float footprintWidth)

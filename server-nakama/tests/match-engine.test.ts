@@ -3662,3 +3662,110 @@ TestHarness.test('Darkness expires at its controllers end phase and resets actio
   TestHarness.equal(result.batch.events[0]!.payload.statusId, 'DARK');
   assertEventBatchMatchesSchema(result.batch);
 });
+
+TestHarness.test('Abandoned Mines generate Cobblestone only after exactly one played card', function (): void {
+  const exact = activeState('match-abandoned-mine-exact', ['alice', 'bob'], ['cave_dark_forest', 'plains_forest']);
+  const exactIndex = exact.activePlayerIndex;
+  const exactPlayer = exact.players[exactIndex]!;
+  exactPlayer.cardsPlayedThisTurn = 1;
+  placeBuilding(exact, exactIndex, 'cd_007', 0, 'object-20');
+
+  const generated = BiomeRivalsRules.applyCommand(exact, exactPlayer.playerId,
+    command('abandoned-mine-exact', 0, 'END_TURN'));
+
+  TestHarness.equal(generated.accepted, true, JSON.stringify(generated));
+  if (!generated.accepted) return;
+  TestHarness.equal(generated.state.players[exactIndex]!.hand.indexOf('tk_010') >= 0, true);
+  TestHarness.equal(generated.batch.events[0]!.type, 'CARD_GENERATED');
+  TestHarness.equal(generated.batch.events[0]!.payload.sourceCardId, 'cd_007');
+  TestHarness.equal(generated.batch.events[0]!.payload.sourceInstanceId, 'object-20');
+  TestHarness.equal(generated.batch.events[0]!.payload.effectId, 'effect.cd_007.01');
+  TestHarness.equal(generated.batch.events[0]!.payload.destination, 'HAND');
+  assertEventBatchMatchesSchema(generated.batch);
+
+  const twoCards = activeState('match-abandoned-mine-two', ['alice', 'bob'], ['cave_dark_forest', 'plains_forest']);
+  const twoIndex = twoCards.activePlayerIndex;
+  const twoPlayer = twoCards.players[twoIndex]!;
+  twoPlayer.cardsPlayedThisTurn = 2;
+  placeBuilding(twoCards, twoIndex, 'cd_007', 0, 'object-30');
+  const skipped = BiomeRivalsRules.applyCommand(twoCards, twoPlayer.playerId,
+    command('abandoned-mine-two', 0, 'END_TURN'));
+  TestHarness.equal(skipped.accepted, true, JSON.stringify(skipped));
+  if (!skipped.accepted) return;
+  TestHarness.equal(skipped.batch.events.some(function (event): boolean {
+    return event.type === 'CARD_GENERATED' && event.payload.sourceCardId === 'cd_007';
+  }), false);
+});
+
+TestHarness.test('Abandoned Mine sends generated Cobblestone to discard at the hand limit', function (): void {
+  const state = activeState('match-abandoned-mine-full-hand', ['alice', 'bob'], ['cave_dark_forest', 'plains_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const actor = state.players[actorIndex]!;
+  actor.cardsPlayedThisTurn = 1;
+  actor.hand = ['pf_001', 'pf_002', 'pf_003', 'pf_004', 'pf_005', 'pf_006', 'pf_007'];
+  placeBuilding(state, actorIndex, 'cd_007', 0, 'object-20');
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    command('abandoned-mine-full-hand', 0, 'END_TURN'));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[actorIndex]!.hand.length, 7);
+  TestHarness.equal(result.state.players[actorIndex]!.discardPile.indexOf('tk_010') >= 0, true);
+  TestHarness.equal(result.batch.events[0]!.type, 'CARD_GENERATED');
+  TestHarness.equal(result.batch.events[0]!.payload.destination, 'DISCARD');
+  assertEventBatchMatchesSchema(result.batch);
+});
+
+TestHarness.test('Woodland Mansion summons a Vindicator Recruit into the leftmost free unit slot', function (): void {
+  const state = activeState('match-woodland-mansion-summon', ['alice', 'bob'], ['cave_dark_forest', 'plains_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const actor = state.players[actorIndex]!;
+  placeBuilding(state, actorIndex, 'cd_008', 0, 'object-20');
+  placeUnit(state, actorIndex, 'pf_001', 0, 'object-10', 1);
+  placeUnit(state, actorIndex, 'pf_002', 2, 'object-12', 1);
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    command('woodland-mansion-summon', 0, 'END_TURN'));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  const recruit = result.state.players[actorIndex]!.battlefield.filter(function (object): boolean {
+    return object.cardId === 'tk_011';
+  })[0]!;
+  TestHarness.equal(recruit.slotIndex, 1);
+  TestHarness.equal(recruit.attack, 2);
+  TestHarness.equal(recruit.health, 2);
+  TestHarness.equal(recruit.hasAttacked, false);
+  TestHarness.equal(result.batch.events[0]!.type, 'OBJECT_SUMMONED');
+  TestHarness.equal(result.batch.events[0]!.payload.sourceCardId, 'cd_008');
+  TestHarness.equal(result.batch.events[0]!.payload.sourceInstanceId, 'object-20');
+  TestHarness.equal(result.batch.events[0]!.payload.effectId, 'effect.cd_008.01');
+  TestHarness.equal(result.batch.events[0]!.payload.slotIndex, 1);
+  assertEventBatchMatchesSchema(result.batch);
+});
+
+TestHarness.test('Woodland Mansion does not summon or allocate an instance on a full unit row', function (): void {
+  const state = activeState('match-woodland-mansion-full', ['alice', 'bob'], ['cave_dark_forest', 'plains_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const actor = state.players[actorIndex]!;
+  placeBuilding(state, actorIndex, 'cd_008', 0, 'object-20');
+  placeUnit(state, actorIndex, 'pf_001', 0, 'object-10', 1);
+  placeUnit(state, actorIndex, 'pf_002', 1, 'object-11', 1);
+  placeUnit(state, actorIndex, 'pf_003', 2, 'object-12', 1);
+  placeUnit(state, actorIndex, 'pf_004', 3, 'object-13', 1);
+  const nextInstanceId = state.nextInstanceId;
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    command('woodland-mansion-full', 0, 'END_TURN'));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[actorIndex]!.battlefield.filter(function (object): boolean {
+    return object.cardId === 'tk_011';
+  }).length, 0);
+  TestHarness.equal(result.state.nextInstanceId, nextInstanceId);
+  TestHarness.equal(result.batch.events.some(function (event): boolean {
+    return event.type === 'OBJECT_SUMMONED' && event.payload.sourceCardId === 'cd_008';
+  }), false);
+});

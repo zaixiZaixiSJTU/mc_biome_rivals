@@ -1,6 +1,6 @@
 # 黑暗玩家状态规则 v1
 
-本规范对应 `protocolVersion 28`、`rulesetVersion prototype-0.42` 与内容版本 34，覆盖 CD-004「幽匿感测体」和 CD-006「回响的黑暗」。
+本规范对应 `protocolVersion 28`、`rulesetVersion prototype-0.43` 与内容版本 35，覆盖 CD-004「幽匿感测体」和 CD-006「回响的黑暗」。
 
 ## 规则语义
 

@@ -1,6 +1,6 @@
 # DB-007 沙漠神殿掩埋链规范 v1
 
-本规范对应 `protocolVersion 28`、`rulesetVersion prototype-0.42` 与内容版本 34。
+本规范对应 `protocolVersion 28`、`rulesetVersion prototype-0.43` 与内容版本 35。
 
 ## 权威规则
 

@@ -999,6 +999,7 @@ namespace BiomeRivals.Demo
             if (!IsPlayerTurn) return Reject(DemoCommandRejectionCode.NotActivePlayer, "当前不是你的回合。");
             var monumentDeathMessages = new List<string>();
             var monumentDamage = ResolveOceanMonumentEndPhase(monumentDeathMessages);
+            ResolveCaveStructureEndPhase(true, out var mineTriggers, out var mansionSummons);
             var poisonDeathMessages = new List<string>();
             var poisonDamage = ResolveEndPhaseStatuses(_playerBattlefield, poisonDeathMessages);
             ResolvePlayerStatuses(_playerStatuses);
@@ -1016,6 +1017,8 @@ namespace BiomeRivals.Demo
             if (monumentDeathMessages.Count > 0) monumentMessage += " " + string.Join(" ", monumentDeathMessages);
             if (poisonDamage > 0) monumentMessage += $" 中毒造成 {poisonDamage} 点伤害。";
             if (poisonDeathMessages.Count > 0) monumentMessage += " " + string.Join(" ", poisonDeathMessages);
+            if (mineTriggers > 0) monumentMessage += $" 废弃矿井生成了 {mineTriggers} 张圆石。";
+            if (mansionSummons > 0) monumentMessage += $" 林地府邸召唤了 {mansionSummons} 个卫道士新兵。";
             return DemoCommandResult.Accept(string.IsNullOrEmpty(monumentMessage) ? "已结束回合。" : monumentMessage + " 已结束回合。", Revision);
         }
 
@@ -1023,6 +1026,7 @@ namespace BiomeRivals.Demo
         {
             if (IsFinished)
                 return RememberDraw(new DemoDrawResult(DemoDrawOutcome.MatchEnded, string.Empty, 0));
+            ResolveCaveStructureEndPhase(false, out _, out _);
             ResolveEndPhaseStatuses(_opponentBattlefield, null);
             ResolvePlayerStatuses(_opponentStatuses);
             _opponentCardsPlayedThisTurn = 0;
@@ -1559,6 +1563,34 @@ namespace BiomeRivals.Demo
                     deathMessages.AddRange(SettleDeaths(killCredits));
             }
             return totalDamage;
+        }
+
+        private void ResolveCaveStructureEndPhase(bool player, out int mineTriggers, out int mansionSummons)
+        {
+            mineTriggers = 0;
+            mansionSummons = 0;
+            var battlefield = player ? _playerBattlefield : _opponentBattlefield;
+            var cardsPlayed = player ? _playerCardsPlayedThisTurn : _opponentCardsPlayedThisTurn;
+            var structures = battlefield
+                .Where(value => value.SlotKind == DemoSlotKind.Building && value.Health > 0 &&
+                    (value.CardId == "cd_007" || value.CardId == "cd_008"))
+                .OrderBy(value => value.SlotIndex)
+                .ThenBy(value => value.InstanceId, StringComparer.Ordinal)
+                .ToArray();
+            foreach (var structure in structures)
+            {
+                if (!battlefield.Contains(structure) || structure.Health <= 0) continue;
+                if (structure.CardId == "cd_007")
+                {
+                    if (cardsPlayed != 1) continue;
+                    if (player) GenerateCard("tk_010");
+                    else if (_opponentHandCount >= 7) _discardPile.Add("tk_010");
+                    else _opponentHandCount++;
+                    mineTriggers++;
+                    continue;
+                }
+                if (TrySummonUnit("tk_011", player, -1, out _)) mansionSummons++;
+            }
         }
 
         private int TriggerSuccessfulMovement(
