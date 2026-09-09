@@ -21,7 +21,8 @@ namespace BiomeRivals.Demo
             string selectionPrompt,
             string missingTargetMessage,
             Func<IDemoMatchView, DemoBattlefieldObject, bool> additionalValidation = null,
-            int requiredTargetCount = 1)
+            int requiredTargetCount = 1,
+            bool optional = false)
         {
             EffectId = effectId ?? throw new ArgumentNullException(nameof(effectId));
             Owner = owner;
@@ -32,6 +33,7 @@ namespace BiomeRivals.Demo
             MissingTargetMessage = missingTargetMessage ?? throw new ArgumentNullException(nameof(missingTargetMessage));
             AdditionalValidation = additionalValidation;
             RequiredTargetCount = Math.Max(1, requiredTargetCount);
+            Optional = optional;
         }
 
         public string EffectId { get; }
@@ -42,6 +44,7 @@ namespace BiomeRivals.Demo
         public string SelectionPrompt { get; }
         public string MissingTargetMessage { get; }
         public int RequiredTargetCount { get; }
+        public bool Optional { get; }
         private Func<IDemoMatchView, DemoBattlefieldObject, bool> AdditionalValidation { get; }
 
         public bool IsLegal(IDemoMatchView match, bool player, DemoSlotKind kind, DemoBattlefieldObject target) =>
@@ -63,6 +66,12 @@ namespace BiomeRivals.Demo
         private static readonly DemoCardTargetRule Stray = new DemoCardTargetRule(
             "effect.si_003.01", DemoTargetOwner.Enemy, DemoSlotKind.Unit, "UNIT",
             "选择战吼目标", "先选择一个发出冰蓝光的敌方生物，再选择己方部署格。", "当前没有可施加缓慢的敌方生物。");
+
+        private static readonly DemoCardTargetRule Goat = new DemoCardTargetRule(
+            "effect.si_004.01", DemoTargetOwner.Friendly, DemoSlotKind.Unit, "UNIT",
+            "选择冲撞友军（可选）", "选择一个旁边连续有两个空格的己方生物；随后把山羊部署到中间格。右键或 Esc 可跳过战吼。",
+            "当前没有能被山羊越位移动的己方生物；仍可直接部署山羊。",
+            HasGoatBattlecryLane, 1, true);
 
         private static readonly DemoCardTargetRule Drowned = new DemoCardTargetRule(
             "effect.or_003.01", DemoTargetOwner.Enemy, DemoSlotKind.Unit, "UNIT",
@@ -100,6 +109,7 @@ namespace BiomeRivals.Demo
                 {
                     case "effect.si_001.01": rule = Snowball; return true;
                     case "effect.si_003.01": rule = Stray; return true;
+                    case "effect.si_004.01": rule = Goat; return true;
                     case "effect.si_006.01": rule = PowderSnowBucket; return true;
                     case "effect.or_003.01": rule = Drowned; return true;
                     case "effect.tk_002.01": rule = Wheat; return true;
@@ -159,6 +169,20 @@ namespace BiomeRivals.Demo
             var slots = target.Player ? match.UnitSlots : match.OpponentUnitSlots;
             foreach (var index in new[] { target.SlotIndex - 1, target.SlotIndex + 1 })
                 if (index >= 0 && index < slots.Length && string.IsNullOrEmpty(slots[index])) return true;
+            return false;
+        }
+
+        private static bool HasGoatBattlecryLane(IDemoMatchView match, DemoBattlefieldObject target)
+        {
+            if (match == null || target == null || !target.Player || target.SlotKind != DemoSlotKind.Unit) return false;
+            var slots = match.UnitSlots;
+            foreach (var direction in new[] { -1, 1 })
+            {
+                var goatSlot = target.SlotIndex + direction;
+                var destination = target.SlotIndex + direction * 2;
+                if (goatSlot >= 0 && goatSlot < slots.Length && destination >= 0 && destination < slots.Length &&
+                    string.IsNullOrEmpty(slots[goatSlot]) && string.IsNullOrEmpty(slots[destination])) return true;
+            }
             return false;
         }
     }

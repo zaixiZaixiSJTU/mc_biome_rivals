@@ -581,9 +581,9 @@
                 "instanceId": { "type": "string", "pattern": "^object-[0-9]+$" },
                 "cardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
                 "sourcePlayerId": { "type": "string", "minLength": 1 },
-                "sourceCardId": { "enum": ["or_001", "or_006", "tk_012"] },
+                "sourceCardId": { "enum": ["si_004", "or_001", "or_006", "tk_012"] },
                 "sourceInstanceId": { "type": "string", "pattern": "^(object|equipment|effect)-[0-9]+$" },
-                "effectId": { "enum": ["effect.or_001.01", "effect.or_006.01", "effect.tk_012.01"] },
+                "effectId": { "enum": ["effect.si_004.01", "effect.or_001.01", "effect.or_006.01", "effect.tk_012.01"] },
                 "fromSlotIndex": { "type": "integer", "minimum": 0, "maximum": 3 },
                 "toSlotIndex": { "type": "integer", "minimum": 0, "maximum": 3 }
               }

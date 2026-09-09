@@ -202,6 +202,7 @@ namespace BiomeRivals.Demo
             }
 
             DemoBattlefieldObject battlecryTarget = null;
+            var goatBattlecryDestination = -1;
             var drownedBattlecryActive = definition.effectImplementationStatus == "IMPLEMENTED" &&
                 definition.effectIds != null && definition.effectIds.Contains("effect.or_003.01") &&
                 HasAdjacentAquaticUnit(command.payload.slotIndex);
@@ -209,7 +210,12 @@ namespace BiomeRivals.Demo
             {
                 var drownedNeedsTarget = drownedBattlecryActive && _opponentBattlefield.Any(value =>
                     value.SlotKind == DemoSlotKind.Unit && value.Health > 0);
-                if (targetRule.EffectId != "effect.or_003.01" || drownedNeedsTarget)
+                var optionalTargetSupplied = !string.IsNullOrEmpty(command.payload.targetType) ||
+                    !string.IsNullOrEmpty(command.payload.targetInstanceId);
+                var shouldResolveTarget = targetRule.Optional
+                    ? optionalTargetSupplied
+                    : targetRule.EffectId != "effect.or_003.01" || drownedNeedsTarget;
+                if (shouldResolveTarget)
                 {
                     if (command.payload == null || command.payload.targetType != targetRule.TargetType)
                         return Reject(DemoCommandRejectionCode.InvalidTarget, targetRule.MissingTargetMessage);
@@ -219,6 +225,18 @@ namespace BiomeRivals.Demo
                     if (!DemoCardTargeting.IsLegalTarget(this, targetRule, playerTarget, targetRule.SlotKind, battlecryTarget))
                         return Reject(DemoCommandRejectionCode.InvalidTarget, targetRule.MissingTargetMessage);
                 }
+            }
+
+            if (definition.effectImplementationStatus == "IMPLEMENTED" &&
+                definition.effectIds != null && definition.effectIds.Contains("effect.si_004.01") && battlecryTarget != null)
+            {
+                if (!battlecryTarget.Player || battlecryTarget.SlotKind != DemoSlotKind.Unit || battlecryTarget.Health <= 0 ||
+                    Math.Abs(battlecryTarget.SlotIndex - command.payload.slotIndex) != 1)
+                    return Reject(DemoCommandRejectionCode.InvalidTarget, "山羊战吼目标必须是部署格旁的存活己方生物。");
+                goatBattlecryDestination = command.payload.slotIndex * 2 - battlecryTarget.SlotIndex;
+                if (goatBattlecryDestination < 0 || goatBattlecryDestination >= UnitSlots.Length ||
+                    !IsIndexFree(UnitSlots, goatBattlecryDestination))
+                    return Reject(DemoCommandRejectionCode.InvalidTarget, "山羊另一侧的相邻单位格必须为空。");
             }
 
             if (battlecryTarget != null && !battlecryTarget.Player)
@@ -358,6 +376,35 @@ namespace BiomeRivals.Demo
             {
                 ApplySlow(battlecryTarget, definition.id, deployedObject.InstanceId, "effect.si_003.01", 0);
                 deployMessage += $"；战吼使 {battlecryTarget.CardId} 获得缓慢。";
+            }
+            else if (definition.effectImplementationStatus == "IMPLEMENTED" &&
+                definition.effectIds != null && definition.effectIds.Contains("effect.si_004.01"))
+            {
+                if (battlecryTarget != null && goatBattlecryDestination >= 0)
+                {
+                    var fromSlotIndex = battlecryTarget.SlotIndex;
+                    UnitSlots[fromSlotIndex] = null;
+                    UnitSlots[goatBattlecryDestination] = battlecryTarget.CardId;
+                    battlecryTarget.SlotIndex = goatBattlecryDestination;
+                    RecalculateAdjacencyHealthAuras();
+                    var movementDeaths = SettleDeaths();
+                    var dolphinTriggers = 0;
+                    var guardianTriggers = 0;
+                    if (_playerBattlefield.Contains(battlecryTarget))
+                        dolphinTriggers = TriggerSuccessfulMovement(
+                            _playerBattlefield, battlecryTarget, out guardianTriggers, movementDeaths);
+                    if (_playerBattlefield.Contains(deployedObject))
+                    {
+                        deployedObject.Attack += 1;
+                        deployedObject.TemporaryAttackModifier += 1;
+                        deployedObject.TemporaryAttackModifierExpiresOnRound = Round;
+                    }
+                    deployMessage += $"；山羊将 {battlecryTarget.CardId} 从 {fromSlotIndex + 1} 号格越位移动到 {goatBattlecryDestination + 1} 号格，本回合获得 +1 攻击力。";
+                    if (dolphinTriggers > 0) deployMessage += $" 海豚向导触发 {dolphinTriggers} 次。";
+                    if (guardianTriggers > 0) deployMessage += $" 守卫者射线触发 {guardianTriggers} 次。";
+                    if (movementDeaths.Count > 0) deployMessage += " " + string.Join(" ", movementDeaths);
+                }
+                else deployMessage += "；已跳过可选的越位移动战吼。";
             }
             else if (definition.effectImplementationStatus == "IMPLEMENTED" &&
                 definition.effectIds != null && definition.effectIds.Contains("effect.or_003.01"))

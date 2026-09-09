@@ -1,6 +1,6 @@
 # 洞穴结构结束阶段规则 v1
 
-本规范对应 `protocolVersion 28`、`rulesetVersion prototype-0.44` 与内容版本 36，覆盖 CD-007「废弃矿井」和 CD-008「林地府邸」。
+本规范对应 `protocolVersion 28`、`rulesetVersion prototype-0.45` 与内容版本 37，覆盖 CD-007「废弃矿井」和 CD-008「林地府邸」。
 
 ## 结算时点与顺序
 

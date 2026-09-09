@@ -191,6 +191,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewWaterCurrent")) SetupWaterCurrentPreview();
             else if (HasCommandLineFlag("-previewSlow")) SetupSlowPreview();
             else if (HasCommandLineFlag("-previewIceSpire")) SetupIceSpirePreview();
+            else if (HasCommandLineFlag("-previewGoat")) SetupGoatPreview();
             else if (HasCommandLineFlag("-previewCombat")) OnEndTurn();
             if (HasCommandLineFlag("-previewGroundHover")) _battlefield.SetSlotHovered(true, DemoSlotKind.Unit, 0, true);
             var capturePath = GetCommandLineValue("-captureDemo");
@@ -699,7 +700,13 @@ namespace BiomeRivals.Demo
                     yield return null;
                     break;
                 case MatchEventTypes.ObjectMoved:
-                    ShowStatus($"{GetCardName(matchEvent.payload.cardId)} 已移动至单位格 {matchEvent.payload.toSlotIndex + 1}。", false);
+                    if (matchEvent.payload?.effectId == "effect.si_004.01")
+                    {
+                        ShowStatus($"山羊越位：{GetCardName(matchEvent.payload.cardId)} 从单位格 {matchEvent.payload.fromSlotIndex + 1} 移动至 {matchEvent.payload.toSlotIndex + 1}。", false);
+                        yield return ShowTurnBanner("山羊越位", Cyan);
+                        yield return PulseBattlefieldObject(matchEvent.payload.sourceInstanceId);
+                    }
+                    else ShowStatus($"{GetCardName(matchEvent.payload.cardId)} 已移动至单位格 {matchEvent.payload.toSlotIndex + 1}。", false);
                     yield return PulseBattlefieldObject(matchEvent.payload.instanceId);
                     break;
                 case MatchEventTypes.CardExcavated: {
@@ -1350,6 +1357,39 @@ namespace BiomeRivals.Demo
             var iceSpire = _match.GetObject(false, DemoSlotKind.Building, 0);
             if (iceSpire != null) StartCoroutine(PulseBattlefieldObject(iceSpire.InstanceId));
             foreach (var target in slowed) StartCoroutine(PulseBattlefieldObject(target.InstanceId));
+        }
+
+        private void SetupGoatPreview()
+        {
+            SelectFaction("snow_ice");
+            SelectOpponentFaction("ocean_river");
+            if (!_registry.TryGetDefinition("si_004", out var goatDefinition) ||
+                !_registry.TryGetDefinition("pf_002", out var sheepDefinition) ||
+                !_registry.TryGetDefinition("or_002", out var dolphinDefinition) ||
+                !_registry.TryGetDefinition("or_004", out var guardianDefinition)) return;
+            _match.ResetHand(new[] { sheepDefinition.id, dolphinDefinition.id });
+            var sheepDeployed = _match.ApplyDeploy(sheepDefinition,
+                _match.CreateDeployCommand(sheepDefinition.id, DemoSlotKind.Unit, 0));
+            var dolphinDeployed = _match.ApplyDeploy(dolphinDefinition,
+                _match.CreateDeployCommand(dolphinDefinition.id, DemoSlotKind.Unit, 3));
+            _match.ResetOpponent(new[] { guardianDefinition });
+            var target = _match.GetObject(true, DemoSlotKind.Unit, 0);
+            _match.ResetHand(new[] { goatDefinition.id });
+            var deployed = target == null
+                ? DemoCommandResult.Reject(DemoCommandRejectionCode.InvalidTarget, "缺少山羊越位目标。", _match.Revision)
+                : _match.ApplyDeploy(goatDefinition, _match.CreateDeployCommand(
+                    goatDefinition.id, DemoSlotKind.Unit, 1, MatchPaymentMethods.Redstone, "UNIT", target.InstanceId));
+            _selectedCardId = goatDefinition.id;
+            RefreshAll();
+            var goat = _match.GetObject(true, DemoSlotKind.Unit, 1);
+            ShowStatus(sheepDeployed.Accepted && dolphinDeployed.Accepted && deployed.Accepted && target?.SlotIndex == 2 && goat?.Attack == 4
+                ? "山羊已落在中间格，把绵羊从 1 号格越位推到 3 号格：海豚先为移动单位加攻、守卫者随后射击，山羊自身本回合显示为 4 攻。"
+                : !sheepDeployed.Accepted ? sheepDeployed.Message : !dolphinDeployed.Accepted ? dolphinDeployed.Message : deployed.Message,
+                !sheepDeployed.Accepted || !dolphinDeployed.Accepted || !deployed.Accepted || target?.SlotIndex != 2 || goat?.Attack != 4);
+            if (goat != null) StartCoroutine(PulseBattlefieldObject(goat.InstanceId));
+            if (target != null) StartCoroutine(PulseBattlefieldObject(target.InstanceId));
+            var guardian = _match.GetObject(false, DemoSlotKind.Unit, 0);
+            if (guardian != null) StartCoroutine(PulseBattlefieldObject(guardian.InstanceId));
         }
 
         private void SetupSnowGolemPreview()
@@ -2424,11 +2464,16 @@ namespace BiomeRivals.Demo
                 !string.IsNullOrEmpty(_selectedCardId) &&
                 _registry.TryGetDefinition(_selectedCardId, out var wolfDefinition) && IsTamedWolf(wolfDefinition) &&
                 TamedWolfBattlecryActivatesAt(view.Index);
+            var activatesGoat = valid && player && empty && view.Kind == DemoSlotKind.Unit &&
+                !string.IsNullOrEmpty(_selectedCardId) && FindSelectedDeploymentTarget() != null &&
+                _registry.TryGetDefinition(_selectedCardId, out var goatDefinition) && IsGoat(goatDefinition);
             var selectedCardTarget = battlefieldObject != null &&
                 _selectedCardTargetInstanceIds.Contains(battlefieldObject.InstanceId);
-            var priorityTarget = selectedCardTarget ||
+            var selectedDeploymentTarget = battlefieldObject != null &&
+                battlefieldObject.InstanceId == _selectedDeploymentTargetInstanceId;
+            var priorityTarget = selectedCardTarget || selectedDeploymentTarget ||
                 movementChoice && battlefieldObject?.InstanceId == match.PendingChoice.targetInstanceId ||
-                valid && !player && battlefieldObject?.HasKeyword("TAUNT") == true || activatesDrowned || activatesTamedWolf;
+                valid && !player && battlefieldObject?.HasKeyword("TAUNT") == true || activatesDrowned || activatesTamedWolf || activatesGoat;
             var auraBattlefield = player ? match.PlayerBattlefield : match.OpponentBattlefield;
             var auraLayers = view.Kind == DemoSlotKind.Unit
                 ? auraBattlefield.Count(value => value != null && value.Health > 0 && value.CardId == "or_005" &&
@@ -2601,16 +2646,27 @@ namespace BiomeRivals.Demo
                     var actionLabel = targeting
                         ? "取消目标选择"
                         : selectedBattlecryTarget != null
-                            ? $"战吼目标：{GetCardName(selectedBattlecryTarget.CardId)}"
-                            : hasLegalTarget ? battlecryTargetRule.ActionLabel : "没有合法目标";
+                            ? battlecryTargetRule.Optional
+                                ? $"取消战吼：{GetCardName(selectedBattlecryTarget.CardId)}"
+                                : $"战吼目标：{GetCardName(selectedBattlecryTarget.CardId)}"
+                            : hasLegalTarget ? battlecryTargetRule.ActionLabel : battlecryTargetRule.Optional ? "没有可移动友军（可直接部署）" : "没有合法目标";
                     var targetButton = CreateSecondaryButton(_inspectorRoot, "BattlecryTarget", new Vector2(0, -118), new Vector2(235, 54), actionLabel, 15);
-                    targetButton.interactable = targeting || (hasLegalTarget && match.IsPlayerTurn && match.Hand.Contains(definition.id) &&
-                        (!IsOnlineBoard || _onlineSession.CanIssueCommand));
-                    targetButton.onClick.AddListener(targeting ? (UnityEngine.Events.UnityAction)CancelTargetSelection : CastSelectedCard);
+                    targetButton.interactable = targeting || selectedBattlecryTarget != null ||
+                        (hasLegalTarget && match.IsPlayerTurn && match.Hand.Contains(definition.id) &&
+                         (!IsOnlineBoard || _onlineSession.CanIssueCommand));
+                    targetButton.onClick.AddListener(targeting
+                        ? (UnityEngine.Events.UnityAction)CancelTargetSelection
+                        : selectedBattlecryTarget != null && battlecryTargetRule.Optional
+                            ? ClearSelectedDeploymentTarget
+                            : CastSelectedCard);
                     targetButton.gameObject.AddComponent<DemoHoverScale>().Configure(1.04f, 16f);
                     var targetHint = selectedBattlecryTarget == null
-                        ? "先锁定敌方战吼目标，再选择己方单位格。"
-                        : $"已锁定 {GetCardName(selectedBattlecryTarget.CardId)} · 选择发光的{target}部署";
+                        ? battlecryTargetRule.Optional
+                            ? hasLegalTarget ? "可直接部署并跳过战吼，或先锁定友军再选择金色中间格。" : "当前没有合法越位路径；仍可把山羊部署到任意空单位格。"
+                            : "先锁定敌方战吼目标，再选择己方单位格。"
+                        : battlecryTargetRule.Optional
+                            ? $"已锁定 {GetCardName(selectedBattlecryTarget.CardId)} · 仅金色中间格可触发越位"
+                            : $"已锁定 {GetCardName(selectedBattlecryTarget.CardId)} · 选择发光的{target}部署";
                     CreateText(_inspectorRoot, "DeployHint", new Vector2(0, -174), new Vector2(246, 48), targetHint, 13,
                         selectedBattlecryTarget == null ? Gold : Cyan, TextAnchor.MiddleCenter, FontStyle.Bold);
                 }
@@ -2718,7 +2774,16 @@ namespace BiomeRivals.Demo
         {
             if (string.IsNullOrEmpty(_selectedCardId) || !_registry.TryGetDefinition(_selectedCardId, out var definition))
                 return new DemoDeploymentPreview(false, 1, "请先选择一张战场部署牌。");
-            return DemoDeploymentRules.Evaluate(MatchView, definition, kind, index, _selectedPaymentMethod);
+            var preview = DemoDeploymentRules.Evaluate(MatchView, definition, kind, index, _selectedPaymentMethod);
+            if (!preview.IsLegal || !IsGoat(definition)) return preview;
+            var selectedTarget = FindSelectedDeploymentTarget();
+            if (selectedTarget == null) return preview;
+            var destination = index * 2 - selectedTarget.SlotIndex;
+            if (kind != DemoSlotKind.Unit || Mathf.Abs(selectedTarget.SlotIndex - index) != 1 || destination < 0 ||
+                destination >= MatchView.UnitSlots.Length || !string.IsNullOrEmpty(MatchView.UnitSlots[destination]))
+                return new DemoDeploymentPreview(false, 1, "山羊必须部署在目标旁，并让目标另一侧的相邻格保持为空。");
+            return new DemoDeploymentPreview(true, 1,
+                $"越位路径：{selectedTarget.SlotIndex + 1} → {destination + 1}；山羊落在中间的 {index + 1} 号格。");
         }
 
         private bool IsPreviewingDeployment(bool player, out int occupiedSlots)
@@ -2727,7 +2792,7 @@ namespace BiomeRivals.Demo
             if (MatchView.IsFinished || !player || !string.IsNullOrEmpty(_pendingTargetCardId) || MatchView.Phase != DemoTurnPhase.Main ||
                 string.IsNullOrEmpty(_selectedCardId) || !_registry.TryGetDefinition(_selectedCardId, out var definition)) return false;
             if (definition.cardType != "UNIT" && definition.cardType != "BUILDING" && definition.cardType != "STRUCTURE") return false;
-            if (DemoCardTargeting.TryGetRule(definition, out var targetRule) && FindSelectedDeploymentTarget() == null &&
+            if (DemoCardTargeting.TryGetRule(definition, out var targetRule) && !targetRule.Optional && FindSelectedDeploymentTarget() == null &&
                 (!IsDrowned(definition) || HasPotentialDrownedBattlecrySlot() && DemoCardTargeting.HasLegalTarget(MatchView, targetRule))) return false;
             occupiedSlots = definition.cardType == "UNIT" ? 1 : Mathf.Max(1, definition.buildingSlots);
             return true;
@@ -2762,6 +2827,11 @@ namespace BiomeRivals.Demo
                     ShowStatus(TamedWolfBattlecryActivatesAt(index)
                         ? "金色地表：此位置相邻另一个己方动物，驯服的狼落位后永久获得 +1 生命。"
                         : "普通地表：可以部署驯服的狼，但没有相邻动物，忠诚战吼不会触发。", false);
+                }
+                else if (!rejected && _registry.TryGetDefinition(_selectedCardId, out var goatHoverDefinition) &&
+                    IsGoat(goatHoverDefinition) && FindSelectedDeploymentTarget() != null)
+                {
+                    ShowStatus(preview.Message, false);
                 }
                 else ShowStatus(preview.Message, rejected);
             }
@@ -2831,7 +2901,8 @@ namespace BiomeRivals.Demo
                 ShowStatus("请先选择一张手牌。", true);
                 return;
             }
-            if (DemoCardTargeting.TryGetRule(definition, out var deploymentTargetRule) && FindSelectedDeploymentTarget() == null &&
+            if (DemoCardTargeting.TryGetRule(definition, out var deploymentTargetRule) && !deploymentTargetRule.Optional &&
+                FindSelectedDeploymentTarget() == null &&
                 (!IsDrowned(definition) || DrownedBattlecryActivatesAt(index) && DemoCardTargeting.HasLegalTarget(MatchView, deploymentTargetRule)))
             {
                 CastSelectedCard();
@@ -2860,6 +2931,7 @@ namespace BiomeRivals.Demo
                 return;
             }
             var crafted = _selectedPaymentMethod == MatchPaymentMethods.Crafting;
+            var deploymentTarget = FindSelectedDeploymentTarget();
             var command = _match.CreateDeployCommand(
                 _selectedCardId, kind, index, _selectedPaymentMethod,
                 deploymentTargetRule?.TargetType ?? string.Empty,
@@ -2871,6 +2943,11 @@ namespace BiomeRivals.Demo
                 _selectedPaymentMethod = MatchPaymentMethods.Redstone;
                 _selectedDeploymentTargetInstanceId = null;
                 if (crafted) StartCoroutine(ShowTurnBanner("合成完成", Cyan));
+                if (deploymentTarget != null && IsGoat(definition))
+                {
+                    StartCoroutine(PulseBattlefieldObject(deploymentTarget.InstanceId));
+                    StartCoroutine(ShowTurnBanner("山羊越位", Cyan));
+                }
             }
             ShowStatus(result.Accepted ? $"{result.Message} · 状态 r{result.Revision}" : result.Message, !result.Accepted);
             RefreshAll();
@@ -3200,6 +3277,13 @@ namespace BiomeRivals.Demo
             RefreshAll();
         }
 
+        private void ClearSelectedDeploymentTarget()
+        {
+            _selectedDeploymentTargetInstanceId = null;
+            ShowStatus("已跳过可选战吼；现在可以把山羊部署到任意空单位格。", false);
+            RefreshAll();
+        }
+
         private bool IsValidPendingCardTarget(bool player, DemoSlotKind kind, DemoBattlefieldObject target)
         {
             if (!_registry.TryGetDefinition(_pendingTargetCardId, out var definition) ||
@@ -3219,6 +3303,9 @@ namespace BiomeRivals.Demo
 
         private static bool IsTamedWolf(CardDefinitionEntry definition) =>
             definition?.effectIds?.Contains("effect.pf_003.01") == true;
+
+        private static bool IsGoat(CardDefinitionEntry definition) =>
+            definition?.effectIds?.Contains("effect.si_004.01") == true;
 
         private bool TamedWolfBattlecryActivatesAt(int slotIndex)
         {

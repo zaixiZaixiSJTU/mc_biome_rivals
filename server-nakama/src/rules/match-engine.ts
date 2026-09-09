@@ -493,6 +493,7 @@ namespace BiomeRivalsRules {
       let battlecryTargetPlayer: PlayerState | null = null;
       let battlecryTarget: BattlefieldObjectState | null = null;
       let drownedBattlecryActive = false;
+      let goatBattlecryDestination = -1;
       if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
           definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.si_003.01') {
         if (command.payload.targetType !== 'UNIT' || typeof command.payload.targetInstanceId !== 'string') {
@@ -526,6 +527,30 @@ namespace BiomeRivalsRules {
         }
       } else {
         return reject(state, 'INVALID_TARGET', 'card type cannot be deployed to the battlefield');
+      }
+
+      if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
+          definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.si_004.01') {
+        const suppliedTargetType = command.payload.targetType;
+        const suppliedTargetInstanceId = command.payload.targetInstanceId;
+        const hasTarget = (suppliedTargetType !== undefined && suppliedTargetType !== '') ||
+          (suppliedTargetInstanceId !== undefined && suppliedTargetInstanceId !== '');
+        if (hasTarget) {
+          if (suppliedTargetType !== 'UNIT' || typeof suppliedTargetInstanceId !== 'string' || suppliedTargetInstanceId.length === 0) {
+            return reject(state, 'INVALID_TARGET', 'goat battlecry target must be a living friendly unit');
+          }
+          battlecryTargetPlayer = player;
+          battlecryTarget = findObject(player, suppliedTargetInstanceId);
+          if (battlecryTarget === null || battlecryTarget.cardType !== 'UNIT' || battlecryTarget.health <= 0 ||
+              Math.abs(battlecryTarget.slotIndex - slotIndex) !== 1) {
+            return reject(state, 'INVALID_TARGET', 'goat battlecry target must be a living adjacent friendly unit');
+          }
+          goatBattlecryDestination = slotIndex * 2 - battlecryTarget.slotIndex;
+          if (goatBattlecryDestination < 0 || goatBattlecryDestination >= player.unitSlots.length ||
+              player.unitSlots[goatBattlecryDestination] !== null) {
+            return reject(state, 'INVALID_TARGET', 'goat battlecry requires the opposite adjacent unit slot to be empty');
+          }
+        }
       }
 
       if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
@@ -706,6 +731,36 @@ namespace BiomeRivalsRules {
           definition.effectIds[0],
           0
         );
+      } else if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
+          definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.si_004.01') {
+        if (battlecryTargetPlayer !== null && battlecryTarget !== null && goatBattlecryDestination >= 0) {
+          const fromSlotIndex = battlecryTarget.slotIndex;
+          player.unitSlots[fromSlotIndex] = null;
+          player.unitSlots[goatBattlecryDestination] = battlecryTarget.instanceId;
+          battlecryTarget.slotIndex = goatBattlecryDestination;
+          emit('OBJECT_MOVED', {
+            playerId: player.playerId, instanceId: battlecryTarget.instanceId, cardId: battlecryTarget.cardId,
+            sourcePlayerId: player.playerId, sourceCardId: cardId,
+            sourceInstanceId: battlefieldObject.instanceId, effectId: definition.effectIds[0],
+            fromSlotIndex: fromSlotIndex, toSlotIndex: goatBattlecryDestination
+          });
+          recalculateAdjacencyHealthAuras();
+          settleDeaths(player, opponentPlayer);
+          if (player.battlefield.indexOf(battlecryTarget) >= 0) triggerSuccessfulMovement(player, battlecryTarget);
+          if (player.battlefield.indexOf(battlefieldObject) >= 0) {
+            battlefieldObject.attack += 1;
+            battlefieldObject.temporaryAttackModifier += 1;
+            battlefieldObject.temporaryAttackModifierExpiresOnTurn = next.turn;
+            emit('OBJECT_STATS_CHANGED', {
+              playerId: player.playerId, instanceId: battlefieldObject.instanceId,
+              sourceCardId: cardId, sourceInstanceId: battlefieldObject.instanceId,
+              effectId: definition.effectIds[0], reason: 'TEMPORARY_ATTACK_MODIFIER',
+              attack: battlefieldObject.attack, health: battlefieldObject.health,
+              temporaryAttackModifier: battlefieldObject.temporaryAttackModifier,
+              temporaryAttackModifierExpiresOnTurn: battlefieldObject.temporaryAttackModifierExpiresOnTurn
+            });
+          }
+        }
       } else if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
           definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.or_003.01') {
         if (drownedBattlecryActive && battlecryTargetPlayer !== null && battlecryTarget !== null) {

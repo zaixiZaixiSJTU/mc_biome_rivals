@@ -1434,6 +1434,8 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(caveSpiderTexture, Is.EqualTo("entity_cave_spider"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("si_002", out var snowGolemTexture), Is.True);
                 Assert.That(snowGolemTexture, Is.EqualTo("entity_snow_golem"));
+                Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("si_004", out var goatTexture), Is.True);
+                Assert.That(goatTexture, Is.EqualTo("entity_goat"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("or_001", out var salmonTexture), Is.True);
                 Assert.That(salmonTexture, Is.EqualTo("entity_salmon"));
                 Assert.That(DemoMinecraftModelFactory.TryGetTextureKey("or_002", out var dolphinTexture), Is.True);
@@ -1559,6 +1561,23 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(iceSpirePiece.Find("IceSpireCenterTip"), Is.Not.Null);
                 Assert.That(iceSpirePiece.Find("IceSpireCenter").GetComponent<MeshRenderer>().sharedMaterial.mainTexture.name,
                     Is.EqualTo("packed_ice"));
+
+                battlefield.SyncPieces(new[]
+                {
+                    new DemoBattlefieldObject
+                    {
+                        InstanceId = "object-render-9", CardId = "si_004", Player = true,
+                        SlotKind = DemoSlotKind.Unit, SlotIndex = 1, OccupiedSlots = 1, Attack = 3, Health = 2, MaxHealth = 2
+                    }
+                }, System.Array.Empty<DemoBattlefieldObject>(), registry);
+                var goatPiece = piecesRoot.Find("Piece_object-render-9_si_004");
+                Assert.That(goatPiece, Is.Not.Null);
+                Assert.That(goatPiece.Find("Body"), Is.Not.Null);
+                Assert.That(goatPiece.Find("Head"), Is.Not.Null);
+                Assert.That(goatPiece.Find("LeftHorn"), Is.Not.Null);
+                Assert.That(goatPiece.Find("RightHorn"), Is.Not.Null);
+                Assert.That(goatPiece.Find("Body").GetComponent<MeshRenderer>().sharedMaterial.mainTexture.name,
+                    Is.EqualTo("entity_goat"));
 
                 var buildingMarker1 = root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Building_1/InteractiveGround");
                 var buildingMarker2 = root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Building_2/InteractiveGround");
@@ -2855,6 +2874,123 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(recruit.CardId, Is.EqualTo("tk_011"));
             Assert.That(recruit.HasStatus("SLOW"), Is.True);
             Assert.That(recruit.Statuses[0].sourcePlayerId, Is.EqualTo("local-player"));
+        }
+
+        [Test]
+        public void GoatVaultsAnAdjacentFriendlyUnitAndItsAttackBonusExpiresAtEndOfTurn()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("si_004", out var goat), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_002", out var sheep), Is.True);
+            Assert.That(goat.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { sheep.id });
+            Assert.That(match.ApplyDeploy(sheep,
+                match.CreateDeployCommand(sheep.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            var target = match.GetObject(true, DemoSlotKind.Unit, 0);
+            match.ResetHand(new[] { goat.id });
+
+            Assert.That(DemoCardTargeting.TryGetRule(goat, out var rule), Is.True);
+            Assert.That(rule.Optional, Is.True);
+            Assert.That(DemoCardTargeting.HasLegalTarget(match, rule), Is.True);
+            Assert.That(DemoCardTargeting.IsLegalTarget(match, rule, true, DemoSlotKind.Unit, target), Is.True);
+            var result = match.ApplyDeploy(goat,
+                match.CreateDeployCommand(goat.id, DemoSlotKind.Unit, 1, MatchPaymentMethods.Redstone, "UNIT", target.InstanceId));
+
+            Assert.That(result.Accepted, Is.True, result.Message);
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 0), Is.Null);
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 2), Is.SameAs(target));
+            var deployedGoat = match.GetObject(true, DemoSlotKind.Unit, 1);
+            Assert.That(deployedGoat.CardId, Is.EqualTo(goat.id));
+            Assert.That(deployedGoat.Attack, Is.EqualTo(4));
+            Assert.That(deployedGoat.TemporaryAttackModifier, Is.EqualTo(1));
+            Assert.That(match.PendingChoice, Is.Null);
+            Assert.That(result.Message, Does.Contain("山羊将"));
+
+            match.EndPlayerTurn();
+            Assert.That(deployedGoat.Attack, Is.EqualTo(3));
+            Assert.That(deployedGoat.TemporaryAttackModifier, Is.Zero);
+        }
+
+        [Test]
+        public void GoatMaySkipItsOptionalVaultAndRemainAtBaseAttack()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("si_004", out var goat), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_002", out var sheep), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { sheep.id });
+            Assert.That(match.ApplyDeploy(sheep,
+                match.CreateDeployCommand(sheep.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            match.ResetHand(new[] { goat.id });
+
+            var result = match.ApplyDeploy(goat,
+                match.CreateDeployCommand(goat.id, DemoSlotKind.Unit, 1));
+
+            Assert.That(result.Accepted, Is.True, result.Message);
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 0).CardId, Is.EqualTo(sheep.id));
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 1).Attack, Is.EqualTo(3));
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 2), Is.Null);
+            Assert.That(result.Message, Does.Contain("跳过"));
+        }
+
+        [Test]
+        public void GoatRejectsABlockedVaultBeforeSpendingEnergyOrRemovingTheCard()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("si_004", out var goat), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_002", out var sheep), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_001", out var bee), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { sheep.id, bee.id });
+            Assert.That(match.ApplyDeploy(sheep,
+                match.CreateDeployCommand(sheep.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            Assert.That(match.ApplyDeploy(bee,
+                match.CreateDeployCommand(bee.id, DemoSlotKind.Unit, 2)).Accepted, Is.True);
+            var target = match.GetObject(true, DemoSlotKind.Unit, 0);
+            match.ResetHand(new[] { goat.id });
+            var energyBefore = match.Energy;
+            var revisionBefore = match.Revision;
+
+            var result = match.ApplyDeploy(goat,
+                match.CreateDeployCommand(goat.id, DemoSlotKind.Unit, 1, MatchPaymentMethods.Redstone, "UNIT", target.InstanceId));
+
+            Assert.That(result.Accepted, Is.False);
+            Assert.That(result.Code, Is.EqualTo(DemoCommandRejectionCode.InvalidTarget));
+            Assert.That(match.Energy, Is.EqualTo(energyBefore));
+            Assert.That(match.Revision, Is.EqualTo(revisionBefore));
+            Assert.That(match.Hand, Does.Contain(goat.id));
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 1), Is.Null);
+        }
+
+        [Test]
+        public void GoatVaultFeedsExistingDolphinAndGuardianMovementReactions()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("si_004", out var goat), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_002", out var sheep), Is.True);
+            Assert.That(registry.TryGetDefinition("or_002", out var dolphin), Is.True);
+            Assert.That(registry.TryGetDefinition("or_004", out var guardian), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { sheep.id, dolphin.id });
+            Assert.That(match.ApplyDeploy(sheep,
+                match.CreateDeployCommand(sheep.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            Assert.That(match.ApplyDeploy(dolphin,
+                match.CreateDeployCommand(dolphin.id, DemoSlotKind.Unit, 3)).Accepted, Is.True);
+            match.ResetOpponent(new[] { guardian });
+            var target = match.GetObject(true, DemoSlotKind.Unit, 0);
+            match.ResetHand(new[] { goat.id });
+
+            var result = match.ApplyDeploy(goat,
+                match.CreateDeployCommand(goat.id, DemoSlotKind.Unit, 1, MatchPaymentMethods.Redstone, "UNIT", target.InstanceId));
+
+            Assert.That(result.Accepted, Is.True, result.Message);
+            Assert.That(target.SlotIndex, Is.EqualTo(2));
+            Assert.That(target.Attack, Is.EqualTo(3));
+            Assert.That(target.Health, Is.EqualTo(2));
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 1).Attack, Is.EqualTo(4));
+            Assert.That(result.Message, Does.Contain("海豚向导触发 1 次"));
+            Assert.That(result.Message, Does.Contain("守卫者射线触发 1 次"));
         }
 
         private static float ProjectedWidth(Camera camera, Transform surface, Vector3[] vertices)

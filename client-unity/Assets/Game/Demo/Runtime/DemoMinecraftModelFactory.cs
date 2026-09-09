@@ -17,6 +17,7 @@ namespace BiomeRivals.Demo
             { "tk_011", "entity_vindicator" },
             { "pf_008", "entity_iron_golem" },
             { "si_002", "entity_snow_golem" },
+            { "si_004", "entity_goat" },
             { "cd_001", "entity_bat" },
             { "cd_002", "entity_cave_spider" },
             { "nt_001", "entity_magma_cube" },
@@ -58,6 +59,7 @@ namespace BiomeRivals.Demo
                     break;
                 case "pf_008": BuildIronGolem(root, material); break;
                 case "si_002": BuildSnowGolem(root, material); break;
+                case "si_004": BuildGoat(root, material); break;
                 case "cd_001": BuildBat(root, material); break;
                 case "cd_002": BuildCaveSpider(root, material); break;
                 case "nt_001": BuildMagmaCube(root, material); break;
@@ -152,6 +154,37 @@ namespace BiomeRivals.Demo
             Cuboid(root, "Head", new Vector3(0f, 2.02f, 0f), new Vector3(0.70f, 0.70f, 0.70f), material, 0, 0, 8, 8, 8, 64, 64);
             Cuboid(root, "LeftArm", new Vector3(-0.72f, 1.40f, 0f), new Vector3(0.76f, 0.11f, 0.11f), material, 32, 0, 12, 2, 2, 64, 64, Quaternion.Euler(0f, 0f, 18f));
             Cuboid(root, "RightArm", new Vector3(0.72f, 1.40f, 0f), new Vector3(0.76f, 0.11f, 0.11f), material, 32, 0, 12, 2, 2, 64, 64, Quaternion.Euler(0f, 0f, -18f));
+        }
+
+        private static void BuildGoat(Transform root, Material material)
+        {
+            root.localScale = Vector3.one * 0.90f;
+            Cuboid(root, "Body", new Vector3(0f, 0.92f, 0.10f), new Vector3(0.78f, 0.92f, 1.42f),
+                material, 1, 28, 9, 11, 16, 64, 64, Quaternion.Euler(90f, 0f, 0f));
+            Cuboid(root, "Head", new Vector3(0f, 1.35f, -0.76f), new Vector3(0.72f, 0.64f, 0.72f),
+                material, 34, 46, 10, 7, 10, 64, 64, Quaternion.Euler(-8f, 0f, 0f));
+            Cuboid(root, "Muzzle", new Vector3(0f, 1.19f, -1.16f), new Vector3(0.48f, 0.30f, 0.34f),
+                material, 2, 2, 5, 3, 4, 64, 64, Quaternion.Euler(-8f, 0f, 0f));
+            Cuboid(root, "LeftEar", new Vector3(-0.43f, 1.57f, -0.72f), new Vector3(0.34f, 0.14f, 0.28f),
+                material, 2, 0, 3, 1, 2, 64, 64, Quaternion.Euler(0f, 0f, -18f));
+            Cuboid(root, "RightEar", new Vector3(0.43f, 1.57f, -0.72f), new Vector3(0.34f, 0.14f, 0.28f),
+                material, 2, 0, 3, 1, 2, 64, 64, Quaternion.Euler(0f, 0f, 18f));
+            Cuboid(root, "LeftHorn", new Vector3(-0.22f, 1.88f, -0.61f), new Vector3(0.14f, 0.56f, 0.14f),
+                material, 12, 55, 2, 7, 2, 64, 64, Quaternion.Euler(-20f, 0f, -8f));
+            Cuboid(root, "RightHorn", new Vector3(0.22f, 1.88f, -0.61f), new Vector3(0.14f, 0.56f, 0.14f),
+                material, 12, 55, 2, 7, 2, 64, 64, Quaternion.Euler(-20f, 0f, 8f));
+            Cuboid(root, "Beard", new Vector3(0f, 1.00f, -1.02f), new Vector3(0.24f, 0.42f, 0.08f),
+                material, 0, 0, 2, 5, 1, 64, 64, Quaternion.Euler(12f, 0f, 0f));
+            GoatLeg(root, "FrontLeftLeg", -0.27f, -0.43f, material);
+            GoatLeg(root, "FrontRightLeg", 0.27f, -0.43f, material);
+            GoatLeg(root, "BackLeftLeg", -0.27f, 0.53f, material);
+            GoatLeg(root, "BackRightLeg", 0.27f, 0.53f, material);
+        }
+
+        private static void GoatLeg(Transform root, string name, float x, float z, Material material)
+        {
+            Cuboid(root, name, new Vector3(x, 0.34f, z), new Vector3(0.23f, 0.72f, 0.23f),
+                material, 36, 29, 4, 11, 4, 64, 64);
         }
 
         private static void BuildMagmaCube(Transform root, Material material)

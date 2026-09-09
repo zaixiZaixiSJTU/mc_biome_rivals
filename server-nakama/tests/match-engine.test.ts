@@ -3883,3 +3883,139 @@ TestHarness.test('Ice Spires slow an end-phase Mansion recruit until its next co
   TestHarness.equal(orderedEffectEvents[0]!.type, 'OBJECT_SUMMONED');
   TestHarness.equal(orderedEffectEvents[1]!.type, 'OBJECT_STATUS_APPLIED');
 });
+
+TestHarness.test('Goat optionally vaults an adjacent friendly unit and gains temporary attack', function (): void {
+  const state = activeState('match-goat-vault', ['alice', 'bob'], ['snow_ice', 'plains_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['si_004'];
+  actor.redstone = 2;
+  actor.redstoneCapacity = 2;
+  placeUnit(state, actorIndex, 'pf_002', 0, 'object-10', 1);
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('goat-vault', 0, 'si_004', 'UNIT', 1, 'REDSTONE', 'UNIT', 'object-10'));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  const moved = result.state.players[actorIndex]!.battlefield.filter(function (object): boolean {
+    return object.instanceId === 'object-10';
+  })[0]!;
+  const goat = result.state.players[actorIndex]!.battlefield.filter(function (object): boolean {
+    return object.cardId === 'si_004';
+  })[0]!;
+  TestHarness.equal(moved.slotIndex, 2);
+  TestHarness.equal(result.state.players[actorIndex]!.unitSlots[0], null);
+  TestHarness.equal(result.state.players[actorIndex]!.unitSlots[1], goat.instanceId);
+  TestHarness.equal(result.state.players[actorIndex]!.unitSlots[2], moved.instanceId);
+  TestHarness.equal(goat.attack, 4);
+  TestHarness.equal(goat.temporaryAttackModifier, 1);
+  TestHarness.equal(goat.temporaryAttackModifierExpiresOnTurn, result.state.turn);
+  TestHarness.equal(result.state.pendingChoice, null, 'the relative destination is deterministic and needs no follow-up choice');
+  const deployedEventIndex = result.batch.events.findIndex(function (event): boolean { return event.type === 'CARD_DEPLOYED'; });
+  const movedEventIndex = result.batch.events.findIndex(function (event): boolean {
+    return event.type === 'OBJECT_MOVED' && event.payload.effectId === 'effect.si_004.01';
+  });
+  const buffEventIndex = result.batch.events.findIndex(function (event): boolean {
+    return event.type === 'OBJECT_STATS_CHANGED' && event.payload.instanceId === goat.instanceId &&
+      event.payload.effectId === 'effect.si_004.01';
+  });
+  TestHarness.equal(deployedEventIndex >= 0, true);
+  TestHarness.equal(movedEventIndex > deployedEventIndex, true);
+  TestHarness.equal(buffEventIndex > movedEventIndex, true);
+  assertEventBatchMatchesSchema(result.batch);
+
+  const ended = BiomeRivalsRules.applyCommand(result.state, actor.playerId, command('goat-vault-end', 1, 'END_TURN'));
+  TestHarness.equal(ended.accepted, true, JSON.stringify(ended));
+  if (!ended.accepted) return;
+  const expiredGoat = ended.state.players[actorIndex]!.battlefield.filter(function (object): boolean {
+    return object.instanceId === goat.instanceId;
+  })[0]!;
+  TestHarness.equal(expiredGoat.attack, 3);
+  TestHarness.equal(expiredGoat.temporaryAttackModifier, 0);
+});
+
+TestHarness.test('Goat may skip its optional battlecry even when a vault is available', function (): void {
+  const state = activeState('match-goat-skip', ['alice', 'bob'], ['snow_ice', 'plains_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['si_004'];
+  actor.redstone = 2;
+  actor.redstoneCapacity = 2;
+  placeUnit(state, actorIndex, 'pf_002', 0, 'object-10', 1);
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('goat-skip', 0, 'si_004', 'UNIT', 1));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  const goat = result.state.players[actorIndex]!.battlefield.filter(function (object): boolean {
+    return object.cardId === 'si_004';
+  })[0]!;
+  TestHarness.equal(result.state.players[actorIndex]!.battlefield.filter(function (object): boolean {
+    return object.instanceId === 'object-10';
+  })[0]!.slotIndex, 0);
+  TestHarness.equal(goat.slotIndex, 1);
+  TestHarness.equal(goat.attack, 3);
+  TestHarness.equal(goat.temporaryAttackModifier, 0);
+  TestHarness.equal(result.batch.events.some(function (event): boolean {
+    return event.payload.effectId === 'effect.si_004.01';
+  }), false);
+});
+
+TestHarness.test('Goat rejects an impossible target lane atomically before payment', function (): void {
+  const state = activeState('match-goat-blocked', ['alice', 'bob'], ['snow_ice', 'plains_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['si_004'];
+  actor.redstone = 2;
+  actor.redstoneCapacity = 2;
+  placeUnit(state, actorIndex, 'pf_002', 0, 'object-10', 1);
+  placeUnit(state, actorIndex, 'pf_001', 2, 'object-11', 1);
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('goat-blocked', 0, 'si_004', 'UNIT', 1, 'REDSTONE', 'UNIT', 'object-10'));
+
+  TestHarness.equal(result.accepted, false);
+  if (result.accepted) return;
+  TestHarness.equal(result.code, 'INVALID_TARGET');
+  TestHarness.equal(state.players[actorIndex]!.redstone, 2);
+  TestHarness.equal(state.players[actorIndex]!.hand[0], 'si_004');
+  TestHarness.equal(state.players[actorIndex]!.unitSlots[1], null);
+  TestHarness.equal(state.revision, 0);
+});
+
+TestHarness.test('Goat movement participates in Dolphin and Guardian reactions before its self buff', function (): void {
+  const state = activeState('match-goat-reactions', ['alice', 'bob'], ['snow_ice', 'ocean_river']);
+  const actorIndex = state.activePlayerIndex;
+  const defenderIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['si_004'];
+  actor.redstone = 2;
+  actor.redstoneCapacity = 2;
+  placeUnit(state, actorIndex, 'pf_002', 0, 'object-10', 1);
+  placeUnit(state, actorIndex, 'or_002', 3, 'object-11', 1);
+  placeUnit(state, defenderIndex, 'or_004', 0, 'object-20', 1);
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('goat-reactions', 0, 'si_004', 'UNIT', 1, 'REDSTONE', 'UNIT', 'object-10'));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  const moved = result.state.players[actorIndex]!.battlefield.filter(function (object): boolean {
+    return object.instanceId === 'object-10';
+  })[0]!;
+  const goat = result.state.players[actorIndex]!.battlefield.filter(function (object): boolean {
+    return object.cardId === 'si_004';
+  })[0]!;
+  TestHarness.equal(moved.slotIndex, 2);
+  TestHarness.equal(moved.attack, 3, 'Dolphin grants +1 temporary attack to the moved sheep');
+  TestHarness.equal(moved.health, 2, 'Guardian deals 1 damage to the moved sheep');
+  TestHarness.equal(goat.attack, 4);
+  const effectOrder = result.batch.events.filter(function (event): boolean {
+    return event.payload.effectId === 'effect.si_004.01' || event.payload.effectId === 'effect.or_002.01' ||
+      event.payload.effectId === 'effect.or_004.01';
+  }).map(function (event): string { return String(event.payload.effectId); });
+  TestHarness.equal(JSON.stringify(effectOrder),
+    JSON.stringify(['effect.si_004.01', 'effect.or_002.01', 'effect.or_004.01', 'effect.si_004.01']));
+});

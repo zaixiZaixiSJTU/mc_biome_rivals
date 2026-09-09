@@ -141,3 +141,5 @@ DB-005 的动态费用直接复用卡面左上角费用槽，不增加独立 Web
 洞穴结构结束阶段预览：[`废弃矿井`](assets/demo-abandoned-mine-preview-v1.png) 使用圆石基座、深板岩矿洞、深色橡木支架、轨道与矿车构成一个跨两个真实建筑格的体素对象；恰好打出一张牌后，产出的圆石进入统一手牌卡面。[`林地府邸`](assets/demo-woodland-mansion-preview-v1.png) 使用圆石与深色橡木构成横跨全部三个建筑格的连续模型，结束阶段召唤的 2/2 卫道士新兵复用 Minecraft 卫道士纹理。两个建筑在满足条件时都直接脉冲其占用地块材质，不叠加屏幕空间边框。
 
 冰刺之巅边缘召唤预览：[`assets/demo-ice-spire-preview-v1.png`](assets/demo-ice-spire-preview-v1.png)。敌方双格结构使用 Minecraft `packed_ice` 构成不对称三根体素冰柱，并让实际占用地表持续低强度冰蓝脉冲。林间集结生成的两个伙伴分别按各自召唤发生前的空位边界判断，落位后直接在其脚下地表显示缓慢高亮和“缓慢 1”世界铭牌；手牌部署不触发，内部格亡语回填也不触发。
+
+山羊越位预览：[`assets/demo-goat-vault-preview-v1.png`](assets/demo-goat-vault-preview-v1.png)。`-previewGoat` 展示山羊在中间格落位后，把相邻友军越位移动到另一侧空格；移动单位、山羊与敌方守卫者都使用场景内脉冲反馈，右侧卡牌详情继续复用雪原主题卡框。
