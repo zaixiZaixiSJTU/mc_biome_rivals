@@ -8,7 +8,7 @@
   "properties": {
     "matchId": { "type": "string", "minLength": 1 },
     "viewerPlayerId": { "type": "string", "minLength": 1 },
-    "protocolVersion": { "const": 28 },
+    "protocolVersion": { "const": 29 },
     "rulesetVersion": { "type": "string", "minLength": 1 },
     "revision": { "type": "integer", "minimum": 0 },
     "lastEventId": { "type": "integer", "minimum": 0 },
@@ -56,7 +56,7 @@
           "triggeredEffectKeysThisTurn": {
             "type": "array",
             "uniqueItems": true,
-            "items": { "type": "string", "pattern": "^object-[0-9]+:effect\\.(db_004|pf_005|or_(002|004|007))\\.01$" }
+            "items": { "type": "string", "pattern": "^object-[0-9]+:effect\\.(db_004|pf_005|si_007|or_(002|004|007))\\.01$" }
           },
           "statuses": {
             "type": "array", "uniqueItems": true,
@@ -75,11 +75,11 @@
           },
           "unitSlots": {
             "type": "array", "minItems": 4, "maxItems": 4,
-            "items": { "type": ["string", "null"], "pattern": "^[a-z0-9_]+$" }
+            "items": { "type": ["string", "null"], "pattern": "^object-[0-9]+$" }
           },
           "buildingSlots": {
             "type": "array", "minItems": 3, "maxItems": 3,
-            "items": { "type": ["string", "null"], "pattern": "^[a-z0-9_]+$" }
+            "items": { "type": ["string", "null"], "pattern": "^object-[0-9]+$" }
           },
           "battlefield": {
             "type": "array",
@@ -132,19 +132,19 @@
       "properties": {
         "choiceId": { "type": "string", "pattern": "^choice-[0-9]+$" },
         "playerId": { "type": "string", "minLength": 1 },
-        "sourceCardId": { "enum": ["cd_001", "db_003", "or_001", "or_006", "tk_012"] },
+        "sourceCardId": { "enum": ["cd_001", "db_003", "or_001", "or_006", "si_007", "tk_012"] },
         "sourceInstanceId": { "type": "string", "pattern": "^(object|equipment|effect)-[0-9]+$" },
-        "effectId": { "enum": ["effect.cd_001.01", "effect.db_003.01", "effect.or_001.01", "effect.or_006.01", "effect.tk_012.01"] },
-        "kind": { "enum": ["ARCHAEOLOGY_TOP_3", "TOP_CARD_SCRY", "MOVE_UNIT"] },
+        "effectId": { "enum": ["effect.cd_001.01", "effect.db_003.01", "effect.or_001.01", "effect.or_006.01", "effect.si_007.01", "effect.tk_012.01"] },
+        "kind": { "enum": ["ARCHAEOLOGY_TOP_3", "TOP_CARD_SCRY", "MOVE_UNIT", "HEAL_UNIT"] },
         "targetPlayerId": { "type": "string" },
         "targetInstanceId": { "type": "string" },
         "options": {
-          "type": "array", "maxItems": 3,
+          "type": "array", "maxItems": 4,
           "items": {
             "type": "object", "additionalProperties": false,
             "required": ["optionIndex", "cardId", "slotIndex", "selectable"],
             "properties": {
-              "optionIndex": { "type": "integer", "minimum": 0, "maximum": 2 },
+              "optionIndex": { "type": "integer", "minimum": 0, "maximum": 3 },
               "cardId": { "type": ["string", "null"], "pattern": "^[a-z0-9_]+$" },
               "slotIndex": { "type": "integer", "minimum": -1, "maximum": 3 },
               "selectable": { "type": "boolean" }

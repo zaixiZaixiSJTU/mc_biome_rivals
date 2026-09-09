@@ -192,6 +192,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewSlow")) SetupSlowPreview();
             else if (HasCommandLineFlag("-previewIceSpire")) SetupIceSpirePreview();
             else if (HasCommandLineFlag("-previewGoat")) SetupGoatPreview();
+            else if (HasCommandLineFlag("-previewSnowHut")) SetupSnowHutPreview();
             else if (HasCommandLineFlag("-previewCombat")) OnEndTurn();
             if (HasCommandLineFlag("-previewGroundHover")) _battlefield.SetSlotHovered(true, DemoSlotKind.Unit, 0, true);
             var capturePath = GetCommandLineValue("-captureDemo");
@@ -669,6 +670,14 @@ namespace BiomeRivals.Demo
                         yield return ShowTurnBanner(prismarineShard ? "碎片涌流" : salmonCurrent ? "水流" : "激流位移", ownChoice ? Gold : Ember);
                         break;
                     }
+                    if (matchEvent.payload?.kind == "HEAL_UNIT")
+                    {
+                        ShowStatus(ownChoice
+                            ? "雪屋：多个友军并列为受伤最重，请直接点击场内发光单位。"
+                            : "对手正在决定雪屋的治疗目标。", false);
+                        yield return ShowTurnBanner("雪屋疗愈", ownChoice ? Cyan : Ember);
+                        break;
+                    }
                     if (matchEvent.payload?.kind == "TOP_CARD_SCRY")
                     {
                         ShowStatus(ownChoice
@@ -844,6 +853,17 @@ namespace BiomeRivals.Demo
                             ? "铁傀儡响应己方建筑，永久获得 +1 攻击、+1 当前与最大生命。"
                             : "敌方铁傀儡响应建筑，永久获得了 +1/+1。", false);
                         yield return ShowTurnBanner("建筑共鸣", golemFriendly ? Gold : Ember);
+                    }
+                    else if (matchEvent.payload?.effectId == "effect.si_007.01" && matchEvent.payload?.reason == "HEAL")
+                    {
+                        var hutViewerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
+                        var hutFriendly = matchEvent.payload?.playerId == hutViewerId;
+                        ShowStatus(hutFriendly
+                            ? "雪屋在起始阶段为最重伤的己方生物恢复了 1 点生命。"
+                            : "敌方雪屋为一个最重伤生物恢复了 1 点生命。", false);
+                        yield return PulseBattlefieldObject(matchEvent.payload?.sourceInstanceId);
+                        yield return PulseBattlefieldObject(matchEvent.payload?.instanceId);
+                        yield return ShowTurnBanner("雪屋疗愈", hutFriendly ? Cyan : Ember);
                     }
                     else if (matchEvent.payload?.effectId == "effect.cd_005.01")
                     {
@@ -1390,6 +1410,36 @@ namespace BiomeRivals.Demo
             if (target != null) StartCoroutine(PulseBattlefieldObject(target.InstanceId));
             var guardian = _match.GetObject(false, DemoSlotKind.Unit, 0);
             if (guardian != null) StartCoroutine(PulseBattlefieldObject(guardian.InstanceId));
+        }
+
+        private void SetupSnowHutPreview()
+        {
+            SelectFaction("snow_ice");
+            SelectOpponentFaction("plains_forest");
+            if (!_registry.TryGetDefinition("si_007", out var hutDefinition) ||
+                !_registry.TryGetDefinition("pf_001", out var beeDefinition)) return;
+            _match.ResetDeckAndHand(new[] { hutDefinition.id, beeDefinition.id, beeDefinition.id }, new[] { "si_001" });
+            var hutResult = _match.ApplyDeploy(hutDefinition,
+                _match.CreateDeployCommand(hutDefinition.id, DemoSlotKind.Building, 1));
+            var leftResult = _match.ApplyDeploy(beeDefinition,
+                _match.CreateDeployCommand(beeDefinition.id, DemoSlotKind.Unit, 0));
+            var rightResult = _match.ApplyDeploy(beeDefinition,
+                _match.CreateDeployCommand(beeDefinition.id, DemoSlotKind.Unit, 2));
+            var left = _match.GetObject(true, DemoSlotKind.Unit, 0);
+            var right = _match.GetObject(true, DemoSlotKind.Unit, 2);
+            if (left != null) left.Health = 1;
+            if (right != null) right.Health = 1;
+            _match.EndPlayerTurn();
+            _match.BeginNextPlayerTurn();
+            _selectedCardId = hutDefinition.id;
+            RefreshAll();
+            var ready = hutResult.Accepted && leftResult.Accepted && rightResult.Accepted &&
+                _match.PendingChoice?.kind == "HEAL_UNIT";
+            ShowStatus(ready
+                ? "雪屋在起始阶段发现两个并列最重伤单位：直接点击场内发光的蜜蜂完成治疗，选择期间其他行动均被锁定。"
+                : "雪屋起始阶段预览初始化失败。", !ready);
+            var hut = _match.GetObject(true, DemoSlotKind.Building, 1);
+            if (hut != null) StartCoroutine(PulseBattlefieldObject(hut.InstanceId));
         }
 
         private void SetupSnowGolemPreview()
@@ -2129,6 +2179,8 @@ namespace BiomeRivals.Demo
                 : match.IsMulligan ? "等待起手确认"
                 : match.PendingChoice != null ? match.PendingChoice.kind == "MOVE_UNIT"
                     ? match.IsChoiceOwner ? "选择移动地块" : "对手正在移动"
+                    : match.PendingChoice.kind == "HEAL_UNIT"
+                        ? match.IsChoiceOwner ? "选择治疗单位" : "对手正在治疗"
                     : match.PendingChoice.kind == "TOP_CARD_SCRY"
                         ? match.IsChoiceOwner ? "决定牌库顶" : "对手正在窥视"
                         : match.IsChoiceOwner ? "完成考古选择" : "对手正在选择"
@@ -2141,7 +2193,7 @@ namespace BiomeRivals.Demo
             if (_choiceOverlay == null) return;
             var match = MatchView;
             var choice = match.PendingChoice;
-            var visible = choice != null && choice.kind != "MOVE_UNIT";
+            var visible = choice != null && choice.kind != "MOVE_UNIT" && choice.kind != "HEAL_UNIT";
             _choiceOverlay.gameObject.SetActive(visible);
             if (!visible)
             {
@@ -2304,6 +2356,26 @@ namespace BiomeRivals.Demo
             RefreshAll();
         }
 
+        private async void ResolveHealingChoice(int optionIndex)
+        {
+            var choice = MatchView.PendingChoice;
+            if (MatchView.IsFinished || choice == null || choice.kind != "HEAL_UNIT" || !MatchView.IsChoiceOwner) return;
+            if (IsOnlineBoard)
+            {
+                if (!_onlineSession.CanIssueCommand) return;
+                await SendOnline(() => _onlineSession.ResolveChoiceAsync(choice.choiceId, optionIndex));
+                RefreshAll();
+                return;
+            }
+            var result = _match.ApplyResolveChoice(_match.CreateResolveChoiceCommand(choice.choiceId, optionIndex));
+            var message = result.Message;
+            foreach (var option in choice.options ?? Array.Empty<PendingChoiceOptionDto>())
+                if (option != null && !string.IsNullOrEmpty(option.cardId)) message = message.Replace(option.cardId, GetCardName(option.cardId));
+            ShowStatus(result.Accepted ? $"{message} · 状态 r{result.Revision}" : message, !result.Accepted);
+            if (result.Accepted) StartCoroutine(ShowTurnBanner("恢复 1 点生命", Cyan));
+            RefreshAll();
+        }
+
         private void RefreshMulligan()
         {
             if (_mulliganOverlay == null) return;
@@ -2441,12 +2513,17 @@ namespace BiomeRivals.Demo
             var canInteract = !match.IsFinished && (!IsOnlineBoard || _onlineSession.CanIssueCommand);
             var valid = false;
             var movementChoice = match.PendingChoice != null && match.PendingChoice.kind == "MOVE_UNIT";
+            var healingChoice = match.PendingChoice != null && match.PendingChoice.kind == "HEAL_UNIT";
             var movementTargetIsPlayer = movementChoice && match.PlayerBattlefield.Any(value =>
                 value != null && value.InstanceId == match.PendingChoice.targetInstanceId);
             if (canInteract && movementChoice)
                 valid = player == movementTargetIsPlayer && view.Kind == DemoSlotKind.Unit && empty && match.IsChoiceOwner &&
                     (match.PendingChoice.options ?? Array.Empty<PendingChoiceOptionDto>()).Any(option =>
                         option != null && option.selectable && option.slotIndex == view.Index);
+            else if (canInteract && healingChoice)
+                valid = player && view.Kind == DemoSlotKind.Unit && !empty && match.IsChoiceOwner &&
+                    (match.PendingChoice.options ?? Array.Empty<PendingChoiceOptionDto>()).Any(option =>
+                        option != null && option.selectable && option.slotIndex == view.Index && option.cardId == battlefieldObject?.CardId);
             else if (canInteract && selectingCardTarget)
                 valid = IsValidPendingCardTarget(player, view.Kind, battlefieldObject);
             else if (canInteract && player)
@@ -2473,6 +2550,7 @@ namespace BiomeRivals.Demo
                 battlefieldObject.InstanceId == _selectedDeploymentTargetInstanceId;
             var priorityTarget = selectedCardTarget || selectedDeploymentTarget ||
                 movementChoice && battlefieldObject?.InstanceId == match.PendingChoice.targetInstanceId ||
+                healingChoice && valid ||
                 valid && !player && battlefieldObject?.HasKeyword("TAUNT") == true || activatesDrowned || activatesTamedWolf || activatesGoat;
             var auraBattlefield = player ? match.PlayerBattlefield : match.OpponentBattlefield;
             var auraLayers = view.Kind == DemoSlotKind.Unit
@@ -2503,6 +2581,11 @@ namespace BiomeRivals.Demo
                 engineReadyKind = DemoEngineReadyKind.Mansion;
             else if (view.Kind == DemoSlotKind.Building && battlefieldObject?.CardId == "si_008")
                 engineReadyKind = DemoEngineReadyKind.IceSpire;
+            else if (view.Kind == DemoSlotKind.Building && battlefieldObject?.CardId == "si_007" &&
+                !match.HasTriggeredEffect(player, battlefieldObject.InstanceId, "effect.si_007.01") &&
+                (player ? match.PlayerBattlefield : match.OpponentBattlefield).Any(value =>
+                    value != null && value.SlotKind == DemoSlotKind.Unit && value.Health > 0 && value.Health < value.MaxHealth))
+                engineReadyKind = DemoEngineReadyKind.SnowHut;
             _battlefield.SetSlotEngineReady(
                 player,
                 view.Kind,
@@ -2559,7 +2642,8 @@ namespace BiomeRivals.Demo
             var match = MatchView;
             ClearChildren(_inspectorRoot);
             var moving = match.PendingChoice != null && match.PendingChoice.kind == "MOVE_UNIT";
-            CreateText(_inspectorRoot, "Header", new Vector2(0, 315), new Vector2(250, 38), moving ? "位移指令" : match.Phase == DemoTurnPhase.Main ? "卡牌详情" : "战斗指令", 20, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
+            var healing = match.PendingChoice != null && match.PendingChoice.kind == "HEAL_UNIT";
+            CreateText(_inspectorRoot, "Header", new Vector2(0, 315), new Vector2(250, 38), moving ? "位移指令" : healing ? "雪屋疗愈" : match.Phase == DemoTurnPhase.Main ? "卡牌详情" : "战斗指令", 20, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
             if (match.IsFinished)
             {
                 _cardDetailsView.Clear();
@@ -2601,6 +2685,18 @@ namespace BiomeRivals.Demo
                     stay.interactable = !IsOnlineBoard || _onlineSession.CanIssueCommand;
                     stay.onClick.AddListener(() => ResolveMovementChoice(-1));
                 }
+                return;
+            }
+            if (healing)
+            {
+                _cardDetailsView.Clear();
+                CreateText(_inspectorRoot, "HealingTitle", new Vector2(0, 105), new Vector2(245, 120),
+                    "雪屋 · 起始阶段\n选择发光的受伤单位", 19, Cyan, TextAnchor.MiddleCenter, FontStyle.Bold);
+                CreateText(_inspectorRoot, "HealingHint", new Vector2(0, -10), new Vector2(235, 115),
+                    match.IsChoiceOwner
+                        ? "这些单位缺失的生命值并列最多。\n直接点击场内模型完成治疗。"
+                        : "等待对手选择一个并列的\n最重伤单位。",
+                    15, Pale, TextAnchor.MiddleCenter, FontStyle.Normal);
                 return;
             }
             if (match.Phase == DemoTurnPhase.Combat)
@@ -2878,6 +2974,13 @@ namespace BiomeRivals.Demo
                     var option = (choice.options ?? Array.Empty<PendingChoiceOptionDto>()).FirstOrDefault(value =>
                         value != null && value.selectable && value.slotIndex == index && player == targetIsPlayer);
                     if (option != null) ResolveMovementChoice(option.optionIndex);
+                }
+                else if (choice.kind == "HEAL_UNIT" && MatchView.IsChoiceOwner && player && kind == DemoSlotKind.Unit)
+                {
+                    var battlefieldObject = MatchView.GetObject(true, kind, index);
+                    var option = (choice.options ?? Array.Empty<PendingChoiceOptionDto>()).FirstOrDefault(value =>
+                        value != null && value.selectable && value.slotIndex == index && value.cardId == battlefieldObject?.CardId);
+                    if (option != null) ResolveHealingChoice(option.optionIndex);
                 }
                 return;
             }

@@ -46,6 +46,7 @@ $textures = [ordered]@{
     cactus_side = 'assets/minecraft/textures/block/cactus_side.png'
     cactus_top = 'assets/minecraft/textures/block/cactus_top.png'
     packed_ice = 'assets/minecraft/textures/block/packed_ice.png'
+    snow_block = 'assets/minecraft/textures/block/snow.png'
     deepslate_bricks = 'assets/minecraft/textures/block/deepslate_bricks.png'
     sculk_sensor_bottom = 'assets/minecraft/textures/block/sculk_sensor_bottom.png'
     sculk_sensor_side = 'assets/minecraft/textures/block/sculk_sensor_side.png'

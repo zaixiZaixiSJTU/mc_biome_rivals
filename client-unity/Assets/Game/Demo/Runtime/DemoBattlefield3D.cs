@@ -17,7 +17,8 @@ namespace BiomeRivals.Demo
         Temple,
         Mine,
         Mansion,
-        IceSpire
+        IceSpire,
+        SnowHut
     }
 
     public sealed class DemoBattlefield3D : MonoBehaviour
@@ -306,6 +307,8 @@ namespace BiomeRivals.Demo
                         ? Color.Lerp(Hex("#3D4C37"), Hex("#9CCF70"), pulse)
                     : marker.EngineReadyKind == DemoEngineReadyKind.IceSpire
                         ? Color.Lerp(Hex("#3A6682"), Hex("#BDEEFF"), pulse)
+                    : marker.EngineReadyKind == DemoEngineReadyKind.SnowHut
+                        ? Color.Lerp(Hex("#477A8C"), Hex("#E5FAFF"), pulse)
                         : Color.Lerp(Hex("#8E3F72"), Hex("#F08FB4"), pulse);
             var highlightColor = rejectedPreview
                 ? Color.Lerp(Hex("#B41635"), Hex("#FF3157"), pulse)
@@ -831,6 +834,7 @@ namespace BiomeRivals.Demo
                 else if (cardId == "cd_004") BuildSculkSensor(root, footprintWidth);
                 else if (cardId == "cd_007") BuildAbandonedMine(root, footprintWidth);
                 else if (cardId == "cd_008") BuildWoodlandMansion(root, footprintWidth);
+                else if (cardId == "si_007") BuildSnowHut(root, footprintWidth);
                 else if (cardId == "si_008") BuildIceSpire(root, footprintWidth);
                 else if (cardId == "or_007") BuildCoralReef(root, material, footprintWidth);
                 else if (cardId == "or_008") BuildOceanMonument(root, material, footprintWidth);
@@ -1111,6 +1115,34 @@ namespace BiomeRivals.Demo
             CreateBlock(root, "IceSpireCenterTip", new Vector3(0f, 2.62f, 0.04f), new Vector3(0.46f, 0.36f, 0.46f), frost);
             CreateBlock(root, "IceSpireRightTip", new Vector3(quarter, 1.56f, 0.02f), new Vector3(0.38f, 0.28f, 0.38f), frost);
             CreateBlock(root, "IceSpireRune", new Vector3(0f, 0.72f, -0.47f), new Vector3(0.62f, 0.30f, 0.07f), frost);
+        }
+
+        private void BuildSnowHut(Transform root, float footprintWidth)
+        {
+            var snow = GetWorldMaterial("snow_hut_snow", "snow_block", Hex("#E7F1F3"));
+            var packedIce = GetWorldMaterial("snow_hut_ice", "packed_ice", Hex("#8FC6DB"));
+            var shadow = GetAccentMaterial("snow_hut_shadow", Hex("#1D3440"));
+            var warmLight = GetAccentMaterial("snow_hut_light", Hex("#F2D58A"));
+            var width = Mathf.Max(2.32f, footprintWidth);
+
+            CreateBlock(root, "SnowHutFoundation", new Vector3(0f, 0.13f, 0f),
+                new Vector3(width, 0.22f, 0.96f), packedIce);
+            CreateBlock(root, "SnowHutLower", new Vector3(0f, 0.52f, 0.05f),
+                new Vector3(width - 0.18f, 0.66f, 0.86f), snow);
+            CreateBlock(root, "SnowHutMiddle", new Vector3(0f, 0.98f, 0.08f),
+                new Vector3(width - 0.62f, 0.34f, 0.74f), snow);
+            CreateBlock(root, "SnowHutCrown", new Vector3(0f, 1.29f, 0.10f),
+                new Vector3(width - 1.18f, 0.30f, 0.58f), snow);
+            CreateBlock(root, "SnowHutEntranceRoof", new Vector3(0f, 0.72f, -0.48f),
+                new Vector3(0.82f, 0.74f, 0.34f), snow);
+            CreateBlock(root, "SnowHutEntrance", new Vector3(0f, 0.55f, -0.67f),
+                new Vector3(0.48f, 0.48f, 0.08f), shadow);
+            CreateBlock(root, "SnowHutWarmCore", new Vector3(0f, 0.54f, -0.715f),
+                new Vector3(0.24f, 0.20f, 0.035f), warmLight);
+            CreateBlock(root, "SnowHutLeftWindow", new Vector3(-width * 0.31f, 0.78f, -0.395f),
+                new Vector3(0.24f, 0.24f, 0.06f), packedIce);
+            CreateBlock(root, "SnowHutRightWindow", new Vector3(width * 0.31f, 0.78f, -0.395f),
+                new Vector3(0.24f, 0.24f, 0.06f), packedIce);
         }
 
         private void BuildOceanMonument(Transform root, Material prismarineBricks, float footprintWidth)

@@ -34,14 +34,15 @@ namespace BiomeRivalsRules {
       const salmonMove = choice.kind === 'MOVE_UNIT' && choice.effectId === 'effect.or_001.01' && choice.sourceCardId === 'or_001';
       const prismarineMove = choice.kind === 'MOVE_UNIT' && choice.effectId === 'effect.tk_012.01' && choice.sourceCardId === 'tk_012';
       const topCardScry = choice.kind === 'TOP_CARD_SCRY' && choice.effectId === 'effect.cd_001.01' && choice.sourceCardId === 'cd_001';
-      if (state.status !== 'ACTIVE' || ((choice.kind === 'ARCHAEOLOGY_TOP_3' || choice.kind === 'TOP_CARD_SCRY') && state.phase !== 'MAIN') ||
+      const snowHutHeal = choice.kind === 'HEAL_UNIT' && choice.effectId === 'effect.si_007.01' && choice.sourceCardId === 'si_007';
+      if (state.status !== 'ACTIVE' || ((choice.kind === 'ARCHAEOLOGY_TOP_3' || choice.kind === 'TOP_CARD_SCRY' || snowHutHeal) && state.phase !== 'MAIN') ||
           (riptideMove && state.phase !== 'COMBAT') || ((salmonMove || prismarineMove) && state.phase !== 'MAIN')) violations.push('pending choice phase is invalid');
       if (choicePlayerIndex < 0 || choicePlayerIndex !== state.activePlayerIndex) violations.push('pending choice owner must be the active player');
       if (!/^choice-[0-9]+$/.test(choice.choiceId)) violations.push('pending choice id is invalid');
       const archaeologyChoice = choice.kind === 'ARCHAEOLOGY_TOP_3' && choice.effectId === 'effect.db_003.01' && choice.sourceCardId === 'db_003';
       const moveChoice = riptideMove || salmonMove || prismarineMove;
-      if (!archaeologyChoice && !topCardScry && !moveChoice) violations.push('pending choice kind or source is unsupported');
-      if (!Array.isArray(choice.options) || choice.options.length > (moveChoice ? 2 : topCardScry ? 1 : 3)) violations.push('pending choice options are invalid');
+      if (!archaeologyChoice && !topCardScry && !moveChoice && !snowHutHeal) violations.push('pending choice kind or source is unsupported');
+      if (!Array.isArray(choice.options) || choice.options.length > (snowHutHeal ? 4 : moveChoice ? 2 : topCardScry ? 1 : 3)) violations.push('pending choice options are invalid');
       if (choicePlayerIndex >= 0) {
         const choicePlayer = state.players[choicePlayerIndex]!;
         if (topCardScry) {
@@ -73,6 +74,37 @@ namespace BiomeRivalsRules {
             }
             if (option.selectable !== (choicePlayer.buriedCardIds.indexOf(option.cardId) >= 0)) {
               violations.push('pending choice selectable marker differs from buried state');
+            }
+          }
+        } else if (snowHutHeal) {
+          const source = choicePlayer.battlefield.filter(function (object): boolean {
+            return object.instanceId === choice.sourceInstanceId && object.cardId === 'si_007' &&
+              object.cardType === 'BUILDING' && object.health > 0;
+          })[0];
+          if (source === undefined || choice.targetPlayerId !== choicePlayer.playerId || choice.targetInstanceId !== '' ||
+              choicePlayer.triggeredEffectKeysThisTurn.indexOf(choice.sourceInstanceId + ':effect.si_007.01') < 0) {
+            violations.push('pending snow hut source is invalid');
+          }
+          let greatestMissingHealth = 0;
+          const injured = choicePlayer.battlefield.filter(function (object): boolean {
+            if (object.cardType !== 'UNIT' || object.health <= 0 || object.health >= object.maxHealth) return false;
+            greatestMissingHealth = Math.max(greatestMissingHealth, object.maxHealth - object.health);
+            return true;
+          }).filter(function (object): boolean {
+            return object.maxHealth - object.health === greatestMissingHealth;
+          }).slice().sort(function (left, right): number {
+            if (left.slotIndex !== right.slotIndex) return left.slotIndex - right.slotIndex;
+            return left.instanceId < right.instanceId ? -1 : left.instanceId > right.instanceId ? 1 : 0;
+          });
+          if (injured.length < 2 || choice.options.length !== injured.length) {
+            violations.push('snow hut choice requires every tied most-injured unit');
+          }
+          for (let optionIndex = 0; optionIndex < choice.options.length; optionIndex += 1) {
+            const option = choice.options[optionIndex]!;
+            const expected = injured[optionIndex];
+            if (expected === undefined || option.optionIndex !== optionIndex || option.cardId !== expected.cardId ||
+                option.slotIndex !== expected.slotIndex || !option.selectable) {
+              violations.push('pending snow hut option is invalid');
             }
           }
         } else if (moveChoice) {
@@ -159,7 +191,7 @@ namespace BiomeRivalsRules {
       if (!Array.isArray(player.triggeredEffectKeysThisTurn) ||
           player.triggeredEffectKeysThisTurn.some(function (key): boolean {
             return typeof key !== 'string' ||
-              !/^object-[0-9]+:effect\.(?:db_004|pf_005|or_(?:002|004|007))\.01$/.test(key);
+              !/^object-[0-9]+:effect\.(?:db_004|pf_005|si_007|or_(?:002|004|007))\.01$/.test(key);
           }) || player.triggeredEffectKeysThisTurn.some(function (key, keyIndex): boolean {
             return player.triggeredEffectKeysThisTurn.indexOf(key) !== keyIndex;
           })) {

@@ -239,10 +239,11 @@ namespace BiomeRivalsRules {
         targetInstanceId: state.pendingChoice.targetInstanceId,
         options: state.pendingChoice.options.map(function (option): PendingChoiceOptionSnapshot {
           const ownsChoice = state.pendingChoice !== null && state.pendingChoice.playerId === viewerPlayerId;
-          const publicMoveChoice = state.pendingChoice !== null && state.pendingChoice.kind === 'MOVE_UNIT';
+          const publicBattlefieldChoice = state.pendingChoice !== null &&
+            (state.pendingChoice.kind === 'MOVE_UNIT' || state.pendingChoice.kind === 'HEAL_UNIT');
           return {
             optionIndex: option.optionIndex,
-            cardId: ownsChoice || publicMoveChoice ? option.cardId : null,
+            cardId: ownsChoice || publicBattlefieldChoice ? option.cardId : null,
             slotIndex: option.slotIndex,
             selectable: ownsChoice && option.selectable
           };
@@ -264,12 +265,14 @@ namespace BiomeRivalsRules {
         if (event.type === 'CARD_DRAWN' && payload.playerId !== viewerPlayerId) payload.cardId = null;
         if (event.type === 'CARD_BURIED' && payload.playerId !== viewerPlayerId) payload.cardId = null;
         if (event.type === 'CARD_GENERATED' && payload.playerId !== viewerPlayerId && payload.destination === 'HAND') payload.cardId = null;
-        if (event.type === 'CHOICE_OFFERED' && payload.playerId !== viewerPlayerId && payload.kind !== 'MOVE_UNIT' && Array.isArray(payload.options)) {
+        if (event.type === 'CHOICE_OFFERED' && payload.playerId !== viewerPlayerId &&
+            payload.kind !== 'MOVE_UNIT' && payload.kind !== 'HEAL_UNIT' && Array.isArray(payload.options)) {
           payload.options = (payload.options as PendingChoiceOptionState[]).map(function (option): PendingChoiceOptionSnapshot {
             return { optionIndex: option.optionIndex, cardId: null, slotIndex: option.slotIndex, selectable: false };
           });
         }
-        if (event.type === 'CHOICE_OFFERED' && payload.playerId !== viewerPlayerId && payload.kind === 'MOVE_UNIT' && Array.isArray(payload.options)) {
+        if (event.type === 'CHOICE_OFFERED' && payload.playerId !== viewerPlayerId &&
+            (payload.kind === 'MOVE_UNIT' || payload.kind === 'HEAL_UNIT') && Array.isArray(payload.options)) {
           payload.options = (payload.options as PendingChoiceOptionState[]).map(function (option): PendingChoiceOptionState {
             return { optionIndex: option.optionIndex, cardId: option.cardId, slotIndex: option.slotIndex, selectable: false };
           });
@@ -1909,6 +1912,84 @@ namespace BiomeRivalsRules {
       });
     }
 
+    function mostInjuredUnits(player: PlayerState): BattlefieldObjectState[] {
+      let greatestMissingHealth = 0;
+      const candidates = player.battlefield.filter(function (object): boolean {
+        if (object.cardType !== 'UNIT' || object.health <= 0 || object.health >= object.maxHealth) return false;
+        greatestMissingHealth = Math.max(greatestMissingHealth, object.maxHealth - object.health);
+        return true;
+      });
+      return candidates.filter(function (object): boolean {
+        return object.maxHealth - object.health === greatestMissingHealth;
+      }).slice().sort(function (left, right): number {
+        if (left.slotIndex !== right.slotIndex) return left.slotIndex - right.slotIndex;
+        return left.instanceId < right.instanceId ? -1 : left.instanceId > right.instanceId ? 1 : 0;
+      });
+    }
+
+    function healFromSnowHut(player: PlayerState, source: BattlefieldObjectState, target: BattlefieldObjectState): void {
+      target.health = Math.min(target.maxHealth, target.health + 1);
+      emit('OBJECT_STATS_CHANGED', {
+        playerId: player.playerId, instanceId: target.instanceId,
+        sourceCardId: source.cardId, sourceInstanceId: source.instanceId,
+        effectId: 'effect.si_007.01', reason: 'HEAL',
+        attack: target.attack, health: target.health,
+        temporaryAttackModifier: target.temporaryAttackModifier,
+        temporaryAttackModifierExpiresOnTurn: target.temporaryAttackModifierExpiresOnTurn
+      });
+    }
+
+    function offerSnowHutChoice(player: PlayerState, source: BattlefieldObjectState,
+      candidates: BattlefieldObjectState[]): void {
+      if (next.pendingChoice !== null) throw new Error('cannot offer a second choice while one is pending');
+      const options = candidates.map(function (target, optionIndex): PendingChoiceOptionState {
+        return { optionIndex: optionIndex, cardId: target.cardId, slotIndex: target.slotIndex, selectable: true };
+      });
+      next.pendingChoice = {
+        choiceId: 'choice-' + String(next.lastEventId + 1),
+        playerId: player.playerId,
+        sourceCardId: source.cardId,
+        sourceInstanceId: source.instanceId,
+        effectId: 'effect.si_007.01',
+        kind: 'HEAL_UNIT',
+        targetPlayerId: player.playerId,
+        targetInstanceId: '',
+        options: options
+      };
+      emit('CHOICE_OFFERED', {
+        choiceId: next.pendingChoice.choiceId, playerId: player.playerId,
+        sourceCardId: source.cardId, sourceInstanceId: source.instanceId,
+        effectId: 'effect.si_007.01', kind: 'HEAL_UNIT',
+        targetPlayerId: player.playerId, targetInstanceId: '',
+        options: options.map(function (option): PendingChoiceOptionState {
+          return { optionIndex: option.optionIndex, cardId: option.cardId, slotIndex: option.slotIndex, selectable: option.selectable };
+        })
+      });
+    }
+
+    function resolveSnowHutStartPhase(player: PlayerState): void {
+      const huts = player.battlefield.filter(function (object): boolean {
+        return object.cardType === 'BUILDING' && object.cardId === 'si_007' && object.health > 0;
+      }).slice().sort(function (left, right): number {
+        if (left.slotIndex !== right.slotIndex) return left.slotIndex - right.slotIndex;
+        return left.instanceId < right.instanceId ? -1 : left.instanceId > right.instanceId ? 1 : 0;
+      });
+      for (let hutIndex = 0; hutIndex < huts.length; hutIndex += 1) {
+        const hut = huts[hutIndex]!;
+        const triggerKey = hut.instanceId + ':effect.si_007.01';
+        if (player.triggeredEffectKeysThisTurn.indexOf(triggerKey) >= 0) continue;
+        const candidates = mostInjuredUnits(player);
+        if (candidates.length === 0) continue;
+        player.triggeredEffectKeysThisTurn.push(triggerKey);
+        if (candidates.length === 1) {
+          healFromSnowHut(player, hut, candidates[0]!);
+          continue;
+        }
+        offerSnowHutChoice(player, hut, candidates);
+        return;
+      }
+    }
+
     function triggerSuccessfulMovement(targetPlayer: PlayerState, movedUnit: BattlefieldObjectState): void {
       const guides = targetPlayer.battlefield.filter(function (object): boolean {
         return object.cardType === 'UNIT' && object.cardId === 'or_002' && object.instanceId !== movedUnit.instanceId;
@@ -2431,6 +2512,35 @@ namespace BiomeRivalsRules {
         });
         return null;
       }
+      if (pendingChoice.kind === 'HEAL_UNIT') {
+        let selectedOption: PendingChoiceOptionState | null = null;
+        for (let optionIndex = 0; optionIndex < pendingChoice.options.length; optionIndex += 1) {
+          const option = pendingChoice.options[optionIndex]!;
+          if (option.optionIndex === selectedOptionIndex && option.selectable) selectedOption = option;
+        }
+        if (selectedOption === null) return reject(state, 'INVALID_CHOICE', 'the selected healing target is not available');
+        const player = next.players[actorIndex]!;
+        const source = findObject(player, pendingChoice.sourceInstanceId);
+        const targetInstanceId = player.unitSlots[selectedOption.slotIndex] || null;
+        const target = targetInstanceId === null ? null : findObject(player, targetInstanceId);
+        if (source === null || source.cardId !== 'si_007' || source.cardType !== 'BUILDING') {
+          throw new Error('pending snow hut source is missing');
+        }
+        if (target === null || target.cardType !== 'UNIT' || target.cardId !== selectedOption.cardId) {
+          throw new Error('pending snow hut target is missing');
+        }
+        next.pendingChoice = null;
+        emit('CHOICE_RESOLVED', {
+          choiceId: pendingChoice.choiceId, playerId: player.playerId,
+          sourceCardId: pendingChoice.sourceCardId, sourceInstanceId: pendingChoice.sourceInstanceId,
+          effectId: pendingChoice.effectId, kind: pendingChoice.kind,
+          selectedOptionIndex: selectedOption.optionIndex, selectedCardId: selectedOption.cardId,
+          selectedSlotIndex: selectedOption.slotIndex
+        });
+        healFromSnowHut(player, source, target);
+        resolveSnowHutStartPhase(player);
+        return null;
+      }
       const selectableOptions = pendingChoice.options.filter(function (option): boolean { return option.selectable; });
       let selectedOption: PendingChoiceOptionState | null = null;
       if (selectableOptions.length === 0) {
@@ -2737,6 +2847,7 @@ namespace BiomeRivalsRules {
           next.winnerPlayerId = next.players[actorIndex]!.playerId;
           emit('MATCH_ENDED', { winnerPlayerId: next.winnerPlayerId, reason: 'FATIGUE' });
         }
+        if (next.status !== 'FINISHED') resolveSnowHutStartPhase(nextPlayer);
         break;
       }
       case 'CONCEDE': {

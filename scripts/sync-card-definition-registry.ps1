@@ -164,7 +164,7 @@ foreach ($line in Get-Content -LiteralPath $sourcePath -Encoding UTF8) {
         foreach ($ingredient in $recipe.ingredients) { $craftingRecipe.Add($ingredient) }
     }
     $definitions.Add([ordered]@{
-        id=$cardId; designId=$designId; contentVersion=37; collectible=(-not $isToken)
+        id=$cardId; designId=$designId; contentVersion=38; collectible=(-not $isToken)
         manualPlayAllowed=($cardId -notin @('tk_006', 'tk_007', 'tk_008'))
         nameKey="card.$cardId.name"; rulesTextKey="card.$cardId.rules"
         factionId=$factionId; themeId=$themeId; rarity=$rarity; cardType=$cardType; cost=$cost
@@ -203,7 +203,7 @@ foreach ($targetDesignId in $recipesByTarget.Keys) {
 }
 
 if ($definitions.Count -ne 74) { throw "Expected 74 card definitions, found $($definitions.Count)." }
-$definitionDocument = [ordered]@{ schemaVersion=4; contentVersion=37; source=$SourceMarkdown.Replace('\','/'); entries=$definitions }
+$definitionDocument = [ordered]@{ schemaVersion=4; contentVersion=38; source=$SourceMarkdown.Replace('\','/'); entries=$definitions }
 $textDocument = [ordered]@{ schemaVersion=1; locale='zh-CN'; source=$SourceMarkdown.Replace('\','/'); entries=$texts }
 
 foreach ($output in @(

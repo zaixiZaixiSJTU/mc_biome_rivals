@@ -1,6 +1,6 @@
 # 林地苗圃动物成长规范 v1
 
-本规范已按当前组合校准为 `protocolVersion 28`、`rulesetVersion prototype-0.45` 与内容版本 37。
+本规范已按当前组合校准为 `protocolVersion 29`、`rulesetVersion prototype-0.46` 与内容版本 38。
 
 ## PF-005 林地苗圃
 

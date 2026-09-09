@@ -139,7 +139,7 @@ namespace BiomeRivals.Core
                 }
                 if (player.triggeredEffectKeysThisTurn == null) player.triggeredEffectKeysThisTurn = Array.Empty<string>();
                 if (player.triggeredEffectKeysThisTurn.Any(value => string.IsNullOrWhiteSpace(value) ||
-                    !System.Text.RegularExpressions.Regex.IsMatch(value, "^object-[0-9]+:effect\\.(db_004|pf_005|or_(002|004|007))\\.01$")) ||
+                    !System.Text.RegularExpressions.Regex.IsMatch(value, "^object-[0-9]+:effect\\.(db_004|pf_005|si_007|or_(002|004|007))\\.01$")) ||
                     player.triggeredEffectKeysThisTurn.Distinct(StringComparer.Ordinal).Count() != player.triggeredEffectKeysThisTurn.Length)
                     throw new InvalidOperationException("Snapshot contains invalid once-per-turn effect markers.");
                 else if (player.buriedCount < 0 || player.buriedCount > player.deckCount)
@@ -326,6 +326,14 @@ namespace BiomeRivals.Core
                     };
                     ValidatePendingChoice(Current, offeredChoice, "Choice event");
                     Current.pendingChoice = offeredChoice;
+                    if (payload.effectId == "effect.si_007.01")
+                    {
+                        var hutOwner = FindPlayer(payload.playerId);
+                        var hutTriggerKey = $"{payload.sourceInstanceId}:{payload.effectId}";
+                        if (Array.IndexOf(hutOwner.triggeredEffectKeysThisTurn ?? Array.Empty<string>(), hutTriggerKey) < 0)
+                            hutOwner.triggeredEffectKeysThisTurn = (hutOwner.triggeredEffectKeysThisTurn ?? Array.Empty<string>())
+                                .Concat(new[] { hutTriggerKey }).ToArray();
+                    }
                     break;
                 case MatchEventTypes.ChoiceResolved:
                     if (Current.pendingChoice == null || Current.pendingChoice.choiceId != payload.choiceId ||
@@ -421,7 +429,7 @@ namespace BiomeRivals.Core
                     statsObject.temporaryAttackModifierExpiresOnTurn = payload.temporaryAttackModifierExpiresOnTurn;
                     if ((payload.effectId == "effect.db_004.01" || payload.effectId == "effect.pf_005.01" ||
                         payload.effectId == "effect.or_002.01" || payload.effectId == "effect.or_004.01" ||
-                        payload.effectId == "effect.or_007.01") &&
+                        payload.effectId == "effect.or_007.01" || payload.effectId == "effect.si_007.01") &&
                         !string.IsNullOrEmpty(payload.sourceInstanceId))
                     {
                         var sourceOwner = Current.players.FirstOrDefault(candidate =>
@@ -619,19 +627,23 @@ namespace BiomeRivals.Core
                 choice.effectId == "effect.or_001.01" && choice.sourceCardId == "or_001";
             var prismarineMovement = choice != null && choice.kind == "MOVE_UNIT" &&
                 choice.effectId == "effect.tk_012.01" && choice.sourceCardId == "tk_012";
+            var snowHutHealing = choice != null && choice.kind == "HEAL_UNIT" &&
+                choice.effectId == "effect.si_007.01" && choice.sourceCardId == "si_007";
             var movement = riptideMovement || salmonMovement || prismarineMovement;
-            if (choice == null || (!archaeology && !topCardScry && !movement) || string.IsNullOrWhiteSpace(choice.choiceId) ||
+            if (choice == null || (!archaeology && !topCardScry && !movement && !snowHutHealing) || string.IsNullOrWhiteSpace(choice.choiceId) ||
                 string.IsNullOrWhiteSpace(choice.sourceInstanceId) || choice.options == null ||
-                choice.options.Length > (movement ? 2 : archaeology ? 3 : 1) || state.status != "ACTIVE" ||
-                ((archaeology || topCardScry) && state.phase != "MAIN") || (riptideMovement && state.phase != "COMBAT") ||
+                choice.options.Length > (snowHutHealing ? 4 : movement ? 2 : archaeology ? 3 : 1) || state.status != "ACTIVE" ||
+                ((archaeology || topCardScry || snowHutHealing) && state.phase != "MAIN") || (riptideMovement && state.phase != "COMBAT") ||
                 ((salmonMovement || prismarineMovement) && state.phase != "MAIN"))
                 throw new InvalidOperationException($"{source} contains an invalid pending card choice.");
             if (topCardScry && choice.options.Length != 1)
                 throw new InvalidOperationException($"{source} top-card scry must contain exactly one option.");
             var owner = FindPlayer(state, choice.playerId);
-            var sourceValid = archaeology || topCardScry
+            var sourceValid = archaeology || topCardScry || snowHutHealing
                 ? (owner?.battlefield ?? Array.Empty<BattlefieldObjectStateDto>()).Any(value =>
-                    value != null && value.instanceId == choice.sourceInstanceId && value.cardId == choice.sourceCardId)
+                    value != null && value.instanceId == choice.sourceInstanceId && value.cardId == choice.sourceCardId &&
+                    (!snowHutHealing || value.cardType == "BUILDING" && value.health > 0)) &&
+                    (!snowHutHealing || choice.targetPlayerId == owner.playerId && string.IsNullOrEmpty(choice.targetInstanceId))
                 : prismarineMovement
                     ? owner != null && choice.targetPlayerId == owner.playerId &&
                         choice.sourceInstanceId.StartsWith("effect-", StringComparison.Ordinal) &&
@@ -646,6 +658,21 @@ namespace BiomeRivals.Core
                 !ReferenceEquals(state.players[state.activePlayerIndex], owner) || !sourceValid)
                 throw new InvalidOperationException($"{source} pending choice has no active source object.");
 
+            BattlefieldObjectStateDto[] snowHutCandidates = null;
+            if (snowHutHealing)
+            {
+                var injured = (owner.battlefield ?? Array.Empty<BattlefieldObjectStateDto>())
+                    .Where(value => value != null && value.cardType == "UNIT" && value.health > 0 && value.health < value.maxHealth)
+                    .ToArray();
+                var greatestMissingHealth = injured.Length == 0 ? 0 : injured.Max(value => value.maxHealth - value.health);
+                snowHutCandidates = injured.Where(value => value.maxHealth - value.health == greatestMissingHealth)
+                    .OrderBy(value => value.slotIndex)
+                    .ThenBy(value => value.instanceId, StringComparer.Ordinal)
+                    .ToArray();
+                if (snowHutCandidates.Length < 2 || choice.options.Length != snowHutCandidates.Length)
+                    throw new InvalidOperationException($"{source} snow-hut choice does not contain every tied target.");
+            }
+
             var isOwnerProjection = choice.playerId == state.viewerPlayerId;
             for (var index = 0; index < choice.options.Length; index++)
             {
@@ -655,8 +682,11 @@ namespace BiomeRivals.Core
                     ((archaeology || topCardScry) && !isOwnerProjection && (!string.IsNullOrEmpty(option.cardId) || option.selectable)) ||
                     ((archaeology || topCardScry) && option.slotIndex != -1) ||
                     (topCardScry && isOwnerProjection && (choice.options.Length != 1 || !option.selectable)) ||
-                    (movement && option.slotIndex < 0) ||
-                    (movement && !isOwnerProjection && option.selectable))
+                    ((movement || snowHutHealing) && option.slotIndex < 0) ||
+                    ((movement || snowHutHealing) && !isOwnerProjection && option.selectable) ||
+                    (snowHutHealing && (string.IsNullOrWhiteSpace(option.cardId) || isOwnerProjection && !option.selectable)) ||
+                    (snowHutHealing && (option.cardId != snowHutCandidates[index].cardId ||
+                        option.slotIndex != snowHutCandidates[index].slotIndex)))
                     throw new InvalidOperationException($"{source} pending choice violates option ordering or privacy projection.");
             }
         }

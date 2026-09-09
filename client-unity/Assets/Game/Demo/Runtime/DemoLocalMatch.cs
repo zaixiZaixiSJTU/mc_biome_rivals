@@ -25,6 +25,7 @@ namespace BiomeRivals.Demo
         private readonly HashSet<string> _processedCommandIds = new HashSet<string>(StringComparer.Ordinal);
         private readonly HashSet<string> _triggeredEffectKeysThisTurn = new HashSet<string>(StringComparer.Ordinal);
         private int _nextLocalCommandId = 1;
+        private int _nextLocalChoiceId = 1;
         private int _nextBattlefieldInstanceId = 1;
         private int _opponentHandCount = 5;
         private int _playerCardsPlayedThisTurn;
@@ -530,6 +531,25 @@ namespace BiomeRivals.Demo
                 return DemoCommandResult.Accept(movedToBottom
                     ? $"洞穴回声：已将 {option.cardId} 置于牌库底。"
                     : $"洞穴回声：{option.cardId} 保持在牌库顶。", Revision);
+            }
+            if (PendingChoice.kind == "HEAL_UNIT")
+            {
+                var healingOption = (PendingChoice.options ?? Array.Empty<PendingChoiceOptionDto>())
+                    .FirstOrDefault(option => option != null && option.selectable && option.optionIndex == command.payload.selectedOptionIndex);
+                if (healingOption == null) return Reject(DemoCommandRejectionCode.InvalidChoice, "该雪屋治疗目标已经不可用。");
+                var source = _playerBattlefield.FirstOrDefault(value => value.InstanceId == PendingChoice.sourceInstanceId &&
+                    value.CardId == "si_007" && value.SlotKind == DemoSlotKind.Building && value.Health > 0);
+                var candidates = GetMostInjuredUnits(_playerBattlefield);
+                var target = candidates.FirstOrDefault(value => value.SlotIndex == healingOption.slotIndex && value.CardId == healingOption.cardId);
+                if (source == null || target == null || candidates.Count < 2)
+                    return Reject(DemoCommandRejectionCode.InvalidChoice, "雪屋来源或并列治疗目标已经变化。");
+                PendingChoice = null;
+                target.Health = Math.Min(target.MaxHealth, target.Health + 1);
+                ResolveSnowHutStartPhase(true, true);
+                AcceptCommand(command);
+                return DemoCommandResult.Accept(PendingChoice == null
+                    ? $"雪屋为 {target.CardId} 恢复了 1 点生命。"
+                    : $"雪屋为 {target.CardId} 恢复了 1 点生命；另一个雪屋仍需选择治疗目标。", Revision);
             }
             var selectable = (PendingChoice.options ?? Array.Empty<PendingChoiceOptionDto>()).Where(option => option != null && option.selectable).ToArray();
             PendingChoiceOptionDto selected = null;
@@ -1073,6 +1093,7 @@ namespace BiomeRivals.Demo
         {
             if (IsFinished)
                 return RememberDraw(new DemoDrawResult(DemoDrawOutcome.MatchEnded, string.Empty, 0));
+            ResolveSnowHutStartPhase(false, false);
             ResolveEndPhaseStatuses(_opponentBattlefield, null);
             ResolvePlayerStatuses(_opponentStatuses);
             ResolveCaveStructureEndPhase(false, out _, out _);
@@ -1088,7 +1109,9 @@ namespace BiomeRivals.Demo
             _playerCardsPlayedThisTurn = 0;
             _playerHasTargetedEnemyObjectThisTurn = false;
             foreach (var battlefieldObject in _playerBattlefield) battlefieldObject.HasAttacked = false;
-            return DrawCard();
+            var draw = DrawCard();
+            if (!IsFinished) ResolveSnowHutStartPhase(true, true);
+            return draw;
         }
 
         private DemoDrawResult DrawCard()
@@ -1195,7 +1218,7 @@ namespace BiomeRivals.Demo
             }
             PendingChoice = new PendingChoiceDto
             {
-                choiceId = $"choice-{Revision + 1}",
+                choiceId = NextChoiceId(),
                 playerId = "local-player",
                 sourceCardId = source.CardId,
                 sourceInstanceId = source.InstanceId,
@@ -1211,7 +1234,7 @@ namespace BiomeRivals.Demo
             if (_deck.Count == 0) return false;
             PendingChoice = new PendingChoiceDto
             {
-                choiceId = $"choice-{Revision + 1}",
+                choiceId = NextChoiceId(),
                 playerId = "local-player",
                 sourceCardId = source.CardId,
                 sourceInstanceId = source.InstanceId,
@@ -1245,6 +1268,59 @@ namespace BiomeRivals.Demo
         {
             LastDrawResult = result;
             return result;
+        }
+
+        private string NextChoiceId() => $"choice-local-{_nextLocalChoiceId++}";
+
+        private static List<DemoBattlefieldObject> GetMostInjuredUnits(List<DemoBattlefieldObject> battlefield)
+        {
+            var injured = battlefield.Where(value => value.SlotKind == DemoSlotKind.Unit && value.Health > 0 &&
+                    value.Health < value.MaxHealth)
+                .ToList();
+            if (injured.Count == 0) return injured;
+            var greatestMissingHealth = injured.Max(value => value.MaxHealth - value.Health);
+            return injured.Where(value => value.MaxHealth - value.Health == greatestMissingHealth)
+                .OrderBy(value => value.SlotIndex)
+                .ThenBy(value => value.InstanceId, StringComparer.Ordinal)
+                .ToList();
+        }
+
+        private int ResolveSnowHutStartPhase(bool player, bool offerPlayerChoice)
+        {
+            var battlefield = player ? _playerBattlefield : _opponentBattlefield;
+            var huts = battlefield.Where(value => value.SlotKind == DemoSlotKind.Building && value.CardId == "si_007" && value.Health > 0)
+                .OrderBy(value => value.SlotIndex)
+                .ThenBy(value => value.InstanceId, StringComparer.Ordinal)
+                .ToArray();
+            var healed = 0;
+            foreach (var hut in huts)
+            {
+                var triggerKey = $"{hut.InstanceId}:effect.si_007.01";
+                if (_triggeredEffectKeysThisTurn.Contains(triggerKey)) continue;
+                var candidates = GetMostInjuredUnits(battlefield);
+                if (candidates.Count == 0) continue;
+                _triggeredEffectKeysThisTurn.Add(triggerKey);
+                if (offerPlayerChoice && candidates.Count > 1)
+                {
+                    PendingChoice = new PendingChoiceDto
+                    {
+                        choiceId = NextChoiceId(), playerId = "local-player",
+                        sourceCardId = hut.CardId, sourceInstanceId = hut.InstanceId,
+                        effectId = "effect.si_007.01", kind = "HEAL_UNIT",
+                        targetPlayerId = "local-player", targetInstanceId = string.Empty,
+                        options = candidates.Select((target, optionIndex) => new PendingChoiceOptionDto
+                        {
+                            optionIndex = optionIndex, cardId = target.CardId,
+                            slotIndex = target.SlotIndex, selectable = true
+                        }).ToArray()
+                    };
+                    break;
+                }
+                var target = candidates[0];
+                target.Health = Math.Min(target.MaxHealth, target.Health + 1);
+                healed++;
+            }
+            return healed;
         }
 
         private bool CanPlay(CardDefinitionEntry definition, out string message)
@@ -1450,7 +1526,7 @@ namespace BiomeRivals.Demo
             if (options.Count == 0) return;
             PendingChoice = new PendingChoiceDto
             {
-                choiceId = $"choice-local-{Revision + 1}", playerId = "local-player",
+                choiceId = NextChoiceId(), playerId = "local-player",
                 sourceCardId = sourceCardId, sourceInstanceId = sourceInstanceId,
                 effectId = effectId, kind = "MOVE_UNIT",
                 targetPlayerId = targetIsPlayer ? "local-player" : "local-opponent", targetInstanceId = target.InstanceId,

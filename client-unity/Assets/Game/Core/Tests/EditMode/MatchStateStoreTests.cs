@@ -1565,6 +1565,83 @@ namespace BiomeRivals.Core.Tests
         }
 
         [Test]
+        public void Apply_ReplaysPublicSnowHutHealingChoiceAndTriggerMarker()
+        {
+            var hut = new BattlefieldObjectStateDto
+            {
+                instanceId = "object-10", cardId = "si_007", cardType = "BUILDING",
+                health = 5, maxHealth = 5, slotKind = "BUILDING", slotIndex = 0, occupiedSlots = 1, summonedTurn = 1
+            };
+            var left = new BattlefieldObjectStateDto
+            {
+                instanceId = "object-11", cardId = "pf_001", cardType = "UNIT", attack = 1,
+                health = 1, maxHealth = 2, slotKind = "UNIT", slotIndex = 0, occupiedSlots = 1, summonedTurn = 1
+            };
+            var right = new BattlefieldObjectStateDto
+            {
+                instanceId = "object-12", cardId = "pf_001", cardType = "UNIT", attack = 1,
+                health = 1, maxHealth = 2, slotKind = "UNIT", slotIndex = 2, occupiedSlots = 1, summonedTurn = 1
+            };
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "snow-hut-replay", viewerPlayerId = "alice", protocolVersion = GameVersions.Protocol,
+                rulesetVersion = GameVersions.Ruleset, status = "ACTIVE", phase = "MAIN", turn = 2, activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto
+                    {
+                        playerId = "alice", unitSlots = new[] { "object-11", null, "object-12", null },
+                        buildingSlots = new[] { "object-10", null, null }, battlefield = new[] { hut, left, right }
+                    },
+                    new PlayerStateDto { playerId = "bob" }
+                }
+            });
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 1, type = MatchEventTypes.ChoiceOffered, payload = new MatchEventPayloadDto
+                    {
+                        choiceId = "choice-1", playerId = "alice", sourceCardId = "si_007", sourceInstanceId = "object-10",
+                        effectId = "effect.si_007.01", kind = "HEAL_UNIT", targetPlayerId = "alice", targetInstanceId = string.Empty,
+                        options = new[]
+                        {
+                            new PendingChoiceOptionDto { optionIndex = 0, cardId = "pf_001", slotIndex = 0, selectable = true },
+                            new PendingChoiceOptionDto { optionIndex = 1, cardId = "pf_001", slotIndex = 2, selectable = true }
+                        }
+                    }}
+                }
+            });
+
+            Assert.That(store.Current.pendingChoice.kind, Is.EqualTo("HEAL_UNIT"));
+            Assert.That(store.Current.players[0].triggeredEffectKeysThisTurn,
+                Does.Contain("object-10:effect.si_007.01"));
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 2,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 2, type = MatchEventTypes.ChoiceResolved,
+                        payload = new MatchEventPayloadDto { choiceId = "choice-1", playerId = "alice" } },
+                    new MatchEventDto { eventId = 3, type = MatchEventTypes.ObjectStatsChanged, payload = new MatchEventPayloadDto
+                    {
+                        playerId = "alice", instanceId = "object-12", sourceCardId = "si_007", sourceInstanceId = "object-10",
+                        effectId = "effect.si_007.01", reason = "HEAL", attack = 1, health = 2,
+                        temporaryAttackModifier = 0, temporaryAttackModifierExpiresOnTurn = 0
+                    }}
+                }
+            });
+
+            Assert.That(right.health, Is.EqualTo(2));
+            Assert.That(store.Current.pendingChoice, Is.Null);
+            Assert.That(store.Current.players[0].triggeredEffectKeysThisTurn.Count(value =>
+                value == "object-10:effect.si_007.01"), Is.EqualTo(1));
+        }
+
+        [Test]
         public void Apply_ReplaysTurtleAuraHealthAndMaximumHealth()
         {
             var salmon = new BattlefieldObjectStateDto

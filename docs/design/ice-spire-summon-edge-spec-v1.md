@@ -1,6 +1,6 @@
 # 冰刺之巅边缘召唤规则 v1
 
-本规范对应 `protocolVersion 28`、`rulesetVersion prototype-0.45` 与内容版本 37，覆盖 SI-008「冰刺之巅」。
+本规范对应 `protocolVersion 29`、`rulesetVersion prototype-0.46` 与内容版本 38，覆盖 SI-008「冰刺之巅」。
 
 ## 触发定义
 

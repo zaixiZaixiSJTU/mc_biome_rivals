@@ -1186,6 +1186,9 @@ namespace BiomeRivals.Demo.Tests
                 battlefield.SetSlotEngineReady(true, DemoSlotKind.Building, 0, DemoEngineReadyKind.IceSpire);
                 var iceSpireHighlight = buildingMarker.GetComponent<MeshRenderer>().sharedMaterial.GetColor("_HighlightColor");
                 Assert.That(iceSpireHighlight, Is.Not.EqualTo(templeHighlight));
+                battlefield.SetSlotEngineReady(true, DemoSlotKind.Building, 0, DemoEngineReadyKind.SnowHut);
+                var snowHutHighlight = buildingMarker.GetComponent<MeshRenderer>().sharedMaterial.GetColor("_HighlightColor");
+                Assert.That(snowHutHighlight, Is.Not.EqualTo(iceSpireHighlight));
                 var synchronizedMarker = root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Building_1/InteractiveGround");
                 battlefield.SetSlotEngineReady(true, DemoSlotKind.Building, 0, DemoEngineReadyKind.Temple, "object-temple");
                 battlefield.SetSlotEngineReady(true, DemoSlotKind.Building, 1, DemoEngineReadyKind.Temple, "object-temple");
@@ -1561,6 +1564,22 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(iceSpirePiece.Find("IceSpireCenterTip"), Is.Not.Null);
                 Assert.That(iceSpirePiece.Find("IceSpireCenter").GetComponent<MeshRenderer>().sharedMaterial.mainTexture.name,
                     Is.EqualTo("packed_ice"));
+
+                battlefield.SyncPieces(new[]
+                {
+                    new DemoBattlefieldObject
+                    {
+                        InstanceId = "object-render-hut", CardId = "si_007", Player = true,
+                        SlotKind = DemoSlotKind.Building, SlotIndex = 0, OccupiedSlots = 1, Health = 5, MaxHealth = 5
+                    }
+                }, System.Array.Empty<DemoBattlefieldObject>(), registry);
+                var snowHutPiece = piecesRoot.Find("Piece_object-render-hut_si_007");
+                Assert.That(snowHutPiece, Is.Not.Null);
+                Assert.That(snowHutPiece.Find("SnowHutEntrance"), Is.Not.Null);
+                Assert.That(snowHutPiece.Find("SnowHutCrown"), Is.Not.Null);
+                Assert.That(snowHutPiece.Find("SnowHutWarmCore"), Is.Not.Null);
+                Assert.That(snowHutPiece.Find("SnowHutLower").GetComponent<MeshRenderer>().sharedMaterial.mainTexture.name,
+                    Is.EqualTo("snow_block"));
 
                 battlefield.SyncPieces(new[]
                 {
@@ -2991,6 +3010,97 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(match.GetObject(true, DemoSlotKind.Unit, 1).Attack, Is.EqualTo(4));
             Assert.That(result.Message, Does.Contain("海豚向导触发 1 次"));
             Assert.That(result.Message, Does.Contain("守卫者射线触发 1 次"));
+        }
+
+        [Test]
+        public void SnowHutOffersAnInWorldChoiceForTiedMostInjuredUnits()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("si_007", out var hut), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_001", out var bee), Is.True);
+            Assert.That(hut.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(new[] { hut.id, bee.id, bee.id }, new[] { "pf_001" });
+            Assert.That(match.ApplyDeploy(hut,
+                match.CreateDeployCommand(hut.id, DemoSlotKind.Building, 0)).Accepted, Is.True);
+            Assert.That(match.ApplyDeploy(bee,
+                match.CreateDeployCommand(bee.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            Assert.That(match.ApplyDeploy(bee,
+                match.CreateDeployCommand(bee.id, DemoSlotKind.Unit, 2)).Accepted, Is.True);
+            match.GetObject(true, DemoSlotKind.Unit, 0).Health = 1;
+            match.GetObject(true, DemoSlotKind.Unit, 2).Health = 1;
+
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+
+            Assert.That(match.PendingChoice, Is.Not.Null);
+            Assert.That(match.PendingChoice.kind, Is.EqualTo("HEAL_UNIT"));
+            Assert.That(match.PendingChoice.options.Select(value => value.slotIndex), Is.EqualTo(new[] { 0, 2 }));
+            var result = match.ApplyResolveChoice(match.CreateResolveChoiceCommand(match.PendingChoice.choiceId, 1));
+            Assert.That(result.Accepted, Is.True, result.Message);
+            Assert.That(match.PendingChoice, Is.Null);
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 0).Health, Is.EqualTo(1));
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 2).Health, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void MultipleSnowHutsRecomputeTheMostInjuredUnitAfterAChoice()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("si_007", out var hut), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_001", out var bee), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(System.Array.Empty<string>(), new[] { "pf_001", "pf_001", "pf_001" });
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            Assert.That(match.MaxEnergy, Is.EqualTo(8));
+            match.ResetHand(new[] { hut.id, hut.id, bee.id, bee.id });
+            Assert.That(match.ApplyDeploy(hut,
+                match.CreateDeployCommand(hut.id, DemoSlotKind.Building, 0)).Accepted, Is.True);
+            Assert.That(match.ApplyDeploy(hut,
+                match.CreateDeployCommand(hut.id, DemoSlotKind.Building, 1)).Accepted, Is.True);
+            Assert.That(match.ApplyDeploy(bee,
+                match.CreateDeployCommand(bee.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            Assert.That(match.ApplyDeploy(bee,
+                match.CreateDeployCommand(bee.id, DemoSlotKind.Unit, 1)).Accepted, Is.True);
+            match.GetObject(true, DemoSlotKind.Unit, 0).Health = 1;
+            match.GetObject(true, DemoSlotKind.Unit, 1).Health = 1;
+
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            Assert.That(match.PendingChoice, Is.Not.Null);
+            var result = match.ApplyResolveChoice(match.CreateResolveChoiceCommand(match.PendingChoice.choiceId, 0));
+
+            Assert.That(result.Accepted, Is.True, result.Message);
+            Assert.That(match.PendingChoice, Is.Null);
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 0).Health, Is.EqualTo(2));
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 1).Health, Is.EqualTo(2));
+            Assert.That(match.HasTriggeredEffect(true, match.GetObject(true, DemoSlotKind.Building, 0).InstanceId,
+                "effect.si_007.01"), Is.True);
+            Assert.That(match.HasTriggeredEffect(true, match.GetObject(true, DemoSlotKind.Building, 1).InstanceId,
+                "effect.si_007.01"), Is.True);
+        }
+
+        [Test]
+        public void SimulatedOpponentSnowHutUsesCanonicalLeftmostTieBreaker()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("si_007", out var hut), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_001", out var bee), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(System.Array.Empty<string>(), new[] { "pf_001" });
+            match.ResetOpponent(new[] { hut, bee, bee });
+            match.GetObject(false, DemoSlotKind.Unit, 0).Health = 1;
+            match.GetObject(false, DemoSlotKind.Unit, 2).Health = 1;
+
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+
+            Assert.That(match.GetObject(false, DemoSlotKind.Unit, 0).Health, Is.EqualTo(2));
+            Assert.That(match.GetObject(false, DemoSlotKind.Unit, 2).Health, Is.EqualTo(1));
+            Assert.That(match.PendingChoice, Is.Null);
         }
 
         private static float ProjectedWidth(Camera camera, Transform surface, Vector3[] vertices)

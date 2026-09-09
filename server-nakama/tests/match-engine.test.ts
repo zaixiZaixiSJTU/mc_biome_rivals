@@ -10,10 +10,20 @@ const eventBatchSchema = JSON.parse(nodeFileSystem.readFileSync(
   'utf8'
 )) as unknown;
 const validateEventBatchSchema = new Ajv2020({ strict: false }).compile(eventBatchSchema);
+const snapshotSchema = JSON.parse(nodeFileSystem.readFileSync(
+  __dirname + '/../../shared-schema/protocol/match-snapshot.schema.json',
+  'utf8'
+)) as unknown;
+const validateSnapshotSchema = new Ajv2020({ strict: false }).compile(snapshotSchema);
 
 function assertEventBatchMatchesSchema(batch: BiomeRivalsRules.MatchEventBatch): void {
   const valid = validateEventBatchSchema(batch);
   TestHarness.ok(valid, 'event batch schema errors: ' + JSON.stringify(validateEventBatchSchema.errors));
+}
+
+function assertSnapshotMatchesSchema(snapshot: BiomeRivalsRules.MatchSnapshot): void {
+  const valid = validateSnapshotSchema(snapshot);
+  TestHarness.ok(valid, 'snapshot schema errors: ' + JSON.stringify(validateSnapshotSchema.errors));
 }
 
 function command(id: string, revision: number, type: BiomeRivalsRules.CommandType): BiomeRivalsRules.MatchCommand {
@@ -4018,4 +4028,124 @@ TestHarness.test('Goat movement participates in Dolphin and Guardian reactions b
   }).map(function (event): string { return String(event.payload.effectId); });
   TestHarness.equal(JSON.stringify(effectOrder),
     JSON.stringify(['effect.si_004.01', 'effect.or_002.01', 'effect.or_004.01', 'effect.si_004.01']));
+});
+
+TestHarness.test('Snow Hut automatically heals the uniquely most-injured friendly unit at turn start', function (): void {
+  const state = activeState('match-snow-hut-unique', ['alice', 'bob'], ['plains_forest', 'snow_ice']);
+  const actorIndex = state.activePlayerIndex;
+  const ownerIndex = actorIndex === 0 ? 1 : 0;
+  placeBuilding(state, ownerIndex, 'si_007', 0, 'object-20');
+  placeUnit(state, ownerIndex, 'pf_008', 0, 'object-21', 1);
+  placeUnit(state, ownerIndex, 'pf_002', 1, 'object-22', 1);
+  state.players[ownerIndex]!.battlefield.filter(function (value): boolean { return value.instanceId === 'object-21'; })[0]!.health -= 3;
+  state.players[ownerIndex]!.battlefield.filter(function (value): boolean { return value.instanceId === 'object-22'; })[0]!.health -= 1;
+
+  const result = BiomeRivalsRules.applyCommand(state, state.players[actorIndex]!.playerId, command('end-for-snow-hut-unique', 0, 'END_TURN'));
+
+  TestHarness.ok(result.accepted, JSON.stringify(result));
+  if (!result.accepted) return;
+  const healed = result.state.players[ownerIndex]!.battlefield.filter(function (value): boolean { return value.instanceId === 'object-21'; })[0]!;
+  TestHarness.equal(healed.health, healed.maxHealth - 2);
+  TestHarness.equal(result.state.pendingChoice, null);
+  const healEvents = result.batch.events.filter(function (event): boolean {
+    return event.type === 'OBJECT_STATS_CHANGED' && event.payload.effectId === 'effect.si_007.01';
+  });
+  TestHarness.equal(healEvents.length, 1);
+  TestHarness.equal(healEvents[0]!.payload.instanceId, 'object-21');
+  TestHarness.equal(healEvents[0]!.payload.sourceInstanceId, 'object-20');
+  TestHarness.equal(result.batch.events.map(function (event): string { return event.type; }).slice(-2).join(','),
+    'CARD_DRAWN,OBJECT_STATS_CHANGED');
+  assertEventBatchMatchesSchema(result.batch);
+});
+
+TestHarness.test('Snow Hut exposes a public in-world choice for tied most-injured units and locks other commands', function (): void {
+  const state = activeState('match-snow-hut-tie', ['alice', 'bob'], ['plains_forest', 'snow_ice']);
+  const actorIndex = state.activePlayerIndex;
+  const ownerIndex = actorIndex === 0 ? 1 : 0;
+  placeBuilding(state, ownerIndex, 'si_007', 0, 'object-30');
+  placeUnit(state, ownerIndex, 'pf_008', 0, 'object-31', 1);
+  placeUnit(state, ownerIndex, 'pf_002', 2, 'object-32', 1);
+  state.players[ownerIndex]!.battlefield.filter(function (value): boolean { return value.cardType === 'UNIT'; })
+    .forEach(function (value): void { value.health = value.maxHealth - 2; });
+
+  const started = BiomeRivalsRules.applyCommand(state, state.players[actorIndex]!.playerId, command('end-for-snow-hut-tie', 0, 'END_TURN'));
+
+  TestHarness.ok(started.accepted, JSON.stringify(started));
+  if (!started.accepted) return;
+  TestHarness.equal(started.state.pendingChoice!.kind, 'HEAL_UNIT');
+  TestHarness.equal(started.state.pendingChoice!.playerId, state.players[ownerIndex]!.playerId);
+  TestHarness.equal(JSON.stringify(started.state.pendingChoice!.options), JSON.stringify([
+    { optionIndex: 0, cardId: 'pf_008', slotIndex: 0, selectable: true },
+    { optionIndex: 1, cardId: 'pf_002', slotIndex: 2, selectable: true }
+  ]));
+  const opponentView = BiomeRivalsRules.createClientSnapshot(started.state, state.players[actorIndex]!.playerId);
+  const ownerView = BiomeRivalsRules.createClientSnapshot(started.state, state.players[ownerIndex]!.playerId);
+  TestHarness.equal(opponentView.pendingChoice!.options[0]!.cardId, 'pf_008');
+  TestHarness.equal(opponentView.pendingChoice!.options[0]!.selectable, false);
+  assertSnapshotMatchesSchema(opponentView);
+  assertSnapshotMatchesSchema(ownerView);
+  const projectedBatch = BiomeRivalsRules.createClientEventBatch(started.batch, state.players[actorIndex]!.playerId);
+  const projectedOptions = projectedBatch.events[projectedBatch.events.length - 1]!.payload.options as BiomeRivalsRules.PendingChoiceOptionSnapshot[];
+  TestHarness.equal(projectedOptions[1]!.cardId, 'pf_002');
+  TestHarness.equal(projectedOptions[1]!.selectable, false);
+  const blocked = BiomeRivalsRules.applyCommand(started.state, state.players[ownerIndex]!.playerId, command('blocked-by-snow-hut', 1, 'ENTER_COMBAT'));
+  TestHarness.equal(blocked.accepted, false);
+  if (!blocked.accepted) TestHarness.equal(blocked.code, 'CHOICE_REQUIRED');
+  assertEventBatchMatchesSchema(started.batch);
+  assertEventBatchMatchesSchema(projectedBatch);
+});
+
+TestHarness.test('Multiple Snow Huts recompute wounds after a tied target is selected', function (): void {
+  const state = activeState('match-snow-hut-chain', ['alice', 'bob'], ['plains_forest', 'snow_ice']);
+  const actorIndex = state.activePlayerIndex;
+  const ownerIndex = actorIndex === 0 ? 1 : 0;
+  placeBuilding(state, ownerIndex, 'si_007', 0, 'object-40');
+  placeBuilding(state, ownerIndex, 'si_007', 1, 'object-41');
+  placeUnit(state, ownerIndex, 'pf_008', 0, 'object-42', 1);
+  placeUnit(state, ownerIndex, 'pf_002', 1, 'object-43', 1);
+  state.players[ownerIndex]!.battlefield.filter(function (value): boolean { return value.cardType === 'UNIT'; })
+    .forEach(function (value): void { value.health = value.maxHealth - 2; });
+  const started = BiomeRivalsRules.applyCommand(state, state.players[actorIndex]!.playerId, command('end-for-snow-hut-chain', 0, 'END_TURN'));
+  TestHarness.ok(started.accepted, JSON.stringify(started));
+  if (!started.accepted) return;
+
+  const resolved = BiomeRivalsRules.applyCommand(started.state, state.players[ownerIndex]!.playerId, resolveChoiceCommand(
+    'resolve-snow-hut-chain', 1, started.state.pendingChoice!.choiceId, 0));
+
+  TestHarness.ok(resolved.accepted, JSON.stringify(resolved));
+  if (!resolved.accepted) return;
+  TestHarness.equal(resolved.state.pendingChoice, null);
+  const first = resolved.state.players[ownerIndex]!.battlefield.filter(function (value): boolean { return value.instanceId === 'object-42'; })[0]!;
+  const second = resolved.state.players[ownerIndex]!.battlefield.filter(function (value): boolean { return value.instanceId === 'object-43'; })[0]!;
+  TestHarness.equal(first.health, first.maxHealth - 1);
+  TestHarness.equal(second.health, second.maxHealth - 1);
+  TestHarness.equal(resolved.state.players[ownerIndex]!.triggeredEffectKeysThisTurn.filter(function (key): boolean {
+    return key.indexOf(':effect.si_007.01') >= 0;
+  }).length, 2);
+  TestHarness.equal(resolved.batch.events.map(function (event): string { return event.type; }).join(','),
+    'CHOICE_RESOLVED,OBJECT_STATS_CHANGED,OBJECT_STATS_CHANGED');
+  TestHarness.equal(resolved.batch.events[1]!.payload.sourceInstanceId, 'object-40');
+  TestHarness.equal(resolved.batch.events[2]!.payload.sourceInstanceId, 'object-41');
+  TestHarness.equal(BiomeRivalsRules.validateState(resolved.state).length, 0);
+  assertEventBatchMatchesSchema(resolved.batch);
+});
+
+TestHarness.test('Snow Hut emits no healing event or replay marker when every friendly unit is healthy', function (): void {
+  const state = activeState('match-snow-hut-no-target', ['alice', 'bob'], ['plains_forest', 'snow_ice']);
+  const actorIndex = state.activePlayerIndex;
+  const ownerIndex = actorIndex === 0 ? 1 : 0;
+  placeBuilding(state, ownerIndex, 'si_007', 0, 'object-50');
+  placeUnit(state, ownerIndex, 'pf_001', 0, 'object-51', 1);
+
+  const result = BiomeRivalsRules.applyCommand(state, state.players[actorIndex]!.playerId,
+    command('end-for-snow-hut-no-target', 0, 'END_TURN'));
+
+  TestHarness.ok(result.accepted, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.pendingChoice, null);
+  TestHarness.equal(result.state.players[ownerIndex]!.triggeredEffectKeysThisTurn.indexOf('object-50:effect.si_007.01'), -1);
+  TestHarness.equal(result.batch.events.filter(function (event): boolean {
+    return event.payload.effectId === 'effect.si_007.01';
+  }).length, 0);
+  assertEventBatchMatchesSchema(result.batch);
 });
