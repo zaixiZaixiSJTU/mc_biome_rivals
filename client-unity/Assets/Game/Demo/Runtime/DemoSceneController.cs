@@ -190,6 +190,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewDolphinCurrent")) SetupDolphinCurrentPreview();
             else if (HasCommandLineFlag("-previewWaterCurrent")) SetupWaterCurrentPreview();
             else if (HasCommandLineFlag("-previewSlow")) SetupSlowPreview();
+            else if (HasCommandLineFlag("-previewIceSpire")) SetupIceSpirePreview();
             else if (HasCommandLineFlag("-previewCombat")) OnEndTurn();
             if (HasCommandLineFlag("-previewGroundHover")) _battlefield.SetSlotHovered(true, DemoSlotKind.Unit, 0, true);
             var capturePath = GetCommandLineValue("-captureDemo");
@@ -929,10 +930,15 @@ namespace BiomeRivals.Demo
                     break;
                 case MatchEventTypes.ObjectStatusApplied:
                     var poisonApplied = matchEvent.payload?.statusId == "POISON";
+                    var iceSpireApplied = matchEvent.payload?.effectId == "effect.si_008.01";
                     ShowStatus(poisonApplied
                         ? $"洞穴蜘蛛的毒素附着目标：中毒 {matchEvent.payload?.remainingDuration}；目标控制者每次结束阶段受到 1 点普通伤害。"
-                        : $"粉雪覆盖目标：缓慢 {matchEvent.payload?.remainingDuration}，期间不能普通攻击。", false);
-                    yield return ShowTurnBanner(poisonApplied ? "中毒" : "缓慢", poisonApplied ? Hex("#A6F04D") : Cyan);
+                        : iceSpireApplied
+                            ? $"冰刺之巅截获边缘召唤：目标获得缓慢 {matchEvent.payload?.remainingDuration}，期间不能普通攻击。"
+                            : $"粉雪覆盖目标：缓慢 {matchEvent.payload?.remainingDuration}，期间不能普通攻击。", false);
+                    yield return ShowTurnBanner(poisonApplied ? "中毒" : iceSpireApplied ? "冰刺封锁" : "缓慢",
+                        poisonApplied ? Hex("#A6F04D") : Cyan);
+                    if (iceSpireApplied) yield return PulseBattlefieldObject(matchEvent.payload?.sourceInstanceId);
                     yield return PulseBattlefieldObject(matchEvent.payload?.instanceId);
                     break;
                 case MatchEventTypes.ObjectStatusRemoved:
@@ -1320,6 +1326,30 @@ namespace BiomeRivals.Demo
             RefreshAll();
             ShowStatus(result.Message, !result.Accepted);
             if (result.Accepted) StartCoroutine(PulseBattlefieldObject(target.InstanceId));
+        }
+
+        private void SetupIceSpirePreview()
+        {
+            SelectFaction("plains_forest");
+            SelectOpponentFaction("snow_ice");
+            if (!_registry.TryGetDefinition("pf_007", out var rallyDefinition) ||
+                !_registry.TryGetDefinition("si_008", out var iceSpireDefinition)) return;
+            _match.ResetDeckAndHand(new[] { rallyDefinition.id }, new[] { "pf_001" });
+            _match.ResetOpponent(new[] { iceSpireDefinition });
+            var result = _match.ApplyPlayCard(rallyDefinition,
+                _match.CreatePlayCardCommand(rallyDefinition.id));
+            var slowed = _match.PlayerBattlefield.Where(value => value.CardId == "tk_004" &&
+                    value.HasStatus("SLOW"))
+                .OrderBy(value => value.SlotIndex)
+                .ToArray();
+            _selectedCardId = iceSpireDefinition.id;
+            RefreshAll();
+            ShowStatus(result.Accepted && slowed.Length == 2
+                ? "冰刺之巅按每次召唤前的空位边界截获林间集结：两个林地伙伴均在边缘落位并获得缓慢；普通手牌部署不会触发。"
+                : result.Message, !result.Accepted || slowed.Length != 2);
+            var iceSpire = _match.GetObject(false, DemoSlotKind.Building, 0);
+            if (iceSpire != null) StartCoroutine(PulseBattlefieldObject(iceSpire.InstanceId));
+            foreach (var target in slowed) StartCoroutine(PulseBattlefieldObject(target.InstanceId));
         }
 
         private void SetupSnowGolemPreview()
@@ -2426,6 +2456,8 @@ namespace BiomeRivals.Demo
             else if (view.Kind == DemoSlotKind.Building && battlefieldObject?.CardId == "cd_008" &&
                 match.IsPlayerTurn == player && HasEmptyUnitSlot(player))
                 engineReadyKind = DemoEngineReadyKind.Mansion;
+            else if (view.Kind == DemoSlotKind.Building && battlefieldObject?.CardId == "si_008")
+                engineReadyKind = DemoEngineReadyKind.IceSpire;
             _battlefield.SetSlotEngineReady(
                 player,
                 view.Kind,
@@ -3586,6 +3618,11 @@ namespace BiomeRivals.Demo
                 var ready = MatchView.IsPlayerTurn == !enemy && HasEmptyUnitSlot(!enemy);
                 stats = $"府邸增援：{(ready ? "结束阶段就绪" : "单位格已满")} · {stats}";
                 if (ready) accent = Leaf;
+            }
+            if (battlefieldObject?.CardId == "si_008")
+            {
+                stats = $"冰刺警戒：监听敌方边缘召唤 · {stats}";
+                accent = Cyan;
             }
             if (battlefieldObject?.CardId == "pf_003")
             {

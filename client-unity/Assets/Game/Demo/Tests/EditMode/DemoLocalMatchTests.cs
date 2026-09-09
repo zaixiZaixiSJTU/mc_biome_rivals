@@ -1183,6 +1183,9 @@ namespace BiomeRivals.Demo.Tests
                 var templeHighlight = buildingMarker.GetComponent<MeshRenderer>().sharedMaterial.GetColor("_HighlightColor");
                 Assert.That(templeHighlight, Is.Not.EqualTo(cactusHighlight));
                 Assert.That(templeHighlight, Is.Not.EqualTo(coralHighlight));
+                battlefield.SetSlotEngineReady(true, DemoSlotKind.Building, 0, DemoEngineReadyKind.IceSpire);
+                var iceSpireHighlight = buildingMarker.GetComponent<MeshRenderer>().sharedMaterial.GetColor("_HighlightColor");
+                Assert.That(iceSpireHighlight, Is.Not.EqualTo(templeHighlight));
                 var synchronizedMarker = root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Building_1/InteractiveGround");
                 battlefield.SetSlotEngineReady(true, DemoSlotKind.Building, 0, DemoEngineReadyKind.Temple, "object-temple");
                 battlefield.SetSlotEngineReady(true, DemoSlotKind.Building, 1, DemoEngineReadyKind.Temple, "object-temple");
@@ -1540,6 +1543,22 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(mansionPiece.Find("MansionEntrance"), Is.Not.Null);
                 Assert.That(mansionPiece.Find("MansionCentralHall").GetComponent<MeshRenderer>().sharedMaterial.mainTexture.name,
                     Is.EqualTo("dark_oak_planks"));
+
+                battlefield.SyncPieces(new[]
+                {
+                    new DemoBattlefieldObject
+                    {
+                        InstanceId = "object-render-8", CardId = "si_008", Player = true,
+                        SlotKind = DemoSlotKind.Building, SlotIndex = 0, OccupiedSlots = 2, Health = 10, MaxHealth = 10
+                    }
+                }, System.Array.Empty<DemoBattlefieldObject>(), registry);
+                var iceSpirePiece = piecesRoot.Find("Piece_object-render-8_si_008");
+                Assert.That(iceSpirePiece, Is.Not.Null);
+                Assert.That(iceSpirePiece.Find("IceSpireFoundation"), Is.Not.Null);
+                Assert.That(iceSpirePiece.Find("IceSpireCenter"), Is.Not.Null);
+                Assert.That(iceSpirePiece.Find("IceSpireCenterTip"), Is.Not.Null);
+                Assert.That(iceSpirePiece.Find("IceSpireCenter").GetComponent<MeshRenderer>().sharedMaterial.mainTexture.name,
+                    Is.EqualTo("packed_ice"));
 
                 var buildingMarker1 = root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Building_1/InteractiveGround");
                 var buildingMarker2 = root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Building_2/InteractiveGround");
@@ -2774,6 +2793,68 @@ namespace BiomeRivals.Demo.Tests
             var summoned = match.GetObject(false, DemoSlotKind.Unit, 0);
             Assert.That(summoned, Is.Not.Null);
             Assert.That(summoned.CardId, Is.EqualTo("tk_011"));
+        }
+
+        [Test]
+        public void IceSpireSlowsUnitsSummonedIntoTheCurrentEmptyRowEdgeLocally()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("si_008", out var iceSpire), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_007", out var rally), Is.True);
+            Assert.That(iceSpire.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(new[] { rally.id }, new[] { "pf_001" });
+            match.ResetOpponent(new[] { iceSpire });
+
+            var result = match.ApplyPlayCard(rally, match.CreatePlayCardCommand(rally.id));
+
+            Assert.That(result.Accepted, Is.True, result.Message);
+            var companions = match.PlayerBattlefield.Where(value => value.CardId == "tk_004")
+                .OrderBy(value => value.SlotIndex).ToArray();
+            Assert.That(companions, Has.Length.EqualTo(2));
+            Assert.That(companions.All(value => value.HasStatus("SLOW")), Is.True);
+            Assert.That(companions.All(value => value.Attack == 2), Is.True);
+            Assert.That(companions[0].Statuses[0].sourceCardId, Is.EqualTo("si_008"));
+            Assert.That(companions[0].Statuses[0].sourcePlayerId, Is.EqualTo("local-opponent"));
+        }
+
+        [Test]
+        public void IceSpireDoesNotSlowAUnitDeployedFromHandLocally()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("si_008", out var iceSpire), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_002", out var sheep), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { sheep.id });
+            match.ResetOpponent(new[] { iceSpire });
+
+            var result = match.ApplyDeploy(sheep,
+                match.CreateDeployCommand(sheep.id, DemoSlotKind.Unit, 0));
+
+            Assert.That(result.Accepted, Is.True, result.Message);
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 0).HasStatus("SLOW"), Is.False);
+        }
+
+        [Test]
+        public void PlayerIceSpireReactsToTheSimulatedOpponentMansionSummon()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("si_008", out var iceSpire), Is.True);
+            Assert.That(registry.TryGetDefinition("cd_008", out var mansion), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(new[] { iceSpire.id }, new[] { "si_001" });
+            match.ResetOpponent(new[] { mansion });
+            Assert.That(match.ApplyDeploy(iceSpire,
+                match.CreateDeployCommand(iceSpire.id, DemoSlotKind.Building, 0)).Accepted, Is.True);
+
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+
+            var recruit = match.GetObject(false, DemoSlotKind.Unit, 0);
+            Assert.That(recruit, Is.Not.Null);
+            Assert.That(recruit.CardId, Is.EqualTo("tk_011"));
+            Assert.That(recruit.HasStatus("SLOW"), Is.True);
+            Assert.That(recruit.Statuses[0].sourcePlayerId, Is.EqualTo("local-player"));
         }
 
         private static float ProjectedWidth(Camera camera, Transform surface, Vector3[] vertices)

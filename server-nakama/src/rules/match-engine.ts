@@ -1494,6 +1494,15 @@ namespace BiomeRivalsRules {
         ? preferredSlotIndex
         : player.unitSlots.indexOf(null);
       if (slotIndex < 0) return false;
+      const leftmostEmptySlot = player.unitSlots.indexOf(null);
+      let rightmostEmptySlot = -1;
+      for (let candidateSlot = player.unitSlots.length - 1; candidateSlot >= 0; candidateSlot -= 1) {
+        if (player.unitSlots[candidateSlot] === null) {
+          rightmostEmptySlot = candidateSlot;
+          break;
+        }
+      }
+      const summonedIntoCurrentEdge = slotIndex === leftmostEmptySlot || slotIndex === rightmostEmptySlot;
       const object: BattlefieldObjectState = {
         instanceId: 'object-' + next.nextInstanceId,
         cardId: cardId,
@@ -1536,6 +1545,24 @@ namespace BiomeRivalsRules {
       recalculateAdjacencyHealthAuras();
       triggerWoodlandNurseryGrowth(player, object);
       triggerCoralReefGrowth(player, object);
+      if (summonedIntoCurrentEdge) {
+        const opponent = next.players.filter(function (candidate): boolean {
+          return candidate.playerId !== player.playerId;
+        })[0];
+        if (!opponent) throw new Error('summoned unit owner has no opponent');
+        const iceSpire = opponent.battlefield.filter(function (candidate): boolean {
+          if (candidate.cardId !== 'si_008' || candidate.cardType !== 'STRUCTURE' || candidate.health <= 0) return false;
+          const candidateDefinition = getCardDefinition(candidate.cardId);
+          return candidateDefinition !== null && candidateDefinition.effectImplementationStatus === 'IMPLEMENTED' &&
+            candidateDefinition.effectIds.indexOf('effect.si_008.01') >= 0;
+        }).slice().sort(function (left, right): number {
+          if (left.slotIndex !== right.slotIndex) return left.slotIndex - right.slotIndex;
+          return left.instanceId < right.instanceId ? -1 : left.instanceId > right.instanceId ? 1 : 0;
+        })[0];
+        if (iceSpire) {
+          applySlow(player, object, opponent, iceSpire.cardId, iceSpire.instanceId, 'effect.si_008.01', 0);
+        }
+      }
       return true;
     }
 
@@ -2597,9 +2624,9 @@ namespace BiomeRivalsRules {
         if (state.status !== 'ACTIVE') return reject(state, 'MULLIGAN_REQUIRED', 'both players must confirm their opening hands first');
         if (actorIndex !== state.activePlayerIndex) return reject(state, 'NOT_ACTIVE_PLAYER', 'only the active player may end the turn');
         resolveOceanMonumentEndPhase(next.players[actorIndex]!, next.players[actorIndex === 0 ? 1 : 0]!);
-        resolveCaveStructureEndPhase(next.players[actorIndex]!);
         resolveEndPhaseStatuses(next.players[actorIndex]!, next.players[actorIndex === 0 ? 1 : 0]!);
         resolveEndPhasePlayerStatuses(next.players[actorIndex]!);
+        resolveCaveStructureEndPhase(next.players[actorIndex]!);
         for (let playerIndex = 0; playerIndex < next.players.length; playerIndex += 1) {
           const effectPlayer = next.players[playerIndex]!;
           for (let objectIndex = 0; objectIndex < effectPlayer.battlefield.length; objectIndex += 1) {

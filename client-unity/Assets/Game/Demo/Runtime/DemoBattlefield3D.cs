@@ -16,7 +16,8 @@ namespace BiomeRivals.Demo
         Sculk,
         Temple,
         Mine,
-        Mansion
+        Mansion,
+        IceSpire
     }
 
     public sealed class DemoBattlefield3D : MonoBehaviour
@@ -303,6 +304,8 @@ namespace BiomeRivals.Demo
                         ? Color.Lerp(Hex("#4A4238"), Hex("#E1B96A"), pulse)
                     : marker.EngineReadyKind == DemoEngineReadyKind.Mansion
                         ? Color.Lerp(Hex("#3D4C37"), Hex("#9CCF70"), pulse)
+                    : marker.EngineReadyKind == DemoEngineReadyKind.IceSpire
+                        ? Color.Lerp(Hex("#3A6682"), Hex("#BDEEFF"), pulse)
                         : Color.Lerp(Hex("#8E3F72"), Hex("#F08FB4"), pulse);
             var highlightColor = rejectedPreview
                 ? Color.Lerp(Hex("#B41635"), Hex("#FF3157"), pulse)
@@ -828,6 +831,7 @@ namespace BiomeRivals.Demo
                 else if (cardId == "cd_004") BuildSculkSensor(root, footprintWidth);
                 else if (cardId == "cd_007") BuildAbandonedMine(root, footprintWidth);
                 else if (cardId == "cd_008") BuildWoodlandMansion(root, footprintWidth);
+                else if (cardId == "si_008") BuildIceSpire(root, footprintWidth);
                 else if (cardId == "or_007") BuildCoralReef(root, material, footprintWidth);
                 else if (cardId == "or_008") BuildOceanMonument(root, material, footprintWidth);
                 else BuildBlockStructure(root, material, theme.Accent, footprintWidth);
@@ -1088,6 +1092,25 @@ namespace BiomeRivals.Demo
             CreateBlock(root, "MansionLeftWindow", new Vector3(-wingOffset, 1.29f, -0.43f), new Vector3(0.44f, 0.42f, 0.07f), window);
             CreateBlock(root, "MansionRightWindow", new Vector3(wingOffset, 1.29f, -0.43f), new Vector3(0.44f, 0.42f, 0.07f), window);
             CreateBlock(root, "MansionCentralWindow", new Vector3(0f, 1.58f, -0.43f), new Vector3(0.52f, 0.46f, 0.07f), window);
+        }
+
+        private void BuildIceSpire(Transform root, float footprintWidth)
+        {
+            var packedIce = GetWorldMaterial("ice_spire_packed", "packed_ice", Hex("#86B9D1"));
+            var deepIce = GetAccentMaterial("ice_spire_deep", Hex("#315E7B"));
+            var frost = GetAccentMaterial("ice_spire_frost", Hex("#D6F5FF"));
+            var width = Mathf.Max(4.65f, footprintWidth);
+            var quarter = width * 0.25f;
+
+            CreateBlock(root, "IceSpireFoundation", new Vector3(0f, 0.14f, 0f), new Vector3(width, 0.24f, 0.98f), deepIce);
+            CreateBlock(root, "IceSpireShelf", new Vector3(0f, 0.38f, 0.02f), new Vector3(width - 0.44f, 0.30f, 0.84f), packedIce);
+            CreateBlock(root, "IceSpireLeft", new Vector3(-quarter, 1.02f, 0.06f), new Vector3(0.76f, 1.38f, 0.72f), packedIce);
+            CreateBlock(root, "IceSpireCenter", new Vector3(0f, 1.40f, 0.04f), new Vector3(0.88f, 2.12f, 0.78f), packedIce);
+            CreateBlock(root, "IceSpireRight", new Vector3(quarter, 0.88f, 0.02f), new Vector3(0.70f, 1.10f, 0.68f), packedIce);
+            CreateBlock(root, "IceSpireLeftTip", new Vector3(-quarter, 1.84f, 0.06f), new Vector3(0.42f, 0.30f, 0.42f), frost);
+            CreateBlock(root, "IceSpireCenterTip", new Vector3(0f, 2.62f, 0.04f), new Vector3(0.46f, 0.36f, 0.46f), frost);
+            CreateBlock(root, "IceSpireRightTip", new Vector3(quarter, 1.56f, 0.02f), new Vector3(0.38f, 0.28f, 0.38f), frost);
+            CreateBlock(root, "IceSpireRune", new Vector3(0f, 0.72f, -0.47f), new Vector3(0.62f, 0.30f, 0.07f), frost);
         }
 
         private void BuildOceanMonument(Transform root, Material prismarineBricks, float footprintWidth)

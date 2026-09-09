@@ -3769,3 +3769,117 @@ TestHarness.test('Woodland Mansion does not summon or allocate an instance on a 
     return event.type === 'OBJECT_SUMMONED' && event.payload.sourceCardId === 'cd_008';
   }), false);
 });
+
+TestHarness.test('Ice Spires slow enemy units summoned into the pre-summon empty-row edge', function (): void {
+  const state = activeState('match-ice-spires-edge-summon', ['alice', 'bob'], ['plains_forest', 'snow_ice']);
+  const actorIndex = state.activePlayerIndex;
+  const defenderIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['pf_007'];
+  actor.redstone = 4;
+  actor.redstoneCapacity = 4;
+  placeUnit(state, actorIndex, 'pf_001', 0, 'object-10', state.turn);
+  placeBuilding(state, defenderIndex, 'si_008', 0, 'object-20');
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('ice-spires-edge-summon', 0, 'pf_007'));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  const companions = result.state.players[actorIndex]!.battlefield.filter(function (object): boolean {
+    return object.cardId === 'tk_004';
+  }).sort(function (left, right): number { return left.slotIndex - right.slotIndex; });
+  TestHarness.equal(companions.length, 2);
+  TestHarness.equal(companions[0]!.slotIndex, 1);
+  TestHarness.equal(companions[1]!.slotIndex, 2);
+  TestHarness.equal(companions[0]!.statuses[0]!.statusId, 'SLOW');
+  TestHarness.equal(companions[1]!.statuses[0]!.statusId, 'SLOW');
+  TestHarness.equal(companions[0]!.statuses[0]!.sourceCardId, 'si_008');
+  TestHarness.equal(companions[0]!.statuses[0]!.sourceInstanceId, 'object-20');
+  TestHarness.equal(companions[0]!.attack, 2, 'Ice Spires slow blocks attacking but does not reduce attack');
+  const slowEvents = result.batch.events.filter(function (event): boolean {
+    return event.type === 'OBJECT_STATUS_APPLIED' && event.payload.effectId === 'effect.si_008.01';
+  });
+  TestHarness.equal(slowEvents.length, 2);
+  TestHarness.equal(slowEvents[0]!.payload.instanceId, companions[0]!.instanceId);
+  TestHarness.equal(slowEvents[0]!.payload.statusAttackModifier, 0);
+  assertEventBatchMatchesSchema(result.batch);
+});
+
+TestHarness.test('Ice Spires do not treat a hand deployment as a summon', function (): void {
+  const state = activeState('match-ice-spires-deploy-excluded', ['alice', 'bob'], ['plains_forest', 'snow_ice']);
+  const actorIndex = state.activePlayerIndex;
+  const defenderIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['pf_002'];
+  actor.redstone = 2;
+  actor.redstoneCapacity = 2;
+  placeBuilding(state, defenderIndex, 'si_008', 0, 'object-20');
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('ice-spires-deploy-excluded', 0, 'pf_002', 'UNIT', 0));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  const sheep = result.state.players[actorIndex]!.battlefield.filter(function (object): boolean {
+    return object.cardId === 'pf_002';
+  })[0]!;
+  TestHarness.equal(sheep.statuses.length, 0);
+  TestHarness.equal(result.batch.events.some(function (event): boolean {
+    return event.payload.effectId === 'effect.si_008.01';
+  }), false);
+});
+
+TestHarness.test('Ice Spires use the empty-row edges before a preferred-slot deathrattle summon', function (): void {
+  const state = activeState('match-ice-spires-interior-summon', ['alice', 'bob'], ['nether', 'snow_ice']);
+  const actorIndex = state.activePlayerIndex;
+  const defenderIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  state.turn = 2;
+  state.phase = 'COMBAT';
+  state.nextInstanceId = 30;
+  placeUnit(state, actorIndex, 'nt_001', 1, 'object-10', 1);
+  actor.battlefield[0]!.health = 1;
+  placeUnit(state, defenderIndex, 'pf_008', 1, 'object-11', 1);
+  placeBuilding(state, defenderIndex, 'si_008', 0, 'object-20');
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    attackCommand('ice-spires-interior-summon', 0, 'object-10', 'UNIT', 'object-11'));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  const smallMagma = result.state.players[actorIndex]!.battlefield.filter(function (object): boolean {
+    return object.cardId === 'tk_014';
+  })[0]!;
+  TestHarness.equal(smallMagma.slotIndex, 1);
+  TestHarness.equal(smallMagma.statuses.length, 0, 'slot 1 is not the left or right empty-row edge when all four slots are empty');
+  TestHarness.equal(result.batch.events.some(function (event): boolean {
+    return event.payload.effectId === 'effect.si_008.01';
+  }), false);
+});
+
+TestHarness.test('Ice Spires slow an end-phase Mansion recruit until its next controller end phase', function (): void {
+  const state = activeState('match-ice-spires-end-phase-summon', ['alice', 'bob'], ['cave_dark_forest', 'snow_ice']);
+  const actorIndex = state.activePlayerIndex;
+  const defenderIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  placeBuilding(state, actorIndex, 'cd_008', 0, 'object-10');
+  placeBuilding(state, defenderIndex, 'si_008', 0, 'object-20');
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    command('ice-spires-end-phase-summon', 0, 'END_TURN'));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  const recruit = result.state.players[actorIndex]!.battlefield.filter(function (object): boolean {
+    return object.cardId === 'tk_011';
+  })[0]!;
+  TestHarness.equal(recruit.statuses.length, 1);
+  TestHarness.equal(recruit.statuses[0]!.statusId, 'SLOW');
+  TestHarness.equal(recruit.statuses[0]!.remainingDuration, 1);
+  const orderedEffectEvents = result.batch.events.filter(function (event): boolean {
+    return event.type === 'OBJECT_SUMMONED' || event.payload.effectId === 'effect.si_008.01';
+  });
+  TestHarness.equal(orderedEffectEvents[0]!.type, 'OBJECT_SUMMONED');
+  TestHarness.equal(orderedEffectEvents[1]!.type, 'OBJECT_STATUS_APPLIED');
+});

@@ -1,6 +1,6 @@
 # DB-004 仙人掌围栏英雄受击反应规范 v1
 
-本规范已按当前组合校准为 `protocolVersion 28`、`rulesetVersion prototype-0.43` 与内容版本 35。
+本规范已按当前组合校准为 `protocolVersion 28`、`rulesetVersion prototype-0.44` 与内容版本 36。
 
 ## 权威规则
 

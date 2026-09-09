@@ -999,10 +999,10 @@ namespace BiomeRivals.Demo
             if (!IsPlayerTurn) return Reject(DemoCommandRejectionCode.NotActivePlayer, "当前不是你的回合。");
             var monumentDeathMessages = new List<string>();
             var monumentDamage = ResolveOceanMonumentEndPhase(monumentDeathMessages);
-            ResolveCaveStructureEndPhase(true, out var mineTriggers, out var mansionSummons);
             var poisonDeathMessages = new List<string>();
             var poisonDamage = ResolveEndPhaseStatuses(_playerBattlefield, poisonDeathMessages);
             ResolvePlayerStatuses(_playerStatuses);
+            ResolveCaveStructureEndPhase(true, out var mineTriggers, out var mansionSummons);
             RestoreExpiredAttackModifiers(_playerBattlefield);
             RestoreExpiredAttackModifiers(_opponentBattlefield);
             _triggeredEffectKeysThisTurn.Clear();
@@ -1026,9 +1026,9 @@ namespace BiomeRivals.Demo
         {
             if (IsFinished)
                 return RememberDraw(new DemoDrawResult(DemoDrawOutcome.MatchEnded, string.Empty, 0));
-            ResolveCaveStructureEndPhase(false, out _, out _);
             ResolveEndPhaseStatuses(_opponentBattlefield, null);
             ResolvePlayerStatuses(_opponentStatuses);
+            ResolveCaveStructureEndPhase(false, out _, out _);
             _opponentCardsPlayedThisTurn = 0;
             _opponentHasTargetedEnemyObjectThisTurn = false;
             Round++;
@@ -1445,6 +1445,9 @@ namespace BiomeRivals.Demo
                 ? preferredSlotIndex
                 : Array.FindIndex(slots, string.IsNullOrEmpty);
             if (slotIndex < 0) return false;
+            var leftmostEmptySlot = Array.FindIndex(slots, string.IsNullOrEmpty);
+            var rightmostEmptySlot = Array.FindLastIndex(slots, string.IsNullOrEmpty);
+            var summonedIntoCurrentEdge = slotIndex == leftmostEmptySlot || slotIndex == rightmostEmptySlot;
             summoned = new DemoBattlefieldObject
             {
                 InstanceId = $"object-{_nextBattlefieldInstanceId++}",
@@ -1465,7 +1468,20 @@ namespace BiomeRivals.Demo
             RecalculateAdjacencyHealthAuras();
             TriggerWoodlandNurseryGrowth(battlefield, summoned);
             TriggerCoralReefGrowth(battlefield, summoned);
+            if (summonedIntoCurrentEdge) TriggerIceSpireSlow(player, summoned);
             return true;
+        }
+
+        private void TriggerIceSpireSlow(bool summonedPlayer, DemoBattlefieldObject summonedUnit)
+        {
+            var opposingBattlefield = summonedPlayer ? _opponentBattlefield : _playerBattlefield;
+            var iceSpire = opposingBattlefield.Where(value => value.CardId == "si_008" &&
+                    value.SlotKind == DemoSlotKind.Building && value.Health > 0)
+                .OrderBy(value => value.SlotIndex)
+                .ThenBy(value => value.InstanceId, StringComparer.Ordinal)
+                .FirstOrDefault();
+            if (iceSpire == null) return;
+            ApplySlow(summonedUnit, iceSpire.CardId, iceSpire.InstanceId, "effect.si_008.01", 0, !summonedPlayer);
         }
 
         private static void RecalculateAdjacencyHealthAuras(List<DemoBattlefieldObject> battlefield)
@@ -1662,7 +1678,8 @@ namespace BiomeRivals.Demo
             string sourceCardId,
             string sourceInstanceId,
             string effectId,
-            int attackModifier)
+            int attackModifier,
+            bool sourcePlayer = true)
         {
             if (target == null) throw new ArgumentNullException(nameof(target));
             var statuses = new List<BattlefieldStatusStateDto>(target.Statuses ?? Array.Empty<BattlefieldStatusStateDto>());
@@ -1675,7 +1692,7 @@ namespace BiomeRivals.Demo
                 {
                     statusId = "SLOW",
                     remainingDuration = 1,
-                    sourcePlayerId = "local-player",
+                    sourcePlayerId = sourcePlayer ? "local-player" : "local-opponent",
                     sourceCardId = sourceCardId,
                     sourceInstanceId = sourceInstanceId,
                     effectId = effectId,
@@ -1703,6 +1720,7 @@ namespace BiomeRivals.Demo
                 }
                 if (replacesSource)
                 {
+                    status.sourcePlayerId = sourcePlayer ? "local-player" : "local-opponent";
                     status.sourceCardId = sourceCardId;
                     status.sourceInstanceId = sourceInstanceId;
                     status.effectId = effectId;
