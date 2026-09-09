@@ -18,7 +18,8 @@ namespace BiomeRivals.Demo
         Mine,
         Mansion,
         IceSpire,
-        SnowHut
+        SnowHut,
+        EndCrystal
     }
 
     public sealed class DemoBattlefield3D : MonoBehaviour
@@ -309,6 +310,8 @@ namespace BiomeRivals.Demo
                         ? Color.Lerp(Hex("#3A6682"), Hex("#BDEEFF"), pulse)
                     : marker.EngineReadyKind == DemoEngineReadyKind.SnowHut
                         ? Color.Lerp(Hex("#477A8C"), Hex("#E5FAFF"), pulse)
+                    : marker.EngineReadyKind == DemoEngineReadyKind.EndCrystal
+                        ? Color.Lerp(Hex("#5A2B78"), Hex("#F2A4FF"), pulse)
                         : Color.Lerp(Hex("#8E3F72"), Hex("#F08FB4"), pulse);
             var highlightColor = rejectedPreview
                 ? Color.Lerp(Hex("#B41635"), Hex("#FF3157"), pulse)
@@ -834,6 +837,7 @@ namespace BiomeRivals.Demo
                 else if (cardId == "cd_004") BuildSculkSensor(root, footprintWidth);
                 else if (cardId == "cd_007") BuildAbandonedMine(root, footprintWidth);
                 else if (cardId == "cd_008") BuildWoodlandMansion(root, footprintWidth);
+                else if (cardId == "ed_007") BuildEndCrystal(root, footprintWidth, battlefieldObject.InstanceId);
                 else if (cardId == "si_007") BuildSnowHut(root, footprintWidth);
                 else if (cardId == "si_008") BuildIceSpire(root, footprintWidth);
                 else if (cardId == "or_007") BuildCoralReef(root, material, footprintWidth);
@@ -1143,6 +1147,44 @@ namespace BiomeRivals.Demo
                 new Vector3(0.24f, 0.24f, 0.06f), packedIce);
             CreateBlock(root, "SnowHutRightWindow", new Vector3(width * 0.31f, 0.78f, -0.395f),
                 new Vector3(0.24f, 0.24f, 0.06f), packedIce);
+        }
+
+        private void BuildEndCrystal(Transform root, float footprintWidth, string instanceId)
+        {
+            var obsidian = GetWorldMaterial("end_crystal_obsidian", "obsidian", Hex("#17121E"));
+            var purpur = GetWorldMaterial("end_crystal_purpur", "purpur_block", Hex("#A878AE"));
+            var core = GetAccentMaterial("end_crystal_core", Hex("#F07BFF"));
+            var cage = GetAccentMaterial("end_crystal_cage", Hex("#E8D7EF"));
+            var width = Mathf.Max(2.05f, footprintWidth);
+            CreateBlock(root, "EndCrystalFoundation", new Vector3(0f, 0.13f, 0f),
+                new Vector3(width, 0.24f, 0.96f), obsidian);
+            CreateBlock(root, "EndCrystalPedestal", new Vector3(0f, 0.39f, 0f),
+                new Vector3(0.92f, 0.38f, 0.74f), purpur);
+
+            var assembly = NewChildRoot(root, "EndCrystalFloatingAssembly", new Vector3(0f, 1.34f, 0f));
+            var coreBlock = CreateBlock(assembly, "EndCrystalCore", Vector3.zero,
+                new Vector3(0.58f, 0.58f, 0.58f), core);
+            coreBlock.transform.localRotation = Quaternion.Euler(22.5f, 45f, 22.5f);
+            var cageRoot = NewChildRoot(assembly, "EndCrystalWireCage", Vector3.zero);
+            cageRoot.localRotation = Quaternion.Euler(0f, 45f, 0f);
+            const float half = 0.62f;
+            const float size = half * 2f;
+            const float thickness = 0.075f;
+            var signs = new[] { -1f, 1f };
+            var edge = 0;
+            foreach (var first in signs)
+            {
+                foreach (var second in signs)
+                {
+                    CreateBlock(cageRoot, "EndCrystalCageX_" + edge++, new Vector3(0f, first * half, second * half),
+                        new Vector3(size, thickness, thickness), cage);
+                    CreateBlock(cageRoot, "EndCrystalCageY_" + edge++, new Vector3(first * half, 0f, second * half),
+                        new Vector3(thickness, size, thickness), cage);
+                    CreateBlock(cageRoot, "EndCrystalCageZ_" + edge++, new Vector3(first * half, second * half, 0f),
+                        new Vector3(thickness, thickness, size), cage);
+                }
+            }
+            _floaters.Add(new Floater(assembly, assembly.localPosition.y, StablePulsePhase(instanceId)));
         }
 
         private void BuildOceanMonument(Transform root, Material prismarineBricks, float footprintWidth)

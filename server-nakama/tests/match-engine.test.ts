@@ -4149,3 +4149,89 @@ TestHarness.test('Snow Hut emits no healing event or replay marker when every fr
   }).length, 0);
   assertEventBatchMatchesSchema(result.batch);
 });
+
+TestHarness.test('End Crystals deal normal hero damage in stable building-slot order at end phase', function (): void {
+  const state = activeState('match-end-crystal-phase', ['alice', 'bob'], ['end', 'plains_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const opponentIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  const opponent = state.players[opponentIndex]!;
+  placeBuilding(state, actorIndex, 'ed_007', 2, 'object-62');
+  placeBuilding(state, actorIndex, 'ed_007', 0, 'object-60');
+  opponent.life = 10;
+  opponent.armor = 1;
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId, command('end-crystal-phase', 0, 'END_TURN'));
+
+  TestHarness.ok(result.accepted, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[opponentIndex]!.armor, 0);
+  TestHarness.equal(result.state.players[opponentIndex]!.life, 7);
+  const crystalEvents = result.batch.events.filter(function (event): boolean {
+    return event.type === 'HERO_DAMAGED' && event.payload.effectId === 'effect.ed_007.01';
+  });
+  TestHarness.equal(crystalEvents.length, 2);
+  TestHarness.equal(crystalEvents[0]!.payload.sourceInstanceId, 'object-60');
+  TestHarness.equal(crystalEvents[0]!.payload.damageType, 'NORMAL');
+  TestHarness.equal(crystalEvents[0]!.payload.armor, 0);
+  TestHarness.equal(crystalEvents[0]!.payload.life, 9);
+  TestHarness.equal(crystalEvents[1]!.payload.sourceInstanceId, 'object-62');
+  TestHarness.equal(crystalEvents[1]!.payload.life, 7);
+  assertEventBatchMatchesSchema(result.batch);
+});
+
+TestHarness.test('A lethal End Crystal end-phase pulse stops turn handoff and later crystals', function (): void {
+  const state = activeState('match-end-crystal-lethal-phase', ['alice', 'bob'], ['end', 'plains_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const opponentIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  const opponent = state.players[opponentIndex]!;
+  placeBuilding(state, actorIndex, 'ed_007', 0, 'object-70');
+  placeBuilding(state, actorIndex, 'ed_007', 1, 'object-71');
+  opponent.life = 2;
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId, command('end-crystal-lethal-phase', 0, 'END_TURN'));
+
+  TestHarness.ok(result.accepted, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.status, 'FINISHED');
+  TestHarness.equal(result.state.winnerPlayerId, actor.playerId);
+  TestHarness.equal(result.state.activePlayerIndex, state.activePlayerIndex);
+  TestHarness.equal(result.batch.events.map(function (event): string { return event.type; }).join(','),
+    'HERO_DAMAGED,MATCH_ENDED');
+  TestHarness.equal(result.batch.events[0]!.payload.sourceInstanceId, 'object-70');
+  assertEventBatchMatchesSchema(result.batch);
+});
+
+TestHarness.test('End Crystal deathrattle deals true damage to its owner and can end the match', function (): void {
+  const state = activeState('match-end-crystal-deathrattle', ['alice', 'bob'], ['plains_forest', 'end']);
+  const actorIndex = state.activePlayerIndex;
+  const defenderIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  const defender = state.players[defenderIndex]!;
+  state.phase = 'COMBAT';
+  placeUnit(state, actorIndex, 'pf_008', 0, 'object-80', state.turn);
+  actor.battlefield[0]!.keywords.push('CHARGE');
+  placeBuilding(state, defenderIndex, 'ed_007', 0, 'object-81', 4);
+  state.nextInstanceId = 82;
+  defender.life = 2;
+  defender.armor = 6;
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    attackCommand('break-end-crystal', 0, 'object-80', 'BUILDING', 'object-81'));
+
+  TestHarness.ok(result.accepted, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.status, 'FINISHED');
+  TestHarness.equal(result.state.winnerPlayerId, actor.playerId);
+  TestHarness.equal(result.state.players[defenderIndex]!.life, 0);
+  TestHarness.equal(result.state.players[defenderIndex]!.armor, 6);
+  TestHarness.equal(result.batch.events.map(function (event): string { return event.type; }).join(','),
+    'ATTACK_RESOLVED,OBJECT_DIED,HERO_DAMAGED,MATCH_ENDED');
+  const deathrattle = result.batch.events[2]!;
+  TestHarness.equal(deathrattle.payload.sourceCardId, 'ed_007');
+  TestHarness.equal(deathrattle.payload.sourceInstanceId, 'object-81');
+  TestHarness.equal(deathrattle.payload.damageType, 'TRUE');
+  TestHarness.equal(deathrattle.payload.life, 0);
+  assertEventBatchMatchesSchema(result.batch);
+});

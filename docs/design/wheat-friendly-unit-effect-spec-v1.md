@@ -1,6 +1,6 @@
 # 小麦友方目标效果规范 v1
 
-本规范对应 `protocolVersion 29`、`rulesetVersion prototype-0.46` 与内容版本 38。
+本规范对应 `protocolVersion 30`、`rulesetVersion prototype-0.47` 与内容版本 39。
 
 ## TK-002 小麦
 

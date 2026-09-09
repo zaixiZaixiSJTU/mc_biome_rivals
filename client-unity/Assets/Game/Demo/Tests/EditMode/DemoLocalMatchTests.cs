@@ -1189,6 +1189,9 @@ namespace BiomeRivals.Demo.Tests
                 battlefield.SetSlotEngineReady(true, DemoSlotKind.Building, 0, DemoEngineReadyKind.SnowHut);
                 var snowHutHighlight = buildingMarker.GetComponent<MeshRenderer>().sharedMaterial.GetColor("_HighlightColor");
                 Assert.That(snowHutHighlight, Is.Not.EqualTo(iceSpireHighlight));
+                battlefield.SetSlotEngineReady(true, DemoSlotKind.Building, 0, DemoEngineReadyKind.EndCrystal);
+                var endCrystalHighlight = buildingMarker.GetComponent<MeshRenderer>().sharedMaterial.GetColor("_HighlightColor");
+                Assert.That(endCrystalHighlight, Is.Not.EqualTo(snowHutHighlight));
                 var synchronizedMarker = root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Building_1/InteractiveGround");
                 battlefield.SetSlotEngineReady(true, DemoSlotKind.Building, 0, DemoEngineReadyKind.Temple, "object-temple");
                 battlefield.SetSlotEngineReady(true, DemoSlotKind.Building, 1, DemoEngineReadyKind.Temple, "object-temple");
@@ -1580,6 +1583,22 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(snowHutPiece.Find("SnowHutWarmCore"), Is.Not.Null);
                 Assert.That(snowHutPiece.Find("SnowHutLower").GetComponent<MeshRenderer>().sharedMaterial.mainTexture.name,
                     Is.EqualTo("snow_block"));
+
+                battlefield.SyncPieces(new[]
+                {
+                    new DemoBattlefieldObject
+                    {
+                        InstanceId = "object-render-crystal", CardId = "ed_007", Player = true,
+                        SlotKind = DemoSlotKind.Building, SlotIndex = 0, OccupiedSlots = 1, Health = 4, MaxHealth = 4
+                    }
+                }, System.Array.Empty<DemoBattlefieldObject>(), registry);
+                var endCrystalPiece = piecesRoot.Find("Piece_object-render-crystal_ed_007");
+                Assert.That(endCrystalPiece, Is.Not.Null);
+                Assert.That(endCrystalPiece.Find("EndCrystalFoundation"), Is.Not.Null);
+                Assert.That(endCrystalPiece.Find("EndCrystalFloatingAssembly/EndCrystalCore"), Is.Not.Null);
+                Assert.That(endCrystalPiece.Find("EndCrystalFloatingAssembly/EndCrystalWireCage/EndCrystalCageX_0"), Is.Not.Null);
+                Assert.That(endCrystalPiece.Find("EndCrystalFoundation").GetComponent<MeshRenderer>().sharedMaterial.mainTexture.name,
+                    Is.EqualTo("obsidian"));
 
                 battlefield.SyncPieces(new[]
                 {
@@ -3101,6 +3120,75 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(match.GetObject(false, DemoSlotKind.Unit, 0).Health, Is.EqualTo(2));
             Assert.That(match.GetObject(false, DemoSlotKind.Unit, 2).Health, Is.EqualTo(1));
             Assert.That(match.PendingChoice, Is.Null);
+        }
+
+        [Test]
+        public void EndCrystalDealsNormalDamageThroughArmorAtLocalEndPhase()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("ed_007", out var crystal), Is.True);
+            Assert.That(crystal.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { crystal.id });
+            Assert.That(match.ApplyDeploy(crystal,
+                match.CreateDeployCommand(crystal.id, DemoSlotKind.Building, 0)).Accepted, Is.True);
+            SetPrivateProperty(match, nameof(DemoLocalMatch.OpponentLife), 10);
+            SetPrivateProperty(match, nameof(DemoLocalMatch.OpponentArmor), 1);
+
+            var result = match.ApplyEndTurn(match.CreateEndTurnCommand());
+
+            Assert.That(result.Accepted, Is.True, result.Message);
+            Assert.That(match.OpponentArmor, Is.EqualTo(0));
+            Assert.That(match.OpponentLife, Is.EqualTo(9));
+            Assert.That(result.Message, Does.Contain("末影水晶"));
+        }
+
+        [Test]
+        public void LethalLocalEndCrystalStopsBeforeTurnHandoff()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("ed_007", out var crystal), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { crystal.id });
+            Assert.That(match.ApplyDeploy(crystal,
+                match.CreateDeployCommand(crystal.id, DemoSlotKind.Building, 0)).Accepted, Is.True);
+            SetPrivateProperty(match, nameof(DemoLocalMatch.OpponentLife), 2);
+
+            var result = match.ApplyEndTurn(match.CreateEndTurnCommand());
+
+            Assert.That(result.Accepted, Is.True, result.Message);
+            Assert.That(match.IsFinished, Is.True);
+            Assert.That(match.IsPlayerTurn, Is.True);
+            Assert.That(match.OpponentLife, Is.EqualTo(0));
+            Assert.That(result.Message, Does.Contain("胜利"));
+        }
+
+        [Test]
+        public void DestroyedOpponentEndCrystalDealsTrueDamageToItsOwnerLocally()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("pf_008", out var ironGolem), Is.True);
+            Assert.That(registry.TryGetDefinition("ed_007", out var crystal), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { ironGolem.id });
+            match.ResetOpponent(new[] { crystal });
+            Assert.That(match.ApplyDeploy(ironGolem,
+                match.CreateDeployCommand(ironGolem.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            SetPrivateProperty(match, nameof(DemoLocalMatch.OpponentLife), 2);
+            SetPrivateProperty(match, nameof(DemoLocalMatch.OpponentArmor), 6);
+            Assert.That(match.ApplyEnterCombat(match.CreateEnterCombatCommand()).Accepted, Is.True);
+            var attacker = match.GetObject(true, DemoSlotKind.Unit, 0);
+            var target = match.GetObject(false, DemoSlotKind.Building, 0);
+
+            var result = match.ApplyAttack(match.CreateAttackCommand(attacker.InstanceId, "BUILDING", target.InstanceId));
+
+            Assert.That(result.Accepted, Is.True, result.Message);
+            Assert.That(match.IsFinished, Is.True);
+            Assert.That(match.OpponentLife, Is.EqualTo(0));
+            Assert.That(match.OpponentArmor, Is.EqualTo(6));
+            Assert.That(result.Message, Does.Contain("末影水晶亡语"));
         }
 
         private static float ProjectedWidth(Camera camera, Transform surface, Vector3[] vertices)

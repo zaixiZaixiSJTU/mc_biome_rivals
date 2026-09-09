@@ -1414,6 +1414,35 @@ namespace BiomeRivalsRules {
       return totalDamage;
     }
 
+    function resolveEndCrystalEndPhase(player: PlayerState, opponent: PlayerState): boolean {
+      const crystals = player.battlefield.filter(function (object): boolean {
+        if (object.cardId !== 'ed_007' || object.cardType !== 'BUILDING' || object.health <= 0) return false;
+        const definition = getCardDefinition(object.cardId);
+        return definition !== null && definition.effectImplementationStatus === 'IMPLEMENTED' &&
+          definition.effectIds.indexOf('effect.ed_007.01') >= 0;
+      }).slice().sort(function (left, right): number {
+        if (left.slotIndex !== right.slotIndex) return left.slotIndex - right.slotIndex;
+        return left.instanceId < right.instanceId ? -1 : left.instanceId > right.instanceId ? 1 : 0;
+      });
+      for (let crystalIndex = 0; crystalIndex < crystals.length; crystalIndex += 1) {
+        const crystal = crystals[crystalIndex]!;
+        if (player.battlefield.indexOf(crystal) < 0 || crystal.health <= 0) continue;
+        damageHero(opponent, 2);
+        emit('HERO_DAMAGED', {
+          playerId: opponent.playerId,
+          sourceCardId: crystal.cardId,
+          sourceInstanceId: crystal.instanceId,
+          effectId: 'effect.ed_007.01',
+          damage: 2,
+          damageType: 'NORMAL',
+          life: opponent.life,
+          armor: opponent.armor
+        });
+        if (finishForSelfDefeat(opponent, 'HERO_DEFEATED')) return true;
+      }
+      return false;
+    }
+
     function removeDeadObjects(player: PlayerState): BattlefieldObjectState[] {
       const deadObjects = player.battlefield.filter(function (object): boolean { return object.health <= 0; });
       deadObjects.sort(function (left, right): number {
@@ -1457,10 +1486,12 @@ namespace BiomeRivalsRules {
         for (let index = 0; index < currentDeaths.length; index += 1) {
           const object = currentDeaths[index]!;
           resolveDeathTriggers(currentPlayer, object, resolvedKillCredits);
+          if (next.status === 'FINISHED') return;
         }
         for (let index = 0; index < nonCurrentDeaths.length; index += 1) {
           const object = nonCurrentDeaths[index]!;
           resolveDeathTriggers(nonCurrentPlayer, object, resolvedKillCredits);
+          if (next.status === 'FINISHED') return;
         }
       }
     }
@@ -1471,6 +1502,7 @@ namespace BiomeRivalsRules {
       killCredits: { [instanceId: string]: string }
     ): void {
       resolveDeathrattles(player, object, killCredits);
+      if (next.status === 'FINISHED') return;
       resolveDrops(player, object, killCredits[object.instanceId]);
     }
 
@@ -1481,6 +1513,20 @@ namespace BiomeRivalsRules {
     ): void {
       const definition = getCardDefinition(object.cardId);
       if (definition === null || definition.effectImplementationStatus !== 'IMPLEMENTED') return;
+      if (definition.effectIds.indexOf('effect.ed_007.01') >= 0) {
+        player.life = Math.max(0, player.life - 2);
+        emit('HERO_DAMAGED', {
+          playerId: player.playerId,
+          sourceCardId: object.cardId,
+          sourceInstanceId: object.instanceId,
+          effectId: 'effect.ed_007.01',
+          damage: 2,
+          damageType: 'TRUE',
+          life: player.life,
+          armor: player.armor
+        });
+        if (finishForSelfDefeat(player, 'SELF_DAMAGE')) return;
+      }
       if (definition.effectIds.indexOf('effect.ed_004.01') >= 0) {
         generateCard(player, 'tk_016', object.cardId, object.instanceId, 'effect.ed_004.01');
       }
@@ -2057,6 +2103,7 @@ namespace BiomeRivalsRules {
       if (player.life > 0) return false;
       const winner = next.players[0]!.playerId === player.playerId ? next.players[1]! : next.players[0]!;
       next.status = 'FINISHED';
+      next.pendingChoice = null;
       next.winnerPlayerId = winner.playerId;
       emit('MATCH_ENDED', { winnerPlayerId: next.winnerPlayerId, reason: reason });
       return true;
@@ -2735,7 +2782,7 @@ namespace BiomeRivalsRules {
         }
       }
 
-      if (defenderPlayer.life <= 0) {
+      if (defenderPlayer.life <= 0 && next.status !== 'FINISHED') {
         next.status = 'FINISHED';
         next.winnerPlayerId = attackerPlayer.playerId;
         emit('MATCH_ENDED', { winnerPlayerId: next.winnerPlayerId, reason: 'HERO_DEFEATED' });
@@ -2791,6 +2838,7 @@ namespace BiomeRivalsRules {
         resolveOceanMonumentEndPhase(next.players[actorIndex]!, next.players[actorIndex === 0 ? 1 : 0]!);
         resolveEndPhaseStatuses(next.players[actorIndex]!, next.players[actorIndex === 0 ? 1 : 0]!);
         resolveEndPhasePlayerStatuses(next.players[actorIndex]!);
+        if (resolveEndCrystalEndPhase(next.players[actorIndex]!, next.players[actorIndex === 0 ? 1 : 0]!)) break;
         resolveCaveStructureEndPhase(next.players[actorIndex]!);
         for (let playerIndex = 0; playerIndex < next.players.length; playerIndex += 1) {
           const effectPlayer = next.players[playerIndex]!;

@@ -193,6 +193,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewIceSpire")) SetupIceSpirePreview();
             else if (HasCommandLineFlag("-previewGoat")) SetupGoatPreview();
             else if (HasCommandLineFlag("-previewSnowHut")) SetupSnowHutPreview();
+            else if (HasCommandLineFlag("-previewEndCrystal")) SetupEndCrystalPreview();
             else if (HasCommandLineFlag("-previewCombat")) OnEndTurn();
             if (HasCommandLineFlag("-previewGroundHover")) _battlefield.SetSlotHovered(true, DemoSlotKind.Unit, 0, true);
             var capturePath = GetCommandLineValue("-captureDemo");
@@ -800,6 +801,18 @@ namespace BiomeRivals.Demo
                             yield return PulseBothHeroHuds(Danger);
                         else
                             yield return null;
+                    }
+                    else if (matchEvent.payload?.effectId == "effect.ed_007.01")
+                    {
+                        var backlash = matchEvent.payload.damageType == "TRUE";
+                        var damagedSide = damagedViewer ? "己方" : "敌方";
+                        ShowStatus(backlash
+                            ? $"末影水晶亡语反噬：{damagedSide}英雄受到 {matchEvent.payload.damage} 点真实伤害。"
+                            : $"末影水晶结束阶段脉冲：{damagedSide}英雄受到 {matchEvent.payload.damage} 点普通伤害。", false);
+                        if (!string.IsNullOrEmpty(matchEvent.payload.sourceInstanceId))
+                            yield return PulseBattlefieldObject(matchEvent.payload.sourceInstanceId);
+                        yield return ShowTurnBanner(backlash ? "水晶反噬" : "末影脉冲", backlash ? Danger : Hex("#D28BFF"));
+                        yield return damagedViewer ? PulsePlayerHud(Danger) : PulseOpponentHud(Danger);
                     }
                     else yield return damagedViewer ? PulsePlayerHud(Danger) : PulseOpponentHud(Danger);
                     break;
@@ -1440,6 +1453,31 @@ namespace BiomeRivals.Demo
                 : "雪屋起始阶段预览初始化失败。", !ready);
             var hut = _match.GetObject(true, DemoSlotKind.Building, 1);
             if (hut != null) StartCoroutine(PulseBattlefieldObject(hut.InstanceId));
+        }
+
+        private void SetupEndCrystalPreview()
+        {
+            SelectFaction("end");
+            SelectOpponentFaction("plains_forest");
+            if (!_registry.TryGetDefinition("ed_007", out var crystalDefinition) ||
+                !_registry.TryGetDefinition("pf_008", out var golemDefinition)) return;
+            _match.ResetHand(Array.Empty<string>());
+            _match.EndPlayerTurn();
+            _match.BeginNextPlayerTurn();
+            _match.EndPlayerTurn();
+            _match.BeginNextPlayerTurn();
+            _match.ResetHand(new[] { crystalDefinition.id });
+            _match.ResetOpponent(new[] { golemDefinition });
+            var result = _match.ApplyDeploy(crystalDefinition,
+                _match.CreateDeployCommand(crystalDefinition.id, DemoSlotKind.Building, 1));
+            _match.ResetHand(new[] { crystalDefinition.id });
+            _selectedCardId = crystalDefinition.id;
+            RefreshAll();
+            ShowStatus(result.Accepted
+                ? "末影水晶已蓄能：己方结束阶段对敌方英雄造成 2 点普通伤害；被摧毁时会反噬拥有者 2 点真实伤害。"
+                : result.Message, !result.Accepted);
+            var crystal = _match.GetObject(true, DemoSlotKind.Building, 1);
+            if (crystal != null) StartCoroutine(PulseBattlefieldObject(crystal.InstanceId));
         }
 
         private void SetupSnowGolemPreview()
@@ -2586,6 +2624,9 @@ namespace BiomeRivals.Demo
                 (player ? match.PlayerBattlefield : match.OpponentBattlefield).Any(value =>
                     value != null && value.SlotKind == DemoSlotKind.Unit && value.Health > 0 && value.Health < value.MaxHealth))
                 engineReadyKind = DemoEngineReadyKind.SnowHut;
+            else if (view.Kind == DemoSlotKind.Building && battlefieldObject?.CardId == "ed_007" &&
+                match.IsPlayerTurn == player)
+                engineReadyKind = DemoEngineReadyKind.EndCrystal;
             _battlefield.SetSlotEngineReady(
                 player,
                 view.Kind,
@@ -3644,6 +3685,7 @@ namespace BiomeRivals.Demo
             ClearSelectedAttackerHighlight();
             _selectedAttackerInstanceId = null;
             RefreshAll();
+            if (TryShowLocalMatchOutcome()) return;
             StartCoroutine(SimulateOpponentTurn());
         }
 
@@ -3659,7 +3701,9 @@ namespace BiomeRivals.Demo
                 ShowStatus($"手牌已满，{GetCardName(draw.CardId)} 被公开并置入弃牌堆。", true);
             else if (draw.Outcome == DemoDrawOutcome.MatchEnded)
             {
-                ShowStatus("炸药机关完成出土伤害，对局已经结束。", true);
+                ShowStatus(_match.PlayerLife <= 0 && _match.OpponentBattlefield.Any(value => value?.CardId == "ed_007")
+                    ? "对手的末影水晶完成结束阶段脉冲，你的英雄生命归零。"
+                    : "结算伤害使一方英雄生命归零，对局已经结束。", true);
                 var playerWon = _match.OpponentLife <= 0;
                 yield return ShowTurnBanner(playerWon ? "胜利" : "战败", playerWon ? Cyan : Danger);
                 yield break;

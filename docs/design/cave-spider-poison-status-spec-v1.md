@@ -1,6 +1,6 @@
 # CD-002 洞穴蜘蛛：中毒状态规范 v1
 
-本规范对应 `protocolVersion 29`、`rulesetVersion prototype-0.46` 与内容版本 38。
+本规范对应 `protocolVersion 30`、`rulesetVersion prototype-0.47` 与内容版本 39。
 
 ## 规则语义
 

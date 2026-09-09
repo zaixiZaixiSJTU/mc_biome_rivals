@@ -86,7 +86,7 @@ try {
   const snapshots = await Promise.all(players.map((player) => player.snapshot.promise));
   for (let index = 0; index < players.length; index += 1) {
     const snapshot = snapshots[index];
-    if (snapshot.protocolVersion !== 29 || snapshot.rulesetVersion !== 'prototype-0.46') {
+    if (snapshot.protocolVersion !== 30 || snapshot.rulesetVersion !== 'prototype-0.47') {
       throw new Error(`snapshot ${index + 1} version mismatch: ${snapshot.protocolVersion}/${snapshot.rulesetVersion}`);
     }
     const ownPlayer = snapshot.players.find((entry) => entry.playerId === snapshot.viewerPlayerId);

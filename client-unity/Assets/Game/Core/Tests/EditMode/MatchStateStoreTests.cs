@@ -927,6 +927,54 @@ namespace BiomeRivals.Core.Tests
         }
 
         [Test]
+        public void Apply_ReplaysEndCrystalPulseAndTrueDamageBacklashFromStableSourceInstance()
+        {
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "match-end-crystal", viewerPlayerId = "alice", status = "ACTIVE",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice", life = 30, armor = 5 },
+                    new PlayerStateDto { playerId = "bob", life = 10, armor = 1 }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 1, type = MatchEventTypes.HeroDamaged,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "bob", sourceCardId = "ed_007", sourceInstanceId = "object-7",
+                            effectId = "effect.ed_007.01", damage = 2, damageType = "NORMAL", life = 9, armor = 0
+                        }
+                    },
+                    new MatchEventDto
+                    {
+                        eventId = 2, type = MatchEventTypes.HeroDamaged,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", sourceCardId = "ed_007", sourceInstanceId = "object-8",
+                            effectId = "effect.ed_007.01", damage = 2, damageType = "TRUE", life = 28, armor = 5
+                        }
+                    }
+                }
+            });
+
+            Assert.That(store.Current.players[0].life, Is.EqualTo(28));
+            Assert.That(store.Current.players[0].armor, Is.EqualTo(5));
+            Assert.That(store.Current.players[1].life, Is.EqualTo(9));
+            Assert.That(store.Current.players[1].armor, Is.Zero);
+            Assert.That(store.Current.lastEventId, Is.EqualTo(2));
+        }
+
+        [Test]
         public void Apply_ReplaysTemporaryAttackModifierAndExpiry()
         {
             var target = new BattlefieldObjectStateDto

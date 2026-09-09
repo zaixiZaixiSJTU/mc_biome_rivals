@@ -1069,6 +1069,12 @@ namespace BiomeRivals.Demo
             var poisonDeathMessages = new List<string>();
             var poisonDamage = ResolveEndPhaseStatuses(_playerBattlefield, poisonDeathMessages);
             ResolvePlayerStatuses(_playerStatuses);
+            var crystalPulses = ResolveEndCrystalEndPhase(true);
+            if (IsFinished)
+            {
+                AcceptCommand(command);
+                return DemoCommandResult.Accept($"末影水晶脉冲 {crystalPulses} 次，敌方英雄生命归零，你获得胜利！", Revision);
+            }
             ResolveCaveStructureEndPhase(true, out var mineTriggers, out var mansionSummons);
             RestoreExpiredAttackModifiers(_playerBattlefield);
             RestoreExpiredAttackModifiers(_opponentBattlefield);
@@ -1086,6 +1092,7 @@ namespace BiomeRivals.Demo
             if (poisonDeathMessages.Count > 0) monumentMessage += " " + string.Join(" ", poisonDeathMessages);
             if (mineTriggers > 0) monumentMessage += $" 废弃矿井生成了 {mineTriggers} 张圆石。";
             if (mansionSummons > 0) monumentMessage += $" 林地府邸召唤了 {mansionSummons} 个卫道士新兵。";
+            if (crystalPulses > 0) monumentMessage += $" 末影水晶对敌方英雄造成了 {crystalPulses * 2} 点普通伤害。";
             return DemoCommandResult.Accept(string.IsNullOrEmpty(monumentMessage) ? "已结束回合。" : monumentMessage + " 已结束回合。", Revision);
         }
 
@@ -1096,6 +1103,9 @@ namespace BiomeRivals.Demo
             ResolveSnowHutStartPhase(false, false);
             ResolveEndPhaseStatuses(_opponentBattlefield, null);
             ResolvePlayerStatuses(_opponentStatuses);
+            ResolveEndCrystalEndPhase(false);
+            if (IsFinished)
+                return RememberDraw(new DemoDrawResult(DemoDrawOutcome.MatchEnded, string.Empty, 0));
             ResolveCaveStructureEndPhase(false, out _, out _);
             _opponentCardsPlayedThisTurn = 0;
             _opponentHasTargetedEnemyObjectThisTurn = false;
@@ -1704,6 +1714,38 @@ namespace BiomeRivals.Demo
             return totalDamage;
         }
 
+        private int ResolveEndCrystalEndPhase(bool player)
+        {
+            var battlefield = player ? _playerBattlefield : _opponentBattlefield;
+            var crystals = battlefield
+                .Where(value => value.CardId == "ed_007" && value.SlotKind == DemoSlotKind.Building && value.Health > 0)
+                .OrderBy(value => value.SlotIndex)
+                .ThenBy(value => value.InstanceId, StringComparer.Ordinal)
+                .ToArray();
+            var triggered = 0;
+            foreach (var crystal in crystals)
+            {
+                if (!battlefield.Contains(crystal) || crystal.Health <= 0 || IsFinished) continue;
+                if (player)
+                {
+                    var armorDamage = Math.Min(OpponentArmor, 2);
+                    OpponentArmor -= armorDamage;
+                    OpponentLife = Math.Max(0, OpponentLife - (2 - armorDamage));
+                    if (OpponentLife == 0) IsFinished = true;
+                }
+                else
+                {
+                    var armorDamage = Math.Min(PlayerArmor, 2);
+                    PlayerArmor -= armorDamage;
+                    PlayerLife = Math.Max(0, PlayerLife - (2 - armorDamage));
+                    if (PlayerLife == 0) IsFinished = true;
+                }
+                triggered++;
+                if (IsFinished) PendingChoice = null;
+            }
+            return triggered;
+        }
+
         private void ResolveCaveStructureEndPhase(bool player, out int mineTriggers, out int mansionSummons)
         {
             mineTriggers = 0;
@@ -1963,6 +2005,7 @@ namespace BiomeRivals.Demo
                 {
                     var message = ResolveLocalDeathrattle(value, resolvedKillCredits);
                     if (!string.IsNullOrEmpty(message)) messages.Add(message);
+                    if (IsFinished) return messages;
                     message = ResolveLocalDrop(value, resolvedKillCredits);
                     if (!string.IsNullOrEmpty(message)) messages.Add(message);
                 }
@@ -1970,6 +2013,7 @@ namespace BiomeRivals.Demo
                 {
                     var message = ResolveLocalDeathrattle(value, resolvedKillCredits);
                     if (!string.IsNullOrEmpty(message)) messages.Add(message);
+                    if (IsFinished) return messages;
                     message = ResolveLocalDrop(value, resolvedKillCredits);
                     if (!string.IsNullOrEmpty(message)) messages.Add(message);
                 }
@@ -2012,6 +2056,26 @@ namespace BiomeRivals.Demo
 
         private string ResolveLocalDeathrattle(DemoBattlefieldObject value, IDictionary<string, bool> killCredits)
         {
+            if (value.CardId == "ed_007")
+            {
+                if (value.Player)
+                {
+                    PlayerLife = Math.Max(0, PlayerLife - 2);
+                    if (PlayerLife == 0)
+                    {
+                        IsFinished = true;
+                        PendingChoice = null;
+                    }
+                    return "末影水晶亡语：己方英雄受到 2 点真实伤害。";
+                }
+                OpponentLife = Math.Max(0, OpponentLife - 2);
+                if (OpponentLife == 0)
+                {
+                    IsFinished = true;
+                    PendingChoice = null;
+                }
+                return "敌方末影水晶亡语：敌方英雄受到 2 点真实伤害。";
+            }
             if (value.CardId == "cd_003")
             {
                 var enemyBattlefield = value.Player ? _opponentBattlefield : _playerBattlefield;
