@@ -16,15 +16,17 @@
 ## 当前基线与风险
 
 - 有效仓库：`D:\gitt\mc_biome_rivals`
-- 当前已提交基线：`b57f44a feat: add end crystal end phase damage`
+- 当前已提交基线：`6c9202e feat: checkpoint voxel battlefield and fire rules`
 - 开发中版本：协议 31、规则集 `prototype-0.48`、内容版本 40。
 - 卡牌效果状态：53 个 `IMPLEMENTED`，16 个 `PENDING`。
-- 工作区同时包含体素场景、实体模型、资源管线和 FIRE 规则的大量未提交修改。此时继续叠加功能会显著增加丢失、混提与回归定位风险。
-- `docs/development/change-log.md` 当前尚未纳入 Git。
+- 此前混合在工作区的体素场景、实体模型、资源管线和 FIRE 规则已在恢复基线 `6c9202e` 中固定。后续不得继续使用这种跨任务混提方式。
+- `docs/development/change-log.md`、本路线图和 BR-000 检查点均已纳入 Git。
 
 ## P0：先稳定现有工作区
 
 ### BR-000 工作区盘点与可恢复检查点
+
+状态：**已完成**（恢复基线 `6c9202e`；两个明确隔离的本机文件未提交）。
 
 目标：在不新增功能的前提下，把当前混合修改整理成可以安全继续开发的状态。
 
@@ -41,6 +43,8 @@
 入口：`git status`、`git diff --stat`、`docs/development/change-log.md`、两个 Minecraft 资源提取脚本。
 
 ### BR-001 2.5D 体素战场与原版模型基线
+
+状态：**已完成并纳入恢复基线 `6c9202e`**。后续视觉改进从 UI-010 或 UI-012 单独立项。
 
 依赖：BR-000。
 
@@ -59,6 +63,8 @@
 入口：`DemoBattlefield3D.cs`、`DemoBattlefieldThemeCatalog.cs`、`DemoMinecraftModelFactory.cs`、`DemoMinecraftEntityModelBuilder.cs`、`DemoLocalMatchTests.cs`。
 
 ### BR-002 烈焰人、烈焰棒与 FIRE 纵向切片
+
+状态：**已完成并纳入恢复基线 `6c9202e`**。验证结果：服务端 162/162、Unity EditMode 202/202。
 
 依赖：BR-000。应与 BR-001 分开提交。
 
@@ -208,4 +214,4 @@
 
 ## 当前唯一推荐下一步
 
-只执行 **BR-000**。在现有混合工作区形成可恢复检查点之前，不开始 UI-010、NET-020 或新的卡牌效果。
+只执行 **UI-010：像素 UI 设计系统**。该任务不修改卡牌规则、联机协议或 3D 高亮交互；完成并验证后，再单独进入 UI-011。

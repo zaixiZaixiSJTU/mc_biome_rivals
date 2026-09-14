@@ -2,7 +2,7 @@
 
 关联任务：`BR-000`
 
-本文件记录 `b57f44a` 之后尚未提交工作的归属与验证证据。它不是改动日志，也不表示下列切片已经提交。
+本文件记录 `b57f44a` 之后工作区的归属与验证证据。盘点内容已经作为恢复基线 `6c9202e feat: checkpoint voxel battlefield and fire rules` 提交；它解释该次历史混合提交，不作为后续混提的先例。
 
 ## 已验证基线
 
@@ -92,9 +92,9 @@ BR-000 首次盘点时共有：
 
 推荐顺序：先提交 BR-001 的体素场景/模型基础，再在其上提交 BR-002 的 FIRE 规则与表现。拆分时每个提交后都至少运行受影响测试；最终再运行两条全量验证命令。
 
-## BR-000 剩余退出条件
+## BR-000 结论
 
-1. 决定两个仍被隔离的未跟踪文件（`scripts/add_units.py`、`PackageManagerSettings.asset`）应提交、忽略或删除；未经确认不破坏其内容。
-2. 按上面的 A/B/C 边界完成暂存预演；当前检查已经确认所有发生变化的 Unity Asset 均有一致的 `.meta` 成对变化，Schema 的 Unity 镜像哈希一致且服务端生成目录校验通过。
-3. 完成 BR-001、BR-002 的实际提交后，把提交号和最终验证结果写入 `change-log.md`。
-4. 最终工作区只允许保留明确标记为本机生成或刻意暂存的文件。
+1. A/B/C 三组历史修改已固定在恢复基线 `6c9202e`；后续任务严格按 `task-roadmap.md` 单独提交。
+2. 所有发生变化的 Unity Asset 均有一致的 `.meta` 成对变化，Schema 的 Unity 镜像哈希一致，服务端生成目录校验通过。
+3. `change-log.md` 已补充 FIRE 条目、准确验证命令和测试数量。
+4. 未提交区只保留两个明确隔离的本机文件：`scripts/add_units.py` 与 `client-unity/ProjectSettings/PackageManagerSettings.asset`。未经来源或团队包源策略确认，不提交也不删除。
