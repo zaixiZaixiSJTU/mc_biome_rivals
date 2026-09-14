@@ -82,7 +82,9 @@ DB-005 的动态费用直接复用卡面左上角费用槽，不增加独立 Web
 - 背景是项目专用生成素材，不含文字、Logo、角色、卡牌或其他游戏的可识别界面。
 - 发布前仍需统一替换为具有明确授权的最终素材，并重新核对 Minecraft 使用规范。
 
-## 战场背景生成记录
+## 历史战场背景生成记录
+
+> **状态：已废弃（2026-09-13）。** 以下 ImageGen 提示词与预览只用于追溯早期视觉方向。当前运行时已经删除整张插画背景和半场合成方案，改用真实 3D 体素地形、方块纹理、群系装饰与原版实体模型。
 
 生成方式：Codex 内置 ImageGen。
 
@@ -90,7 +92,7 @@ DB-005 的动态费用直接复用卡面左上角费用槽，不增加独立 Web
 
 > Use case: stylized-concept. Asset type: 16:9 Unity digital card-game battlefield background. Create a polished empty block-built arena for a collectible card game. The upper half is a restrained Nether-like volcanic biome with dark basalt bricks, deep crimson accents, tiny controlled ember cracks and warm orange edge light. The lower half is a meadow-and-forest biome with dark oak planks, mossy stone, grass and subtle leaf details. Separate the halves with a narrow neutral deepslate lane and a faint turquoise river/rune accent. The arena must support overlay UI for four unit slots and three building slots on each side, but do not draw literal card slots; use subtle floor rhythm and material changes only. Upper and lower terrain geometry may differ organically while retaining balanced competitive readability. Style/medium: shippable modern digital card game environment, elegant blocky voxel-inspired materials, crisp game UI backdrop, restrained premium polish, not a screenshot and not concept sketch. Composition/framing: wide 16:9, straight-on shallow top-down view, perfectly centered central lane, large calm empty play areas, darkened outer edges reserved for HUD and buttons. Lighting/mood: controlled soft cinematic lighting, upper warm ember glow, lower cool natural moonlight, strong readable separation, no visual noise behind cards. Color palette: charcoal, deep crimson, ember orange, forest green, oak brown, muted turquoise. Constraints: absolutely no text, letters, numbers, logos, characters, creatures, cards, UI buttons, item icons, trademarks or watermark; no recognizable copied game interface; keep the central play surfaces uncluttered and high contrast for overlay elements. Avoid: busy scenery, tall objects blocking play space, excessive lava glow, photorealism, fisheye perspective, ornate fantasy filigree.
 
-精绘环境层：`client-unity/Assets/Game/Demo/Art/demo-battlefield-bg-v1.png`。2.5D 版本保留它作为默认环境质感来源，并在其上叠加真实 3D 槽位、生物与建筑。
+旧精绘环境层位于 `client-unity/Assets/Game/Demo/Art/demo-battlefield-bg-v1.png`，现已删除。当前 2.5D 版本不再加载屏幕空间背景图；地表、槽位、生物与建筑全部处于 3D 场景并接受同一相机投影。
 
 实际运行预览：[`assets/demo-runtime-preview-v1.png`](assets/demo-runtime-preview-v1.png)
 

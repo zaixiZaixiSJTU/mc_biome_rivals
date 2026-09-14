@@ -164,6 +164,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewArchaeology")) SetupArchaeologyPreview();
             else if (HasCommandLineFlag("-previewBatScry")) SetupBatScryPreview();
             else if (HasCommandLineFlag("-previewCaveSpiderPoison")) SetupCaveSpiderPoisonPreview();
+            else if (HasCommandLineFlag("-previewBlazeFire")) SetupBlazeFirePreview();
             else if (HasCommandLineFlag("-previewDarkness")) SetupDarknessPreview();
             else if (HasCommandLineFlag("-previewAbandonedMine")) SetupAbandonedMinePreview();
             else if (HasCommandLineFlag("-previewWoodlandMansion")) SetupWoodlandMansionPreview();
@@ -822,7 +823,22 @@ namespace BiomeRivals.Demo
                     yield return healedViewer ? PulsePlayerHud(Cyan) : PulseOpponentHud(Cyan);
                     break;
                 case MatchEventTypes.ObjectStatsChanged:
-                    if (matchEvent.payload?.effectId == "effect.cd_002.01" && matchEvent.payload?.reason == "DAMAGE")
+                    if ((matchEvent.payload?.effectId == "effect.nt_003.01" || matchEvent.payload?.effectId == "effect.tk_013.01") &&
+                        matchEvent.payload?.reason == "DAMAGE")
+                    {
+                        var fireViewerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
+                        var burningFriendly = matchEvent.payload?.playerId == fireViewerId;
+                        var fireTick = matchEvent.payload?.damageType == "TRUE";
+                        ShowStatus(fireTick
+                            ? burningFriendly
+                                ? "己方对象的烈焰发作，受到 1 点真实伤害。"
+                                : "敌方对象的烈焰发作，受到 1 点真实伤害。"
+                            : burningFriendly
+                                ? "敌方烈焰棒命中己方生物，造成 1 点伤害。"
+                                : "烈焰棒命中敌方生物，造成 1 点伤害。", false);
+                        yield return ShowTurnBanner(fireTick ? "烈焰发作" : "烈焰棒", Hex("#FF8A2A"));
+                    }
+                    else if (matchEvent.payload?.effectId == "effect.cd_002.01" && matchEvent.payload?.reason == "DAMAGE")
                     {
                         var poisonViewerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
                         var poisonedFriendly = matchEvent.payload?.playerId == poisonViewerId;
@@ -970,20 +986,26 @@ namespace BiomeRivals.Demo
                     break;
                 case MatchEventTypes.ObjectStatusApplied:
                     var poisonApplied = matchEvent.payload?.statusId == "POISON";
+                    var fireApplied = matchEvent.payload?.statusId == "FIRE";
                     var iceSpireApplied = matchEvent.payload?.effectId == "effect.si_008.01";
-                    ShowStatus(poisonApplied
+                    ShowStatus(fireApplied
+                        ? $"烈焰附着目标：着火 {matchEvent.payload?.remainingDuration}；目标控制者每次结束阶段受到 1 点真实伤害。"
+                        : poisonApplied
                         ? $"洞穴蜘蛛的毒素附着目标：中毒 {matchEvent.payload?.remainingDuration}；目标控制者每次结束阶段受到 1 点普通伤害。"
                         : iceSpireApplied
                             ? $"冰刺之巅截获边缘召唤：目标获得缓慢 {matchEvent.payload?.remainingDuration}，期间不能普通攻击。"
                             : $"粉雪覆盖目标：缓慢 {matchEvent.payload?.remainingDuration}，期间不能普通攻击。", false);
-                    yield return ShowTurnBanner(poisonApplied ? "中毒" : iceSpireApplied ? "冰刺封锁" : "缓慢",
-                        poisonApplied ? Hex("#A6F04D") : Cyan);
+                    yield return ShowTurnBanner(fireApplied ? "着火" : poisonApplied ? "中毒" : iceSpireApplied ? "冰刺封锁" : "缓慢",
+                        fireApplied ? Hex("#FF8A2A") : poisonApplied ? Hex("#A6F04D") : Cyan);
                     if (iceSpireApplied) yield return PulseBattlefieldObject(matchEvent.payload?.sourceInstanceId);
                     yield return PulseBattlefieldObject(matchEvent.payload?.instanceId);
                     break;
                 case MatchEventTypes.ObjectStatusRemoved:
                     var poisonRemoved = matchEvent.payload?.statusId == "POISON";
-                    ShowStatus(poisonRemoved
+                    var fireRemoved = matchEvent.payload?.statusId == "FIRE";
+                    ShowStatus(fireRemoved
+                        ? "第二次真实火焰伤害已经结算，着火状态移除。"
+                        : poisonRemoved
                         ? "第三次毒伤已经结算，中毒状态移除。"
                         : "目标控制者的结束阶段已结算，缓慢与绑定的攻击修正已移除。", false);
                     yield return PulseBattlefieldObject(matchEvent.payload?.instanceId);
@@ -1918,6 +1940,41 @@ namespace BiomeRivals.Demo
             if (target != null) StartCoroutine(PulseBattlefieldObject(target.InstanceId));
         }
 
+        private void SetupBlazeFirePreview()
+        {
+            SelectFaction("nether");
+            SelectOpponentFaction("ocean_river");
+            if (!_registry.TryGetDefinition("nt_003", out var blazeDefinition) ||
+                !_registry.TryGetDefinition("tk_013", out var blazeRodDefinition) ||
+                !_registry.TryGetDefinition("or_005", out var turtleDefinition)) return;
+            _match.ResetDeckAndHand(new[] { blazeDefinition.id, blazeDefinition.id, blazeRodDefinition.id }, new[] { "nt_001", "nt_006" });
+            _match.ResetOpponent(new[] { turtleDefinition });
+            var firstDeployed = _match.ApplyDeploy(blazeDefinition,
+                _match.CreateDeployCommand(blazeDefinition.id, DemoSlotKind.Unit, 1));
+            var secondDeployed = _match.ApplyDeploy(blazeDefinition,
+                _match.CreateDeployCommand(blazeDefinition.id, DemoSlotKind.Unit, 2));
+            _match.EndPlayerTurn();
+            _match.BeginNextPlayerTurn();
+            var target = _match.GetObject(false, DemoSlotKind.Unit, 0);
+            _match.ApplyEnterCombat(_match.CreateEnterCombatCommand());
+            var blaze = _match.GetObject(true, DemoSlotKind.Unit, 1);
+            var attacked = blaze == null || target == null
+                ? DemoCommandResult.Reject(DemoCommandRejectionCode.InvalidTarget, "预览目标初始化失败。", _match.Revision)
+                : _match.ApplyAttack(_match.CreateAttackCommand(blaze.InstanceId, "UNIT", target.InstanceId));
+            if (attacked.Accepted)
+            {
+                _match.ApplyEndTurn(_match.CreateEndTurnCommand());
+                _match.BeginNextPlayerTurn();
+            }
+            _selectedCardId = blazeRodDefinition.id;
+            RefreshAll();
+            ShowStatus(attacked.Accepted
+                ? "烈焰人已令海龟着火：橙色像素火焰附着模型并直接照亮地表；当前已回到主行动阶段，可用手牌中的烈焰棒继续点燃目标。"
+                : firstDeployed.Accepted && secondDeployed.Accepted ? attacked.Message : !firstDeployed.Accepted ? firstDeployed.Message : secondDeployed.Message,
+                !firstDeployed.Accepted || !secondDeployed.Accepted || !attacked.Accepted);
+            if (target != null) StartCoroutine(PulseBattlefieldObject(target.InstanceId));
+        }
+
         private void SetupAbandonedMinePreview()
         {
             SelectFaction("cave_dark_forest");
@@ -2627,6 +2684,10 @@ namespace BiomeRivals.Demo
             else if (view.Kind == DemoSlotKind.Building && battlefieldObject?.CardId == "ed_007" &&
                 match.IsPlayerTurn == player)
                 engineReadyKind = DemoEngineReadyKind.EndCrystal;
+            else if (view.Kind == DemoSlotKind.Unit && battlefieldObject?.CardId == "nt_003" &&
+                match.IsPlayerTurn == player && match.Phase == DemoTurnPhase.Combat && !battlefieldObject.HasAttacked &&
+                !battlefieldObject.HasStatus("SLOW"))
+                engineReadyKind = DemoEngineReadyKind.Blaze;
             _battlefield.SetSlotEngineReady(
                 player,
                 view.Kind,
@@ -2637,6 +2698,8 @@ namespace BiomeRivals.Demo
                 IsOceanMonumentThreat(player, battlefieldObject));
             _battlefield.SetSlotPoisoned(player, view.Kind, view.Index,
                 battlefieldObject?.HasStatus("POISON") == true);
+            _battlefield.SetSlotBurning(player, view.Kind, view.Index,
+                battlefieldObject?.HasStatus("FIRE") == true);
             _battlefield.SetSlotState(player, view.Kind, view.Index, valid, !empty, priorityTarget);
 
             if (!empty)
@@ -3886,6 +3949,13 @@ namespace BiomeRivals.Demo
             {
                 stats = $"中毒 {poison.remainingDuration} · {stats}";
                 accent = Hex("#A6F04D");
+            }
+            var fire = (battlefieldObject?.Statuses ?? Array.Empty<BattlefieldStatusStateDto>())
+                .FirstOrDefault(value => value != null && value.statusId == "FIRE");
+            if (fire != null)
+            {
+                stats = $"着火 {fire.remainingDuration} · {stats}";
+                accent = Hex("#FF8A2A");
             }
             var labelY = -size.y * 0.34f;
             var plate = CreatePanel(parent, "WorldLabel", new Vector2(0, labelY), new Vector2(size.x - 8, 30), new Color(Ink.r, Ink.g, Ink.b, 0.84f));

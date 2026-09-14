@@ -63,6 +63,10 @@ namespace BiomeRivals.Demo
             "effect.si_006.01", DemoTargetOwner.Enemy, DemoSlotKind.Unit, "UNIT",
             "选择缓慢目标", "请选择一个发出冰蓝光的敌方生物；右键或 Esc 取消。", "当前没有可施加缓慢的敌方生物。");
 
+        private static readonly DemoCardTargetRule BlazeRod = new DemoCardTargetRule(
+            "effect.tk_013.01", DemoTargetOwner.Enemy, DemoSlotKind.Unit, "UNIT",
+            "选择点燃目标", "请选择一个发出烈焰橙光的敌方生物；先造成 1 点伤害，存活则着火。", "当前没有可点燃的敌方生物。");
+
         private static readonly DemoCardTargetRule Stray = new DemoCardTargetRule(
             "effect.si_003.01", DemoTargetOwner.Enemy, DemoSlotKind.Unit, "UNIT",
             "选择战吼目标", "先选择一个发出冰蓝光的敌方生物，再选择己方部署格。", "当前没有可施加缓慢的敌方生物。");
@@ -116,6 +120,7 @@ namespace BiomeRivals.Demo
                     case "effect.tk_009.01": rule = Bone; return true;
                     case "effect.tk_010.01": rule = Cobblestone; return true;
                     case "effect.tk_012.01": rule = PrismarineShard; return true;
+                    case "effect.tk_013.01": rule = BlazeRod; return true;
                     case "effect.pf_006.01": rule = BreedingSeason; return true;
                 }
             }

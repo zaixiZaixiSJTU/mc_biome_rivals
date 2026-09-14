@@ -1,4 +1,10 @@
-# 战场半场环境模块规范 v1
+# 战场半场环境模块规范 v1（已被体素地形方案取代）
+
+> **状态：已废弃（2026-09-13）。** 本文档描述的“插画半场图片 + 合成 Shader”方案已由真正的 2.5D 体素地形取代：战场不再使用任何手绘背景图，地面、群系主题与部署格全部由 Minecraft 方块纹理驱动的 3D 体素网格呈现，实体单位改为由原版 `minecraft:geometry` 几何 JSON 驱动的体素模型。历史设计保留如下，仅供追溯。
+>
+> 详见 `docs/development/change-log.md` 2026-09-13 条目。
+
+# 历史方案：战场半场环境模块（不可用于新实现）
 
 ## 目标
 
@@ -23,8 +29,8 @@
 - 河岸结构可以形成浅沟，但不得表现为把两个独立俯视平面竖直拼接。
 - 部署格不是背景图的一部分；它们是 3D Mesh，分别采样本方环境模块并继承主相机 MVP 变换。
 
-## 运行时职责
+## 历史运行时职责
 
-`DemoBattlefieldThemeCatalog` 负责群系 ID 到 `near` / `far` 资源与环境色的稳定映射；`DemoBattlefield3D.SetBattlefieldThemes` 原子更新背景、双方部署格和环境灯光；`DemoCompositeBackdrop.shader` 只负责同坐标采样与中立河道混合，不执行镜像或透视补偿。
+废弃方案曾让 `DemoBattlefieldThemeCatalog` 负责群系 ID 到 `near` / `far` 资源与环境色的映射，让 `DemoBattlefield3D.SetBattlefieldThemes` 更新背景、双方部署格和环境灯光，并由已经删除的 `DemoCompositeBackdrop.shader` 合成半场图片。该职责描述仅用于解释旧提交，不得作为当前实现依据。
 
-新增群系时，必须同时注册两张资源，并通过 EditMode 测试验证资源名、双方独立切换和远端材质引用。
+当前方案新增群系时，应注册主/次/副地表方块纹理、地基纹理、主题颜色、灯光与装饰配置，并通过 EditMode 测试验证双方独立切换。不得重新引入 `near` / `far` 半场图片。

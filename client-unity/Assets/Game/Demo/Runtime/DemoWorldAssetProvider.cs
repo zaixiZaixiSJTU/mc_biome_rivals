@@ -49,21 +49,23 @@ namespace BiomeRivals.Demo
             return material;
         }
 
-        public static Material CreateEntityMaterial(string name, Color fallback, string textureKey, Shader preferredShader = null)
+        /// <summary>
+        /// Vanilla-style entity cutout material: unlit shading with baked
+        /// per-face vertex colors plus an optional emissive lift used by fire
+        /// creatures (blaze, magma cube).
+        /// </summary>
+        public static Material CreateEntityMaterial(string name, Color fallback, string textureKey, Shader preferredShader = null, float emissiveBoost = 0f)
         {
-            var material = CreateBlockMaterial(name, fallback, textureKey, Color.black, preferredShader);
+            var shader = preferredShader ??
+                         Shader.Find("BiomeRivals/Demo/Entity") ??
+                         Shader.Find("Standard") ??
+                         Shader.Find("Universal Render Pipeline/Lit");
+            if (shader == null) throw new MissingReferenceException("No tracked demo entity shader is available.");
+            var material = CreateBlockMaterial(name, fallback, textureKey, Color.black, shader);
             material.enableInstancing = false;
-            var texture = LoadBlockTexture(textureKey);
-            if (texture != null)
-            {
-                SetColor(material, "_BaseColor", Color.white);
-                SetColor(material, "_Color", Color.white);
-                SetTexture(material, "_EmissionMap", texture);
-                SetColor(material, "_EmissionColor", new Color(0.34f, 0.34f, 0.34f, 1f));
-                material.EnableKeyword("_EMISSION");
-            }
             if (material.HasProperty("_Cutoff")) material.SetFloat("_Cutoff", 0.1f);
-            material.EnableKeyword("_ALPHATEST_ON");
+            if (material.HasProperty("_EmissiveBoost")) material.SetFloat("_EmissiveBoost", emissiveBoost);
+            material.SetOverrideTag("RenderType", "TransparentCutout");
             material.renderQueue = 2450;
             return material;
         }
@@ -79,6 +81,12 @@ namespace BiomeRivals.Demo
             if (material.HasProperty("_HighlightStrength")) material.SetFloat("_HighlightStrength", 0f);
             if (material.HasProperty("_UseScreenProjection")) material.SetFloat("_UseScreenProjection", useScreenProjection ? 1f : 0f);
             return material;
+        }
+
+        public static void SetMaterialColor(Material material, Color value)
+        {
+            SetColor(material, "_Color", value);
+            SetColor(material, "_BaseColor", value);
         }
 
         private static void SetColor(Material material, string property, Color value)

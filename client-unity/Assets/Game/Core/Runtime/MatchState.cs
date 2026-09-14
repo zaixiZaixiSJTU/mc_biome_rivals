@@ -158,12 +158,14 @@ namespace BiomeRivals.Core
                     var seenStatuses = new HashSet<string>(StringComparer.Ordinal);
                     foreach (var status in battlefieldObject.statuses ?? Array.Empty<BattlefieldStatusStateDto>())
                     {
-                        if (status == null || (status.statusId != "SLOW" && status.statusId != "POISON") || status.remainingDuration < 1 ||
+                        if (status == null || (status.statusId != "SLOW" && status.statusId != "POISON" && status.statusId != "FIRE") || status.remainingDuration < 1 ||
                             string.IsNullOrWhiteSpace(status.sourcePlayerId) || string.IsNullOrWhiteSpace(status.sourceCardId) ||
                             string.IsNullOrWhiteSpace(status.effectId) || status.attackModifier > 0 ||
                             status.boundAttackModifier > 0 || status.attackModifier < status.boundAttackModifier ||
                             !seenStatuses.Add(status.statusId) ||
                             (status.statusId == "POISON" && (status.remainingDuration > 3 ||
+                                status.attackModifier != 0 || status.boundAttackModifier != 0)) ||
+                            (status.statusId == "FIRE" && (status.remainingDuration > 2 ||
                                 status.attackModifier != 0 || status.boundAttackModifier != 0)))
                             throw new InvalidOperationException("Snapshot contains an invalid battlefield status.");
                     }

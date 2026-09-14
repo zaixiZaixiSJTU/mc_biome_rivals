@@ -273,6 +273,109 @@ namespace BiomeRivals.Demo.Tests
         }
 
         [Test]
+        public void LocalBlazeAppliesFireBeforeRetaliationDeathAndDropsABlazeRod()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("nt_003", out var blaze), Is.True);
+            Assert.That(registry.TryGetDefinition("or_005", out var turtle), Is.True);
+            Assert.That(blaze.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(new[] { blaze.id }, new[] { "nt_001", "nt_006" });
+            match.ResetOpponent(new[] { turtle });
+            Assert.That(match.ApplyDeploy(blaze,
+                match.CreateDeployCommand(blaze.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            Assert.That(match.ApplyEnterCombat(match.CreateEnterCombatCommand()).Accepted, Is.True);
+            var attacker = match.GetObject(true, DemoSlotKind.Unit, 0);
+            var target = match.GetObject(false, DemoSlotKind.Unit, 0);
+            var opponentHandBefore = match.OpponentHandCount;
+
+            var attacked = match.ApplyAttack(match.CreateAttackCommand(attacker.InstanceId, "UNIT", target.InstanceId));
+
+            Assert.That(attacked.Accepted, Is.True, attacked.Message);
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 0), Is.Null);
+            Assert.That(target.Health, Is.EqualTo(3));
+            Assert.That(target.Statuses.Single().statusId, Is.EqualTo("FIRE"));
+            Assert.That(target.Statuses.Single().remainingDuration, Is.EqualTo(2));
+            Assert.That(target.Statuses.Single().sourceCardId, Is.EqualTo("nt_003"));
+            Assert.That(match.OpponentHandCount, Is.EqualTo(opponentHandBefore + 1));
+            Assert.That(attacked.Message, Does.Contain("着火"));
+            Assert.That(attacked.Message, Does.Contain("烈焰棒"));
+
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            Assert.That(target.Health, Is.EqualTo(2));
+            Assert.That(target.Statuses.Single().remainingDuration, Is.EqualTo(1));
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            Assert.That(target.Health, Is.EqualTo(1));
+            Assert.That(target.Statuses, Is.Empty);
+        }
+
+        [Test]
+        public void LocalBlazeRetaliationBurnsTheAttackerAndAwardsItsDropToTheKiller()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("pf_008", out var ironGolem), Is.True);
+            Assert.That(registry.TryGetDefinition("nt_003", out var blaze), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(new[] { ironGolem.id }, new[] { "pf_001" });
+            match.ResetOpponent(new[] { blaze });
+            Assert.That(match.ApplyDeploy(ironGolem,
+                match.CreateDeployCommand(ironGolem.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            Assert.That(match.ApplyEnterCombat(match.CreateEnterCombatCommand()).Accepted, Is.True);
+            var attacker = match.GetObject(true, DemoSlotKind.Unit, 0);
+            var defender = match.GetObject(false, DemoSlotKind.Unit, 0);
+
+            var attacked = match.ApplyAttack(match.CreateAttackCommand(attacker.InstanceId, "UNIT", defender.InstanceId));
+
+            Assert.That(attacked.Accepted, Is.True, attacked.Message);
+            Assert.That(attacker.Health, Is.EqualTo(4));
+            Assert.That(attacker.Statuses.Single().statusId, Is.EqualTo("FIRE"));
+            Assert.That(attacker.Statuses.Single().sourcePlayerId, Is.EqualTo("opponent"));
+            Assert.That(match.GetObject(false, DemoSlotKind.Unit, 0), Is.Null);
+            Assert.That(match.Hand, Does.Contain("tk_013"));
+        }
+
+        [Test]
+        public void LocalBlazeRodDamagesThenBurnsOnlyASurvivingEnemyUnit()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("tk_013", out var blazeRod), Is.True);
+            Assert.That(registry.TryGetDefinition("or_005", out var turtle), Is.True);
+            Assert.That(blazeRod.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { blazeRod.id });
+            match.ResetOpponent(new[] { turtle });
+            var target = match.GetObject(false, DemoSlotKind.Unit, 0);
+
+            var result = match.ApplyPlayCard(blazeRod,
+                match.CreatePlayCardCommand(blazeRod.id, "UNIT", target.InstanceId));
+
+            Assert.That(result.Accepted, Is.True, result.Message);
+            Assert.That(target.Health, Is.EqualTo(5));
+            Assert.That(target.Statuses.Single().statusId, Is.EqualTo("FIRE"));
+            Assert.That(target.Statuses.Single().remainingDuration, Is.EqualTo(2));
+            Assert.That(target.Statuses.Single().sourceCardId, Is.EqualTo("tk_013"));
+            Assert.That(match.Hand, Is.Empty);
+            Assert.That(match.DiscardPile, Does.Contain("tk_013"));
+
+            var lethal = new DemoLocalMatch();
+            lethal.ResetHand(new[] { blazeRod.id });
+            Assert.That(registry.TryGetDefinition("cd_002", out var caveSpider), Is.True);
+            lethal.ResetOpponent(new[] { caveSpider });
+            var lethalTarget = lethal.GetObject(false, DemoSlotKind.Unit, 0);
+            lethalTarget.Health = 1;
+            var lethalResult = lethal.ApplyPlayCard(blazeRod,
+                lethal.CreatePlayCardCommand(blazeRod.id, "UNIT", lethalTarget.InstanceId));
+            Assert.That(lethalResult.Accepted, Is.True, lethalResult.Message);
+            Assert.That(lethal.GetObject(false, DemoSlotKind.Unit, 0), Is.Null);
+        }
+
+        [Test]
         public void LocalArchaeologistRequiresAChoiceAndExcavatesTheSelectedBuriedCard()
         {
             var registry = CardContentLoader.Load();
@@ -420,6 +523,7 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(registry.TryGetDefinition("tk_002", out var wheat), Is.True);
             Assert.That(registry.TryGetDefinition("tk_009", out var bone), Is.True);
             Assert.That(registry.TryGetDefinition("tk_010", out var cobblestone), Is.True);
+            Assert.That(registry.TryGetDefinition("tk_013", out var blazeRod), Is.True);
             Assert.That(registry.TryGetDefinition("pf_006", out var breeding), Is.True);
 
             Assert.That(DemoCardTargeting.TryGetRule(snowball, out var snowballRule), Is.True);
@@ -435,6 +539,9 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(cobbleRule.Owner, Is.EqualTo(DemoTargetOwner.Friendly));
             Assert.That(cobbleRule.SlotKind, Is.EqualTo(DemoSlotKind.Building));
             Assert.That(cobbleRule.TargetType, Is.EqualTo("BUILDING"));
+            Assert.That(DemoCardTargeting.TryGetRule(blazeRod, out var blazeRodRule), Is.True);
+            Assert.That(blazeRodRule.Owner, Is.EqualTo(DemoTargetOwner.Enemy));
+            Assert.That(blazeRodRule.SlotKind, Is.EqualTo(DemoSlotKind.Unit));
             Assert.That(DemoCardTargeting.TryGetRule(breeding, out var breedingRule), Is.True);
             Assert.That(breedingRule.Owner, Is.EqualTo(DemoTargetOwner.Friendly));
             Assert.That(breedingRule.RequiredTargetCount, Is.EqualTo(2));
@@ -1133,9 +1240,7 @@ namespace BiomeRivals.Demo.Tests
                 var configuredBattlefield = root.AddComponent<DemoBattlefield3D>();
                 configuredBattlefield.Configure(
                     Shader.Find("Standard") ?? Shader.Find("Universal Render Pipeline/Lit"),
-                    Shader.Find("BiomeRivals/Demo/CompositeBackdrop"),
-                    Shader.Find("BiomeRivals/Demo/GroundSurface"),
-                    AssetDatabase.LoadAssetAtPath<Texture2D>(DemoSceneBuilder.BackgroundPath));
+                    Shader.Find("BiomeRivals/Demo/GroundSurface"));
                 var controller = root.AddComponent<DemoSceneController>();
                 controller.BuildNow();
                 var battlefield = root.GetComponent<DemoBattlefield3D>();
@@ -1164,9 +1269,11 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(unitMarker.GetComponent<MeshRenderer>().enabled, Is.True);
                 Assert.That(buildingMarker.GetComponent<MeshRenderer>().enabled, Is.True);
                 Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.shader.name, Is.EqualTo("BiomeRivals/Demo/GroundSurface"));
-                Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_UseScreenProjection"), Is.EqualTo(1f));
-                Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.mainTexture.name, Is.EqualTo("field-plains_forest-v1"));
-                Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.mainTexture.name, Is.EqualTo("field-nether-far-v1"));
+                Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_UseScreenProjection"), Is.EqualTo(0f));
+                Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.mainTexture.name, Is.EqualTo("grass_block_top"));
+                Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.mainTexture.name, Is.EqualTo("netherrack"));
+                Assert.That(root.transform.Find("BattlefieldGeometry/Ground_Player_0_-3"), Is.Not.Null, "voxel terrain is built for the player half");
+                Assert.That(root.transform.Find("BattlefieldGeometry/Ground_Opponent_0_3"), Is.Not.Null, "voxel terrain is built for the opponent half");
                 Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.GreaterThan(0f));
                 Assert.That(buildingMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.Zero);
                 battlefield.SetSlotEngineReady(true, DemoSlotKind.Building, 0, DemoEngineReadyKind.Nursery);
@@ -1210,6 +1317,12 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetColor("_HighlightColor").g,
                     Is.GreaterThan(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetColor("_HighlightColor").r));
                 battlefield.SetSlotPoisoned(false, DemoSlotKind.Unit, 0, false);
+                Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.Zero);
+                battlefield.SetSlotBurning(false, DemoSlotKind.Unit, 0, true);
+                Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.GreaterThan(0f));
+                var fireHighlight = opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetColor("_HighlightColor");
+                Assert.That(fireHighlight.r, Is.GreaterThan(fireHighlight.b));
+                battlefield.SetSlotBurning(false, DemoSlotKind.Unit, 0, false);
                 Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.Zero);
                 battlefield.SetSlotState(false, DemoSlotKind.Unit, 0, true, false, true);
                 Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.GreaterThanOrEqualTo(0.32f));
@@ -1359,13 +1472,58 @@ namespace BiomeRivals.Demo.Tests
                     { "nether", "nt" },
                     { "end", "ed" }
                 };
+                var decorLandmarks = new[,]
+                {
+                    { "plains_forest", "ForestTree_Player_0Trunk" },
+                    { "desert_badlands", "Cactus_Player_0" },
+                    { "snow_ice", "IceSpike_Player_0" },
+                    { "cave_dark_forest", "Boulder_Player_0" },
+                    { "ocean_river", "CoralStack_Player_0_0" },
+                    { "nether", "BasaltPillar_Player_0" },
+                    { "end", "ObsidianPillar_Player_0" }
+                };
+                var factionGroundTextures = new[,]
+                {
+                    { "plains_forest", "grass_block_top" },
+                    { "desert_badlands", "red_sandstone" },
+                    { "snow_ice", "snow_block" },
+                    { "cave_dark_forest", "mossy_stone_bricks" },
+                    { "ocean_river", "prismarine_bricks" },
+                    { "nether", "netherrack" },
+                    { "end", "purpur_block" }
+                };
                 for (var mapping = 0; mapping < frameMappings.GetLength(0); mapping++)
                 {
                     var themeId = frameMappings[mapping, 0];
                     var prefix = frameMappings[mapping, 1];
                     GameObject.Find("Faction_" + themeId).GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
                     Assert.That(battlefield.PlayerFactionId, Is.EqualTo(themeId));
-                    Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.mainTexture.name, Is.EqualTo("field-" + themeId + "-v1"));
+                    var theme = DemoBattlefieldThemeCatalog.Get(themeId);
+                    Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.mainTexture.name, Is.EqualTo(factionGroundTextures[mapping, 1]));
+                    Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetColor("_Color"),
+                        Is.EqualTo(theme.GroundColor), "deploy pads follow the faction ground tint");
+                    var playerGround = root.transform.Find("BattlefieldGeometry/Ground_Player_0_-3").GetComponent<MeshRenderer>().sharedMaterial;
+                    Assert.That(playerGround.mainTexture.name, Is.EqualTo(theme.PrimaryTextureKey),
+                        "voxel terrain ground texture follows the player faction");
+                    var playerFoundation = root.transform.Find("BattlefieldGeometry/PlayerFoundation").GetComponent<MeshRenderer>().sharedMaterial;
+                    Assert.That(playerFoundation.mainTexture.name, Is.EqualTo(theme.FoundationTextureKey),
+                        "voxel terrain foundation follows the player faction");
+                    var opponentFoundation = root.transform.Find("BattlefieldGeometry/OpponentFoundation").GetComponent<MeshRenderer>().sharedMaterial;
+                    Assert.That(opponentFoundation.mainTexture.name, Is.EqualTo(DemoBattlefieldThemeCatalog.Get(battlefield.OpponentFactionId).FoundationTextureKey),
+                        "voxel terrain foundation follows the opponent faction");
+                    var playerLight = root.transform.Find("PlayerEnvironmentLight").GetComponent<Light>();
+                    Assert.That(playerLight.color, Is.EqualTo(theme.EnvironmentLight),
+                        "player environment light follows the player faction");
+                    var opponentLight = root.transform.Find("OpponentEnvironmentLight").GetComponent<Light>();
+                    Assert.That(opponentLight.color, Is.EqualTo(DemoBattlefieldThemeCatalog.Get(battlefield.OpponentFactionId).EnvironmentLight),
+                        "opponent environment light follows the opponent faction");
+                    var decorRoot = root.transform.Find("BattlefieldDecor");
+                    Assert.That(decorRoot, Is.Not.Null);
+                    Assert.That(decorRoot.childCount, Is.GreaterThanOrEqualTo(6), themeId);
+                    Assert.That(decorRoot.Find("DecorLamp_Player_L"), Is.Not.Null, themeId);
+                    Assert.That(decorRoot.Find("DecorLamp_Opponent_R"), Is.Not.Null, themeId);
+                    Assert.That(decorRoot.Find(decorLandmarks[mapping, 1]), Is.Not.Null,
+                        $"{themeId} decorations rebuild with the selected factions");
                     var mappedCardId = prefix + "_001";
                     var card = GameObject.Find("Card_" + mappedCardId);
                     Assert.That(card, Is.Not.Null, themeId);
@@ -1384,15 +1542,10 @@ namespace BiomeRivals.Demo.Tests
                         Assert.That(card.transform.Find("DurabilitySocketFrame").GetComponent<UnityEngine.UI.Image>().sprite.name, Is.EqualTo("CardHealthSocket_" + themeId));
                 }
 
-                var backdropRenderer = root.transform.Find("BattlefieldCamera/IllustratedBattlefieldBackdrop").GetComponent<MeshRenderer>();
-                Assert.That(backdropRenderer.sharedMaterial.shader.name, Is.EqualTo("BiomeRivals/Demo/CompositeBackdrop"));
-                Assert.That(backdropRenderer.sharedMaterial.GetTexture("_PlayerTex").name, Is.EqualTo("field-end-v1"));
-                Assert.That(backdropRenderer.sharedMaterial.GetTexture("_OpponentTex").name, Is.EqualTo("field-nether-far-v1"));
                 var nextOpponent = root.transform.Find("DemoCanvas/OpponentFactionSelector/NextOpponentFaction").GetComponent<UnityEngine.UI.Button>();
                 nextOpponent.onClick.Invoke();
                 Assert.That(battlefield.OpponentFactionId, Is.EqualTo("end"));
-                Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.mainTexture.name, Is.EqualTo("field-end-far-v1"));
-                Assert.That(backdropRenderer.sharedMaterial.GetTexture("_OpponentTex").name, Is.EqualTo("field-end-far-v1"));
+                Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.mainTexture.name, Is.EqualTo("purpur_block"));
                 Assert.That(root.transform.Find("DemoCanvas/OpponentFactionSelector/FactionLabel").GetComponent<UnityEngine.UI.Text>().text, Is.EqualTo("敌方 · 末地"));
                 Assert.That(root.transform.Find("DemoCanvas/OpponentHUD/Name").GetComponent<UnityEngine.UI.Text>().text, Is.EqualTo("虚空行者"));
 
@@ -1604,18 +1757,46 @@ namespace BiomeRivals.Demo.Tests
                 {
                     new DemoBattlefieldObject
                     {
+                        InstanceId = "object-burning-blaze", CardId = "nt_003", Player = true,
+                        SlotKind = DemoSlotKind.Unit, SlotIndex = 1, OccupiedSlots = 1, Attack = 3, Health = 3, MaxHealth = 3,
+                        Statuses = new[]
+                        {
+                            new BattlefieldStatusStateDto
+                            {
+                                statusId = "FIRE", remainingDuration = 2, sourcePlayerId = "opponent",
+                                sourceCardId = "tk_013", sourceInstanceId = "effect-1", effectId = "effect.tk_013.01"
+                            }
+                        }
+                    }
+                }, System.Array.Empty<DemoBattlefieldObject>(), registry);
+                var burningPiece = piecesRoot.Find("Piece_object-burning-blaze_nt_003");
+                Assert.That(burningPiece, Is.Not.Null);
+                Assert.That(burningPiece.Find("FireStatusFx/FlameL"), Is.Not.Null);
+                Assert.That(burningPiece.Find("FireStatusFx/FlameHigh"), Is.Not.Null);
+
+                battlefield.SyncPieces(new[]
+                {
+                    new DemoBattlefieldObject
+                    {
                         InstanceId = "object-render-9", CardId = "si_004", Player = true,
                         SlotKind = DemoSlotKind.Unit, SlotIndex = 1, OccupiedSlots = 1, Attack = 3, Health = 2, MaxHealth = 2
                     }
                 }, System.Array.Empty<DemoBattlefieldObject>(), registry);
                 var goatPiece = piecesRoot.Find("Piece_object-render-9_si_004");
                 Assert.That(goatPiece, Is.Not.Null);
-                Assert.That(goatPiece.Find("Body"), Is.Not.Null);
-                Assert.That(goatPiece.Find("Head"), Is.Not.Null);
-                Assert.That(goatPiece.Find("LeftHorn"), Is.Not.Null);
-                Assert.That(goatPiece.Find("RightHorn"), Is.Not.Null);
-                Assert.That(goatPiece.Find("Body").GetComponent<MeshRenderer>().sharedMaterial.mainTexture.name,
-                    Is.EqualTo("entity_goat"));
+                var goatModel = goatPiece.Find("Model");
+                if (goatModel != null)
+                {
+                    var goatBones = goatModel.GetComponentsInChildren<Transform>(true).Select(transform => transform.name).ToHashSet();
+                    Assert.That(goatBones, Does.Contain("Bone_body"), "goat geometry bones build under the model root");
+                    Assert.That(goatBones, Does.Contain("Bone_left_horn"));
+                    Assert.That(goatPiece.GetComponentInChildren<MeshRenderer>().sharedMaterial.mainTexture.name,
+                        Is.EqualTo("entity_goat"));
+                }
+                else
+                {
+                    Assert.That(goatPiece.Find("Body"), Is.Not.Null, "goat falls back to the generic block creature when geometry is not extracted");
+                }
 
                 var buildingMarker1 = root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Building_1/InteractiveGround");
                 var buildingMarker2 = root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Building_2/InteractiveGround");

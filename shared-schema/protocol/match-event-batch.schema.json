@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["protocolVersion", "rulesetVersion", "revision", "acknowledgedCommandId", "events"],
   "properties": {
-    "protocolVersion": { "const": 30 },
+    "protocolVersion": { "const": 31 },
     "rulesetVersion": { "type": "string" },
     "revision": { "type": "integer", "minimum": 0 },
     "acknowledgedCommandId": { "type": "string" },
@@ -423,7 +423,7 @@
                   "properties": {
                     "playerId": { "type": "string", "minLength": 1 },
                     "instanceId": { "type": "string", "pattern": "^object-[0-9]+$" },
-                    "statusId": { "enum": ["SLOW", "POISON"] },
+                    "statusId": { "enum": ["SLOW", "POISON", "FIRE"] },
                     "remainingDuration": { "type": "integer", "minimum": 1 },
                     "sourcePlayerId": { "type": "string", "minLength": 1 },
                     "sourceCardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },

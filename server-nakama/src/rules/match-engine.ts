@@ -1031,7 +1031,54 @@ namespace BiomeRivalsRules {
       });
     }
 
-    function resolveEndPhaseStatuses(player: PlayerState, opponent: PlayerState): void {
+    function applyFire(
+      targetPlayer: PlayerState,
+      target: BattlefieldObjectState,
+      sourcePlayer: PlayerState,
+      sourceCardId: string,
+      sourceInstanceId: string,
+      effectId: string
+    ): void {
+      let status: BattlefieldStatusState | null = null;
+      for (let index = 0; index < target.statuses.length; index += 1) {
+        if (target.statuses[index]!.statusId === 'FIRE') status = target.statuses[index]!;
+      }
+      if (status === null) {
+        status = {
+          statusId: 'FIRE',
+          remainingDuration: 2,
+          sourcePlayerId: sourcePlayer.playerId,
+          sourceCardId: sourceCardId,
+          sourceInstanceId: sourceInstanceId,
+          effectId: effectId,
+          attackModifier: 0,
+          boundAttackModifier: 0
+        };
+        target.statuses.push(status);
+      } else if (status.remainingDuration < 2) {
+        status.remainingDuration = 2;
+        status.sourcePlayerId = sourcePlayer.playerId;
+        status.sourceCardId = sourceCardId;
+        status.sourceInstanceId = sourceInstanceId;
+        status.effectId = effectId;
+      }
+      emit('OBJECT_STATUS_APPLIED', {
+        playerId: targetPlayer.playerId,
+        instanceId: target.instanceId,
+        statusId: status.statusId,
+        remainingDuration: status.remainingDuration,
+        sourcePlayerId: status.sourcePlayerId,
+        sourceCardId: status.sourceCardId,
+        sourceInstanceId: status.sourceInstanceId,
+        effectId: status.effectId,
+        statusAttackModifier: status.attackModifier,
+        boundAttackModifier: status.boundAttackModifier,
+        attack: target.attack,
+        health: target.health
+      });
+    }
+
+    function resolveEndPhaseStatuses(player: PlayerState, opponent: PlayerState): boolean {
       const objects = player.battlefield.slice().sort(function (left, right): number {
         if (left.slotIndex !== right.slotIndex) return left.slotIndex - right.slotIndex;
         return left.instanceId < right.instanceId ? -1 : left.instanceId > right.instanceId ? 1 : 0;
@@ -1042,7 +1089,7 @@ namespace BiomeRivalsRules {
         let statusIndex = 0;
         while (statusIndex < object.statuses.length) {
           const status = object.statuses[statusIndex]!;
-          if (status.statusId === 'POISON') {
+          if (status.statusId === 'POISON' || status.statusId === 'FIRE') {
             object.health = Math.max(0, object.health - 1);
             emit('OBJECT_STATS_CHANGED', {
               playerId: player.playerId,
@@ -1052,7 +1099,7 @@ namespace BiomeRivalsRules {
               sourceInstanceId: status.sourceInstanceId,
               effectId: status.effectId,
               reason: 'DAMAGE',
-              damageType: 'NORMAL',
+              damageType: status.statusId === 'FIRE' ? 'TRUE' : 'NORMAL',
               attack: object.attack,
               health: object.health,
               temporaryAttackModifier: object.temporaryAttackModifier,
@@ -1062,6 +1109,7 @@ namespace BiomeRivalsRules {
               const killCredits: { [instanceId: string]: string } = {};
               killCredits[object.instanceId] = status.sourcePlayerId;
               settleDeaths(player, opponent, killCredits);
+              if (next.status === 'FINISHED') return true;
               break;
             }
           }
@@ -1100,6 +1148,7 @@ namespace BiomeRivalsRules {
           });
         }
       }
+      return false;
     }
 
     function isImplementedTurtleAuraSource(object: BattlefieldObjectState): boolean {
@@ -1576,6 +1625,7 @@ namespace BiomeRivalsRules {
       else if (definition.effectIds.indexOf('effect.cd_003.01') >= 0) dropCardId = 'tk_009';
       else if (definition.effectIds.indexOf('effect.si_003.01') >= 0) dropCardId = 'tk_009';
       else if (definition.effectIds.indexOf('effect.or_004.01') >= 0) dropCardId = 'tk_012';
+      else if (definition.effectIds.indexOf('effect.nt_003.01') >= 0) dropCardId = 'tk_013';
       if (dropCardId === null) return;
       const killer = next.players.filter(function (candidate): boolean {
         return candidate.playerId === killerPlayerId;
@@ -2128,7 +2178,7 @@ namespace BiomeRivalsRules {
           effectId !== 'effect.pf_006.01' && effectId !== 'effect.pf_007.01' &&
           effectId !== 'effect.si_001.01' && effectId !== 'effect.si_006.01' && effectId !== 'effect.tk_005.01' &&
           effectId !== 'effect.tk_002.01' && effectId !== 'effect.tk_009.01' && effectId !== 'effect.tk_010.01' && effectId !== 'effect.tk_012.01' && effectId !== 'effect.or_006.01' &&
-          effectId !== 'effect.tk_016.01') {
+          effectId !== 'effect.tk_013.01' && effectId !== 'effect.tk_016.01') {
         return reject(state, 'EFFECT_NOT_IMPLEMENTED', 'effect handler is not registered');
       }
       const player = next.players[actorIndex]!;
@@ -2154,19 +2204,19 @@ namespace BiomeRivalsRules {
           if (left.slotIndex !== right.slotIndex) return left.slotIndex - right.slotIndex;
           return left.instanceId < right.instanceId ? -1 : left.instanceId > right.instanceId ? 1 : 0;
         });
-      } else if (effectId === 'effect.si_001.01' || effectId === 'effect.si_006.01' ||
+      } else if (effectId === 'effect.si_001.01' || effectId === 'effect.si_006.01' || effectId === 'effect.tk_013.01' ||
           effectId === 'effect.tk_002.01' || effectId === 'effect.tk_009.01' || effectId === 'effect.tk_012.01') {
         if (command.payload.targetType !== 'UNIT' || typeof command.payload.targetInstanceId !== 'string') {
           return reject(state, 'INVALID_TARGET', effectId === 'effect.tk_002.01' || effectId === 'effect.tk_009.01' || effectId === 'effect.tk_012.01'
             ? 'material requires a friendly unit target'
-            : 'snow spell requires an enemy unit target');
+            : effectId === 'effect.tk_013.01' ? 'blaze rod requires an enemy unit target' : 'snow spell requires an enemy unit target');
         }
         targetedPlayer = effectId === 'effect.tk_002.01' || effectId === 'effect.tk_009.01' || effectId === 'effect.tk_012.01' ? player : opponent;
         targetedObject = findObject(targetedPlayer, command.payload.targetInstanceId);
         if (targetedObject === null || targetedObject.cardType !== 'UNIT' || targetedObject.health <= 0) {
           return reject(state, 'INVALID_TARGET', effectId === 'effect.tk_002.01' || effectId === 'effect.tk_009.01' || effectId === 'effect.tk_012.01'
             ? 'material target must be a living friendly unit'
-            : 'snow spell target must be a living enemy unit');
+            : effectId === 'effect.tk_013.01' ? 'blaze rod target must be a living enemy unit' : 'snow spell target must be a living enemy unit');
         }
         if (effectId === 'effect.tk_012.01') {
           const hasAdjacentEmptySlot = [targetedObject.slotIndex - 1, targetedObject.slotIndex + 1].some(function (slotIndex): boolean {
@@ -2435,6 +2485,32 @@ namespace BiomeRivalsRules {
           if (targetedObject === null || targetedPlayer === null) throw new Error('validated prismarine shard target was not resolved');
           offerMoveChoice(player, cardId, 'effect-' + String(next.lastEventId), targetedPlayer, targetedObject, effectId);
           if (next.pendingChoice === null) throw new Error('validated prismarine movement did not create a choice');
+          return completePlayedCard(player, opponent);
+        }
+        case 'effect.tk_013.01': {
+          if (targetedObject === null || targetedPlayer === null) throw new Error('validated blaze rod target was not resolved');
+          targetedObject.health = Math.max(0, targetedObject.health - 1);
+          emit('OBJECT_STATS_CHANGED', {
+            playerId: targetedPlayer.playerId,
+            instanceId: targetedObject.instanceId,
+            sourcePlayerId: player.playerId,
+            sourceCardId: cardId,
+            sourceInstanceId: effectSourceInstanceId,
+            effectId: effectId,
+            reason: 'DAMAGE',
+            damageType: 'NORMAL',
+            attack: targetedObject.attack,
+            health: targetedObject.health,
+            temporaryAttackModifier: targetedObject.temporaryAttackModifier,
+            temporaryAttackModifierExpiresOnTurn: targetedObject.temporaryAttackModifierExpiresOnTurn
+          });
+          if (targetedObject.health === 0) {
+            const blazeRodKillCredits: { [instanceId: string]: string } = {};
+            blazeRodKillCredits[targetedObject.instanceId] = player.playerId;
+            settleDeaths(player, opponent, blazeRodKillCredits);
+          } else {
+            applyFire(targetedPlayer, targetedObject, player, cardId, effectSourceInstanceId, effectId);
+          }
           return completePlayedCard(player, opponent);
         }
         case 'effect.tk_016.01':
@@ -2740,6 +2816,14 @@ namespace BiomeRivalsRules {
             target.cardId === 'cd_002') {
           applyPoison(attackerPlayer, attacker!, defenderPlayer, target.cardId, target.instanceId, 'effect.cd_002.01');
         }
+        if (!heroAttack && attackValue > 0 && target.cardType === 'UNIT' && target.health > 0 &&
+            attacker!.cardId === 'nt_003') {
+          applyFire(defenderPlayer, target, attackerPlayer, attacker!.cardId, attacker!.instanceId, 'effect.nt_003.01');
+        }
+        if (!heroAttack && retaliation > 0 && attacker!.health > 0 && target.cardType === 'UNIT' &&
+            target.cardId === 'nt_003') {
+          applyFire(attackerPlayer, attacker!, defenderPlayer, target.cardId, target.instanceId, 'effect.nt_003.01');
+        }
         settleDeaths(attackerPlayer, defenderPlayer, combatKillCredits);
         if (heroAttack && attackingEquipment !== null) {
           attackingEquipment.durability -= 1;
@@ -2836,7 +2920,7 @@ namespace BiomeRivalsRules {
         if (state.status !== 'ACTIVE') return reject(state, 'MULLIGAN_REQUIRED', 'both players must confirm their opening hands first');
         if (actorIndex !== state.activePlayerIndex) return reject(state, 'NOT_ACTIVE_PLAYER', 'only the active player may end the turn');
         resolveOceanMonumentEndPhase(next.players[actorIndex]!, next.players[actorIndex === 0 ? 1 : 0]!);
-        resolveEndPhaseStatuses(next.players[actorIndex]!, next.players[actorIndex === 0 ? 1 : 0]!);
+        if (resolveEndPhaseStatuses(next.players[actorIndex]!, next.players[actorIndex === 0 ? 1 : 0]!)) break;
         resolveEndPhasePlayerStatuses(next.players[actorIndex]!);
         if (resolveEndCrystalEndPhase(next.players[actorIndex]!, next.players[actorIndex === 0 ? 1 : 0]!)) break;
         resolveCaveStructureEndPhase(next.players[actorIndex]!);

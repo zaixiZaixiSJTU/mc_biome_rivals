@@ -619,7 +619,7 @@ namespace BiomeRivals.Demo
             if (effectId != "effect.cd_006.01" && effectId != "effect.db_002.01" && effectId != "effect.db_006.01" && effectId != "effect.nt_006.01" &&
                 effectId != "effect.si_001.01" && effectId != "effect.si_006.01" && effectId != "effect.tk_005.01" &&
                 effectId != "effect.tk_002.01" && effectId != "effect.tk_009.01" && effectId != "effect.tk_010.01" && effectId != "effect.or_006.01" &&
-                effectId != "effect.tk_012.01" && effectId != "effect.tk_016.01" && effectId != "effect.pf_006.01" &&
+                effectId != "effect.tk_012.01" && effectId != "effect.tk_013.01" && effectId != "effect.tk_016.01" && effectId != "effect.pf_006.01" &&
                 effectId != "effect.pf_007.01")
                 return Reject(DemoCommandRejectionCode.EffectNotImplemented, "找不到该 effectId 的规则处理器。");
             DemoBattlefieldObject targetedObject = null;
@@ -781,6 +781,24 @@ namespace BiomeRivals.Demo
                     if (PendingChoice == null)
                         throw new InvalidOperationException("Validated Prismarine Shard target has no legal movement option.");
                     message = "海晶碎片：请选择目标旁的发光地块；移动后恢复 1 点生命值。";
+                    break;
+                case "effect.tk_013.01":
+                    targetedObject.Health = Math.Max(0, targetedObject.Health - 1);
+                    if (targetedObject.Health == 0)
+                    {
+                        var blazeRodKillCredits = new Dictionary<string, bool>(StringComparer.Ordinal)
+                        {
+                            [targetedObject.InstanceId] = true
+                        };
+                        var blazeRodDeaths = SettleDeaths(blazeRodKillCredits);
+                        message = $"烈焰棒：对 {targetedObject.CardId} 造成 1 点伤害并将其消灭。";
+                        if (blazeRodDeaths.Count > 0) message += " " + string.Join(" ", blazeRodDeaths);
+                    }
+                    else
+                    {
+                        ApplyFire(targetedObject, true, definition.id, $"effect-{Revision + 1}", effectId);
+                        message = $"烈焰棒：对 {targetedObject.CardId} 造成 1 点伤害，并施加着火 2。";
+                    }
                     break;
                 case "effect.tk_016.01":
                     PlayerArmor += 2;
@@ -1032,6 +1050,19 @@ namespace BiomeRivals.Demo
                 ApplyPoison(attacker, target);
                 poisonApplications++;
             }
+            var fireApplications = 0;
+            if (!heroAttack && attackValue > 0 && target.SlotKind == DemoSlotKind.Unit && target.Health > 0 &&
+                attacker.CardId == "nt_003")
+            {
+                ApplyFire(target, attacker.Player, attacker.CardId, attacker.InstanceId, "effect.nt_003.01");
+                fireApplications++;
+            }
+            if (!heroAttack && retaliation > 0 && attacker.Health > 0 && target.SlotKind == DemoSlotKind.Unit &&
+                target.CardId == "nt_003")
+            {
+                ApplyFire(attacker, target.Player, target.CardId, target.InstanceId, "effect.nt_003.01");
+                fireApplications++;
+            }
             var deathrattleMessages = SettleDeaths(combatKillCredits);
             if (heroAttack)
             {
@@ -1049,6 +1080,7 @@ namespace BiomeRivals.Demo
             return DemoCommandResult.Accept(
                 $"造成 {attackValue} 点伤害，受到 {retaliation} 点反击" + (targetDied ? "；目标死亡。" : "。") +
                 (poisonApplications > 0 ? $" 洞穴蜘蛛施加了 {poisonApplications} 次中毒。" : string.Empty) +
+                (fireApplications > 0 ? $" 烈焰人施加了 {fireApplications} 次着火。" : string.Empty) +
                 (deathrattleMessages.Count > 0 ? " " + string.Join(" ", deathrattleMessages) : string.Empty),
                 Revision);
         }
@@ -1067,7 +1099,7 @@ namespace BiomeRivals.Demo
             var monumentDeathMessages = new List<string>();
             var monumentDamage = ResolveOceanMonumentEndPhase(monumentDeathMessages);
             var poisonDeathMessages = new List<string>();
-            var poisonDamage = ResolveEndPhaseStatuses(_playerBattlefield, poisonDeathMessages);
+            var poisonDamage = ResolveEndPhaseStatuses(_playerBattlefield, poisonDeathMessages, out var fireDamage);
             ResolvePlayerStatuses(_playerStatuses);
             var crystalPulses = ResolveEndCrystalEndPhase(true);
             if (IsFinished)
@@ -1089,6 +1121,7 @@ namespace BiomeRivals.Demo
                 : string.Empty;
             if (monumentDeathMessages.Count > 0) monumentMessage += " " + string.Join(" ", monumentDeathMessages);
             if (poisonDamage > 0) monumentMessage += $" 中毒造成 {poisonDamage} 点伤害。";
+            if (fireDamage > 0) monumentMessage += $" 着火造成 {fireDamage} 点真实伤害。";
             if (poisonDeathMessages.Count > 0) monumentMessage += " " + string.Join(" ", poisonDeathMessages);
             if (mineTriggers > 0) monumentMessage += $" 废弃矿井生成了 {mineTriggers} 张圆石。";
             if (mansionSummons > 0) monumentMessage += $" 林地府邸召唤了 {mansionSummons} 个卫道士新兵。";
@@ -1101,7 +1134,7 @@ namespace BiomeRivals.Demo
             if (IsFinished)
                 return RememberDraw(new DemoDrawResult(DemoDrawOutcome.MatchEnded, string.Empty, 0));
             ResolveSnowHutStartPhase(false, false);
-            ResolveEndPhaseStatuses(_opponentBattlefield, null);
+            ResolveEndPhaseStatuses(_opponentBattlefield, null, out _);
             ResolvePlayerStatuses(_opponentStatuses);
             ResolveEndCrystalEndPhase(false);
             if (IsFinished)
@@ -1926,9 +1959,46 @@ namespace BiomeRivals.Demo
             target.Statuses = statuses.ToArray();
         }
 
-        private int ResolveEndPhaseStatuses(List<DemoBattlefieldObject> battlefield, List<string> deathMessages)
+        private static void ApplyFire(
+            DemoBattlefieldObject target,
+            bool sourcePlayer,
+            string sourceCardId,
+            string sourceInstanceId,
+            string effectId)
+        {
+            if (target == null) throw new ArgumentNullException(nameof(target));
+            var statuses = new List<BattlefieldStatusStateDto>(target.Statuses ?? Array.Empty<BattlefieldStatusStateDto>());
+            var status = statuses.Find(value => value != null && value.statusId == "FIRE");
+            if (status == null)
+            {
+                status = new BattlefieldStatusStateDto
+                {
+                    statusId = "FIRE",
+                    remainingDuration = 2,
+                    sourcePlayerId = sourcePlayer ? "local-player" : "opponent",
+                    sourceCardId = sourceCardId,
+                    sourceInstanceId = sourceInstanceId,
+                    effectId = effectId,
+                    attackModifier = 0,
+                    boundAttackModifier = 0
+                };
+                statuses.Add(status);
+            }
+            else if (status.remainingDuration < 2)
+            {
+                status.remainingDuration = 2;
+                status.sourcePlayerId = sourcePlayer ? "local-player" : "opponent";
+                status.sourceCardId = sourceCardId;
+                status.sourceInstanceId = sourceInstanceId;
+                status.effectId = effectId;
+            }
+            target.Statuses = statuses.ToArray();
+        }
+
+        private int ResolveEndPhaseStatuses(List<DemoBattlefieldObject> battlefield, List<string> deathMessages, out int fireDamage)
         {
             var totalPoisonDamage = 0;
+            fireDamage = 0;
             var objects = battlefield.OrderBy(value => value.SlotIndex)
                 .ThenBy(value => value.InstanceId, StringComparer.Ordinal).ToArray();
             foreach (var value in objects)
@@ -1943,17 +2013,23 @@ namespace BiomeRivals.Demo
                     {
                         value.Health = Math.Max(0, value.Health - 1);
                         totalPoisonDamage++;
-                        if (value.Health == 0)
+                    }
+                    else if (status.statusId == "FIRE")
+                    {
+                        value.Health = Math.Max(0, value.Health - 1);
+                        fireDamage++;
+                    }
+                    if ((status.statusId == "POISON" || status.statusId == "FIRE") && value.Health == 0)
+                    {
+                        value.Statuses = statuses.ToArray();
+                        var killCredits = new Dictionary<string, bool>(StringComparer.Ordinal)
                         {
-                            value.Statuses = statuses.ToArray();
-                            var killCredits = new Dictionary<string, bool>(StringComparer.Ordinal)
-                            {
-                                [value.InstanceId] = status.sourcePlayerId == "local-player"
-                            };
-                            var resolvedDeaths = SettleDeaths(killCredits);
-                            if (deathMessages != null) deathMessages.AddRange(resolvedDeaths);
-                            break;
-                        }
+                            [value.InstanceId] = status.sourcePlayerId == "local-player"
+                        };
+                        var resolvedDeaths = SettleDeaths(killCredits);
+                        if (deathMessages != null) deathMessages.AddRange(resolvedDeaths);
+                        if (IsFinished) return totalPoisonDamage;
+                        break;
                     }
                     status.remainingDuration--;
                     if (status.remainingDuration > 0)
@@ -2034,6 +2110,7 @@ namespace BiomeRivals.Demo
                 case "cd_003": dropCardId = "tk_009"; sourceName = "地牢骷髅"; dropName = "骨头"; break;
                 case "si_003": dropCardId = "tk_009"; sourceName = "流浪者"; dropName = "骨头"; break;
                 case "or_004": dropCardId = "tk_012"; sourceName = "守卫者"; dropName = "海晶碎片"; break;
+                case "nt_003": dropCardId = "tk_013"; sourceName = "烈焰人"; dropName = "烈焰棒"; break;
                 default: return string.Empty;
             }
             if (killerIsPlayer)

@@ -1,6 +1,6 @@
 # 林地卫道士建筑战吼规范 v1
 
-本规范对应 `protocolVersion 30`、`rulesetVersion prototype-0.47` 与内容版本 39。
+本规范对应 `protocolVersion 31`、`rulesetVersion prototype-0.48` 与内容版本 40。
 
 ## CD-005 林地卫道士
 

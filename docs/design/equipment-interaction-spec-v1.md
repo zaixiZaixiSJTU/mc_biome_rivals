@@ -1,6 +1,6 @@
 # 装备与英雄攻击交互规范 v1
 
-当前实现对应 `protocolVersion 30`、`rulesetVersion prototype-0.47` 与内容版本 39；本机制最初落地于协议 17 / 规则集 prototype-0.20 / 内容版本 12。
+当前实现对应 `protocolVersion 31`、`rulesetVersion prototype-0.48` 与内容版本 40；本机制最初落地于协议 17 / 规则集 prototype-0.20 / 内容版本 12。
 
 ## 权威状态
 

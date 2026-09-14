@@ -7,16 +7,34 @@ namespace BiomeRivals.Demo
     public readonly struct DemoBattlefieldTheme
     {
         public readonly string FactionId;
-        public readonly string NearResourcePath;
-        public readonly string FarResourcePath;
+        /// <summary>Dominant voxel ground texture, also used for deploy slot pads.</summary>
+        public readonly string PrimaryTextureKey;
+        public readonly string SecondaryTextureKey;
+        public readonly string TertiaryTextureKey;
+        public readonly string FoundationTextureKey;
+        public readonly Color GroundColor;
+        public readonly Color FoundationColor;
         public readonly Color EnvironmentLight;
         public readonly Color UiTint;
 
-        public DemoBattlefieldTheme(string factionId, string nearResourcePath, string farResourcePath, string environmentLight, string uiTint)
+        public DemoBattlefieldTheme(
+            string factionId,
+            string primaryTextureKey,
+            string secondaryTextureKey,
+            string tertiaryTextureKey,
+            string foundationTextureKey,
+            string groundColor,
+            string foundationColor,
+            string environmentLight,
+            string uiTint)
         {
             FactionId = factionId;
-            NearResourcePath = nearResourcePath;
-            FarResourcePath = farResourcePath;
+            PrimaryTextureKey = primaryTextureKey;
+            SecondaryTextureKey = secondaryTextureKey;
+            TertiaryTextureKey = tertiaryTextureKey;
+            FoundationTextureKey = foundationTextureKey;
+            GroundColor = Parse(groundColor);
+            FoundationColor = Parse(foundationColor);
             EnvironmentLight = Parse(environmentLight);
             UiTint = Parse(uiTint);
         }
@@ -28,20 +46,52 @@ namespace BiomeRivals.Demo
         }
     }
 
+    /// <summary>
+    /// Maps each faction to voxel terrain textures extracted from the local
+    /// Minecraft installation. The battlefield is fully 3D, so themes swap
+    /// ground blocks, slot pads and environment lights instead of painted
+    /// half-module images.
+    /// </summary>
     public static class DemoBattlefieldThemeCatalog
     {
-        private const string ResourceRoot = "DemoBattlefields/";
-
         private static readonly Dictionary<string, DemoBattlefieldTheme> Themes =
             new Dictionary<string, DemoBattlefieldTheme>(StringComparer.Ordinal)
             {
-                { "plains_forest", Create("plains_forest", "#8FC7B7", "#4F8D59") },
-                { "desert_badlands", Create("desert_badlands", "#F1B86A", "#B96E32") },
-                { "snow_ice", Create("snow_ice", "#A7D8EF", "#619BB9") },
-                { "cave_dark_forest", Create("cave_dark_forest", "#52B9A5", "#315C58") },
-                { "ocean_river", Create("ocean_river", "#52BBD2", "#287B91") },
-                { "nether", Create("nether", "#FF6A2B", "#9D3529") },
-                { "end", Create("end", "#C59BE8", "#6E4A8E") }
+                {
+                    "plains_forest", new DemoBattlefieldTheme(
+                        "plains_forest", "grass_block_top", "mossy_stone_bricks", "oak_planks", "dirt",
+                        "#6A873E", "#6C4D32", "#8FC7B7", "#4F8D59")
+                },
+                {
+                    "desert_badlands", new DemoBattlefieldTheme(
+                        "desert_badlands", "red_sandstone", "sandstone", "cut_sandstone", "sandstone",
+                        "#C17A43", "#D8BE78", "#F1B86A", "#B96E32")
+                },
+                {
+                    "snow_ice", new DemoBattlefieldTheme(
+                        "snow_ice", "snow_block", "packed_ice", "stone_bricks", "dirt",
+                        "#DFEDF2", "#6C4D32", "#A7D8EF", "#619BB9")
+                },
+                {
+                    "cave_dark_forest", new DemoBattlefieldTheme(
+                        "cave_dark_forest", "mossy_stone_bricks", "stone_bricks", "cobblestone", "cobblestone",
+                        "#61754B", "#77746E", "#52B9A5", "#315C58")
+                },
+                {
+                    "ocean_river", new DemoBattlefieldTheme(
+                        "ocean_river", "prismarine_bricks", "dark_prismarine", "sea_lantern", "dark_prismarine",
+                        "#4A8F7C", "#315D59", "#52BBD2", "#287B91")
+                },
+                {
+                    "nether", new DemoBattlefieldTheme(
+                        "nether", "netherrack", "nether_bricks", "basalt_top", "netherrack",
+                        "#6A2E2C", "#5A2428", "#FF6A2B", "#9D3529")
+                },
+                {
+                    "end", new DemoBattlefieldTheme(
+                        "end", "purpur_block", "obsidian", "deepslate_bricks", "obsidian",
+                        "#A97BA9", "#17121E", "#C59BE8", "#6E4A8E")
+                }
             };
 
         public static DemoBattlefieldTheme Get(string factionId)
@@ -49,25 +99,5 @@ namespace BiomeRivals.Demo
             if (factionId != null && Themes.TryGetValue(factionId, out var theme)) return theme;
             throw new ArgumentException("Unknown battlefield faction: " + factionId, nameof(factionId));
         }
-
-        public static Texture2D LoadNearTexture(string factionId) => LoadTexture(Get(factionId).NearResourcePath);
-
-        public static Texture2D LoadFarTexture(string factionId) => LoadTexture(Get(factionId).FarResourcePath);
-
-        private static Texture2D LoadTexture(string resourcePath)
-        {
-            var texture = Resources.Load<Texture2D>(resourcePath);
-            if (texture == null)
-                throw new MissingReferenceException($"Battlefield half-module is missing: Resources/{resourcePath}.png");
-            return texture;
-        }
-
-        private static DemoBattlefieldTheme Create(string factionId, string environmentLight, string uiTint) =>
-            new DemoBattlefieldTheme(
-                factionId,
-                ResourceRoot + "field-" + factionId + "-v1",
-                ResourceRoot + "field-" + factionId + "-far-v1",
-                environmentLight,
-                uiTint);
     }
 }

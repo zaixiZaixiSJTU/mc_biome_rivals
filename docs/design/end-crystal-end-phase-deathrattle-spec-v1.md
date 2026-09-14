@@ -1,6 +1,6 @@
 # ED-007 末影水晶结束阶段与亡语规范 v1
 
-本规范对应 `protocolVersion 30`、`rulesetVersion prototype-0.47` 与内容版本 39。
+本规范对应 `protocolVersion 31`、`rulesetVersion prototype-0.48` 与内容版本 40。
 
 ## 权威规则
 

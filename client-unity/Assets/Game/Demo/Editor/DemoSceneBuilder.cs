@@ -9,7 +9,6 @@ namespace BiomeRivals.Demo.Editor
     public static class DemoSceneBuilder
     {
         public const string ScenePath = "Assets/Game/Demo/Scenes/Demo.unity";
-        public const string BackgroundPath = "Assets/Game/Demo/Art/demo-battlefield-bg-v1.png";
 
         [MenuItem("Biome Rivals/Build and Open Demo Scene")]
         public static void BuildAndOpen()
@@ -48,13 +47,9 @@ namespace BiomeRivals.Demo.Editor
             if (battlefield == null) battlefield = root.AddComponent<DemoBattlefield3D>();
             var blockShader = Shader.Find("Standard") ?? Shader.Find("Universal Render Pipeline/Lit");
             if (blockShader == null) throw new MissingReferenceException("A tracked block shader is required by the 2.5D demo.");
-            var backdropShader = Shader.Find("BiomeRivals/Demo/CompositeBackdrop");
-            if (backdropShader == null) throw new MissingReferenceException("The composite battlefield shader is required by the 2.5D demo.");
             var groundSurfaceShader = Shader.Find("BiomeRivals/Demo/GroundSurface");
             if (groundSurfaceShader == null) throw new MissingReferenceException("The interactive ground surface shader is required by the 2.5D demo.");
-            var backdrop = AssetDatabase.LoadAssetAtPath<Texture2D>(BackgroundPath);
-            if (backdrop == null) throw new FileNotFoundException("The illustrated battlefield backdrop is missing.", BackgroundPath);
-            battlefield.Configure(blockShader, backdropShader, groundSurfaceShader, backdrop);
+            battlefield.Configure(blockShader, groundSurfaceShader);
             if (root.GetComponent<DemoSceneController>() == null) root.AddComponent<DemoSceneController>();
 
             if (!EditorSceneManager.SaveScene(scene, ScenePath))

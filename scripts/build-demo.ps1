@@ -23,6 +23,7 @@ if (-not $UnityPath -or -not (Test-Path -LiteralPath $UnityPath)) { throw "Unity
 if ($WithMinecraftAssets) {
     & (Join-Path $PSScriptRoot 'extract-minecraft-card-icons.ps1')
     & (Join-Path $PSScriptRoot 'extract-minecraft-world-textures.ps1')
+    & (Join-Path $PSScriptRoot 'extract-minecraft-entity-models.ps1')
 }
 [System.IO.Directory]::CreateDirectory((Join-Path $projectPath 'Logs')) | Out-Null
 

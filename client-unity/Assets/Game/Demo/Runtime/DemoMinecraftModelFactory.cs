@@ -1,387 +1,503 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
 namespace BiomeRivals.Demo
 {
+    /// <summary>
+    /// Builds battlefield creature pieces from vanilla Minecraft entity
+    /// geometry ("minecraft:geometry" files) matched with entity textures.
+    /// Geometry/texture pairs are extracted from Mojang's official
+    /// bedrock-samples repository by scripts/extract-minecraft-entity-models.ps1
+    /// into Assets/Generated/MinecraftWorldTextures/Resources/DemoWorld (never
+    /// committed). When the local extraction has not been run, TryBuild returns
+    /// false and the battlefield falls back to the generic block creature.
+    /// </summary>
     public static class DemoMinecraftModelFactory
     {
-        private static readonly Dictionary<string, string> TextureKeys = new Dictionary<string, string>
+        private const string ModelResourceRoot = "DemoWorld/entity_models/";
+
+        private sealed class EntitySpec
         {
-            { "pf_001", "entity_bee" },
-            { "pf_002", "entity_sheep" },
-            { "tk_003", "entity_sheep" },
-            { "tk_004", "entity_wolf" },
-            { "pf_003", "entity_wolf" },
-            { "pf_004", "entity_villager" },
-            { "cd_005", "entity_vindicator" },
-            { "tk_011", "entity_vindicator" },
-            { "pf_008", "entity_iron_golem" },
-            { "si_002", "entity_snow_golem" },
-            { "si_004", "entity_goat" },
-            { "cd_001", "entity_bat" },
-            { "cd_002", "entity_cave_spider" },
-            { "nt_001", "entity_magma_cube" },
-            { "tk_014", "entity_magma_cube" },
-            { "nt_003", "entity_blaze" },
-            { "si_003", "entity_stray" },
-            { "or_001", "entity_salmon" },
-            { "or_002", "entity_dolphin" },
-            { "or_003", "entity_drowned" },
-            { "or_004", "entity_guardian" }
+            public string GeometryId;
+            public string TextureKey;
+            public float TargetHeight;
+            public float TargetWidth;
+            public float HoverY;
+            public float ExtraScale = 1f;
+            public string OverlayTextureKey;
+            public float OverlayInflate;
+            public Dictionary<string, float[]> BonePivotOverrides;
+            public Dictionary<string, float[]> BoneRotationOverrides;
+            public DemoEntityIdleAnimator.IdleTrackSpec[] IdleTracks;
+        }
+
+        private static readonly Dictionary<string, EntitySpec> Entities = new Dictionary<string, EntitySpec>
+        {
+            {
+                "pf_001", new EntitySpec
+                { GeometryId = "geometry.bee", TextureKey = "entity_bee",
+                    TargetHeight = 1.5f, HoverY = 0.32f
+                }
+            },
+            {
+                "pf_002", new EntitySpec
+                { GeometryId = "geometry.sheep.sheared.v1.8", TextureKey = "entity_sheep",
+                    TargetHeight = 1.45f, OverlayTextureKey = "entity_sheep_wool", OverlayInflate = 1.2f
+                }
+            },
+            {
+                "tk_003", new EntitySpec
+                { GeometryId = "geometry.sheep.sheared.v1.8", TextureKey = "entity_sheep",
+                    TargetHeight = 1.45f, ExtraScale = 0.62f, OverlayTextureKey = "entity_sheep_wool", OverlayInflate = 1.2f
+                }
+            },
+            {
+                "tk_004", new EntitySpec
+                { GeometryId = "geometry.wolf", TextureKey = "entity_wolf",
+                    TargetHeight = 1.4f, ExtraScale = 0.82f
+                }
+            },
+            {
+                "pf_003", new EntitySpec
+                { GeometryId = "geometry.wolf", TextureKey = "entity_wolf", TargetHeight = 1.4f
+                }
+            },
+            {
+                "pf_004", new EntitySpec
+                { GeometryId = "geometry.villager_v2", TextureKey = "entity_villager",
+                    TargetHeight = 2.05f
+                }
+            },
+            {
+                "cd_005", new EntitySpec
+                { GeometryId = "geometry.vindicator.v1.8", TextureKey = "entity_vindicator",
+                    TargetHeight = 2.15f, ExtraScale = 0.96f
+                }
+            },
+            {
+                "tk_011", new EntitySpec
+                { GeometryId = "geometry.vindicator.v1.8", TextureKey = "entity_vindicator",
+                    TargetHeight = 2.15f, ExtraScale = 0.82f
+                }
+            },
+            {
+                "pf_008", new EntitySpec
+                { GeometryId = "geometry.irongolem", TextureKey = "entity_iron_golem",
+                    TargetHeight = 2.6f, ExtraScale = 0.9f
+                }
+            },
+            {
+                "si_002", new EntitySpec
+                { GeometryId = "geometry.snowgolem.v1.8", TextureKey = "entity_snow_golem",
+                    TargetHeight = 2f, ExtraScale = 0.92f
+                }
+            },
+            {
+                "si_004", new EntitySpec
+                { GeometryId = "geometry.goat", TextureKey = "entity_goat",
+                    TargetHeight = 1.8f, ExtraScale = 0.9f
+                }
+            },
+            {
+                "cd_001", new EntitySpec
+                { GeometryId = "geometry.bat_v2", TextureKey = "entity_bat",
+                    TargetHeight = 1.05f, HoverY = 0.55f
+                }
+            },
+            {
+                "cd_002", new EntitySpec
+                { GeometryId = "geometry.spider.v1.8", TextureKey = "entity_cave_spider",
+                    // Spiders span far wider than they are tall; fit the leg spread instead of the height.
+                    TargetWidth = 2.2f, ExtraScale = 0.9f
+                }
+            },
+            {
+                "nt_001", new EntitySpec
+                { GeometryId = "geometry.slime", TextureKey = "entity_magma_cube",
+                    TargetHeight = 1.7f
+                }
+            },
+            {
+                "tk_014", new EntitySpec
+                { GeometryId = "geometry.slime", TextureKey = "entity_magma_cube",
+                    TargetHeight = 1.7f, ExtraScale = 0.62f
+                }
+            },
+            {
+                "nt_003", new EntitySpec
+                { GeometryId = "geometry.blaze", TextureKey = "entity_blaze",
+                    TargetHeight = 2.05f, BonePivotOverrides = BlazeRodPivots()
+                }
+            },
+            {
+                "si_003", new EntitySpec
+                { GeometryId = "geometry.skeleton.stray.v1.8", TextureKey = "entity_stray",
+                    TargetHeight = 2.1f, OverlayTextureKey = "entity_stray_overlay", OverlayInflate = 0.55f
+                }
+            },
+            {
+                "or_001", new EntitySpec
+                { GeometryId = "geometry.salmon", TextureKey = "entity_salmon",
+                    TargetHeight = 1f, HoverY = 0.45f
+                }
+            },
+            {
+                "or_002", new EntitySpec
+                { GeometryId = "geometry.dolphin", TextureKey = "entity_dolphin",
+                    TargetHeight = 1.25f, HoverY = 0.35f
+                }
+            },
+            {
+                "or_003", new EntitySpec
+                { GeometryId = "geometry.zombie.drowned.v1.16", TextureKey = "entity_drowned",
+                    TargetHeight = 2.1f
+                }
+            },
+            {
+                "or_004", new EntitySpec
+                { GeometryId = "geometry.guardian.v1.8", TextureKey = "entity_guardian",
+                    TargetHeight = 1.6f, HoverY = 0.4f
+                }
+            },
+            {
+                "db_001", new EntitySpec
+                { GeometryId = "geometry.zombie.husk.v1.8", TextureKey = "entity_husk",
+                    TargetHeight = 2f
+                }
+            },
+            {
+                "db_003", new EntitySpec
+                { GeometryId = "geometry.villager_v2", TextureKey = "entity_villager_desert",
+                    TargetHeight = 2.05f
+                }
+            },
+            {
+                "db_005", new EntitySpec
+                { GeometryId = "geometry.pillager", TextureKey = "entity_pillager",
+                    TargetHeight = 2f
+                }
+            },
+            {
+                "db_008", new EntitySpec
+                { GeometryId = "geometry.camel", TextureKey = "entity_camel",
+                    // The camel silhouette is taller than it is wide; fit the height.
+                    TargetHeight = 2.2f
+                }
+            },
+            {
+                "si_005", new EntitySpec
+                { GeometryId = "geometry.polarbear", TextureKey = "entity_polar_bear",
+                    TargetHeight = 2f
+                }
+            },
+            {
+                "cd_003", new EntitySpec
+                { GeometryId = "geometry.skeleton.v1.8", TextureKey = "entity_skeleton",
+                    TargetHeight = 2f
+                }
+            },
+            {
+                "or_005", new EntitySpec
+                { GeometryId = "geometry.turtle", TextureKey = "entity_turtle",
+                    TargetWidth = 1.8f, HoverY = 0.05f
+                }
+            },
+            {
+                "nt_002", new EntitySpec
+                { GeometryId = "geometry.pigzombie.v1.8", TextureKey = "entity_zombie_pigman",
+                    TargetHeight = 2f
+                }
+            },
+            {
+                "nt_004", new EntitySpec
+                { GeometryId = "geometry.strider", TextureKey = "entity_strider",
+                    TargetHeight = 2f
+                }
+            },
+            {
+                "nt_005", new EntitySpec
+                { GeometryId = "geometry.skeleton.wither.v1.8", TextureKey = "entity_wither_skeleton",
+                    TargetHeight = 2.3f
+                }
+            },
+            {
+                "ed_001", new EntitySpec
+                { GeometryId = "geometry.endermite", TextureKey = "entity_endermite",
+                    TargetHeight = 0.75f
+                }
+            },
+            {
+                "ed_003", new EntitySpec
+                { GeometryId = "geometry.enderman.v1.8", TextureKey = "entity_enderman",
+                    TargetHeight = 2.8f
+                }
+            },
+            {
+                "ed_004", new EntitySpec
+                { GeometryId = "geometry.shulker.v1.8", TextureKey = "entity_shulker",
+                    TargetHeight = 1.15f, HoverY = 0.05f
+                }
+            },
+            {
+                "tk_015", new EntitySpec
+                { GeometryId = "geometry.skeleton.wither.v1.8", TextureKey = "entity_wither_skeleton",
+                    TargetHeight = 2.3f
+                }
+            },
+            {
+                "tk_017", new EntitySpec
+                { GeometryId = "geometry.dragon", TextureKey = "entity_dragon",
+                    // Vanilla spreads the right wing via animation; bake the yaw and fit the wingspan.
+                    TargetWidth = 3.6f, HoverY = 0.55f,
+                    BoneRotationOverrides = new Dictionary<string, float[]> { { "wing1", new[] { 0f, 180f, 0f } } }
+                }
+            }
         };
 
-        public static bool TryGetTextureKey(string cardId, out string textureKey) =>
-            TextureKeys.TryGetValue(cardId, out textureKey);
-
-        public static bool TryBuild(Transform root, string cardId, bool player, Material material)
+        static DemoMinecraftModelFactory()
         {
-            if (!TextureKeys.ContainsKey(cardId)) return false;
+            var flap = Vector3.forward;
+            Entities["pf_001"].IdleTracks = new[]
+            {
+                Track("rightwing_bone", 35f, flap, 13f),
+                Track("leftwing_bone", -35f, flap, 13f)
+            };
+            Entities["cd_001"].IdleTracks = new[]
+            {
+                Track("rightWing", 45f, flap, 6.5f),
+                Track("leftWing", -45f, flap, 6.5f),
+                Track("rightWingTip", 24f, flap, 6.5f, 0.6f),
+                Track("leftWingTip", -24f, flap, 6.5f, 0.6f)
+            };
+            var blazeRods = new List<DemoEntityIdleAnimator.IdleTrackSpec>();
+            for (var rod = 0; rod < 12; rod++)
+            {
+                blazeRods.Add(Track("upperBodyParts" + rod, 0f, Vector3.up, 1.7f, rod * 0.55f, 0.045f));
+                blazeRods.Add(Track("upperBodyParts" + rod, 16f, Vector3.up, 0.9f, rod * 0.55f));
+            }
+            blazeRods.Add(Track("head", 5f, Vector3.right, 0.7f));
+            Entities["nt_003"].IdleTracks = blazeRods.ToArray();
+            Entities["or_004"].IdleTracks = new[]
+            {
+                Track("tailpart0", 10f, Vector3.up, 1.1f),
+                Track("tailpart1", 14f, Vector3.up, 1.1f, 0.55f),
+                Track("tailpart2", 18f, Vector3.up, 1.1f, 1.1f),
+                Track("head", 4f, Vector3.right, 0.6f)
+            };
+            Entities["or_002"].IdleTracks = new[]
+            {
+                Track("tail", 9f, Vector3.up, 1.5f),
+                Track("tail_fin", 13f, Vector3.up, 1.5f, 0.5f)
+            };
+            Entities["or_001"].IdleTracks = new[] { Track("tailfin", 12f, Vector3.up, 2.2f) };
+            var wolfTail = new[] { Track("tail", 15f, Vector3.up, 2.4f), Track("head", 3f, Vector3.right, 0.55f) };
+            Entities["pf_003"].IdleTracks = wolfTail;
+            Entities["tk_004"].IdleTracks = wolfTail;
+            var spiderLegs = new List<DemoEntityIdleAnimator.IdleTrackSpec>();
+            for (var leg = 0; leg < 8; leg++) spiderLegs.Add(Track("leg" + leg, 3f, Vector3.up, 1.9f, leg * 0.7f));
+            Entities["cd_002"].IdleTracks = spiderLegs.ToArray();
+            var undeadArms = new[]
+            {
+                Track("rightArm", 4f, Vector3.right, 1f),
+                Track("leftArm", 4f, Vector3.right, 1f, Mathf.PI),
+                Track("head", 5f, Vector3.up, 0.42f)
+            };
+            Entities["si_003"].IdleTracks = undeadArms;
+            Entities["or_003"].IdleTracks = undeadArms;
+            var raiderArms = new[]
+            {
+                Track("rightArm", 3f, Vector3.right, 1f),
+                Track("leftArm", 3f, Vector3.right, 1f, Mathf.PI),
+                Track("head", 4f, Vector3.up, 0.4f)
+            };
+            Entities["cd_005"].IdleTracks = raiderArms;
+            Entities["tk_011"].IdleTracks = raiderArms;
+            var grazeHead = new[] { Track("head", 4f, Vector3.right, 0.5f) };
+            Entities["pf_002"].IdleTracks = grazeHead;
+            Entities["tk_003"].IdleTracks = grazeHead;
+            Entities["si_004"].IdleTracks = new[] { Track("head", 3.5f, Vector3.right, 0.55f) };
+            Entities["pf_008"].IdleTracks = new[]
+            {
+                Track("arm0", 2.5f, Vector3.right, 0.8f),
+                Track("arm1", 2.5f, Vector3.right, 0.8f, Mathf.PI),
+                Track("head", 4f, Vector3.up, 0.35f)
+            };
+            Entities["si_002"].IdleTracks = new[]
+            {
+                Track("head", 6f, Vector3.up, 0.65f),
+                Track("arm1", 5f, Vector3.right, 1.2f),
+                Track("arm2", 5f, Vector3.right, 1.2f, Mathf.PI)
+            };
+            Entities["pf_004"].IdleTracks = new[] { Track("head", 5f, Vector3.up, 0.45f) };
+            Entities["db_003"].IdleTracks = new[] { Track("head", 5f, Vector3.up, 0.45f) };
+            Entities["db_005"].IdleTracks = new[]
+            {
+                Track("rightarm", 4f, Vector3.right, 1f),
+                Track("leftarm", 4f, Vector3.right, 1f, Mathf.PI),
+                Track("head", 5f, Vector3.up, 0.4f)
+            };
+            Entities["db_008"].IdleTracks = new[]
+            {
+                Track("head", 3f, Vector3.right, 0.5f),
+                Track("tail", 8f, Vector3.up, 1.8f)
+            };
+            Entities["si_005"].IdleTracks = new[]
+            {
+                Track("head", 3.5f, Vector3.right, 0.5f),
+                Track("leg0", 1.5f, Vector3.right, 0.8f),
+                Track("leg1", 1.5f, Vector3.right, 0.8f, Mathf.PI),
+                Track("leg2", 1.5f, Vector3.right, 0.8f),
+                Track("leg3", 1.5f, Vector3.right, 0.8f, Mathf.PI)
+            };
+            Entities["or_005"].IdleTracks = new[]
+            {
+                Track("head", 6f, Vector3.up, 0.4f),
+                Track("leg0", 1.5f, Vector3.right, 0.7f),
+                Track("leg1", 1.5f, Vector3.right, 0.7f, Mathf.PI),
+                Track("leg2", 1.5f, Vector3.right, 0.7f),
+                Track("leg3", 1.5f, Vector3.right, 0.7f, Mathf.PI)
+            };
+            Entities["nt_004"].IdleTracks = new[]
+            {
+                Track("right_leg", 2f, Vector3.right, 1.2f),
+                Track("left_leg", 2f, Vector3.right, 1.2f, Mathf.PI),
+                Track("bristle0", 5f, Vector3.forward, 1.4f),
+                Track("bristle1", -5f, Vector3.forward, 1.4f, 0.5f),
+                Track("bristle2", 5f, Vector3.forward, 1.4f, 1f),
+                Track("bristle3", -5f, Vector3.forward, 1.4f, 1.5f),
+                Track("bristle4", 5f, Vector3.forward, 1.4f, 2f),
+                Track("bristle5", -5f, Vector3.forward, 1.4f, 2.5f)
+            };
+            Entities["ed_001"].IdleTracks = new[]
+            {
+                Track("section_0", 9f, Vector3.up, 1.6f),
+                Track("section_1", -9f, Vector3.up, 1.6f, 0.8f),
+                Track("section_2", 9f, Vector3.up, 1.6f, 1.6f),
+                Track("section_3", -9f, Vector3.up, 1.6f, 2.4f)
+            };
+            Entities["ed_003"].IdleTracks = new[]
+            {
+                Track("rightArm", 3f, Vector3.right, 1f),
+                Track("leftArm", 3f, Vector3.right, 1f, Mathf.PI),
+                Track("head", 6f, Vector3.up, 0.4f)
+            };
+            Entities["ed_004"].IdleTracks = new[] { Track("head", 7f, Vector3.right, 0.5f) };
+            Entities["tk_017"].IdleTracks = new[]
+            {
+                Track("wing", 9f, Vector3.forward, 0.5f),
+                Track("wing1", -9f, Vector3.forward, 0.5f),
+                Track("wingtip", 7f, Vector3.forward, 0.5f, 0.4f),
+                Track("wingtip1", -7f, Vector3.forward, 0.5f, 0.4f),
+                Track("head", 6f, Vector3.up, 0.35f),
+                Track("neck", 5f, Vector3.up, 0.35f, 0.3f),
+                Track("jaw", 6f, Vector3.right, 0.35f, 0.3f)
+            };
+        }
+
+        private static DemoEntityIdleAnimator.IdleTrackSpec Track(
+            string boneName, float amplitudeDegrees, Vector3 axis, float frequency, float phase = 0f, float positionAmplitude = 0f)
+        {
+            return new DemoEntityIdleAnimator.IdleTrackSpec
+            {
+                BoneName = boneName,
+                AmplitudeDegrees = amplitudeDegrees,
+                Axis = axis,
+                Frequency = frequency,
+                Phase = phase,
+                PositionAmplitude = positionAmplitude
+            };
+        }
+
+        public static bool TryGetTextureKey(string cardId, out string textureKey)
+        {
+            if (Entities.TryGetValue(cardId, out var spec))
+            {
+                textureKey = spec.TextureKey;
+                return true;
+            }
+            textureKey = null;
+            return false;
+        }
+
+        /// <summary>Geometry resource key under Resources/DemoWorld/entity_models (same key as the entity texture).</summary>
+        public static bool TryGetModelKey(string cardId, out string modelKey)
+        {
+            return TryGetTextureKey(cardId, out modelKey);
+        }
+
+        /// <summary>materialProvider receives a texture key (entity_*) per cube layer.</summary>
+        public static bool TryBuild(Transform root, string cardId, bool player, Func<string, Material> materialProvider)
+        {
+            if (!Entities.TryGetValue(cardId, out var spec)) return false;
+            var geometry = LoadGeometry(spec.TextureKey, spec.GeometryId);
+            if (geometry == null) return false;
+
             root.localRotation = Quaternion.Euler(0f, player ? 180f : 0f, 0f);
 
-            switch (cardId)
+            var options = new DemoMinecraftEntityModelBuilder.BuildOptions
             {
-                case "pf_001": BuildBee(root, material); break;
-                case "pf_002": BuildSheep(root, material); break;
-                case "tk_003":
-                    root.localScale = Vector3.one * 0.62f;
-                    BuildSheep(root, material);
-                    break;
-                case "tk_004":
-                    root.localScale = Vector3.one * 0.82f;
-                    BuildWolf(root, material);
-                    break;
-                case "pf_003": BuildWolf(root, material); break;
-                case "pf_004": BuildVillager(root, material); break;
-                case "cd_005": BuildVindicator(root, material); break;
-                case "tk_011":
-                    root.localScale = Vector3.one * 0.82f;
-                    BuildVindicator(root, material);
-                    break;
-                case "pf_008": BuildIronGolem(root, material); break;
-                case "si_002": BuildSnowGolem(root, material); break;
-                case "si_004": BuildGoat(root, material); break;
-                case "cd_001": BuildBat(root, material); break;
-                case "cd_002": BuildCaveSpider(root, material); break;
-                case "nt_001": BuildMagmaCube(root, material); break;
-                case "tk_014":
-                    root.localScale = Vector3.one * 0.62f;
-                    BuildMagmaCube(root, material);
-                    break;
-                case "nt_003": BuildBlaze(root, material); break;
-                case "si_003": BuildStray(root, material); break;
-                case "or_001": BuildSalmon(root, material); break;
-                case "or_002": BuildDolphin(root, material); break;
-                case "or_003": BuildDrowned(root, material); break;
-                case "or_004": BuildGuardian(root, material); break;
-                default: return false;
+                MaterialProvider = materialProvider,
+                PrimaryTextureKey = spec.TextureKey,
+                TextureWidth = geometry.TextureWidth,
+                TextureHeight = geometry.TextureHeight,
+                TargetHeight = spec.TargetHeight,
+                TargetWidth = spec.TargetWidth,
+                BaseY = spec.HoverY,
+                BonePivotOverrides = spec.BonePivotOverrides,
+                BoneRotationOverrides = spec.BoneRotationOverrides
+            };
+            if (!string.IsNullOrEmpty(spec.OverlayTextureKey))
+            {
+                options.Layers.Add(new DemoMinecraftEntityModelBuilder.OverlayLayer
+                {
+                    TextureKey = spec.OverlayTextureKey,
+                    Inflate = spec.OverlayInflate
+                });
             }
+            if (!DemoMinecraftEntityModelBuilder.TryBuild(root, geometry, options)) return false;
+            // Applied after the auto-fit so juvenile variants stay smaller than the fitted adult size.
+            if (!Mathf.Approximately(spec.ExtraScale, 1f)) root.localScale = Vector3.one * spec.ExtraScale;
+            if (spec.IdleTracks != null) DemoEntityIdleAnimator.Attach(root.gameObject, spec.IdleTracks);
             return true;
         }
 
-        private static void BuildBee(Transform root, Material material)
+        private static DemoEntityGeometry LoadGeometry(string resourceKey, string geometryId)
         {
-            Cuboid(root, "Body", new Vector3(0f, 0.88f, 0f), new Vector3(0.78f, 0.58f, 1.08f), material, 0, 0, 7, 5, 10, 64, 64);
-            Cuboid(root, "LeftWing", new Vector3(-0.53f, 1.15f, 0.12f), new Vector3(0.62f, 0.055f, 0.80f), material, 0, 18, 1, 1, 1, 64, 64, Quaternion.Euler(0f, 0f, -9f));
-            Cuboid(root, "RightWing", new Vector3(0.53f, 1.15f, 0.12f), new Vector3(0.62f, 0.055f, 0.80f), material, 0, 18, 1, 1, 1, 64, 64, Quaternion.Euler(0f, 0f, 9f));
-            Cuboid(root, "Stinger", new Vector3(0f, 0.87f, 0.64f), new Vector3(0.16f, 0.16f, 0.22f), material, 26, 7, 1, 1, 2, 64, 64);
-            Cuboid(root, "LeftAntenna", new Vector3(-0.22f, 1.27f, -0.54f), new Vector3(0.10f, 0.30f, 0.10f), material, 0, 0, 1, 3, 1, 64, 64, Quaternion.Euler(-20f, 0f, 0f));
-            Cuboid(root, "RightAntenna", new Vector3(0.22f, 1.27f, -0.54f), new Vector3(0.10f, 0.30f, 0.10f), material, 0, 0, 1, 3, 1, 64, 64, Quaternion.Euler(-20f, 0f, 0f));
-        }
-
-        private static void BuildSheep(Transform root, Material material)
-        {
-            Cuboid(root, "Body", new Vector3(0f, 0.82f, 0.05f), new Vector3(0.84f, 1.42f, 0.62f), material, 28, 8, 8, 16, 6, 64, 32, Quaternion.Euler(90f, 0f, 0f));
-            Cuboid(root, "Head", new Vector3(0f, 1.02f, -0.73f), new Vector3(0.62f, 0.66f, 0.58f), material, 0, 0, 6, 6, 6, 64, 32);
-            Leg(root, "FrontLeftLeg", -0.29f, -0.43f, material, 0, 16, 64, 32);
-            Leg(root, "FrontRightLeg", 0.29f, -0.43f, material, 0, 16, 64, 32);
-            Leg(root, "BackLeftLeg", -0.29f, 0.52f, material, 0, 16, 64, 32);
-            Leg(root, "BackRightLeg", 0.29f, 0.52f, material, 0, 16, 64, 32);
-        }
-
-        private static void BuildWolf(Transform root, Material material)
-        {
-            Cuboid(root, "Body", new Vector3(0f, 0.82f, 0.12f), new Vector3(0.64f, 0.72f, 1.18f), material, 18, 14, 6, 9, 6, 64, 32, Quaternion.Euler(90f, 0f, 0f));
-            Cuboid(root, "Head", new Vector3(0f, 1.13f, -0.66f), new Vector3(0.64f, 0.64f, 0.58f), material, 0, 0, 6, 6, 4, 64, 32);
-            Cuboid(root, "Muzzle", new Vector3(0f, 1.00f, -1.00f), new Vector3(0.34f, 0.28f, 0.28f), material, 0, 10, 3, 3, 3, 64, 32);
-            Cuboid(root, "LeftEar", new Vector3(-0.22f, 1.52f, -0.66f), new Vector3(0.18f, 0.30f, 0.16f), material, 16, 14, 2, 2, 1, 64, 32);
-            Cuboid(root, "RightEar", new Vector3(0.22f, 1.52f, -0.66f), new Vector3(0.18f, 0.30f, 0.16f), material, 16, 14, 2, 2, 1, 64, 32);
-            Leg(root, "FrontLeftLeg", -0.23f, -0.35f, material, 0, 18, 64, 32);
-            Leg(root, "FrontRightLeg", 0.23f, -0.35f, material, 0, 18, 64, 32);
-            Leg(root, "BackLeftLeg", -0.23f, 0.48f, material, 0, 18, 64, 32);
-            Leg(root, "BackRightLeg", 0.23f, 0.48f, material, 0, 18, 64, 32);
-            Cuboid(root, "Tail", new Vector3(0f, 1.02f, 0.86f), new Vector3(0.22f, 0.22f, 0.78f), material, 9, 18, 2, 8, 2, 64, 32, Quaternion.Euler(-38f, 0f, 0f));
-        }
-
-        private static void BuildVillager(Transform root, Material material)
-        {
-            Cuboid(root, "Head", new Vector3(0f, 1.64f, 0f), new Vector3(0.72f, 0.72f, 0.72f), material, 0, 0, 8, 8, 8, 64, 64);
-            Cuboid(root, "Nose", new Vector3(0f, 1.55f, -0.45f), new Vector3(0.18f, 0.34f, 0.18f), material, 24, 0, 2, 4, 2, 64, 64);
-            Cuboid(root, "Body", new Vector3(0f, 0.94f, 0f), new Vector3(0.72f, 0.96f, 0.48f), material, 16, 20, 8, 12, 6, 64, 64);
-            Cuboid(root, "CrossedArms", new Vector3(0f, 1.06f, -0.40f), new Vector3(0.92f, 0.28f, 0.28f), material, 44, 22, 8, 4, 4, 64, 64, Quaternion.Euler(-28f, 0f, 0f));
-            Cuboid(root, "LeftLeg", new Vector3(-0.19f, 0.29f, 0f), new Vector3(0.32f, 0.72f, 0.38f), material, 0, 22, 4, 8, 4, 64, 64);
-            Cuboid(root, "RightLeg", new Vector3(0.19f, 0.29f, 0f), new Vector3(0.32f, 0.72f, 0.38f), material, 0, 22, 4, 8, 4, 64, 64);
-        }
-
-        private static void BuildVindicator(Transform root, Material material)
-        {
-            root.localScale = Vector3.one * 0.96f;
-            Cuboid(root, "Head", new Vector3(0f, 1.66f, 0f), new Vector3(0.72f, 0.78f, 0.72f), material, 0, 0, 8, 10, 8, 64, 64);
-            Cuboid(root, "Nose", new Vector3(0f, 1.55f, -0.45f), new Vector3(0.18f, 0.34f, 0.18f), material, 24, 0, 2, 4, 2, 64, 64);
-            Cuboid(root, "Body", new Vector3(0f, 0.96f, 0f), new Vector3(0.72f, 0.98f, 0.48f), material, 16, 20, 8, 12, 6, 64, 64);
-            Cuboid(root, "LeftArm", new Vector3(-0.48f, 1.03f, -0.18f), new Vector3(0.24f, 0.90f, 0.24f), material, 40, 38, 4, 12, 4, 64, 64, Quaternion.Euler(-34f, 0f, 8f));
-            Cuboid(root, "RightArm", new Vector3(0.48f, 1.03f, -0.18f), new Vector3(0.24f, 0.90f, 0.24f), material, 40, 38, 4, 12, 4, 64, 64, Quaternion.Euler(-34f, 0f, -8f));
-            Cuboid(root, "LeftLeg", new Vector3(-0.19f, 0.29f, 0f), new Vector3(0.32f, 0.72f, 0.38f), material, 0, 22, 4, 8, 4, 64, 64);
-            Cuboid(root, "RightLeg", new Vector3(0.19f, 0.29f, 0f), new Vector3(0.32f, 0.72f, 0.38f), material, 0, 22, 4, 8, 4, 64, 64);
-        }
-
-        private static void BuildIronGolem(Transform root, Material material)
-        {
-            root.localScale = Vector3.one * 0.86f;
-            Cuboid(root, "Head", new Vector3(0f, 2.02f, 0f), new Vector3(0.76f, 0.78f, 0.72f), material, 0, 0, 8, 10, 8, 128, 128);
-            Cuboid(root, "Nose", new Vector3(0f, 1.92f, -0.44f), new Vector3(0.20f, 0.34f, 0.20f), material, 24, 0, 2, 4, 2, 128, 128);
-            Cuboid(root, "Body", new Vector3(0f, 1.18f, 0f), new Vector3(1.12f, 1.14f, 0.66f), material, 0, 40, 18, 12, 11, 128, 128);
-            Cuboid(root, "LeftArm", new Vector3(-0.74f, 0.96f, 0f), new Vector3(0.34f, 1.58f, 0.40f), material, 60, 58, 4, 30, 6, 128, 128);
-            Cuboid(root, "RightArm", new Vector3(0.74f, 0.96f, 0f), new Vector3(0.34f, 1.58f, 0.40f), material, 60, 21, 4, 30, 6, 128, 128);
-            Cuboid(root, "LeftLeg", new Vector3(-0.30f, 0.28f, 0f), new Vector3(0.42f, 0.88f, 0.48f), material, 60, 0, 6, 16, 5, 128, 128);
-            Cuboid(root, "RightLeg", new Vector3(0.30f, 0.28f, 0f), new Vector3(0.42f, 0.88f, 0.48f), material, 37, 0, 6, 16, 5, 128, 128);
-        }
-
-        private static void BuildSnowGolem(Transform root, Material material)
-        {
-            root.localScale = Vector3.one * 0.92f;
-            Cuboid(root, "LowerSnowball", new Vector3(0f, 0.58f, 0f), new Vector3(1.05f, 1.05f, 1.05f), material, 0, 36, 12, 12, 12, 64, 64);
-            Cuboid(root, "UpperSnowball", new Vector3(0f, 1.38f, 0f), new Vector3(0.82f, 0.82f, 0.82f), material, 0, 16, 10, 10, 10, 64, 64);
-            Cuboid(root, "Head", new Vector3(0f, 2.02f, 0f), new Vector3(0.70f, 0.70f, 0.70f), material, 0, 0, 8, 8, 8, 64, 64);
-            Cuboid(root, "LeftArm", new Vector3(-0.72f, 1.40f, 0f), new Vector3(0.76f, 0.11f, 0.11f), material, 32, 0, 12, 2, 2, 64, 64, Quaternion.Euler(0f, 0f, 18f));
-            Cuboid(root, "RightArm", new Vector3(0.72f, 1.40f, 0f), new Vector3(0.76f, 0.11f, 0.11f), material, 32, 0, 12, 2, 2, 64, 64, Quaternion.Euler(0f, 0f, -18f));
-        }
-
-        private static void BuildGoat(Transform root, Material material)
-        {
-            root.localScale = Vector3.one * 0.90f;
-            Cuboid(root, "Body", new Vector3(0f, 0.92f, 0.10f), new Vector3(0.78f, 0.92f, 1.42f),
-                material, 1, 28, 9, 11, 16, 64, 64, Quaternion.Euler(90f, 0f, 0f));
-            Cuboid(root, "Head", new Vector3(0f, 1.35f, -0.76f), new Vector3(0.72f, 0.64f, 0.72f),
-                material, 34, 46, 10, 7, 10, 64, 64, Quaternion.Euler(-8f, 0f, 0f));
-            Cuboid(root, "Muzzle", new Vector3(0f, 1.19f, -1.16f), new Vector3(0.48f, 0.30f, 0.34f),
-                material, 2, 2, 5, 3, 4, 64, 64, Quaternion.Euler(-8f, 0f, 0f));
-            Cuboid(root, "LeftEar", new Vector3(-0.43f, 1.57f, -0.72f), new Vector3(0.34f, 0.14f, 0.28f),
-                material, 2, 0, 3, 1, 2, 64, 64, Quaternion.Euler(0f, 0f, -18f));
-            Cuboid(root, "RightEar", new Vector3(0.43f, 1.57f, -0.72f), new Vector3(0.34f, 0.14f, 0.28f),
-                material, 2, 0, 3, 1, 2, 64, 64, Quaternion.Euler(0f, 0f, 18f));
-            Cuboid(root, "LeftHorn", new Vector3(-0.22f, 1.88f, -0.61f), new Vector3(0.14f, 0.56f, 0.14f),
-                material, 12, 55, 2, 7, 2, 64, 64, Quaternion.Euler(-20f, 0f, -8f));
-            Cuboid(root, "RightHorn", new Vector3(0.22f, 1.88f, -0.61f), new Vector3(0.14f, 0.56f, 0.14f),
-                material, 12, 55, 2, 7, 2, 64, 64, Quaternion.Euler(-20f, 0f, 8f));
-            Cuboid(root, "Beard", new Vector3(0f, 1.00f, -1.02f), new Vector3(0.24f, 0.42f, 0.08f),
-                material, 0, 0, 2, 5, 1, 64, 64, Quaternion.Euler(12f, 0f, 0f));
-            GoatLeg(root, "FrontLeftLeg", -0.27f, -0.43f, material);
-            GoatLeg(root, "FrontRightLeg", 0.27f, -0.43f, material);
-            GoatLeg(root, "BackLeftLeg", -0.27f, 0.53f, material);
-            GoatLeg(root, "BackRightLeg", 0.27f, 0.53f, material);
-        }
-
-        private static void GoatLeg(Transform root, string name, float x, float z, Material material)
-        {
-            Cuboid(root, name, new Vector3(x, 0.34f, z), new Vector3(0.23f, 0.72f, 0.23f),
-                material, 36, 29, 4, 11, 4, 64, 64);
-        }
-
-        private static void BuildMagmaCube(Transform root, Material material)
-        {
-            for (var slice = 0; slice < 8; slice++)
+            var asset = Resources.Load<TextAsset>(ModelResourceRoot + resourceKey);
+            if (asset == null) return null;
+            try
             {
-                Cuboid(root, "BodySlice_" + slice, new Vector3(0f, 0.24f + slice * 0.135f, 0f), new Vector3(1.18f, 0.135f, 1.18f), material, 0, slice, 8, 1, 8, 64, 32);
+                return DemoMinecraftEntityGeometryParser.Parse(asset.text, geometryId);
             }
-            Cuboid(root, "InnerCore", new Vector3(0f, 0.70f, 0f), new Vector3(0.58f, 0.58f, 0.58f), material, 24, 10, 4, 4, 4, 64, 32);
+            catch (FormatException error)
+            {
+                Debug.LogWarning($"Skipping entity model '{resourceKey}': {error.Message}");
+                return null;
+            }
         }
 
-        private static void BuildBat(Transform root, Material material)
+        /// <summary>
+        /// The vanilla blaze geometry stacks all twelve rods on one column and
+        /// relies on runtime animation; bake the resting ring pose so the
+        /// static battlefield model shows the classic three-ring silhouette.
+        /// </summary>
+        private static Dictionary<string, float[]> BlazeRodPivots()
         {
-            root.localPosition += new Vector3(0f, 0.42f, 0f);
-            root.localScale = Vector3.one * 0.92f;
-            Cuboid(root, "Head", new Vector3(0f, 1.08f, -0.12f), new Vector3(0.52f, 0.48f, 0.46f), material, 0, 0, 6, 6, 6, 64, 64);
-            Cuboid(root, "LeftEar", new Vector3(-0.20f, 1.43f, -0.10f), new Vector3(0.16f, 0.34f, 0.12f), material, 24, 0, 2, 4, 1, 64, 64, Quaternion.Euler(0f, 0f, -10f));
-            Cuboid(root, "RightEar", new Vector3(0.20f, 1.43f, -0.10f), new Vector3(0.16f, 0.34f, 0.12f), material, 24, 0, 2, 4, 1, 64, 64, Quaternion.Euler(0f, 0f, 10f));
-            Cuboid(root, "Body", new Vector3(0f, 0.68f, 0.06f), new Vector3(0.42f, 0.68f, 0.36f), material, 0, 16, 6, 8, 6, 64, 64);
-            Cuboid(root, "LeftWing", new Vector3(-0.65f, 0.82f, 0.08f), new Vector3(0.92f, 0.08f, 0.56f), material, 24, 16, 10, 1, 6, 64, 64, Quaternion.Euler(0f, -8f, -18f));
-            Cuboid(root, "RightWing", new Vector3(0.65f, 0.82f, 0.08f), new Vector3(0.92f, 0.08f, 0.56f), material, 24, 16, 10, 1, 6, 64, 64, Quaternion.Euler(0f, 8f, 18f));
-            Cuboid(root, "LeftFoot", new Vector3(-0.11f, 0.26f, 0.03f), new Vector3(0.08f, 0.20f, 0.08f), material, 0, 34, 1, 2, 1, 64, 64);
-            Cuboid(root, "RightFoot", new Vector3(0.11f, 0.26f, 0.03f), new Vector3(0.08f, 0.20f, 0.08f), material, 0, 34, 1, 2, 1, 64, 64);
-        }
-
-        private static void BuildCaveSpider(Transform root, Material material)
-        {
-            root.localScale = Vector3.one * 0.86f;
-            Cuboid(root, "Head", new Vector3(0f, 0.58f, -0.74f), new Vector3(0.66f, 0.64f, 0.64f), material, 32, 4, 8, 8, 8, 64, 32);
-            Cuboid(root, "Thorax", new Vector3(0f, 0.58f, -0.08f), new Vector3(0.52f, 0.50f, 0.54f), material, 0, 0, 6, 6, 6, 64, 32);
-            Cuboid(root, "Abdomen", new Vector3(0f, 0.60f, 0.70f), new Vector3(0.82f, 0.66f, 1.02f), material, 0, 12, 10, 8, 12, 64, 32);
-            SpiderLeg(root, "FrontLeftLeg", -1f, -0.42f, -34f, 22f, material);
-            SpiderLeg(root, "FrontRightLeg", 1f, -0.42f, 34f, -22f, material);
-            SpiderLeg(root, "MidFrontLeftLeg", -1f, -0.06f, -12f, 12f, material);
-            SpiderLeg(root, "MidFrontRightLeg", 1f, -0.06f, 12f, -12f, material);
-            SpiderLeg(root, "MidRearLeftLeg", -1f, 0.30f, 12f, 12f, material);
-            SpiderLeg(root, "MidRearRightLeg", 1f, 0.30f, -12f, -12f, material);
-            SpiderLeg(root, "RearLeftLeg", -1f, 0.60f, 34f, 22f, material);
-            SpiderLeg(root, "RearRightLeg", 1f, 0.60f, -34f, -22f, material);
-        }
-
-        private static void SpiderLeg(
-            Transform root, string name, float side, float z, float yaw, float roll, Material material)
-        {
-            Cuboid(root, name, new Vector3(side * 0.74f, 0.43f, z), new Vector3(1.18f, 0.13f, 0.13f),
-                material, 18, 0, 16, 2, 2, 64, 32, Quaternion.Euler(0f, yaw, roll));
-        }
-
-        private static void BuildBlaze(Transform root, Material material)
-        {
-            Cuboid(root, "Head", new Vector3(0f, 1.36f, 0f), new Vector3(0.72f, 0.72f, 0.72f), material, 0, 0, 8, 8, 8, 64, 32);
+            var pivots = new Dictionary<string, float[]>();
             for (var rod = 0; rod < 12; rod++)
             {
                 var ring = rod / 4;
-                var angle = (rod % 4) * Mathf.PI * 0.5f + ring * 0.58f;
-                var radius = ring == 1 ? 0.48f : 0.68f;
-                var y = 0.52f + ring * 0.39f;
-                var position = new Vector3(Mathf.Cos(angle) * radius, y, Mathf.Sin(angle) * radius);
-                Cuboid(root, "Rod_" + rod, position, new Vector3(0.16f, 0.72f, 0.16f), material, 0, 16, 2, 8, 2, 64, 32);
+                var angle = (float)((rod % 4) * System.Math.PI * 0.5 + ring * 0.58);
+                var radius = ring == 1 ? 10.5f : 7.5f;
+                pivots["upperBodyParts" + rod] = new[]
+                {
+                    Mathf.Cos(angle) * radius,
+                    24f - ring * 7f,
+                    Mathf.Sin(angle) * radius
+                };
             }
-        }
-
-        private static void BuildStray(Transform root, Material material)
-        {
-            Cuboid(root, "Head", new Vector3(0f, 1.72f, 0f), new Vector3(0.64f, 0.64f, 0.64f), material, 0, 0, 8, 8, 8, 64, 32);
-            Cuboid(root, "Body", new Vector3(0f, 1.05f, 0f), new Vector3(0.52f, 0.84f, 0.30f), material, 16, 16, 8, 12, 4, 64, 32);
-            Cuboid(root, "LeftArm", new Vector3(-0.39f, 1.08f, 0f), new Vector3(0.18f, 0.86f, 0.18f), material, 40, 16, 2, 12, 2, 64, 32, Quaternion.Euler(0f, 0f, 8f));
-            Cuboid(root, "RightArm", new Vector3(0.39f, 1.08f, 0f), new Vector3(0.18f, 0.86f, 0.18f), material, 40, 16, 2, 12, 2, 64, 32, Quaternion.Euler(0f, 0f, -8f));
-            Cuboid(root, "LeftLeg", new Vector3(-0.14f, 0.38f, 0f), new Vector3(0.19f, 0.86f, 0.19f), material, 0, 16, 2, 12, 2, 64, 32);
-            Cuboid(root, "RightLeg", new Vector3(0.14f, 0.38f, 0f), new Vector3(0.19f, 0.86f, 0.19f), material, 0, 16, 2, 12, 2, 64, 32);
-        }
-
-        private static void BuildSalmon(Transform root, Material material)
-        {
-            root.localPosition += new Vector3(0f, 0.30f, 0f);
-            Cuboid(root, "FrontBody", new Vector3(-0.24f, 0.70f, 0f), new Vector3(0.78f, 0.62f, 0.48f), material, 0, 0, 3, 4, 5, 32, 32);
-            Cuboid(root, "RearBody", new Vector3(0.52f, 0.70f, 0f), new Vector3(0.76f, 0.56f, 0.45f), material, 0, 9, 3, 4, 5, 32, 32);
-            Cuboid(root, "Head", new Vector3(-0.78f, 0.67f, 0f), new Vector3(0.42f, 0.48f, 0.38f), material, 22, 0, 2, 3, 3, 32, 32);
-            Cuboid(root, "DorsalFin", new Vector3(0.18f, 1.05f, 0f), new Vector3(0.46f, 0.34f, 0.055f), material, 20, 10, 1, 2, 3, 32, 32, Quaternion.Euler(0f, 0f, 10f));
-            Cuboid(root, "LeftFin", new Vector3(-0.08f, 0.60f, -0.32f), new Vector3(0.28f, 0.055f, 0.36f), material, 2, 2, 2, 1, 2, 32, 32, Quaternion.Euler(-22f, 0f, 0f));
-            Cuboid(root, "RightFin", new Vector3(-0.08f, 0.60f, 0.32f), new Vector3(0.28f, 0.055f, 0.36f), material, 2, 2, 2, 1, 2, 32, 32, Quaternion.Euler(22f, 0f, 0f));
-            Cuboid(root, "Tail", new Vector3(1.05f, 0.70f, 0f), new Vector3(0.46f, 0.72f, 0.055f), material, 20, 15, 1, 4, 3, 32, 32);
-        }
-
-        private static void BuildDolphin(Transform root, Material material)
-        {
-            root.localPosition += new Vector3(0f, 0.20f, 0f);
-            Cuboid(root, "Body", new Vector3(0f, 0.78f, 0.05f), new Vector3(0.86f, 0.68f, 1.42f), material, 22, 0, 8, 7, 13, 64, 64);
-            Cuboid(root, "Head", new Vector3(0f, 0.80f, -0.86f), new Vector3(0.78f, 0.62f, 0.58f), material, 0, 0, 8, 7, 6, 64, 64);
-            Cuboid(root, "Snout", new Vector3(0f, 0.68f, -1.27f), new Vector3(0.42f, 0.25f, 0.48f), material, 0, 13, 4, 2, 4, 64, 64);
-            Cuboid(root, "DorsalFin", new Vector3(0f, 1.23f, 0.12f), new Vector3(0.07f, 0.48f, 0.56f), material, 51, 0, 1, 4, 5, 64, 64, Quaternion.Euler(-18f, 0f, 0f));
-            Cuboid(root, "LeftFlipper", new Vector3(-0.58f, 0.63f, -0.12f), new Vector3(0.56f, 0.07f, 0.34f), material, 48, 20, 4, 1, 3, 64, 64, Quaternion.Euler(0f, -8f, -28f));
-            Cuboid(root, "RightFlipper", new Vector3(0.58f, 0.63f, -0.12f), new Vector3(0.56f, 0.07f, 0.34f), material, 48, 20, 4, 1, 3, 64, 64, Quaternion.Euler(0f, 8f, 28f));
-            Cuboid(root, "TailStem", new Vector3(0f, 0.79f, 0.98f), new Vector3(0.42f, 0.38f, 0.58f), material, 0, 19, 4, 4, 5, 64, 64);
-            Cuboid(root, "TailFlukes", new Vector3(0f, 0.80f, 1.37f), new Vector3(1.02f, 0.08f, 0.44f), material, 19, 20, 9, 1, 4, 64, 64);
-        }
-
-        private static void BuildDrowned(Transform root, Material material)
-        {
-            Cuboid(root, "Head", new Vector3(0f, 1.72f, 0f), new Vector3(0.66f, 0.66f, 0.66f), material, 0, 0, 8, 8, 8, 64, 64);
-            Cuboid(root, "Body", new Vector3(0f, 1.04f, 0f), new Vector3(0.54f, 0.84f, 0.30f), material, 16, 16, 8, 12, 4, 64, 64);
-            Cuboid(root, "LeftArm", new Vector3(-0.42f, 1.17f, -0.18f), new Vector3(0.20f, 0.86f, 0.20f), material, 40, 16, 4, 12, 4, 64, 64, Quaternion.Euler(-58f, 0f, 8f));
-            Cuboid(root, "RightArm", new Vector3(0.42f, 1.17f, -0.18f), new Vector3(0.20f, 0.86f, 0.20f), material, 32, 48, 4, 12, 4, 64, 64, Quaternion.Euler(-58f, 0f, -8f));
-            Cuboid(root, "LeftLeg", new Vector3(-0.15f, 0.38f, 0f), new Vector3(0.22f, 0.86f, 0.22f), material, 0, 16, 4, 12, 4, 64, 64);
-            Cuboid(root, "RightLeg", new Vector3(0.15f, 0.38f, 0f), new Vector3(0.22f, 0.86f, 0.22f), material, 16, 48, 4, 12, 4, 64, 64);
-        }
-
-        private static void BuildGuardian(Transform root, Material material)
-        {
-            root.localPosition += new Vector3(0f, 0.22f, 0f);
-            Cuboid(root, "Body", new Vector3(0f, 0.82f, 0f), new Vector3(1.08f, 1.02f, 1.28f), material, 0, 0, 12, 12, 16, 64, 64);
-            Cuboid(root, "TailBase", new Vector3(0f, 0.78f, 0.78f), new Vector3(0.48f, 0.42f, 0.58f), material, 40, 0, 4, 4, 6, 64, 64, Quaternion.Euler(0f, 12f, 0f));
-            Cuboid(root, "TailMiddle", new Vector3(0.18f, 0.76f, 1.18f), new Vector3(0.34f, 0.32f, 0.52f), material, 0, 32, 3, 3, 5, 64, 64, Quaternion.Euler(0f, 28f, 0f));
-            Cuboid(root, "TailFin", new Vector3(0.43f, 0.76f, 1.48f), new Vector3(0.58f, 0.62f, 0.07f), material, 24, 32, 5, 5, 1, 64, 64, Quaternion.Euler(0f, 36f, 0f));
-
-            for (var spike = 0; spike < 4; spike++)
-            {
-                var x = -0.42f + spike * 0.28f;
-                Cuboid(root, "TopSpike_" + spike, new Vector3(x, 1.48f, 0f), new Vector3(0.13f, 0.42f, 0.13f), material, 0, 28, 2, 4, 2, 64, 64);
-                Cuboid(root, "BottomSpike_" + spike, new Vector3(x, 0.17f, 0f), new Vector3(0.13f, 0.36f, 0.13f), material, 0, 28, 2, 4, 2, 64, 64);
-            }
-            for (var side = -1; side <= 1; side += 2)
-            {
-                Cuboid(root, side < 0 ? "LeftSpikeFront" : "RightSpikeFront", new Vector3(side * 0.70f, 1.05f, -0.30f), new Vector3(0.42f, 0.13f, 0.13f), material, 0, 28, 2, 4, 2, 64, 64);
-                Cuboid(root, side < 0 ? "LeftSpikeRear" : "RightSpikeRear", new Vector3(side * 0.70f, 0.62f, 0.28f), new Vector3(0.42f, 0.13f, 0.13f), material, 0, 28, 2, 4, 2, 64, 64);
-            }
-        }
-
-        private static void Leg(Transform root, string name, float x, float z, Material material, int u, int v, int textureWidth, int textureHeight)
-        {
-            Cuboid(root, name, new Vector3(x, 0.33f, z), new Vector3(0.24f, 0.68f, 0.24f), material, u, v, 2, 6, 2, textureWidth, textureHeight);
-        }
-
-        private static void Cuboid(
-            Transform parent, string name, Vector3 position, Vector3 size, Material material,
-            int u, int v, int dx, int dy, int dz, int textureWidth, int textureHeight, Quaternion? rotation = null)
-        {
-            var gameObject = new GameObject(name, typeof(MeshFilter), typeof(MeshRenderer), typeof(DemoGeneratedMeshOwner));
-            gameObject.transform.SetParent(parent, false);
-            gameObject.transform.localPosition = position;
-            gameObject.transform.localRotation = rotation ?? Quaternion.identity;
-            gameObject.GetComponent<MeshRenderer>().sharedMaterial = material;
-            var mesh = CreateCuboidMesh(name + "_Mesh", size, u, v, dx, dy, dz, textureWidth, textureHeight);
-            gameObject.GetComponent<MeshFilter>().sharedMesh = mesh;
-            gameObject.GetComponent<DemoGeneratedMeshOwner>().Configure(mesh);
-        }
-
-        private static Mesh CreateCuboidMesh(string name, Vector3 size, int u, int v, int dx, int dy, int dz, int textureWidth, int textureHeight)
-        {
-            var vertices = new List<Vector3>(24);
-            var uv = new List<Vector2>(24);
-            var triangles = new List<int>(36);
-            var x = size.x * 0.5f;
-            var y = size.y * 0.5f;
-            var z = size.z * 0.5f;
-
-            AddFace(vertices, uv, triangles, new Vector3(-x, -y, -z), new Vector3(-x, y, -z), new Vector3(x, y, -z), new Vector3(x, -y, -z), u + dz, v + dz, dx, dy, textureWidth, textureHeight);
-            AddFace(vertices, uv, triangles, new Vector3(x, -y, z), new Vector3(x, y, z), new Vector3(-x, y, z), new Vector3(-x, -y, z), u + dz + dx + dz, v + dz, dx, dy, textureWidth, textureHeight);
-            AddFace(vertices, uv, triangles, new Vector3(-x, -y, z), new Vector3(-x, y, z), new Vector3(-x, y, -z), new Vector3(-x, -y, -z), u, v + dz, dz, dy, textureWidth, textureHeight);
-            AddFace(vertices, uv, triangles, new Vector3(x, -y, -z), new Vector3(x, y, -z), new Vector3(x, y, z), new Vector3(x, -y, z), u + dz + dx, v + dz, dz, dy, textureWidth, textureHeight);
-            AddFace(vertices, uv, triangles, new Vector3(-x, y, -z), new Vector3(-x, y, z), new Vector3(x, y, z), new Vector3(x, y, -z), u + dz, v, dx, dz, textureWidth, textureHeight);
-            AddFace(vertices, uv, triangles, new Vector3(-x, -y, z), new Vector3(-x, -y, -z), new Vector3(x, -y, -z), new Vector3(x, -y, z), u + dz + dx, v, dx, dz, textureWidth, textureHeight);
-
-            var mesh = new Mesh { name = name };
-            mesh.SetVertices(vertices);
-            mesh.SetUVs(0, uv);
-            mesh.SetTriangles(triangles, 0);
-            mesh.RecalculateNormals();
-            mesh.RecalculateBounds();
-            return mesh;
-        }
-
-        private static void AddFace(
-            ICollection<Vector3> vertices, ICollection<Vector2> uv, ICollection<int> triangles,
-            Vector3 bottomLeft, Vector3 topLeft, Vector3 topRight, Vector3 bottomRight,
-            int u, int v, int width, int height, int textureWidth, int textureHeight)
-        {
-            var start = vertices.Count;
-            vertices.Add(bottomLeft);
-            vertices.Add(topLeft);
-            vertices.Add(topRight);
-            vertices.Add(bottomRight);
-
-            var left = u / (float)textureWidth;
-            var right = (u + width) / (float)textureWidth;
-            var top = 1f - v / (float)textureHeight;
-            var bottom = 1f - (v + height) / (float)textureHeight;
-            uv.Add(new Vector2(left, bottom));
-            uv.Add(new Vector2(left, top));
-            uv.Add(new Vector2(right, top));
-            uv.Add(new Vector2(right, bottom));
-            triangles.Add(start);
-            triangles.Add(start + 1);
-            triangles.Add(start + 2);
-            triangles.Add(start);
-            triangles.Add(start + 2);
-            triangles.Add(start + 3);
+            return pivots;
         }
     }
 }

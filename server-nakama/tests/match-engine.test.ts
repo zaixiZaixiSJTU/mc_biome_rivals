@@ -3484,6 +3484,152 @@ TestHarness.test('Lethal poison credits its source controller for enemy drops', 
   assertEventBatchMatchesSchema(result.batch);
 });
 
+TestHarness.test('Blaze applies Fire after attack damage and drops a Blaze Rod when retaliation kills it', function (): void {
+  const state = activeState('match-blaze-attack', ['alice', 'bob'], ['nether', 'plains_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const defenderIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  const defender = state.players[defenderIndex]!;
+  state.turn = 2;
+  state.phase = 'COMBAT';
+  placeUnit(state, actorIndex, 'nt_003', 0, 'object-10', 1);
+  placeUnit(state, defenderIndex, 'or_005', 0, 'object-20', 1);
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    attackCommand('blaze-attack', 0, 'object-10', 'UNIT', 'object-20'));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  const target = result.state.players[defenderIndex]!.battlefield[0]!;
+  TestHarness.equal(target.health, 3);
+  TestHarness.equal(target.statuses.length, 1);
+  TestHarness.equal(target.statuses[0]!.statusId, 'FIRE');
+  TestHarness.equal(target.statuses[0]!.remainingDuration, 2);
+  TestHarness.equal(target.statuses[0]!.sourcePlayerId, actor.playerId);
+  TestHarness.equal(target.statuses[0]!.sourceCardId, 'nt_003');
+  TestHarness.equal(result.state.players[actorIndex]!.battlefield.length, 0);
+  TestHarness.equal(defender.hand.indexOf('tk_013') >= 0, false, 'accepted commands must not mutate input');
+  TestHarness.equal(result.state.players[defenderIndex]!.hand.indexOf('tk_013') >= 0, true);
+  TestHarness.equal(result.batch.events[0]!.type, 'ATTACK_RESOLVED');
+  TestHarness.equal(result.batch.events[1]!.type, 'OBJECT_STATUS_APPLIED');
+  TestHarness.equal(result.batch.events[2]!.type, 'OBJECT_DIED');
+  TestHarness.equal(result.batch.events[3]!.type, 'CARD_GENERATED');
+  TestHarness.equal(result.batch.events[3]!.payload.cardId, 'tk_013');
+  assertEventBatchMatchesSchema(result.batch);
+});
+
+TestHarness.test('Blaze retaliation applies Fire to a surviving attacker even when the Blaze dies', function (): void {
+  const state = activeState('match-blaze-retaliation', ['alice', 'bob'], ['plains_forest', 'nether']);
+  const actorIndex = state.activePlayerIndex;
+  const defenderIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  const defender = state.players[defenderIndex]!;
+  state.turn = 2;
+  state.phase = 'COMBAT';
+  placeUnit(state, actorIndex, 'pf_008', 0, 'object-10', 1);
+  placeUnit(state, defenderIndex, 'nt_003', 0, 'object-20', 1);
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    attackCommand('blaze-retaliation', 0, 'object-10', 'UNIT', 'object-20'));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  const attacker = result.state.players[actorIndex]!.battlefield[0]!;
+  TestHarness.equal(attacker.health, 4);
+  TestHarness.equal(attacker.statuses.length, 1);
+  TestHarness.equal(attacker.statuses[0]!.statusId, 'FIRE');
+  TestHarness.equal(attacker.statuses[0]!.sourcePlayerId, defender.playerId);
+  TestHarness.equal(result.state.players[defenderIndex]!.battlefield.length, 0);
+  TestHarness.equal(result.state.players[actorIndex]!.hand.indexOf('tk_013') >= 0, true);
+  TestHarness.equal(result.batch.events[1]!.type, 'OBJECT_STATUS_APPLIED');
+  TestHarness.equal(result.batch.events[2]!.type, 'OBJECT_DIED');
+  TestHarness.equal(result.batch.events[3]!.type, 'CARD_GENERATED');
+});
+
+TestHarness.test('Fire deals true damage for two controller end phases and then expires', function (): void {
+  const state = activeState('match-fire-duration', ['alice', 'bob'], ['plains_forest', 'nether']);
+  placeUnit(state, 0, 'pf_008', 0, 'object-10', 1);
+  const burning = state.players[0]!.battlefield[0]!;
+  burning.statuses.push({
+    statusId: 'FIRE', remainingDuration: 2, sourcePlayerId: 'bob', sourceCardId: 'nt_003',
+    sourceInstanceId: 'object-20', effectId: 'effect.nt_003.01', attackModifier: 0, boundAttackModifier: 0
+  });
+
+  const firstTick = BiomeRivalsRules.applyCommand(state, 'alice', command('fire-first-tick', 0, 'END_TURN'));
+  TestHarness.equal(firstTick.accepted, true, JSON.stringify(firstTick));
+  if (!firstTick.accepted) return;
+  TestHarness.equal(firstTick.state.players[0]!.battlefield[0]!.health, 6);
+  TestHarness.equal(firstTick.state.players[0]!.battlefield[0]!.statuses[0]!.remainingDuration, 1);
+  TestHarness.equal(firstTick.batch.events[0]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(firstTick.batch.events[0]!.payload.damageType, 'TRUE');
+  TestHarness.equal(firstTick.batch.events[1]!.type, 'OBJECT_STATUS_TICKED');
+
+  const pass = BiomeRivalsRules.applyCommand(firstTick.state, 'bob', command('fire-pass', 1, 'END_TURN'));
+  TestHarness.ok(pass.accepted);
+  if (!pass.accepted) return;
+  const secondTick = BiomeRivalsRules.applyCommand(pass.state, 'alice', command('fire-second-tick', 2, 'END_TURN'));
+  TestHarness.equal(secondTick.accepted, true, JSON.stringify(secondTick));
+  if (!secondTick.accepted) return;
+  TestHarness.equal(secondTick.state.players[0]!.battlefield[0]!.health, 5);
+  TestHarness.equal(secondTick.state.players[0]!.battlefield[0]!.statuses.length, 0);
+  TestHarness.equal(secondTick.batch.events[0]!.payload.damageType, 'TRUE');
+  TestHarness.equal(secondTick.batch.events[1]!.type, 'OBJECT_STATUS_REMOVED');
+  assertEventBatchMatchesSchema(firstTick.batch);
+  assertEventBatchMatchesSchema(secondTick.batch);
+});
+
+TestHarness.test('Blaze Rod damages an enemy unit then applies or refreshes Fire only if it survives', function (): void {
+  const state = activeState('match-blaze-rod', ['alice', 'bob'], ['nether', 'cave_dark_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const opponentIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['tk_013'];
+  actor.redstone = 1;
+  actor.redstoneCapacity = 1;
+  placeUnit(state, opponentIndex, 'pf_008', 0, 'object-20', 1);
+  const target = state.players[opponentIndex]!.battlefield[0]!;
+  target.statuses.push({
+    statusId: 'FIRE', remainingDuration: 1, sourcePlayerId: 'bob', sourceCardId: 'nt_003',
+    sourceInstanceId: 'object-99', effectId: 'effect.nt_003.01', attackModifier: 0, boundAttackModifier: 0
+  });
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('blaze-rod-survive', 0, 'tk_013', 'UNIT', 'object-20'));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  const burned = result.state.players[opponentIndex]!.battlefield[0]!;
+  TestHarness.equal(burned.health, 6);
+  TestHarness.equal(burned.statuses.length, 1);
+  TestHarness.equal(burned.statuses[0]!.remainingDuration, 2);
+  TestHarness.equal(burned.statuses[0]!.sourcePlayerId, actor.playerId);
+  TestHarness.equal(burned.statuses[0]!.sourceCardId, 'tk_013');
+  TestHarness.equal(burned.statuses[0]!.sourceInstanceId, 'effect-1');
+  TestHarness.equal(result.batch.events[0]!.type, 'CARD_PLAYED');
+  TestHarness.equal(result.batch.events[1]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(result.batch.events[1]!.payload.damageType, 'NORMAL');
+  TestHarness.equal(result.batch.events[2]!.type, 'OBJECT_STATUS_APPLIED');
+  assertEventBatchMatchesSchema(result.batch);
+
+  const lethalState = activeState('match-blaze-rod-lethal', ['alice', 'bob'], ['nether', 'cave_dark_forest']);
+  const lethalActorIndex = lethalState.activePlayerIndex;
+  const lethalOpponentIndex = lethalActorIndex === 0 ? 1 : 0;
+  const lethalActor = lethalState.players[lethalActorIndex]!;
+  lethalActor.hand = ['tk_013'];
+  lethalActor.redstone = 1;
+  placeUnit(lethalState, lethalOpponentIndex, 'cd_002', 0, 'object-30', 1);
+  lethalState.players[lethalOpponentIndex]!.battlefield[0]!.health = 1;
+  const lethal = BiomeRivalsRules.applyCommand(lethalState, lethalActor.playerId,
+    playCommand('blaze-rod-lethal', 0, 'tk_013', 'UNIT', 'object-30'));
+  TestHarness.equal(lethal.accepted, true, JSON.stringify(lethal));
+  if (!lethal.accepted) return;
+  TestHarness.equal(lethal.state.players[lethalOpponentIndex]!.battlefield.length, 0);
+  TestHarness.equal(lethal.batch.events.some(function (event): boolean {
+    return event.type === 'OBJECT_STATUS_APPLIED';
+  }), false);
+  assertEventBatchMatchesSchema(lethal.batch);
+});
+
 TestHarness.test('Echoing Darkness applies one public player status and draws a card', function (): void {
   const state = activeState('match-echoing-darkness', ['alice', 'bob'], ['cave_dark_forest', 'plains_forest']);
   const actorIndex = state.activePlayerIndex;

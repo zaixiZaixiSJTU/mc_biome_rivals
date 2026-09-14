@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using BiomeRivals.Content;
+using BiomeRivals.Core;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -19,7 +20,8 @@ namespace BiomeRivals.Demo
         Mansion,
         IceSpire,
         SnowHut,
-        EndCrystal
+        EndCrystal,
+        Blaze
     }
 
     public sealed class DemoBattlefield3D : MonoBehaviour
@@ -35,17 +37,19 @@ namespace BiomeRivals.Demo
         private readonly Dictionary<string, Material> _materials = new Dictionary<string, Material>(StringComparer.Ordinal);
         private readonly Dictionary<string, SlotMarker> _slotMarkers = new Dictionary<string, SlotMarker>(StringComparer.Ordinal);
         private readonly List<Floater> _floaters = new List<Floater>();
+        private readonly List<MeshRenderer> _playerGroundRenderers = new List<MeshRenderer>();
+        private readonly List<MeshRenderer> _opponentGroundRenderers = new List<MeshRenderer>();
+        private readonly List<MeshRenderer> _playerFoundationRenderers = new List<MeshRenderer>();
+        private readonly List<MeshRenderer> _opponentFoundationRenderers = new List<MeshRenderer>();
         private readonly RaycastHit[] _slotRaycastHits = new RaycastHit[64];
         [SerializeField] private Shader blockShader;
-        [SerializeField] private Shader backdropShader;
         [SerializeField] private Shader groundSurfaceShader;
-        [SerializeField] private Texture2D illustratedBackdrop;
         private Transform _terrainRoot;
         private Transform _piecesRoot;
+        private Transform _decorRoot;
         private Camera _camera;
         private Light _opponentEnvironmentLight;
         private Light _playerEnvironmentLight;
-        private Material _backdropMaterial;
         private bool _built;
         private string _pieceSignature = string.Empty;
         private string _playerFactionId = "plains_forest";
@@ -55,12 +59,10 @@ namespace BiomeRivals.Demo
         public string PlayerFactionId => _playerFactionId;
         public string OpponentFactionId => _opponentFactionId;
 
-        public void Configure(Shader worldShader, Shader unlitBackdropShader, Shader interactiveGroundShader, Texture2D backdrop)
+        public void Configure(Shader worldShader, Shader interactiveGroundShader)
         {
             blockShader = worldShader;
-            backdropShader = unlitBackdropShader;
             groundSurfaceShader = interactiveGroundShader;
-            illustratedBackdrop = backdrop;
         }
 
         public void BuildNow()
@@ -70,11 +72,9 @@ namespace BiomeRivals.Demo
             CreateRoots();
             CreateMaterials();
             ConfigureWorld();
-            BuildIllustratedBackdrop();
-            if (illustratedBackdrop == null) BuildTerrain();
+            BuildTerrain();
             BuildSlotPads();
-            if (illustratedBackdrop == null) BuildBiomeDecor();
-            if (illustratedBackdrop != null) SetBattlefieldThemes(_playerFactionId, _opponentFactionId);
+            RebuildDecor();
         }
 
         public void SetBattlefieldThemes(string playerFactionId, string opponentFactionId)
@@ -82,27 +82,45 @@ namespace BiomeRivals.Demo
             BuildNow();
             var playerTheme = DemoBattlefieldThemeCatalog.Get(playerFactionId);
             var opponentTheme = DemoBattlefieldThemeCatalog.Get(opponentFactionId);
-            var playerTexture = DemoBattlefieldThemeCatalog.LoadNearTexture(playerFactionId);
-            var opponentTexture = DemoBattlefieldThemeCatalog.LoadFarTexture(opponentFactionId);
+            var playerTexture = DemoWorldAssetProvider.LoadBlockTexture(playerTheme.PrimaryTextureKey);
+            var opponentTexture = DemoWorldAssetProvider.LoadBlockTexture(opponentTheme.PrimaryTextureKey);
 
             _playerFactionId = playerFactionId;
             _opponentFactionId = opponentFactionId;
-            if (_backdropMaterial != null)
-            {
-                _backdropMaterial.SetTexture("_PlayerTex", playerTexture);
-                _backdropMaterial.SetTexture("_OpponentTex", opponentTexture);
-                _backdropMaterial.SetTexture("_NeutralTex", illustratedBackdrop);
-                _backdropMaterial.SetColor("_PlayerTint", Color.white);
-                _backdropMaterial.SetColor("_OpponentTint", Color.white);
-            }
 
             foreach (var marker in _slotMarkers.Values)
             {
                 marker.SurfaceMaterial.mainTexture = marker.Player ? playerTexture : opponentTexture;
+                var markerTheme = marker.Player ? playerTheme : opponentTheme;
+                DemoWorldAssetProvider.SetMaterialColor(marker.SurfaceMaterial, markerTheme.GroundColor);
             }
 
             if (_playerEnvironmentLight != null) _playerEnvironmentLight.color = playerTheme.EnvironmentLight;
             if (_opponentEnvironmentLight != null) _opponentEnvironmentLight.color = opponentTheme.EnvironmentLight;
+            ApplyTerrainThemes();
+            RebuildDecor();
+        }
+
+        private void ApplyTerrainThemes()
+        {
+            var playerTheme = DemoBattlefieldThemeCatalog.Get(_playerFactionId);
+            var opponentTheme = DemoBattlefieldThemeCatalog.Get(_opponentFactionId);
+            var playerGround = GetTerrainMaterial("terrain_ground_" + _playerFactionId, playerTheme.GroundColor, playerTheme.PrimaryTextureKey);
+            var opponentGround = GetTerrainMaterial("terrain_ground_" + _opponentFactionId, opponentTheme.GroundColor, opponentTheme.PrimaryTextureKey);
+            var playerFoundation = GetTerrainMaterial("terrain_foundation_" + _playerFactionId, playerTheme.FoundationColor, playerTheme.FoundationTextureKey);
+            var opponentFoundation = GetTerrainMaterial("terrain_foundation_" + _opponentFactionId, opponentTheme.FoundationColor, opponentTheme.FoundationTextureKey);
+            foreach (var renderer in _playerGroundRenderers) renderer.sharedMaterial = playerGround;
+            foreach (var renderer in _opponentGroundRenderers) renderer.sharedMaterial = opponentGround;
+            foreach (var renderer in _playerFoundationRenderers) renderer.sharedMaterial = playerFoundation;
+            foreach (var renderer in _opponentFoundationRenderers) renderer.sharedMaterial = opponentFoundation;
+        }
+
+        private Material GetTerrainMaterial(string key, Color fallback, string textureKey)
+        {
+            if (_materials.TryGetValue(key, out var material)) return material;
+            material = DemoWorldAssetProvider.CreateBlockMaterial("Demo_" + key, fallback, textureKey, Color.black, blockShader);
+            _materials[key] = material;
+            return material;
         }
 
         public Vector3 GetSlotWorldPosition(bool player, DemoSlotKind kind, int index)
@@ -194,6 +212,14 @@ namespace BiomeRivals.Demo
             UpdateSlotMarker(marker, Time.unscaledTime, 0f);
         }
 
+        public void SetSlotBurning(bool player, DemoSlotKind kind, int index, bool burning)
+        {
+            BuildNow();
+            if (!_slotMarkers.TryGetValue(SlotKey(player, kind, index), out var marker)) return;
+            marker.Burning = burning;
+            UpdateSlotMarker(marker, Time.unscaledTime, 0f);
+        }
+
         public void SetSlotHovered(bool player, DemoSlotKind kind, int index, bool hovered)
         {
             BuildNow();
@@ -261,7 +287,9 @@ namespace BiomeRivals.Demo
                 .OrderBy(value => value.Player ? 0 : 1)
                 .ThenBy(value => value.SlotKind)
                 .ThenBy(value => value.SlotIndex)
-                .Select(value => $"{value.InstanceId}:{value.CardId}:{value.SlotKind}:{value.SlotIndex}:{value.OccupiedSlots}"));
+                .Select(value => $"{value.InstanceId}:{value.CardId}:{value.SlotKind}:{value.SlotIndex}:{value.OccupiedSlots}:" +
+                    string.Join(",", (value.Statuses ?? Array.Empty<BattlefieldStatusStateDto>())
+                        .Where(status => status != null).Select(status => status.statusId).OrderBy(statusId => statusId, StringComparer.Ordinal))));
             if (signature == _pieceSignature) return;
             _pieceSignature = signature;
             ClearChildren(_piecesRoot);
@@ -312,6 +340,8 @@ namespace BiomeRivals.Demo
                         ? Color.Lerp(Hex("#477A8C"), Hex("#E5FAFF"), pulse)
                     : marker.EngineReadyKind == DemoEngineReadyKind.EndCrystal
                         ? Color.Lerp(Hex("#5A2B78"), Hex("#F2A4FF"), pulse)
+                    : marker.EngineReadyKind == DemoEngineReadyKind.Blaze
+                        ? Color.Lerp(Hex("#9A3B0A"), Hex("#FFD35C"), pulse)
                         : Color.Lerp(Hex("#8E3F72"), Hex("#F08FB4"), pulse);
             var highlightColor = rejectedPreview
                 ? Color.Lerp(Hex("#B41635"), Hex("#FF3157"), pulse)
@@ -323,6 +353,8 @@ namespace BiomeRivals.Demo
                              : Color.Lerp(Hex("#3D9E8F"), Hex("#79E0CB"), pulse)
                     : marker.EndPhaseThreat
                         ? Color.Lerp(Hex("#8A2E24"), Hex("#FF8865"), pulse)
+                     : marker.Burning
+                         ? Color.Lerp(Hex("#B92D08"), Hex("#FFB52E"), pulse)
                      : marker.Poisoned
                          ? Color.Lerp(Hex("#00883D"), Hex("#00FF70"), pulse)
                      : marker.AuraLayers > 0
@@ -342,6 +374,8 @@ namespace BiomeRivals.Demo
                              : (marker.Occupied ? 0.48f + pulse * 0.18f : 0.18f + pulse * 0.12f)
                         : marker.EndPhaseThreat
                             ? 0.22f + pulse * 0.10f
+                         : marker.Burning
+                             ? 0.68f + pulse * 0.22f
                          : marker.Poisoned
                              ? 0.62f + pulse * 0.20f
                          : marker.AuraLayers > 0
@@ -368,6 +402,7 @@ namespace BiomeRivals.Demo
         {
             _terrainRoot = NewRoot("BattlefieldGeometry");
             _piecesRoot = NewRoot("BattlefieldPieces");
+            _decorRoot = NewRoot("BattlefieldDecor");
         }
 
         private Transform NewRoot(string name)
@@ -430,45 +465,17 @@ namespace BiomeRivals.Demo
 
             var sun = new GameObject("BlockSun", typeof(Light));
             sun.transform.SetParent(transform, false);
-            sun.transform.rotation = Quaternion.Euler(48f, -32f, 0);
+            // Lower elevation produces long, readable shadows across the voxel field.
+            sun.transform.rotation = Quaternion.Euler(38f, -30f, 0);
             var sunLight = sun.GetComponent<Light>();
             sunLight.type = LightType.Directional;
             sunLight.color = Hex("#F4D7B0");
-            sunLight.intensity = 1.15f;
+            sunLight.intensity = 1.2f;
             sunLight.shadows = LightShadows.Soft;
+            sunLight.shadowStrength = 0.82f;
 
             _opponentEnvironmentLight = CreatePointLight("OpponentEnvironmentLight", new Vector3(0, 4.2f, 5.5f), Hex("#FF6A2B"), 7.5f, 2.4f);
             _playerEnvironmentLight = CreatePointLight("PlayerEnvironmentLight", new Vector3(-3.5f, 4.8f, -4.5f), Hex("#8FC7B7"), 8f, 1.25f);
-        }
-
-        private void BuildIllustratedBackdrop()
-        {
-            if (illustratedBackdrop == null) return;
-            if (backdropShader == null) throw new MissingReferenceException("The illustrated battlefield backdrop shader is not configured.");
-            RenderSettings.fog = false;
-
-            _backdropMaterial = new Material(backdropShader) { name = "DemoIllustratedBattlefield" };
-            _backdropMaterial.SetTexture("_NeutralTex", illustratedBackdrop);
-            _materials["illustrated_backdrop"] = _backdropMaterial;
-
-            var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            quad.name = "IllustratedBattlefieldBackdrop";
-            quad.transform.SetParent(_camera.transform, false);
-            const float backdropDistance = 45f;
-            quad.transform.localPosition = new Vector3(0, 0, backdropDistance);
-            quad.transform.localRotation = Quaternion.identity;
-            var backdropHeight = 2f * backdropDistance * Mathf.Tan(_camera.fieldOfView * 0.5f * Mathf.Deg2Rad);
-            quad.transform.localScale = new Vector3(backdropHeight * _camera.aspect, backdropHeight, 1f);
-            var renderer = quad.GetComponent<MeshRenderer>();
-            renderer.sharedMaterial = _backdropMaterial;
-            renderer.shadowCastingMode = ShadowCastingMode.Off;
-            renderer.receiveShadows = false;
-            var collider = quad.GetComponent<Collider>();
-            if (collider != null)
-            {
-                if (Application.isPlaying) Destroy(collider);
-                else DestroyImmediate(collider);
-            }
         }
 
         private Light CreatePointLight(string name, Vector3 position, Color color, float range, float intensity)
@@ -487,37 +494,52 @@ namespace BiomeRivals.Demo
 
         private void BuildTerrain()
         {
-            CreateBlock(_terrainRoot, "MeadowFoundation", new Vector3(0, -0.68f, -3.35f), new Vector3(17.6f, 1.25f, 6.65f), _materials["dirt"]);
-            CreateBlock(_terrainRoot, "NetherFoundation", new Vector3(0, -0.58f, 3.35f), new Vector3(17.6f, 1.45f, 6.65f), _materials["netherrack"]);
+            var playerTheme = DemoBattlefieldThemeCatalog.Get(_playerFactionId);
+            var opponentTheme = DemoBattlefieldThemeCatalog.Get(_opponentFactionId);
+            var playerGround = GetTerrainMaterial("terrain_ground_" + _playerFactionId, playerTheme.GroundColor, playerTheme.PrimaryTextureKey);
+            var opponentGround = GetTerrainMaterial("terrain_ground_" + _opponentFactionId, opponentTheme.GroundColor, opponentTheme.PrimaryTextureKey);
+            var playerFoundation = GetTerrainMaterial("terrain_foundation_" + _playerFactionId, playerTheme.FoundationColor, playerTheme.FoundationTextureKey);
+            var opponentFoundation = GetTerrainMaterial("terrain_foundation_" + _opponentFactionId, opponentTheme.FoundationColor, opponentTheme.FoundationTextureKey);
+            var playerSecondary = GetTerrainMaterial("terrain_secondary_" + _playerFactionId, playerTheme.GroundColor, playerTheme.SecondaryTextureKey);
+            var opponentSecondary = GetTerrainMaterial("terrain_secondary_" + _opponentFactionId, opponentTheme.GroundColor, opponentTheme.SecondaryTextureKey);
+            var playerTertiary = GetTerrainMaterial("terrain_tertiary_" + _playerFactionId, playerTheme.GroundColor, playerTheme.TertiaryTextureKey);
+            var opponentTertiary = GetTerrainMaterial("terrain_tertiary_" + _opponentFactionId, opponentTheme.GroundColor, opponentTheme.TertiaryTextureKey);
 
-            for (var x = -8; x <= 8; x++)
+            _playerFoundationRenderers.Add(CreateBlock(_terrainRoot, "PlayerFoundation", new Vector3(0, -0.68f, -4.55f), new Vector3(24.4f, 1.25f, 9.6f), playerFoundation).GetComponent<MeshRenderer>());
+            _opponentFoundationRenderers.Add(CreateBlock(_terrainRoot, "OpponentFoundation", new Vector3(0, -0.58f, 4.65f), new Vector3(24.4f, 1.45f, 9.6f), opponentFoundation).GetComponent<MeshRenderer>());
+
+            for (var x = -11; x <= 11; x++)
             {
-                for (var z = -6; z <= -1; z++)
+                for (var z = -8; z <= -1; z++)
                 {
                     var hash = Mathf.Abs(x * 31 + z * 17);
-                    var material = hash % 9 == 0 ? _materials["oak"] : hash % 5 == 0 ? _materials["moss"] : _materials["grass"];
-                    var height = hash % 13 == 0 ? 0.16f : 0.08f;
-                    CreateBlock(_terrainRoot, $"Meadow_{x}_{z}", new Vector3(x, height * 0.5f, z + 0.35f), new Vector3(1.02f, height, 1.02f), material);
+                    var material = hash % 9 == 0 ? playerTertiary : hash % 5 == 0 ? playerSecondary : playerGround;
+                    // Rows near the rim rise slightly, giving the field a gentle terrace.
+                    var height = (hash % 13 == 0 ? 0.16f : 0.08f) + (z <= -7 ? 0.07f : 0f);
+                    _playerGroundRenderers.Add(CreateBlock(_terrainRoot, $"Ground_Player_{x}_{z}", new Vector3(x, height * 0.5f, z + 0.35f), new Vector3(1.02f, height, 1.02f), material).GetComponent<MeshRenderer>());
                 }
-                for (var z = 1; z <= 6; z++)
+                for (var z = 1; z <= 8; z++)
                 {
                     var hash = Mathf.Abs(x * 29 + z * 19);
-                    var material = hash % 7 == 0 ? _materials["nether"] : hash % 5 == 0 ? _materials["basalt"] : _materials["blackstone"];
-                    var height = hash % 11 == 0 ? 0.23f : 0.15f;
-                    CreateBlock(_terrainRoot, $"Nether_{x}_{z}", new Vector3(x, height * 0.5f + 0.06f, z - 0.35f), new Vector3(1.02f, height, 1.02f), material);
+                    var material = hash % 9 == 0 ? opponentTertiary : hash % 5 == 0 ? opponentSecondary : opponentGround;
+                    var height = (hash % 11 == 0 ? 0.23f : 0.15f) + (z >= 7 ? 0.07f : 0f);
+                    _opponentGroundRenderers.Add(CreateBlock(_terrainRoot, $"Ground_Opponent_{x}_{z}", new Vector3(x, height * 0.5f + 0.06f, z - 0.35f), new Vector3(1.02f, height, 1.02f), material).GetComponent<MeshRenderer>());
                 }
             }
 
-            for (var x = -8; x <= 8; x++)
+            var gravel = GetWorldMaterial("decor_gravel", "gravel", Hex("#8A8781"));
+            for (var x = -11; x <= 11; x++)
             {
                 CreateBlock(_terrainRoot, "River_" + x, new Vector3(x, 0.05f, 0), new Vector3(1.02f, 0.13f, 0.72f), _materials["water"]);
-                if (x % 4 == 0) CreateBlock(_terrainRoot, "RiverStone_" + x, new Vector3(x + 0.35f, 0.13f, 0), new Vector3(0.28f, 0.18f, 0.74f), _materials["stone"]);
+                if (x % 3 == 0) CreateBlock(_terrainRoot, "RiverStone_" + x, new Vector3(x + 0.35f, 0.13f, 0), new Vector3(0.28f, 0.18f, 0.74f), _materials["stone"]);
+                if (x % 4 == 1) CreateBlock(_terrainRoot, "RiverBank_" + x, new Vector3(x, 0.08f, -0.62f), new Vector3(1.02f, 0.11f, 0.36f), gravel);
+                else if (x % 4 == 3) CreateBlock(_terrainRoot, "RiverBank_" + x, new Vector3(x, 0.08f, 0.62f), new Vector3(1.02f, 0.11f, 0.36f), gravel);
             }
 
-            CreateBlock(_terrainRoot, "LeftRim", new Vector3(-8.82f, 0.15f, 0), new Vector3(0.55f, 0.8f, 13.8f), _materials["stone"]);
-            CreateBlock(_terrainRoot, "RightRim", new Vector3(8.82f, 0.15f, 0), new Vector3(0.55f, 0.8f, 13.8f), _materials["stone"]);
-            CreateBlock(_terrainRoot, "FarRim", new Vector3(0, 0.28f, 6.72f), new Vector3(18.2f, 1.1f, 0.55f), _materials["basalt"]);
-            CreateBlock(_terrainRoot, "NearRim", new Vector3(0, 0.08f, -6.72f), new Vector3(18.2f, 0.75f, 0.55f), _materials["oak"]);
+            CreateBlock(_terrainRoot, "LeftRim", new Vector3(-11.65f, 0.15f, 0), new Vector3(0.6f, 0.8f, 17.9f), _materials["stone"]);
+            CreateBlock(_terrainRoot, "RightRim", new Vector3(11.65f, 0.15f, 0), new Vector3(0.6f, 0.8f, 17.9f), _materials["stone"]);
+            _opponentFoundationRenderers.Add(CreateBlock(_terrainRoot, "FarRim", new Vector3(0, 0.28f, 8.6f), new Vector3(24.6f, 1.1f, 0.6f), opponentFoundation).GetComponent<MeshRenderer>());
+            _playerFoundationRenderers.Add(CreateBlock(_terrainRoot, "NearRim", new Vector3(0, 0.08f, -8.6f), new Vector3(24.6f, 0.75f, 0.6f), playerFoundation).GetComponent<MeshRenderer>());
         }
 
         private void BuildSlotPads()
@@ -538,14 +560,15 @@ namespace BiomeRivals.Demo
         {
             var position = GetSlotWorldPosition(player, kind, index);
             var markerRoot = NewChildRoot(_terrainRoot, $"SlotMarker_{(player ? "Player" : "Opponent")}_{kind}_{index}", position);
-            var groundTexture = illustratedBackdrop != null
-                ? illustratedBackdrop
-                : DemoWorldAssetProvider.LoadBlockTexture(player ? "grass_block_top" : "polished_blackstone_bricks");
+            var factionTheme = DemoBattlefieldThemeCatalog.Get(player ? _playerFactionId : _opponentFactionId);
+            var groundTexture = DemoWorldAssetProvider.LoadBlockTexture(factionTheme.PrimaryTextureKey);
             var surfaceMaterial = DemoWorldAssetProvider.CreateGroundSurfaceMaterial(
                 $"DemoGroundSurface_{(player ? "Player" : "Opponent")}_{kind}_{index}",
                 groundTexture,
-                illustratedBackdrop != null,
+                false,
                 groundSurfaceShader);
+            // Several vanilla block textures (grass tops, sea lanterns) ship grayscale and rely on a biome tint.
+            DemoWorldAssetProvider.SetMaterialColor(surfaceMaterial, factionTheme.GroundColor);
             var riserMaterial = DemoWorldAssetProvider.CreateBlockMaterial(
                 $"DemoGroundRiser_{(player ? "Player" : "Opponent")}_{kind}_{index}",
                 player ? Hex("#3F3425") : Hex("#392526"),
@@ -745,30 +768,170 @@ namespace BiomeRivals.Demo
 
         private static void SetGroundHighlight(Material material, Color color, float strength)
         {
-            if (material.HasProperty("_Color")) material.SetColor("_Color", Color.white);
             if (material.HasProperty("_HighlightColor")) material.SetColor("_HighlightColor", color);
             if (material.HasProperty("_HighlightStrength")) material.SetFloat("_HighlightStrength", strength);
         }
 
-        private void BuildBiomeDecor()
+        /// <summary>
+        /// Faction decorations live in their own subtree and are rebuilt on every
+        /// theme change, so the scenery always matches the selected factions.
+        /// </summary>
+        private void RebuildDecor()
         {
-            for (var z = 2; z <= 6; z += 2)
-            {
-                CreateBlock(_terrainRoot, "BasaltPillarL", new Vector3(-7.85f, 0.65f, z - 0.25f), new Vector3(0.72f, 1.6f + z * 0.08f, 0.72f), _materials["basalt"]);
-                CreateBlock(_terrainRoot, "BasaltPillarR", new Vector3(7.85f, 0.65f, z - 0.25f), new Vector3(0.72f, 1.45f + z * 0.07f, 0.72f), _materials["basalt"]);
-                CreateBlock(_terrainRoot, "EmberL", new Vector3(-7.82f, 1.48f + z * 0.04f, z - 0.25f), new Vector3(0.32f, 0.32f, 0.32f), _materials["ember"]);
-            }
-
-            CreateTree(new Vector3(-7.5f, 0.35f, -4.7f), 1.0f);
-            CreateTree(new Vector3(7.45f, 0.35f, -3.9f), 0.85f);
-            CreateTree(new Vector3(-7.7f, 0.35f, -1.9f), 0.72f);
-            CreateBlock(_terrainRoot, "MagmaPool", new Vector3(6.8f, 0.27f, 5.3f), new Vector3(1.4f, 0.13f, 1.1f), _materials["magma"]);
+            if (_decorRoot == null) return;
+            ClearChildren(_decorRoot);
+            BuildSideDecor(true, _playerFactionId);
+            BuildSideDecor(false, _opponentFactionId);
         }
 
-        private void CreateTree(Vector3 position, float scale)
+        private void BuildSideDecor(bool player, string factionId)
         {
-            CreateBlock(_terrainRoot, "OakTrunk", position + new Vector3(0, 0.75f * scale, 0), new Vector3(0.48f, 1.5f, 0.48f) * scale, _materials["oak"]);
-            CreateBlock(_terrainRoot, "OakCrown", position + new Vector3(0, 1.65f * scale, 0), new Vector3(1.55f, 1.05f, 1.55f) * scale, _materials["leaf"]);
+            var side = player ? -1f : 1f;
+            var theme = DemoBattlefieldThemeCatalog.Get(factionId);
+            switch (factionId)
+            {
+                case "plains_forest": BuildForestDecor(player, side); break;
+                case "desert_badlands": BuildCactusDecor(player, side); break;
+                case "snow_ice": BuildIceSpikeDecor(player, side); break;
+                case "cave_dark_forest": BuildBoulderDecor(player, side); break;
+                case "ocean_river": BuildCoralDecor(player, side); break;
+                case "nether": BuildNetherDecor(player, side); break;
+                case "end": BuildEndDecor(player, side); break;
+            }
+            BuildLamp(player, side, theme.EnvironmentLight, -7.3f);
+            BuildLamp(player, side, theme.EnvironmentLight, 7.3f);
+        }
+
+        private void BuildForestDecor(bool player, float side)
+        {
+            var trunk = GetWorldMaterial("decor_oak_log", "oak_log", Hex("#6B5433"));
+            var sideName = player ? "Player" : "Opponent";
+            BuildTree("ForestTree_" + sideName + "_0", new Vector3(-8.7f, 0.1f, side * 5.1f), 1.05f, trunk, _materials["leaf"]);
+            BuildTree("ForestTree_" + sideName + "_1", new Vector3(-7.6f, 0.1f, side * 7.1f), 0.8f, trunk, _materials["leaf"]);
+            BuildTree("ForestTree_" + sideName + "_2", new Vector3(8.5f, 0.1f, side * 5.9f), 0.95f, trunk, _materials["leaf"]);
+            CreateBlock(_decorRoot, "ForestBush_" + sideName + "_0", new Vector3(-6.8f, 0.14f, side * 7.4f), new Vector3(0.7f, 0.5f, 0.7f), _materials["leaf"]);
+            CreateBlock(_decorRoot, "ForestBush_" + sideName + "_1", new Vector3(6.9f, 0.14f, side * 7.6f), new Vector3(0.6f, 0.42f, 0.6f), _materials["leaf"]);
+        }
+
+        private void BuildTree(string name, Vector3 position, float scale, Material trunk, Material crown)
+        {
+            CreateBlock(_decorRoot, name + "Trunk", position + new Vector3(0, 0.72f * scale, 0), new Vector3(0.44f, 1.45f, 0.44f) * scale, trunk);
+            CreateBlock(_decorRoot, name + "Crown", position + new Vector3(0, 1.6f * scale, 0), new Vector3(1.5f, 1.05f, 1.5f) * scale, crown);
+        }
+
+        private void BuildCactusDecor(bool player, float side)
+        {
+            var sideName = player ? "Player" : "Opponent";
+            var cactus = GetWorldMaterial("decor_cactus", "cactus_side", Hex("#4F8A3A"));
+            var cactusTop = GetWorldMaterial("decor_cactus_top", "cactus_top", Hex("#7AAE50"));
+            var cacti = new[] { (-8.6f, 5.2f, 1.3f), (-7.5f, 7.0f, 0.9f), (8.4f, 5.6f, 1.5f), (9.3f, 7.2f, 1.0f) };
+            for (var index = 0; index < cacti.Length; index++)
+            {
+                var (x, zBase, height) = cacti[index];
+                var z = side * zBase;
+                CreateBlock(_decorRoot, "Cactus_" + sideName + "_" + index, new Vector3(x, 0.32f + height * 0.5f, z), new Vector3(0.46f, height, 0.46f), cactus);
+                CreateBlock(_decorRoot, "CactusTop_" + sideName + "_" + index, new Vector3(x, 0.32f + height, z), new Vector3(0.48f, 0.08f, 0.48f), cactusTop);
+            }
+            var sandstone = GetWorldMaterial("decor_sandstone", "sandstone", Hex("#D8BE78"));
+            CreateBlock(_decorRoot, "SandMound_" + sideName + "_0", new Vector3(6.8f, 0.14f, side * 7.5f), new Vector3(1.0f, 0.24f, 0.8f), sandstone);
+        }
+
+        private void BuildIceSpikeDecor(bool player, float side)
+        {
+            var sideName = player ? "Player" : "Opponent";
+            var ice = GetWorldMaterial("decor_ice", "packed_ice", Hex("#8FC6DB"));
+            var snow = GetWorldMaterial("decor_snow", "snow_block", Hex("#E7F1F3"));
+            var spikes = new[] { (-8.5f, 5.4f, 1.9f), (8.5f, 5.0f, 2.35f), (9.3f, 6.9f, 1.35f), (-7.4f, 7.2f, 1.1f) };
+            for (var index = 0; index < spikes.Length; index++)
+            {
+                var (x, zBase, height) = spikes[index];
+                var z = side * zBase;
+                CreateBlock(_decorRoot, "IceSpike_" + sideName + "_" + index, new Vector3(x, 0.1f + height * 0.5f, z), new Vector3(0.52f, height, 0.52f), ice);
+                CreateBlock(_decorRoot, "IceSpikeTop_" + sideName + "_" + index, new Vector3(x, 0.1f + height + 0.14f, z), new Vector3(0.3f, 0.3f, 0.3f), snow);
+            }
+            CreateBlock(_decorRoot, "SnowMound_" + sideName, new Vector3(6.9f, 0.12f, side * 7.6f), new Vector3(0.9f, 0.2f, 0.8f), snow);
+        }
+
+        private void BuildBoulderDecor(bool player, float side)
+        {
+            var sideName = player ? "Player" : "Opponent";
+            var mossy = _materials["moss"];
+            var stone = _materials["stone"];
+            var boulders = new[] { (-8.5f, 5.3f, 0.9f, mossy), (8.6f, 5.6f, 1.1f, stone), (-7.5f, 7.0f, 0.7f, stone), (9.2f, 7.3f, 0.8f, mossy) };
+            for (var index = 0; index < boulders.Length; index++)
+            {
+                var (x, zBase, size, material) = boulders[index];
+                CreateBlock(_decorRoot, "Boulder_" + sideName + "_" + index, new Vector3(x, size * 0.4f, side * zBase), new Vector3(size, size * 0.8f, size), material);
+            }
+            var darkTrunk = GetWorldMaterial("decor_dark_oak", "dark_oak_planks", Hex("#4A3424"));
+            CreateBlock(_decorRoot, "CaveTrunk_" + sideName, new Vector3(-8.9f, 0.8f, side * 6.4f), new Vector3(0.4f, 1.6f, 0.4f), darkTrunk);
+        }
+
+        private void BuildCoralDecor(bool player, float side)
+        {
+            var sideName = player ? "Player" : "Opponent";
+            var coral = GetWorldMaterial("decor_coral", "tube_coral_block", Hex("#6E6FCF"));
+            var lantern = GetWorldMaterial("decor_lantern", "sea_lantern", Hex("#D8F2D2"));
+            var stacks = new[] { (-8.5f, 5.3f, 2), (8.6f, 5.7f, 3), (-7.6f, 7.1f, 1), (9.3f, 7.0f, 2) };
+            for (var index = 0; index < stacks.Length; index++)
+            {
+                var (x, zBase, cubes) = stacks[index];
+                for (var layer = 0; layer < cubes; layer++)
+                {
+                    CreateBlock(_decorRoot, "CoralStack_" + sideName + "_" + index + "_" + layer,
+                        new Vector3(x, 0.35f + layer * 0.5f, side * zBase), new Vector3(0.5f, 0.5f, 0.5f), coral);
+                }
+            }
+            CreateBlock(_decorRoot, "SeaLanternDecor_" + sideName, new Vector3(6.9f, 0.25f, side * 7.5f), new Vector3(0.5f, 0.5f, 0.5f), lantern);
+        }
+
+        private void BuildNetherDecor(bool player, float side)
+        {
+            var sideName = player ? "Player" : "Opponent";
+            var basalt = GetWorldMaterial("decor_basalt", "basalt_top", Hex("#333238"));
+            for (var index = 0; index < 4; index++)
+            {
+                var x = index % 2 == 0 ? -8.5f : 8.5f;
+                var zBase = index < 2 ? 5.2f : 7.0f;
+                var height = 1.5f + index * 0.22f;
+                CreateBlock(_decorRoot, "BasaltPillar_" + sideName + "_" + index, new Vector3(x, 0.65f, side * zBase), new Vector3(0.72f, height, 0.72f), basalt);
+                CreateBlock(_decorRoot, "Ember_" + sideName + "_" + index, new Vector3(x, 0.65f + height * 0.5f, side * zBase), new Vector3(0.3f, 0.3f, 0.3f), _materials["ember"]);
+            }
+            CreateBlock(_decorRoot, "MagmaPool_" + sideName, new Vector3(6.8f, 0.27f, side * 5.4f), new Vector3(1.4f, 0.13f, 1.1f), _materials["magma"]);
+        }
+
+        private void BuildEndDecor(bool player, float side)
+        {
+            var sideName = player ? "Player" : "Opponent";
+            var obsidian = GetWorldMaterial("decor_obsidian", "obsidian", Hex("#17121E"));
+            var purpur = GetWorldMaterial("decor_purpur", "purpur_block", Hex("#A878AE"));
+            var pillars = new[] { (-8.5f, 5.3f, 2.1f), (8.6f, 5.6f, 1.6f), (-7.6f, 7.1f, 1.2f) };
+            for (var index = 0; index < pillars.Length; index++)
+            {
+                var (x, zBase, height) = pillars[index];
+                CreateBlock(_decorRoot, "ObsidianPillar_" + sideName + "_" + index, new Vector3(x, 0.1f + height * 0.5f, side * zBase), new Vector3(0.6f, height, 0.6f), obsidian);
+            }
+            CreateBlock(_decorRoot, "PurpurBlock_" + sideName, new Vector3(9.2f, 0.4f, side * 7.2f), new Vector3(0.7f, 0.6f, 0.7f), purpur);
+        }
+
+        private void BuildLamp(bool player, float side, Color glowColor, float x)
+        {
+            var sideName = player ? "Player" : "Opponent";
+            var corner = x < 0 ? "L" : "R";
+            var post = GetWorldMaterial("decor_basalt", "basalt_top", Hex("#333238"));
+            var glowstone = GetWorldMaterial("decor_glowstone", "glowstone", Hex("#F5D76E"));
+            var z = side * 4.9f;
+            CreateBlock(_decorRoot, "DecorLamp_" + sideName + "_" + corner, new Vector3(x, 0.5f, z), new Vector3(0.2f, 0.9f, 0.2f), post);
+            CreateBlock(_decorRoot, "DecorLampHead_" + sideName + "_" + corner, new Vector3(x, 1.08f, z), new Vector3(0.34f, 0.34f, 0.34f), glowstone);
+            var lampLight = new GameObject("DecorLight_" + sideName + "_" + corner, typeof(Light));
+            lampLight.transform.SetParent(_decorRoot, false);
+            lampLight.transform.localPosition = new Vector3(x, 1.7f, z);
+            var light = lampLight.GetComponent<Light>();
+            light.type = LightType.Point;
+            light.color = glowColor;
+            light.range = 5.5f;
+            light.intensity = 0.85f;
+            light.shadows = LightShadows.None;
         }
 
         private void CreateSidePieces(bool player, IReadOnlyList<DemoBattlefieldObject> objects, CardContentRegistry registry)
@@ -811,6 +974,7 @@ namespace BiomeRivals.Demo
                 instance.name = "Piece_" + battlefieldObject.InstanceId + "_" + cardId;
                 instance.transform.localPosition = position;
                 instance.transform.localRotation = Quaternion.Euler(0, player ? 0 : 180, 0);
+                if (battlefieldObject.HasStatus("FIRE")) BuildFireStatusEffect(instance.transform, battlefieldObject.InstanceId);
                 return;
             }
 
@@ -845,14 +1009,27 @@ namespace BiomeRivals.Demo
                 else BuildBlockStructure(root, material, theme.Accent, footprintWidth);
             }
             else BuildBlockCreature(root, material, theme.Accent, cardId, player, battlefieldObject.SlotIndex);
+            if (battlefieldObject.HasStatus("FIRE")) BuildFireStatusEffect(root, battlefieldObject.InstanceId);
+        }
+
+        private void BuildFireStatusEffect(Transform parent, string instanceId)
+        {
+            var root = NewChildRoot(parent, "FireStatusFx", Vector3.zero);
+            var ember = GetAccentMaterial("status_fire_ember", Hex("#FF5A12"));
+            var flame = GetAccentMaterial("status_fire_flame", Hex("#FFD04A"));
+            CreateBlock(root, "FlameL", new Vector3(-0.62f, 0.66f, -0.24f), new Vector3(0.24f, 0.94f, 0.24f), ember);
+            CreateBlock(root, "FlameR", new Vector3(0.60f, 0.78f, 0.22f), new Vector3(0.22f, 1.12f, 0.22f), flame);
+            CreateBlock(root, "FlameFront", new Vector3(0.16f, 0.54f, -0.56f), new Vector3(0.26f, 0.76f, 0.26f), flame);
+            CreateBlock(root, "FlameBack", new Vector3(-0.24f, 0.62f, 0.52f), new Vector3(0.22f, 0.84f, 0.22f), ember);
+            CreateBlock(root, "FlameHigh", new Vector3(-0.10f, 1.26f, 0.04f), new Vector3(0.18f, 0.74f, 0.18f), ember);
+            _floaters.Add(new Floater(root, root.localPosition.y, StablePulsePhase(instanceId)));
         }
 
         private void BuildBlockCreature(Transform root, Material material, Color accent, string cardId, bool player, int index)
         {
             if (DemoMinecraftModelFactory.TryGetTextureKey(cardId, out var textureKey))
             {
-                var entityMaterial = GetEntityMaterial(cardId, textureKey, material.color);
-                if (DemoMinecraftModelFactory.TryBuild(root, cardId, player, entityMaterial))
+                if (DemoMinecraftModelFactory.TryBuild(root, cardId, player, GetEntityMaterial))
                 {
                     _floaters.Add(new Floater(root, root.localPosition.y + (cardId == "nt_003" ? 0.12f : 0f), index * 0.9f + (player ? 0f : 2.7f)));
                     return;
@@ -868,11 +1045,14 @@ namespace BiomeRivals.Demo
             _floaters.Add(new Floater(root, root.localPosition.y, index * 0.9f + (player ? 0 : 2.7f)));
         }
 
-        private Material GetEntityMaterial(string cardId, string textureKey, Color fallback)
+        private Material GetEntityMaterial(string textureKey)
         {
-            var key = "entity_" + cardId;
+            var key = "entity_tex_" + textureKey;
             if (_materials.TryGetValue(key, out var material)) return material;
-            material = DemoWorldAssetProvider.CreateEntityMaterial("DemoEntity_" + cardId, fallback, textureKey, blockShader);
+            // Vanilla entity textures are pre-colored; keep the tint white and only
+            // lift fire creatures with an unshaded emissive boost.
+            var emissiveBoost = textureKey == "entity_blaze" || textureKey == "entity_magma_cube" ? 0.3f : 0f;
+            material = DemoWorldAssetProvider.CreateEntityMaterial("DemoEntity_" + textureKey, Color.white, textureKey, null, emissiveBoost);
             _materials[key] = material;
             return material;
         }
@@ -1332,6 +1512,7 @@ namespace BiomeRivals.Demo
             public int AuraLayers;
             public DemoEngineReadyKind EngineReadyKind;
             public bool EndPhaseThreat;
+            public bool Burning;
             public bool Poisoned;
             public bool Hovered;
             public bool Pressed;

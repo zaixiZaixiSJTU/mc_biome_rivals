@@ -1,6 +1,6 @@
 namespace BiomeRivalsRules {
-  export const PROTOCOL_VERSION = 30;
-  export const RULESET_VERSION = 'prototype-0.47';
+  export const PROTOCOL_VERSION = 31;
+  export const RULESET_VERSION = 'prototype-0.48';
 
   export type MatchStatus = 'WAITING' | 'MULLIGAN' | 'ACTIVE' | 'FINISHED';
   export type CommandType = 'MULLIGAN' | 'DEPLOY_CARD' | 'PLAY_CARD' | 'RESOLVE_CHOICE' | 'ENTER_COMBAT' | 'ATTACK' | 'END_TURN' | 'CONCEDE';
@@ -11,7 +11,7 @@ namespace BiomeRivalsRules {
   export type AttackTargetType = 'HERO' | 'UNIT' | 'BUILDING';
   export type CardType = 'UNIT' | 'SPELL' | 'BUILDING' | 'STRUCTURE' | 'EQUIPMENT' | 'MATERIAL';
   export type CardKeyword = 'TAUNT' | 'CHARGE';
-  export type BattlefieldStatusId = 'SLOW' | 'POISON';
+  export type BattlefieldStatusId = 'SLOW' | 'POISON' | 'FIRE';
   export type PlayerStatusId = 'DARK';
   export type FactionId = 'plains_forest' | 'desert_badlands' | 'snow_ice' | 'cave_dark_forest' | 'ocean_river' | 'nether' | 'end';
 

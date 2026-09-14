@@ -1,6 +1,6 @@
 # 山羊越位战吼规范 v1
 
-本规范对应 `protocolVersion 30`、`rulesetVersion prototype-0.47` 与内容版本 39，覆盖 SI-004「山羊」。
+本规范对应 `protocolVersion 31`、`rulesetVersion prototype-0.48` 与内容版本 40，覆盖 SI-004「山羊」。
 
 ## 规则定义
 

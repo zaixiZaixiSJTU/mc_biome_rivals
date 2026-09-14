@@ -1532,6 +1532,111 @@ namespace BiomeRivals.Core.Tests
         }
 
         [Test]
+        public void Apply_ReplaysFireApplicationTrueDamageAndRemoval()
+        {
+            var target = new BattlefieldObjectStateDto
+            {
+                instanceId = "object-7", cardId = "pf_004", cardType = "UNIT", attack = 2,
+                health = 4, maxHealth = 4, slotKind = "UNIT", slotIndex = 1, occupiedSlots = 1, summonedTurn = 1
+            };
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "fire-replay", protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice" },
+                    new PlayerStateDto
+                    {
+                        playerId = "bob", unitSlots = new[] { null, "object-7", null, null },
+                        battlefield = new[] { target }
+                    }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 1, type = MatchEventTypes.ObjectStatsChanged,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "bob", instanceId = "object-7", sourcePlayerId = "alice", sourceCardId = "tk_013",
+                            sourceInstanceId = "effect-1", effectId = "effect.tk_013.01", reason = "DAMAGE",
+                            damageType = "NORMAL", attack = 2, health = 3
+                        }
+                    },
+                    new MatchEventDto
+                    {
+                        eventId = 2, type = MatchEventTypes.ObjectStatusApplied,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "bob", instanceId = "object-7", statusId = "FIRE", remainingDuration = 2,
+                            sourcePlayerId = "alice", sourceCardId = "tk_013", sourceInstanceId = "effect-1",
+                            effectId = "effect.tk_013.01", attack = 2, health = 3
+                        }
+                    }
+                }
+            });
+            Assert.That(target.health, Is.EqualTo(3));
+            Assert.That(target.statuses.Single().statusId, Is.EqualTo("FIRE"));
+            Assert.That(target.statuses.Single().remainingDuration, Is.EqualTo(2));
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 2,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 3, type = MatchEventTypes.ObjectStatsChanged,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "bob", instanceId = "object-7", sourcePlayerId = "alice", sourceCardId = "tk_013",
+                            sourceInstanceId = "effect-1", effectId = "effect.tk_013.01", reason = "DAMAGE",
+                            damageType = "TRUE", attack = 2, health = 2
+                        }
+                    },
+                    new MatchEventDto
+                    {
+                        eventId = 4, type = MatchEventTypes.ObjectStatusTicked,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "bob", instanceId = "object-7", statusId = "FIRE", remainingDuration = 1,
+                            sourcePlayerId = "alice", sourceCardId = "tk_013", sourceInstanceId = "effect-1",
+                            effectId = "effect.tk_013.01", attack = 2, health = 2
+                        }
+                    }
+                }
+            });
+            Assert.That(target.health, Is.EqualTo(2));
+            Assert.That(target.statuses.Single().remainingDuration, Is.EqualTo(1));
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 3,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 5, type = MatchEventTypes.ObjectStatusRemoved,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "bob", instanceId = "object-7", statusId = "FIRE",
+                            sourcePlayerId = "alice", sourceCardId = "tk_013", sourceInstanceId = "effect-1",
+                            effectId = "effect.tk_013.01", reason = "DURATION_EXPIRED", attack = 2, health = 1
+                        }
+                    }
+                }
+            });
+            Assert.That(target.statuses, Is.Empty);
+            Assert.That(target.health, Is.EqualTo(1));
+        }
+
+        [Test]
         public void Apply_ReplaysHeroEquipmentAttackAndTridentMovementChoice()
         {
             var target = new BattlefieldObjectStateDto

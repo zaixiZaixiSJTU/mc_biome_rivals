@@ -1,6 +1,6 @@
 # 海龟相邻生命光环规范 v1
 
-本规范已按当前组合校准为 `protocolVersion 30`、`rulesetVersion prototype-0.47` 与内容版本 39。
+本规范已按当前组合校准为 `protocolVersion 31`、`rulesetVersion prototype-0.48` 与内容版本 40。
 
 ## OR-005 海龟
 
