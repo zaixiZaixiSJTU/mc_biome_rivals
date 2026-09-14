@@ -4,21 +4,16 @@ using System.Threading;
 using System.Threading.Tasks;
 using BiomeRivals.Core;
 using Nakama;
-using UnityEngine;
 
 namespace BiomeRivals.Networking
 {
     public sealed class NakamaMatchTransport : IMatchTransport, IMatchReconnectDiagnostics
     {
-        private const string DeviceIdPreference = "biome_rivals.nakama.device_id";
-        private const string AuthTokenPreference = "biome_rivals.nakama.auth_token";
-        private const string RefreshTokenPreference = "biome_rivals.nakama.refresh_token";
-
         private readonly NakamaConnectionSettings _settings;
         private readonly MatchmakingPreferences _matchmakingPreferences;
+        private readonly IPlayerAccountSessionProvider _accountSessionProvider;
+        private readonly IDisposable _ownedAccountService;
         private readonly SemaphoreSlim _lifecycle = new SemaphoreSlim(1, 1);
-        private readonly string _deviceId;
-        private readonly string _sessionKeySuffix;
         private Client _client;
         private ISession _session;
         private ISocket _socket;
@@ -39,13 +34,24 @@ namespace BiomeRivals.Networking
         public MatchConnectionStatus CurrentStatus { get; private set; } =
             new MatchConnectionStatus(MatchConnectionPhase.Offline);
 
-        public NakamaMatchTransport(NakamaConnectionSettings settings, MatchmakingPreferences matchmakingPreferences = null)
+        public NakamaMatchTransport(
+            NakamaConnectionSettings settings,
+            MatchmakingPreferences matchmakingPreferences = null,
+            IPlayerAccountSessionProvider accountSessionProvider = null)
         {
             _settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _settings.Validate();
             _matchmakingPreferences = matchmakingPreferences ?? new MatchmakingPreferences(FactionIds.PlainsForest);
-            _deviceId = ResolveDeviceId(out var overridden);
-            _sessionKeySuffix = overridden ? "." + _deviceId : string.Empty;
+            if (accountSessionProvider == null)
+            {
+                var ownedService = new PlayerAccountService(new NakamaPlayerAccountBackend(_settings));
+                _accountSessionProvider = ownedService;
+                _ownedAccountService = ownedService;
+            }
+            else
+            {
+                _accountSessionProvider = accountSessionProvider;
+            }
         }
 
         public async Task ConnectAsync()
@@ -137,12 +143,9 @@ namespace BiomeRivals.Networking
                 _resumeMatchId,
                 reconnectAttempt));
             EnsureClient();
-            _session = RestoreSession();
-            if (_session == null || _session.IsExpired)
-            {
-                _session = await _client.AuthenticateDeviceAsync(_deviceId);
-                SaveSession(_session);
-            }
+            var nativeSession = await _accountSessionProvider.GetOrAuthenticateSessionAsync(cancellationToken);
+            _session = nativeSession as ISession ?? throw new InvalidOperationException(
+                "The authenticated account session is not compatible with Nakama matchmaking.");
             cancellationToken.ThrowIfCancellationRequested();
 
             ResetSocket();
@@ -313,57 +316,6 @@ namespace BiomeRivals.Networking
             _connectCancellation = null;
         }
 
-        private static string ResolveDeviceId(out bool overridden)
-        {
-            var overrideId = Environment.GetEnvironmentVariable("BIOME_RIVALS_NAKAMA_DEVICE_ID");
-            var arguments = Environment.GetCommandLineArgs();
-            for (var index = 0; index < arguments.Length - 1; index++)
-                if (string.Equals(arguments[index], "-nakamaDeviceId", StringComparison.Ordinal)) overrideId = arguments[index + 1];
-            if (!string.IsNullOrWhiteSpace(overrideId))
-            {
-                overrideId = overrideId.Trim();
-                if (overrideId.Length < 10 || overrideId.Length > 128)
-                    throw new FormatException("Nakama device ID override must contain 10 to 128 characters.");
-                overridden = true;
-                return overrideId;
-            }
-
-            overridden = false;
-            var deviceId = PlayerPrefs.GetString(DeviceIdPreference, string.Empty);
-            if (string.IsNullOrWhiteSpace(deviceId) || deviceId == SystemInfo.unsupportedIdentifier)
-            {
-                deviceId = SystemInfo.deviceUniqueIdentifier;
-                if (string.IsNullOrWhiteSpace(deviceId) || deviceId == SystemInfo.unsupportedIdentifier)
-                    deviceId = Guid.NewGuid().ToString("N");
-                PlayerPrefs.SetString(DeviceIdPreference, deviceId);
-                PlayerPrefs.Save();
-            }
-            return deviceId;
-        }
-
-        private ISession RestoreSession()
-        {
-            try
-            {
-                return Session.Restore(
-                    PlayerPrefs.GetString(AuthTokenPreference + _sessionKeySuffix, string.Empty),
-                    PlayerPrefs.GetString(RefreshTokenPreference + _sessionKeySuffix, string.Empty));
-            }
-            catch (Exception)
-            {
-                PlayerPrefs.DeleteKey(AuthTokenPreference + _sessionKeySuffix);
-                PlayerPrefs.DeleteKey(RefreshTokenPreference + _sessionKeySuffix);
-                return null;
-            }
-        }
-
-        private void SaveSession(ISession session)
-        {
-            PlayerPrefs.SetString(AuthTokenPreference + _sessionKeySuffix, session.AuthToken ?? string.Empty);
-            PlayerPrefs.SetString(RefreshTokenPreference + _sessionKeySuffix, session.RefreshToken ?? string.Empty);
-            PlayerPrefs.Save();
-        }
-
         private void Publish(MatchConnectionStatus status)
         {
             CurrentStatus = status;
@@ -383,6 +335,7 @@ namespace BiomeRivals.Networking
             _connectCancellation?.Cancel();
             if (_socket != null && (_socket.IsConnected || _socket.IsConnecting)) _ = _socket.CloseAsync();
             DetachSocket();
+            _ownedAccountService?.Dispose();
             // Do not dispose the semaphore: an in-flight connect/reconnect can still
             // execute its finally block and release it after cancellation.
         }

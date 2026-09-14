@@ -8,12 +8,14 @@ namespace BiomeRivals.Bootstrap
     public sealed class GameCompositionRoot : MonoBehaviour
     {
         private IMatchGateway _matchGateway;
+        private IPlayerAccountService _playerAccountService;
         private PresentationQueue _presentationQueue;
         private readonly MatchStateStore _matchStateStore = new MatchStateStore();
 
         public static GameCompositionRoot Instance { get; private set; }
         public MatchStateStore MatchStateStore => _matchStateStore;
         public IMatchGateway MatchGateway => _matchGateway;
+        public IPlayerAccountService PlayerAccountService => EnsurePlayerAccountService();
         public PresentationQueue PresentationQueue => _presentationQueue;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
@@ -41,6 +43,8 @@ namespace BiomeRivals.Bootstrap
         private void OnDestroy()
         {
             UnbindGateway();
+            _playerAccountService?.Dispose();
+            _playerAccountService = null;
             if (Instance == this) Instance = null;
         }
 
@@ -54,10 +58,23 @@ namespace BiomeRivals.Bootstrap
 
         public IMatchGateway RegisterDefaultOnlineTransport(string factionId = FactionIds.PlainsForest)
         {
+            var settings = NakamaConnectionSettings.Load();
+            var accountService = EnsurePlayerAccountService(settings);
+            var sessionProvider = accountService as IPlayerAccountSessionProvider ??
+                throw new System.InvalidOperationException("The configured account service cannot provide a matchmaking session.");
             RegisterOnlineTransport(new NakamaMatchTransport(
-                NakamaConnectionSettings.Load(),
-                new MatchmakingPreferences(factionId)));
+                settings,
+                new MatchmakingPreferences(factionId),
+                sessionProvider));
             return _matchGateway;
+        }
+
+        private IPlayerAccountService EnsurePlayerAccountService(NakamaConnectionSettings settings = null)
+        {
+            if (_playerAccountService != null) return _playerAccountService;
+            _playerAccountService = new PlayerAccountService(
+                new NakamaPlayerAccountBackend(settings ?? NakamaConnectionSettings.Load()));
+            return _playerAccountService;
         }
 
         private void BindGateway(IMatchGateway gateway)

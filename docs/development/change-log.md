@@ -2,6 +2,15 @@
 
 本文件按时间倒序记录影响视觉表现、资源管线或运行时架构的改动。
 
+## 2026-09-14 账户服务与最小大厅外壳
+
+- **认证解耦**：新增 `IPlayerAccountService` / `IPlayerAccountBackend` / `IPlayerAccountSessionProvider`。设备认证、token 恢复、资料读取、改名和退出集中到 Nakama 账户适配器；实时传输只消费已认证 session，不再拥有身份生命周期。
+- **可恢复状态机**：账户明确区分未登录、认证中、就绪、更新中、退出中和失败；认证失败或取消后可重试，跨对局复用同一账户会话。
+- **大厅顶栏**：顶部材质化容器同时显示游客身份、当前原型卡组、连接状态与匹配入口；左侧栏从“群系”明确为“卡组”。实机布局已收窄到标题栏和回合栏之间，不再发生容器重叠。
+- **配置边界**：连接资源缺失时直接报错，移除编译进代码的 server-key 后备值；开发配置及环境变量覆盖路径保持可用。
+- **自动验证**：账户服务测试覆盖成功复用、失败重试、取消重试、改名、退出和输入校验；双客户端报告额外核对账户 Ready、账户 ID 与权威 viewer 一致及显示名非空。
+- **验收结果**：Unity `6000.0.28f1c1` EditMode 214/214；Windows Player 构建通过；Docker/Nakama 双客户端对局 `684247e5-23b4-47c0-ad78-1d597c2e17f1.biome-rivals` 在完成强制断线恢复与动作链后收敛到 revision 16。视觉验收见 [`account-lobby-shell-preview-v1.png`](../design/assets/account-lobby-shell-preview-v1.png)。
+
 ## 2026-09-14 断线重连与权威状态恢复
 
 - **旧会话替换**：Nakama 在双人房已满时允许同一 `userId` 的新 session 重入，并在加入阶段原子移除该玩家的旧 presence，消除 socket 已重连但服务端尚未来得及清理旧会话时的“match is full”竞态。

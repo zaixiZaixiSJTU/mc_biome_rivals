@@ -11,7 +11,7 @@ namespace BiomeRivals.Networking
         public string scheme = "http";
         public string host = "localhost";
         public int port = 17350;
-        public string serverKey = "local_only_change_me";
+        public string serverKey = string.Empty;
         public int requestTimeoutSeconds = 10;
         public int matchmakingTimeoutSeconds = 30;
         public int maxReconnectAttempts = 3;
@@ -19,9 +19,9 @@ namespace BiomeRivals.Networking
         public static NakamaConnectionSettings Load()
         {
             var asset = Resources.Load<TextAsset>(ResourcePath);
-            var settings = asset == null
-                ? new NakamaConnectionSettings()
-                : JsonUtility.FromJson<NakamaConnectionSettings>(asset.text);
+            if (asset == null)
+                throw new InvalidOperationException($"Nakama connection resource '{ResourcePath}' is missing.");
+            var settings = JsonUtility.FromJson<NakamaConnectionSettings>(asset.text);
             if (settings == null) throw new FormatException("Nakama connection settings JSON is invalid.");
             settings.ApplyEnvironmentOverrides();
             settings.Validate();

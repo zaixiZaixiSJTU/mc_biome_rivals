@@ -75,6 +75,8 @@ namespace BiomeRivals.Demo
         private CanvasGroup _turnBanner;
         private Text _turnBannerText;
         private Text _onlineStatusText;
+        private Text _accountStatusText;
+        private Text _deckStatusText;
         private Text _onlineActionLabel;
         private Button _onlineActionButton;
         private RectTransform _mulliganOverlay;
@@ -90,6 +92,7 @@ namespace BiomeRivals.Demo
         private Text _choiceConfirmLabel;
         private Button _choiceConfirmButton;
         private IMatchGateway _onlineGateway;
+        private IPlayerAccountService _accountService;
         private DemoOnlineMatchSession _onlineSession;
         private Image _opponentTint;
         private Image _playerTint;
@@ -212,6 +215,7 @@ namespace BiomeRivals.Demo
         private void OnDestroy()
         {
             if (_onlineGateway != null) _onlineGateway.ConnectionStateChanged -= HandleOnlineConnectionState;
+            if (_accountService != null) _accountService.StateChanged -= HandleAccountStateChanged;
             DisposeOnlineSession();
             UnregisterOnlineEventPresenters();
             if (_hudMaterialFactory != null)
@@ -370,7 +374,7 @@ namespace BiomeRivals.Demo
         private void BuildFactionRail()
         {
             var rail = CreateBasePanel(_canvasRoot, "FactionRail", new Vector2(-879, 45), new Vector2(150, 590));
-            CreateText(rail, "Header", new Vector2(0, 252), new Vector2(120, 48), "群 系", 18, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
+            CreateText(rail, "Header", new Vector2(0, 252), new Vector2(120, 48), "卡 组", 18, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
 
             for (var i = 0; i < Factions.Length; i++)
             {
@@ -387,11 +391,60 @@ namespace BiomeRivals.Demo
 
         private void BuildOnlineStatus()
         {
-            var panel = CreateBasePanel(_canvasRoot, "OnlineStatusPanel", new Vector2(410, 472), new Vector2(250, 54));
-            _onlineStatusText = CreateText(panel, "Status", new Vector2(-43, 0), new Vector2(138, 36), "本地模式", 13, Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
-            _onlineActionButton = CreateSecondaryButton(panel, "OnlineAction", new Vector2(78, 0), new Vector2(78, 38), "联机", 14);
+            var panel = CreateBasePanel(_canvasRoot, "OnlineStatusPanel", new Vector2(410, 467), new Vector2(300, 72));
+            _accountStatusText = CreateText(panel, "Account", new Vector2(-79, 14), new Vector2(126, 24), "游客 · 未登录", 11, Pale, TextAnchor.MiddleLeft, FontStyle.Bold);
+            _deckStatusText = CreateText(panel, "Deck", new Vector2(-79, -14), new Vector2(126, 22), "卡组 · 平原", 10, Muted, TextAnchor.MiddleLeft, FontStyle.Normal);
+            _onlineStatusText = CreateText(panel, "Status", new Vector2(42, 0), new Vector2(84, 40), "本地模式", 11, Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
+            _onlineActionButton = CreateSecondaryButton(panel, "OnlineAction", new Vector2(111, 0), new Vector2(66, 40), "匹配", 13);
             _onlineActionLabel = _onlineActionButton.GetComponentInChildren<Text>();
             _onlineActionButton.onClick.AddListener(ToggleOnlineConnection);
+            _accountService = GameCompositionRoot.Instance?.PlayerAccountService;
+            if (_accountService != null)
+            {
+                _accountService.StateChanged += HandleAccountStateChanged;
+                HandleAccountStateChanged(_accountService.CurrentStatus);
+            }
+        }
+
+        private void HandleAccountStateChanged(PlayerAccountStatus status)
+        {
+            if (_accountStatusText == null) return;
+            switch (status.Phase)
+            {
+                case PlayerAccountPhase.Authenticating:
+                    _accountStatusText.text = "游客 · 认证中";
+                    break;
+                case PlayerAccountPhase.Ready:
+                case PlayerAccountPhase.Updating:
+                    _accountStatusText.text = "游客 · " + CompactPlayerName(status.Profile?.DisplayName);
+                    break;
+                case PlayerAccountPhase.SigningOut:
+                    _accountStatusText.text = "游客 · 退出中";
+                    break;
+                case PlayerAccountPhase.Failed:
+                    _accountStatusText.text = "账户异常 · 可重试";
+                    break;
+                default:
+                    _accountStatusText.text = "游客 · 未登录";
+                    break;
+            }
+            _accountStatusText.color = status.Phase == PlayerAccountPhase.Failed ? Danger :
+                status.Phase == PlayerAccountPhase.Ready ? Cyan : Pale;
+            RefreshDeckShell();
+        }
+
+        private static string CompactPlayerName(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return "未命名";
+            value = value.Trim();
+            return value.Length <= 8 ? value : value.Substring(0, 7) + "…";
+        }
+
+        private void RefreshDeckShell()
+        {
+            if (_deckStatusText == null) return;
+            var faction = Factions.FirstOrDefault(item => item.Id == _activeFaction);
+            _deckStatusText.text = "卡组 · " + (faction?.Label ?? _activeFaction);
         }
 
         private async void ToggleOnlineConnection()
@@ -472,7 +525,7 @@ namespace BiomeRivals.Demo
             }
             var ready = status.Phase == MatchConnectionPhase.Ready;
             var idle = status.Phase == MatchConnectionPhase.Offline || status.Phase == MatchConnectionPhase.Failed;
-            _onlineActionLabel.text = ready ? "断开" : idle ? "联机" : "取消";
+            _onlineActionLabel.text = ready ? "断开" : idle ? "匹配" : "取消";
             _onlineStatusText.color = status.Phase == MatchConnectionPhase.Failed ? Danger : ready ? Cyan : Muted;
             RefreshAll();
         }
@@ -2156,6 +2209,7 @@ namespace BiomeRivals.Demo
         private void ApplyPlayerFactionVisuals(FactionSpec spec)
         {
             _activeFaction = spec.Id;
+            RefreshDeckShell();
             if (_registry.TryGetTheme(spec.Id, out var selectedTheme))
             {
                 _playerAvatarImage.color = Color.Lerp(selectedTheme.FrameDark, selectedTheme.Accent, 0.24f);
@@ -3595,6 +3649,8 @@ namespace BiomeRivals.Demo
                 {
                     var directory = Path.GetDirectoryName(reportPath);
                     if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
+                    var accountStatus = _accountService?.CurrentStatus ??
+                        new PlayerAccountStatus(PlayerAccountPhase.SignedOut);
                     File.WriteAllText(reportPath, JsonUtility.ToJson(new OnlineProbeReport
                     {
                         ok = true,
@@ -3612,6 +3668,9 @@ namespace BiomeRivals.Demo
                         opponentLife = MatchView.OpponentLife,
                         playerFaction = _activeFaction,
                         opponentFaction = _opponentFaction,
+                        accountPhase = accountStatus.Phase.ToString(),
+                        accountUserId = accountStatus.Profile?.UserId,
+                        accountDisplayName = accountStatus.Profile?.DisplayName,
                         winnerPlayerId = GameCompositionRoot.Instance.MatchStateStore.Current.winnerPlayerId,
                         playerUnitCount = MatchView.PlayerBattlefield.Count(value => value.SlotKind == DemoSlotKind.Unit && value.Health > 0),
                         opponentUnitCount = MatchView.OpponentBattlefield.Count(value => value.SlotKind == DemoSlotKind.Unit && value.Health > 0),
@@ -4324,6 +4383,9 @@ namespace BiomeRivals.Demo
             public int opponentLife;
             public string playerFaction;
             public string opponentFaction;
+            public string accountPhase;
+            public string accountUserId;
+            public string accountDisplayName;
             public string winnerPlayerId;
             public int playerUnitCount;
             public int opponentUnitCount;

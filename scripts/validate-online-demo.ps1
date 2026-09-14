@@ -57,6 +57,15 @@ try {
     if (-not $probeA.ok -or -not $probeB.ok) { throw 'At least one online demo probe reported failure.' }
     if ($probeA.matchId -ne $probeB.matchId) { throw 'Online demo probes joined different authoritative matches.' }
     if ($probeA.viewerPlayerId -eq $probeB.viewerPlayerId) { throw 'Online demo probes reused one player identity.' }
+    if ($probeA.accountPhase -ne 'Ready' -or $probeB.accountPhase -ne 'Ready') {
+        throw 'At least one Unity account service was not ready after device authentication.'
+    }
+    if ($probeA.accountUserId -ne $probeA.viewerPlayerId -or $probeB.accountUserId -ne $probeB.viewerPlayerId) {
+        throw 'The lobby account identity does not match the authoritative match viewer.'
+    }
+    if (-not $probeA.accountDisplayName -or -not $probeB.accountDisplayName) {
+        throw 'At least one authenticated lobby profile has no display name.'
+    }
     if ($probeA.playerFaction -ne 'plains_forest' -or $probeB.playerFaction -ne 'desert_badlands') {
         throw 'Online demo faction projection does not match the submitted factions.'
     }

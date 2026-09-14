@@ -1380,7 +1380,13 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(GameObject.Find("EndTurnButton"), Is.Not.Null);
                 Assert.That(GameObject.Find("Faction_plains_forest"), Is.Not.Null);
                 Assert.That(root.transform.Find("DemoCanvas/OnlineStatusPanel/Status").GetComponent<UnityEngine.UI.Text>().text, Is.EqualTo("本地模式"));
+                Assert.That(root.transform.Find("DemoCanvas/OnlineStatusPanel/Account").GetComponent<UnityEngine.UI.Text>().text,
+                    Is.EqualTo("游客 · 未登录"));
+                Assert.That(root.transform.Find("DemoCanvas/OnlineStatusPanel/Deck").GetComponent<UnityEngine.UI.Text>().text,
+                    Is.EqualTo("卡组 · 平原"));
                 Assert.That(root.transform.Find("DemoCanvas/OnlineStatusPanel/OnlineAction").GetComponent<SecondaryButton>(), Is.Not.Null);
+                Assert.That(root.transform.Find("DemoCanvas/OnlineStatusPanel/OnlineAction").GetComponentInChildren<UnityEngine.UI.Text>().text,
+                    Is.EqualTo("匹配"));
                 var playerSlotHitArea = root.transform.Find("DemoCanvas/PlayerUnitSlot0");
                 Assert.That(playerSlotHitArea.GetComponent<UnityEngine.UI.Graphic>(), Is.Null);
                 Assert.That(playerSlotHitArea.GetComponent<UnityEngine.UI.Button>(), Is.Null);
