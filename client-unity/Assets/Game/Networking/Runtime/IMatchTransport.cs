@@ -15,4 +15,9 @@ namespace BiomeRivals.Networking
         Task SendAsync(int opcode, string json);
         Task DisconnectAsync();
     }
+
+    public interface IMatchReconnectDiagnostics
+    {
+        Task SimulateUnexpectedDisconnectAsync();
+    }
 }

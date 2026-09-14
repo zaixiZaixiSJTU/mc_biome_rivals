@@ -2187,5 +2187,83 @@ namespace BiomeRivals.Core.Tests
             Assert.That(store.Current.players[1].hasTargetedEnemyObjectThisTurn, Is.False);
             Assert.That(store.Current.players[1].cardsPlayedThisTurn, Is.Zero);
         }
+
+        [Test]
+        public void Replace_ReconnectSnapshotAtomicallyRestoresPrivateAndPersistentState()
+        {
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "recovery-match", viewerPlayerId = "alice", protocolVersion = GameVersions.Protocol,
+                rulesetVersion = GameVersions.Ruleset, revision = 3, lastEventId = 8, status = "ACTIVE",
+                phase = "MAIN", turn = 2, activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice", life = 30, hand = new[] { "pf_001" } },
+                    new PlayerStateDto { playerId = "bob", life = 30, hand = new[] { string.Empty } }
+                }
+            });
+
+            var caveBat = new BattlefieldObjectStateDto
+            {
+                instanceId = "object-4", cardId = "cd_001", cardType = "UNIT", attack = 1,
+                health = 1, maxHealth = 1, slotKind = "UNIT", slotIndex = 0, occupiedSlots = 1,
+                statuses = new[]
+                {
+                    new BattlefieldStatusStateDto
+                    {
+                        statusId = "FIRE", remainingDuration = 2, sourcePlayerId = "bob",
+                        sourceCardId = "ne_002", sourceInstanceId = "object-9", effectId = "effect.ne_002.01"
+                    }
+                }
+            };
+            var recovered = new MatchStateDto
+            {
+                matchId = "recovery-match", viewerPlayerId = "alice", protocolVersion = GameVersions.Protocol,
+                rulesetVersion = GameVersions.Ruleset, revision = 7, lastEventId = 19, status = "ACTIVE",
+                phase = "MAIN", turn = 3, activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto
+                    {
+                        playerId = "alice", life = 24, armor = 2, hand = new[] { "cd_003", "tk_012" },
+                        equipment = new EquipmentStateDto
+                        {
+                            instanceId = "equipment-3", cardId = "or_006", attack = 2, durability = 1, maxDurability = 2
+                        },
+                        unitSlots = new[] { "object-4", null, null, null }, buildingSlots = new string[3],
+                        battlefield = new[] { caveBat }
+                    },
+                    new PlayerStateDto
+                    {
+                        playerId = "bob", life = 28, hand = new[] { string.Empty, string.Empty, string.Empty },
+                        unitSlots = new string[4], buildingSlots = new string[3]
+                    }
+                },
+                pendingChoice = new PendingChoiceDto
+                {
+                    choiceId = "choice-6", playerId = "alice", sourceCardId = "cd_001",
+                    sourceInstanceId = "object-4", effectId = "effect.cd_001.01", kind = "TOP_CARD_SCRY",
+                    options = new[]
+                    {
+                        new PendingChoiceOptionDto { optionIndex = 0, cardId = "pf_004", slotIndex = -1, selectable = true }
+                    }
+                }
+            };
+
+            var changedCount = 0;
+            store.Changed += _ => changedCount++;
+            store.Replace(recovered);
+
+            Assert.That(changedCount, Is.EqualTo(1));
+            Assert.That(store.Current, Is.SameAs(recovered));
+            Assert.That(store.Current.revision, Is.EqualTo(7));
+            Assert.That(store.Current.lastEventId, Is.EqualTo(19));
+            Assert.That(store.Current.players[0].equipment.cardId, Is.EqualTo("or_006"));
+            Assert.That(store.Current.players[0].battlefield[0].statuses[0].statusId, Is.EqualTo("FIRE"));
+            Assert.That(store.Current.pendingChoice.options[0].cardId, Is.EqualTo("pf_004"));
+            Assert.That(store.Current.players[1].hand, Is.All.Empty,
+                "A recovery snapshot must not reveal the opponent's private hand.");
+        }
     }
 }

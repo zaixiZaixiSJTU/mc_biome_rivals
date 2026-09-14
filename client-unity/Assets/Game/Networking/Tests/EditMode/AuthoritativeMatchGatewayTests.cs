@@ -63,6 +63,52 @@ namespace BiomeRivals.Networking.Tests
         }
 
         [Test]
+        public void IncompatibleEventRulesetFailsAndLocksTheGateway()
+        {
+            var transport = new FakeTransport();
+            using (var gateway = new AuthoritativeMatchGateway(transport))
+            {
+                MatchEventBatchDto received = null;
+                Exception fault = null;
+                gateway.EventBatchReceived += batch => received = batch;
+                gateway.Faulted += exception => fault = exception;
+                transport.EmitStatus(new MatchConnectionStatus(MatchConnectionPhase.Ready, "ready", "match-1"));
+
+                transport.Emit(MatchOpcodes.EventBatch,
+                    "{\"protocolVersion\":31,\"rulesetVersion\":\"future-rules\",\"revision\":1," +
+                    "\"acknowledgedCommandId\":\"turn-1\",\"events\":[]}");
+
+                Assert.That(received, Is.Null);
+                Assert.That(fault, Is.TypeOf<InvalidOperationException>());
+                Assert.That(gateway.CurrentStatus.Phase, Is.EqualTo(MatchConnectionPhase.Failed));
+                Assert.That(gateway.CurrentStatus.MatchId, Is.EqualTo("match-1"));
+                Assert.That(gateway.CurrentStatus.CanSendCommands, Is.False);
+
+                transport.EmitStatus(new MatchConnectionStatus(MatchConnectionPhase.Ready, "reconnected", "match-1", 1));
+                Assert.That(gateway.CurrentStatus.Phase, Is.EqualTo(MatchConnectionPhase.Failed),
+                    "A transport reconnect cannot make an incompatible client safe to use.");
+            }
+        }
+
+        [Test]
+        public void IncompatibleSnapshotProtocolFailsInsteadOfPublishingState()
+        {
+            var transport = new FakeTransport();
+            using (var gateway = new AuthoritativeMatchGateway(transport))
+            {
+                MatchStateDto received = null;
+                gateway.SnapshotReceived += snapshot => received = snapshot;
+                transport.EmitStatus(new MatchConnectionStatus(MatchConnectionPhase.Ready, "ready", "match-1"));
+
+                transport.Emit(MatchOpcodes.Snapshot,
+                    "{\"matchId\":\"match-1\",\"protocolVersion\":999,\"rulesetVersion\":\"prototype-0.48\"}");
+
+                Assert.That(received, Is.Null);
+                Assert.That(gateway.CurrentStatus.Phase, Is.EqualTo(MatchConnectionPhase.Failed));
+            }
+        }
+
+        [Test]
         public async Task DeployCommandIsSentOnAuthoritativeCommandOpcode()
         {
             var transport = new FakeTransport();
@@ -80,6 +126,23 @@ namespace BiomeRivals.Networking.Tests
                 Assert.That(transport.LastJson, Does.Contain("\"targetType\":\"UNIT\""));
                 Assert.That(transport.LastJson, Does.Contain("\"targetInstanceId\":\"object-7\""));
                 Assert.That(transport.LastJson, Does.Not.Contain("attackerInstanceId"));
+            }
+        }
+
+        [Test]
+        public void CommandWithIncompatibleRulesetIsRejectedBeforeTransport()
+        {
+            var transport = new FakeTransport();
+            using (var gateway = new AuthoritativeMatchGateway(transport))
+            {
+                var command = MatchCommandFactory.EndTurn("future-command", 1);
+                command.rulesetVersion = "future-rules";
+
+                var exception = Assert.ThrowsAsync<InvalidOperationException>(async () =>
+                    await gateway.SendCommandAsync(command));
+
+                Assert.That(exception.Message, Does.Contain("ruleset version"));
+                Assert.That(transport.LastOpcode, Is.Zero);
             }
         }
 
@@ -263,6 +326,26 @@ namespace BiomeRivals.Networking.Tests
                     MatchCommandFactory.EndTurn("disconnect-1", 2),
                     TimeSpan.FromSeconds(5));
                 transport.EmitStatus(new MatchConnectionStatus(MatchConnectionPhase.Disconnecting));
+
+                var result = await pending;
+                Assert.That(result.Outcome, Is.EqualTo(MatchCommandOutcome.TransportFailed));
+                Assert.That(result.Code, Is.EqualTo("TRANSPORT_FAULT"));
+                Assert.That(dispatcher.PendingCount, Is.Zero);
+            }
+        }
+
+        [Test]
+        public async Task CommandDispatcherFailsPendingCommandAsSoonAsReconnectStarts()
+        {
+            var transport = new FakeTransport();
+            using (var gateway = new AuthoritativeMatchGateway(transport))
+            using (var dispatcher = new MatchCommandDispatcher(gateway))
+            {
+                transport.EmitStatus(new MatchConnectionStatus(MatchConnectionPhase.Ready, "ready", "match-1"));
+                var pending = dispatcher.SendAndWaitAsync(
+                    MatchCommandFactory.EndTurn("reconnect-1", 2),
+                    TimeSpan.FromSeconds(5));
+                transport.EmitStatus(new MatchConnectionStatus(MatchConnectionPhase.Reconnecting, "socket closed", "match-1", 1));
 
                 var result = await pending;
                 Assert.That(result.Outcome, Is.EqualTo(MatchCommandOutcome.TransportFailed));

@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace BiomeRivals.Networking
 {
-    public sealed class NakamaMatchTransport : IMatchTransport
+    public sealed class NakamaMatchTransport : IMatchTransport, IMatchReconnectDiagnostics
     {
         private const string DeviceIdPreference = "biome_rivals.nakama.device_id";
         private const string AuthTokenPreference = "biome_rivals.nakama.auth_token";
@@ -117,6 +117,15 @@ namespace BiomeRivals.Networking
                 _disconnecting = false;
                 _lifecycle.Release();
             }
+        }
+
+        public Task SimulateUnexpectedDisconnectAsync()
+        {
+            ThrowIfDisposed();
+            if (!CurrentStatus.CanSendCommands || _socket == null || !_socket.IsConnected)
+                return Task.FromException(new InvalidOperationException(
+                    "Cannot simulate connection loss before an authoritative match is ready."));
+            return _socket.CloseAsync();
         }
 
         private async Task ConnectCoreAsync(int reconnectAttempt, CancellationToken cancellationToken)

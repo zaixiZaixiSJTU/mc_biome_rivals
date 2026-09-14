@@ -2,6 +2,14 @@
 
 本文件按时间倒序记录影响视觉表现、资源管线或运行时架构的改动。
 
+## 2026-09-14 断线重连与权威状态恢复
+
+- **旧会话替换**：Nakama 在双人房已满时允许同一 `userId` 的新 session 重入，并在加入阶段原子移除该玩家的旧 presence，消除 socket 已重连但服务端尚未来得及清理旧会话时的“match is full”竞态。
+- **私有恢复快照**：重入者收到只投递给新 session 的 opcode `4` 快照；测试覆盖 revision/event 游标、等待选择及其私有选项、隐藏对手手牌，并断言权威去重表不会投影到客户端。
+- **客户端故障边界**：快照和事件批次同时校验协议与规则集；不兼容后 Gateway 锁定为 `Failed`，底层 socket 的后续 `Ready` 不能误解锁交互。命令自身也同时校验协议与规则集。连接进入 `Reconnecting` 时立即结束所有结果未知的 pending 命令，避免等待超时或重复操作。
+- **真实断线探针**：新增 `-autoReconnectProbe` 自动化诊断入口。Windows 双客户端验证会强制关闭第一端 socket，确认 `Reconnecting → Ready`、原 Match ID 和新快照恢复后，再继续部署、阶段切换、结束回合、攻击与投降。本次对局 `08ede1b0-4b1c-49b5-a978-474c270b0b3b.biome-rivals` 最终双方收敛到 revision 18、相同胜者，首端报告 `reconnectRecovered=true`。
+- **验证**：服务端 163/163；Unity `6000.0.28f1c1` EditMode 208/208；Windows Player 构建及真实 Docker/Nakama 双客户端探针通过。
+
 ## 2026-09-14 Unity 双客户端权威对局探针
 
 - **补齐投降边界**：为 `MatchCommandFactory` 和 `DemoOnlineMatchSession` 增加 `CONCEDE` 命令入口，Unity 不再只能被动接收投降事件。

@@ -101,7 +101,8 @@ namespace BiomeRivals.Networking
 
         private void HandleConnectionState(MatchConnectionStatus status)
         {
-            if (status.Phase != MatchConnectionPhase.Disconnecting &&
+            if (status.Phase != MatchConnectionPhase.Reconnecting &&
+                status.Phase != MatchConnectionPhase.Disconnecting &&
                 status.Phase != MatchConnectionPhase.Offline &&
                 status.Phase != MatchConnectionPhase.Failed) return;
             HandleFault(new InvalidOperationException(

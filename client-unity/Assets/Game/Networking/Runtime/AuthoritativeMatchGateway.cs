@@ -5,9 +5,11 @@ using UnityEngine;
 
 namespace BiomeRivals.Networking
 {
-    public sealed class AuthoritativeMatchGateway : IMatchGateway
+    public sealed class AuthoritativeMatchGateway : IMatchGateway, IMatchReconnectDiagnostics
     {
         private readonly IMatchTransport _transport;
+        private MatchConnectionStatus _currentStatus;
+        private bool _compatibilityFailed;
         private bool _disposed;
 
         public event Action<MatchEventBatchDto> EventBatchReceived;
@@ -16,11 +18,12 @@ namespace BiomeRivals.Networking
         public event Action<Exception> Faulted;
         public event Action<MatchConnectionStatus> ConnectionStateChanged;
 
-        public MatchConnectionStatus CurrentStatus => _transport.CurrentStatus;
+        public MatchConnectionStatus CurrentStatus => _currentStatus;
 
         public AuthoritativeMatchGateway(IMatchTransport transport)
         {
             _transport = transport ?? throw new ArgumentNullException(nameof(transport));
+            _currentStatus = _transport.CurrentStatus;
             _transport.MessageReceived += HandleMessage;
             _transport.Faulted += HandleFault;
             _transport.ConnectionStateChanged += HandleConnectionState;
@@ -33,6 +36,10 @@ namespace BiomeRivals.Networking
             if (command == null) throw new ArgumentNullException(nameof(command));
             if (command.protocolVersion != GameVersions.Protocol)
                 throw new InvalidOperationException("Command protocol version does not match this client.");
+            if (!string.Equals(command.rulesetVersion, GameVersions.Ruleset, StringComparison.Ordinal))
+                throw new InvalidOperationException("Command ruleset version does not match this client.");
+            if (_compatibilityFailed)
+                throw new InvalidOperationException("The authoritative match uses an incompatible protocol or ruleset.");
             return _transport.SendAsync(MatchOpcodes.Command, SerializeCommand(command));
         }
 
@@ -70,6 +77,14 @@ namespace BiomeRivals.Networking
 
         public Task DisconnectAsync() => _transport.DisconnectAsync();
 
+        public Task SimulateUnexpectedDisconnectAsync()
+        {
+            if (_transport is IMatchReconnectDiagnostics diagnostics)
+                return diagnostics.SimulateUnexpectedDisconnectAsync();
+            return Task.FromException(new NotSupportedException(
+                "The configured match transport does not expose reconnect diagnostics."));
+        }
+
         private void HandleMessage(int opcode, string json)
         {
             try
@@ -78,8 +93,11 @@ namespace BiomeRivals.Networking
                 {
                     case MatchOpcodes.EventBatch:
                         var batch = JsonUtility.FromJson<MatchEventBatchDto>(json);
-                        if (batch.protocolVersion != GameVersions.Protocol)
-                            throw new InvalidOperationException("Server protocol version is unsupported.");
+                        if (batch == null || !HasCompatibleVersion(batch.protocolVersion, batch.rulesetVersion))
+                        {
+                            FailCompatibility("Server event protocol or ruleset version is unsupported.");
+                            return;
+                        }
                         EventBatchReceived?.Invoke(batch);
                         break;
                     case MatchOpcodes.Rejection:
@@ -88,8 +106,11 @@ namespace BiomeRivals.Networking
                     case MatchOpcodes.Snapshot:
                         var snapshot = JsonUtility.FromJson<MatchStateDto>(json);
                         if (snapshot != null && IsExplicitJsonNull(json, "pendingChoice")) snapshot.pendingChoice = null;
-                        if (snapshot == null || snapshot.protocolVersion != GameVersions.Protocol || snapshot.rulesetVersion != GameVersions.Ruleset)
-                            throw new InvalidOperationException("Server snapshot protocol or ruleset version is unsupported.");
+                        if (snapshot == null || !HasCompatibleVersion(snapshot.protocolVersion, snapshot.rulesetVersion))
+                        {
+                            FailCompatibility("Server snapshot protocol or ruleset version is unsupported.");
+                            return;
+                        }
                         SnapshotReceived?.Invoke(snapshot);
                         break;
                 }
@@ -102,7 +123,30 @@ namespace BiomeRivals.Networking
 
         private void HandleFault(Exception exception) => Faulted?.Invoke(exception);
 
-        private void HandleConnectionState(MatchConnectionStatus status) => ConnectionStateChanged?.Invoke(status);
+        private void HandleConnectionState(MatchConnectionStatus status)
+        {
+            if (_compatibilityFailed) return;
+            _currentStatus = status;
+            ConnectionStateChanged?.Invoke(status);
+        }
+
+        private static bool HasCompatibleVersion(int protocolVersion, string rulesetVersion) =>
+            protocolVersion == GameVersions.Protocol &&
+            string.Equals(rulesetVersion, GameVersions.Ruleset, StringComparison.Ordinal);
+
+        private void FailCompatibility(string message)
+        {
+            if (_compatibilityFailed) return;
+            _compatibilityFailed = true;
+            var exception = new InvalidOperationException(message);
+            _currentStatus = new MatchConnectionStatus(
+                MatchConnectionPhase.Failed,
+                message,
+                _currentStatus.MatchId,
+                _currentStatus.Attempt);
+            ConnectionStateChanged?.Invoke(_currentStatus);
+            Faulted?.Invoke(exception);
+        }
 
         private static bool IsExplicitJsonNull(string json, string propertyName)
         {

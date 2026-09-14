@@ -57,8 +57,11 @@ function biomeRivalsMatchJoinAttempt(
   if (assignedPlayerIds.length > 0 && !state.factionByPlayerId[presence.userId]) {
     return { state: state, accept: false, rejectMessage: 'player was not assigned to this match' };
   }
-  const count = Object.keys(state.presences).length;
-  if (!state.presences[presence.sessionId] && count >= 2) {
+  const sessionIds = Object.keys(state.presences);
+  const alreadyConnectedAsPlayer = sessionIds.some(function (sessionId): boolean {
+    return state.presences[sessionId]!.userId === presence.userId;
+  });
+  if (!state.presences[presence.sessionId] && !alreadyConnectedAsPlayer && sessionIds.length >= 2) {
     return { state: state, accept: false, rejectMessage: 'match is full' };
   }
   return { state: state, accept: true };
@@ -75,6 +78,13 @@ function biomeRivalsMatchJoin(
 ): { state: BiomeRivalsMatchState } {
   for (let i = 0; i < presences.length; i += 1) {
     const presence = presences[i]!;
+    const existingSessionIds = Object.keys(state.presences);
+    for (let sessionIndex = 0; sessionIndex < existingSessionIds.length; sessionIndex += 1) {
+      const existingSessionId = existingSessionIds[sessionIndex]!;
+      if (existingSessionId !== presence.sessionId && state.presences[existingSessionId]!.userId === presence.userId) {
+        delete state.presences[existingSessionId];
+      }
+    }
     state.presences[presence.sessionId] = presence;
   }
   const connected = Object.keys(state.presences).map(function (sessionId): nkruntime.Presence {

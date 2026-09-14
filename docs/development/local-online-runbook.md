@@ -56,12 +56,13 @@ Windows Development Player 支持以下仅用于自动验证的参数：
 - `-previewDeathrattle`：离线结算潜影贝死亡并选中生成的潜影壳，用于检查亡语提示、私有手牌卡面和区域计数。
 - `-previewSummon`：离线结算岩浆怪死亡，并在来源释放格生成小型岩浆怪，用于检查公开召唤事件、Minecraft 模型和出生地表脉冲。
 - `-autoOnlineAction`：双方先自动保留全部起手牌，然后从安全白名单选择可支付生物进行真实部署；双方自动轮转主阶段/战斗阶段和结束回合，待召唤疲劳结束后攻击敌方英雄并投降。两端必须等待权威对局结束。
+- `-autoReconnectProbe`：仅供自动诊断；在收到正式对局快照后主动关闭当前实时 socket，要求客户端按原 Match ID 自动重入并收到新的私有权威快照，再继续动作场景。
 - `-nakamaDeviceId <ID>`：为同机并行实例指定不同设备身份，长度 10–128。
 - `-onlineProbe <json>`：写出 Match ID、观察者 ID、revision、阶段、手牌、能量、生命、双方群系、胜者、单位数量及本端实际执行的动作。
 - `-captureOnline <png>`：权威状态稳定且事件动画队列清空后截图。
 - `-quitAfterOnlineProbe`：报告写完后退出。
 
-运行 `scripts/validate-online-demo.ps1` 会同时启动两个无图形 Windows Player。两个报告必须具有相同 Match ID、不同观察者 ID、`FINISHED` 状态、相同最终 revision 和相同胜者；双方起手确认字段均为 `true`，私有手牌不同，且 `playerFaction/opponentFaction` 互为镜像。验证器还会要求两个报告合计证明至少一次部署、攻击、结束回合与投降，并确认英雄生命确实下降、最终双方投影中都存在已部署单位。
+运行 `scripts/validate-online-demo.ps1` 会同时启动两个无图形 Windows Player，并只对第一端执行一次强制断线。第一端必须报告 `reconnectRecovered=true`，证明它经历重连并收到恢复快照。两个报告还必须具有相同 Match ID、不同观察者 ID、`FINISHED` 状态、相同最终 revision 和相同胜者；双方起手确认字段均为 `true`，私有手牌不同，且 `playerFaction/opponentFaction` 互为镜像。验证器会要求两个报告合计证明至少一次部署、攻击、结束回合与投降，并确认英雄生命确实下降、最终双方投影中都存在已部署单位。
 
 海洋河流对末地的权威双客户端验证截图：[`../design/assets/demo-authoritative-ocean-vs-end-v1.png`](../design/assets/demo-authoritative-ocean-vs-end-v1.png)。截图中的近端海洋与远端末地由各自玩家提交并经服务器快照确认，两块半场仍共用同一透视平面。
 

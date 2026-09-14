@@ -458,7 +458,10 @@ namespace BiomeRivals.Demo
                     _onlineStatusText.text = $"正在重连 · 第 {status.Attempt} 次";
                     break;
                 case MatchConnectionPhase.Failed:
-                    _onlineStatusText.text = "连接失败";
+                    _onlineStatusText.text = status.Detail.IndexOf("protocol", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        status.Detail.IndexOf("ruleset", StringComparison.OrdinalIgnoreCase) >= 0
+                        ? "客户端版本不兼容"
+                        : "连接失败";
                     break;
                 case MatchConnectionPhase.Disconnecting:
                     _onlineStatusText.text = "正在断开";
@@ -3576,6 +3579,9 @@ namespace BiomeRivals.Demo
                 while (MatchView.IsMulligan && Time.realtimeSinceStartup < deadline) await Task.Yield();
                 if (MatchView.IsMulligan) throw new TimeoutException("Both Unity clients did not finish opening hand selection.");
 
+                var reconnectRecovered = HasCommandLineFlag("-autoReconnectProbe") &&
+                    await VerifyReconnectRecovery(deadline);
+
                 var actions = performAction
                     ? await RunOnlineActionScenario(deadline)
                     : new OnlineProbeActions();
@@ -3612,7 +3618,8 @@ namespace BiomeRivals.Demo
                         performedDeploy = actions.PerformedDeploy,
                         performedAttack = actions.PerformedAttack,
                         performedEndTurn = actions.PerformedEndTurn,
-                        performedConcede = actions.PerformedConcede
+                        performedConcede = actions.PerformedConcede,
+                        reconnectRecovered = reconnectRecovered
                     }, true));
                 }
 
@@ -3629,6 +3636,50 @@ namespace BiomeRivals.Demo
                     File.WriteAllText(reportPath, JsonUtility.ToJson(new OnlineProbeReport { ok = false, error = exception.Message }, true));
                 }
                 Application.Quit(1);
+            }
+        }
+
+        private async Task<bool> VerifyReconnectRecovery(float deadline)
+        {
+            if (!(_onlineGateway is IMatchReconnectDiagnostics diagnostics))
+                throw new InvalidOperationException("The online gateway does not support reconnect diagnostics.");
+            var stateStore = GameCompositionRoot.Instance?.MatchStateStore;
+            var before = stateStore?.Current;
+            if (before == null) throw new InvalidOperationException("Reconnect probe requires an authoritative snapshot.");
+
+            var matchId = before.matchId;
+            var minimumRevision = before.revision;
+            var sawReconnecting = false;
+            var sawReadyAfterReconnect = false;
+            var receivedRecoverySnapshot = false;
+            void ObserveStatus(MatchConnectionStatus status)
+            {
+                if (status.Phase == MatchConnectionPhase.Reconnecting) sawReconnecting = true;
+                if (sawReconnecting && status.Phase == MatchConnectionPhase.Ready && status.MatchId == matchId)
+                    sawReadyAfterReconnect = true;
+            }
+            void ObserveSnapshot(MatchStateDto snapshot)
+            {
+                if (snapshot != null && snapshot.matchId == matchId && snapshot.revision >= minimumRevision)
+                    receivedRecoverySnapshot = true;
+            }
+
+            _onlineGateway.ConnectionStateChanged += ObserveStatus;
+            _onlineGateway.SnapshotReceived += ObserveSnapshot;
+            try
+            {
+                await diagnostics.SimulateUnexpectedDisconnectAsync();
+                while ((!sawReconnecting || !sawReadyAfterReconnect || !receivedRecoverySnapshot) &&
+                       Time.realtimeSinceStartup < deadline)
+                    await Task.Yield();
+                if (!sawReconnecting || !sawReadyAfterReconnect || !receivedRecoverySnapshot)
+                    throw new TimeoutException("Client did not restore its authoritative match and snapshot after connection loss.");
+                return true;
+            }
+            finally
+            {
+                _onlineGateway.ConnectionStateChanged -= ObserveStatus;
+                _onlineGateway.SnapshotReceived -= ObserveSnapshot;
             }
         }
 
@@ -4280,6 +4331,7 @@ namespace BiomeRivals.Demo
             public bool performedAttack;
             public bool performedEndTurn;
             public bool performedConcede;
+            public bool reconnectRecovered;
         }
 
         private sealed class OnlineProbeActions

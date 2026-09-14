@@ -25,7 +25,7 @@ Remove-Item -LiteralPath $reportA,$reportB,$logA,$logB -Force -ErrorAction Silen
 
 $runId = [Guid]::NewGuid().ToString('N')
 $argumentsA = @(
-    '-batchmode','-nographics','-autoOnline','-autoOnlineAction',
+    '-batchmode','-nographics','-autoOnline','-autoOnlineAction','-autoReconnectProbe',
     '-previewPlayerFaction','plains_forest','-nakamaDeviceId',"online-probe-a-$runId",
     '-onlineProbe',$reportA,'-quitAfterOnlineProbe','-logFile',$logA)
 $argumentsB = @(
@@ -73,6 +73,7 @@ try {
     if (-not ($probeA.performedAttack -or $probeB.performedAttack)) { throw 'No Unity client attacked.' }
     if (-not ($probeA.performedEndTurn -or $probeB.performedEndTurn)) { throw 'No Unity client ended a turn.' }
     if (-not ($probeA.performedConcede -or $probeB.performedConcede)) { throw 'No Unity client conceded.' }
+    if (-not $probeA.reconnectRecovered) { throw 'The first Unity client did not recover from the forced connection loss.' }
     if ([Math]::Min([Math]::Min($probeA.playerLife, $probeA.opponentLife), [Math]::Min($probeB.playerLife, $probeB.opponentLife)) -ge 30) {
         throw 'The authoritative hero attack did not change either projected life total.'
     }
