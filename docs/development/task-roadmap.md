@@ -16,7 +16,7 @@
 ## 当前基线与风险
 
 - 有效仓库：`D:\gitt\mc_biome_rivals`
-- 当前已提交基线：`74ab06e feat: recover authoritative matches after disconnect`
+- 当前已提交基线：`7110a45 feat: add account and lobby shell`
 - 开发中版本：协议 31、规则集 `prototype-0.48`、内容版本 40。
 - 卡牌效果状态：53 个 `IMPLEMENTED`，16 个 `PENDING`。
 - 此前混合在工作区的体素场景、实体模型、资源管线和 FIRE 规则已在恢复基线 `6c9202e` 中固定。后续不得继续使用这种跨任务混提方式。
