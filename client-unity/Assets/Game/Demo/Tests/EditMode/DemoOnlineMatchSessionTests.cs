@@ -110,6 +110,23 @@ namespace BiomeRivals.Demo.Tests
         }
 
         [Test]
+        public async Task OnlineSessionSendsConcedeAtCurrentRevision()
+        {
+            var store = CreateStore(viewerIndex: 0);
+            store.Current.revision = 9;
+            var gateway = new FakeGateway();
+            using (var session = new DemoOnlineMatchSession(gateway, store))
+            {
+                _ = session.ConcedeAsync();
+
+                Assert.That(gateway.LastCommand.type, Is.EqualTo(MatchCommandTypes.Concede));
+                Assert.That(gateway.LastCommand.expectedRevision, Is.EqualTo(9));
+                Assert.That(gateway.LastCommand.payload, Is.Not.Null);
+                await Task.Yield();
+            }
+        }
+
+        [Test]
         public void OnlineSessionRejectsSecondCommandWhileFirstIsPending()
         {
             var store = CreateStore(viewerIndex: 0);

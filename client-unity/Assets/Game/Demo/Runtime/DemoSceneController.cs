@@ -3561,11 +3561,11 @@ namespace BiomeRivals.Demo
         {
             try
             {
-                var deadline = Time.realtimeSinceStartup + 45f;
+                var deadline = Time.realtimeSinceStartup + 90f;
                 while ((!IsOnlineBoard || _onlineGateway.CurrentStatus.Phase != MatchConnectionPhase.Ready) && Time.realtimeSinceStartup < deadline)
                     await Task.Yield();
                 if (!IsOnlineBoard || _onlineGateway.CurrentStatus.Phase != MatchConnectionPhase.Ready)
-                    throw new TimeoutException("Unity client did not receive an authoritative snapshot within 45 seconds.");
+                    throw new TimeoutException("Unity client did not receive an authoritative snapshot within 90 seconds.");
 
                 if (MatchView.IsMulligan && !MatchView.PlayerMulliganCompleted)
                 {
@@ -3576,22 +3576,11 @@ namespace BiomeRivals.Demo
                 while (MatchView.IsMulligan && Time.realtimeSinceStartup < deadline) await Task.Yield();
                 if (MatchView.IsMulligan) throw new TimeoutException("Both Unity clients did not finish opening hand selection.");
 
-                var actionStartRevision = MatchView.Revision;
-                if (performAction && MatchView.IsPlayerTurn && MatchView.Phase == DemoTurnPhase.Main)
-                {
-                    var combatResult = await SendOnline(() => _onlineSession.EnterCombatAsync());
-                    if (combatResult?.Outcome != MatchCommandOutcome.Accepted)
-                        throw new InvalidOperationException("The active Unity client did not receive an accepted ENTER_COMBAT acknowledgement.");
-                    var turnResult = await SendOnline(() => _onlineSession.EndTurnAsync());
-                    if (turnResult?.Outcome != MatchCommandOutcome.Accepted)
-                        throw new InvalidOperationException("The active Unity client did not receive an accepted END_TURN acknowledgement.");
-                }
+                var actions = performAction
+                    ? await RunOnlineActionScenario(deadline)
+                    : new OnlineProbeActions();
                 if (performAction)
                 {
-                    var expectedActionRevision = actionStartRevision + 2;
-                    while (MatchView.Revision < expectedActionRevision && Time.realtimeSinceStartup < deadline) await Task.Yield();
-                    if (MatchView.Revision < expectedActionRevision)
-                        throw new TimeoutException("The Unity clients did not observe the authoritative action revision.");
                     var presentationQueue = GameCompositionRoot.Instance?.PresentationQueue;
                     while (presentationQueue != null && presentationQueue.IsPlaying && Time.realtimeSinceStartup < deadline) await Task.Yield();
                 }
@@ -3616,7 +3605,14 @@ namespace BiomeRivals.Demo
                         playerLife = MatchView.PlayerLife,
                         opponentLife = MatchView.OpponentLife,
                         playerFaction = _activeFaction,
-                        opponentFaction = _opponentFaction
+                        opponentFaction = _opponentFaction,
+                        winnerPlayerId = GameCompositionRoot.Instance.MatchStateStore.Current.winnerPlayerId,
+                        playerUnitCount = MatchView.PlayerBattlefield.Count(value => value.SlotKind == DemoSlotKind.Unit && value.Health > 0),
+                        opponentUnitCount = MatchView.OpponentBattlefield.Count(value => value.SlotKind == DemoSlotKind.Unit && value.Health > 0),
+                        performedDeploy = actions.PerformedDeploy,
+                        performedAttack = actions.PerformedAttack,
+                        performedEndTurn = actions.PerformedEndTurn,
+                        performedConcede = actions.PerformedConcede
                     }, true));
                 }
 
@@ -3634,6 +3630,80 @@ namespace BiomeRivals.Demo
                 }
                 Application.Quit(1);
             }
+        }
+
+        private async Task<OnlineProbeActions> RunOnlineActionScenario(float deadline)
+        {
+            var actions = new OnlineProbeActions();
+            while (!MatchView.IsFinished && Time.realtimeSinceStartup < deadline)
+            {
+                if (!MatchView.IsPlayerTurn || !_onlineSession.CanIssueCommand)
+                {
+                    await Task.Yield();
+                    continue;
+                }
+
+                if (MatchView.PendingChoice != null)
+                    throw new InvalidOperationException("The online action probe entered an unexpected pending choice.");
+
+                if (MatchView.Phase == DemoTurnPhase.Main)
+                {
+                    var deployCardId = FindOnlineProbeUnit();
+                    var emptySlot = Array.FindIndex(MatchView.UnitSlots, string.IsNullOrEmpty);
+                    if (!string.IsNullOrEmpty(deployCardId) && emptySlot >= 0)
+                    {
+                        RequireAccepted(
+                            await SendOnline(() => _onlineSession.DeployAsync(deployCardId, DemoSlotKind.Unit, emptySlot)),
+                            "DEPLOY_CARD");
+                        actions.PerformedDeploy = true;
+                        continue;
+                    }
+
+                    RequireAccepted(await SendOnline(() => _onlineSession.EnterCombatAsync()), "ENTER_COMBAT");
+                    continue;
+                }
+
+                var attacker = MatchView.PlayerBattlefield.FirstOrDefault(value =>
+                    value.SlotKind == DemoSlotKind.Unit && MatchView.CanAttackWith(value, out _));
+                if (attacker != null && MatchView.CanAttackTarget(null, "HERO", out _))
+                {
+                    RequireAccepted(
+                        await SendOnline(() => _onlineSession.AttackAsync(attacker.InstanceId, "HERO")),
+                        "ATTACK");
+                    actions.PerformedAttack = true;
+                    RequireAccepted(await SendOnline(() => _onlineSession.ConcedeAsync()), "CONCEDE");
+                    actions.PerformedConcede = true;
+                    continue;
+                }
+
+                RequireAccepted(await SendOnline(() => _onlineSession.EndTurnAsync()), "END_TURN");
+                actions.PerformedEndTurn = true;
+            }
+
+            if (!MatchView.IsFinished)
+                throw new TimeoutException("The Unity clients did not complete deploy, attack, end-turn and concede actions before the probe deadline.");
+            return actions;
+        }
+
+        private string FindOnlineProbeUnit()
+        {
+            var safeUnits = _activeFaction == FactionIds.DesertBadlands
+                ? new[] { "db_001", "db_005" }
+                : new[] { "pf_001", "pf_002", "pf_003", "pf_004", "pf_008" };
+            foreach (var cardId in MatchView.Hand)
+            {
+                if (Array.IndexOf(safeUnits, cardId) < 0 || !_registry.TryGetDefinition(cardId, out var definition)) continue;
+                if (definition.cardType == "UNIT" && definition.manualPlayAllowed &&
+                    definition.effectImplementationStatus == "IMPLEMENTED" && MatchView.GetEffectiveCost(definition) <= MatchView.Energy)
+                    return cardId;
+            }
+            return string.Empty;
+        }
+
+        private static void RequireAccepted(MatchCommandDispatchResult? result, string commandType)
+        {
+            if (!result.HasValue || result.Value.Outcome != MatchCommandOutcome.Accepted)
+                throw new InvalidOperationException($"The Unity client did not receive an accepted {commandType} acknowledgement.");
         }
 
         private IEnumerator PulsePlayerHud(Color color) => PulseHeroHud(_playerHud, _playerEffectFlash, color);
@@ -4203,6 +4273,21 @@ namespace BiomeRivals.Demo
             public int opponentLife;
             public string playerFaction;
             public string opponentFaction;
+            public string winnerPlayerId;
+            public int playerUnitCount;
+            public int opponentUnitCount;
+            public bool performedDeploy;
+            public bool performedAttack;
+            public bool performedEndTurn;
+            public bool performedConcede;
+        }
+
+        private sealed class OnlineProbeActions
+        {
+            public bool PerformedDeploy;
+            public bool PerformedAttack;
+            public bool PerformedEndTurn;
+            public bool PerformedConcede;
         }
     }
 }

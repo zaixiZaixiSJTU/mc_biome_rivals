@@ -37,7 +37,7 @@ npm run smoke:integration --workspace server-nakama
 
 `IMatchTransport` 只负责连接生命周期和 opcode 消息；`AuthoritativeMatchGateway` 负责协议反序列化；`MatchCommandDispatcher` 负责 pending 命令，并等待事件批次中的 `acknowledgedCommandId` 或 opcode `3` 拒绝。超时、断线和拒绝都不能被 UI 当成成功。
 
-收到 opcode `4` 后，Demo 标题会切换为“权威联机对局”，并以 `DemoAuthoritativeMatchView` 将观察者固定映射到近端：己方私有手牌、能量、生命、牌库/弃牌数量、双方单位/建筑槽和阶段全部从 `MatchStateStore` 渲染。部署、施法、进入战斗、攻击和结束回合经 `DemoOnlineMatchSession` 发往服务器；pending 期间交互锁定，只有 opcode `2` 的命令回执会推进画面，opcode `3`、断线和超时都会显示失败。
+收到 opcode `4` 后，Demo 标题会切换为“权威联机对局”，并以 `DemoAuthoritativeMatchView` 将观察者固定映射到近端：己方私有手牌、能量、生命、牌库/弃牌数量、双方单位/建筑槽和阶段全部从 `MatchStateStore` 渲染。部署、施法、进入战斗、攻击、结束回合和投降经 `DemoOnlineMatchSession` 发往服务器；pending 期间交互锁定，只有 opcode `2` 的命令回执会推进画面，opcode `3`、断线和超时都会显示失败。
 
 ## Unity 双进程探针
 
@@ -55,13 +55,13 @@ Windows Development Player 支持以下仅用于自动验证的参数：
 - `-previewWoodlandMansion`：离线部署占满三个建筑格的林地府邸并结算结束阶段，用于检查最左空格召唤的 Minecraft 卫道士新兵模型。
 - `-previewDeathrattle`：离线结算潜影贝死亡并选中生成的潜影壳，用于检查亡语提示、私有手牌卡面和区域计数。
 - `-previewSummon`：离线结算岩浆怪死亡，并在来源释放格生成小型岩浆怪，用于检查公开召唤事件、Minecraft 模型和出生地表脉冲。
-- `-autoOnlineAction`：双方先自动保留全部起手牌；当前行动方随后发送 `ENTER_COMBAT` 与 `END_TURN`，两端等待相同的最终 revision。
+- `-autoOnlineAction`：双方先自动保留全部起手牌，然后从安全白名单选择可支付生物进行真实部署；双方自动轮转主阶段/战斗阶段和结束回合，待召唤疲劳结束后攻击敌方英雄并投降。两端必须等待权威对局结束。
 - `-nakamaDeviceId <ID>`：为同机并行实例指定不同设备身份，长度 10–128。
-- `-onlineProbe <json>`：写出 Match ID、观察者 ID、revision、阶段、手牌、能量、生命和双方群系。
+- `-onlineProbe <json>`：写出 Match ID、观察者 ID、revision、阶段、手牌、能量、生命、双方群系、胜者、单位数量及本端实际执行的动作。
 - `-captureOnline <png>`：权威状态稳定且事件动画队列清空后截图。
 - `-quitAfterOnlineProbe`：报告写完后退出。
 
-两个报告必须具有相同 Match ID、不同观察者 ID、`ACTIVE` 状态和相同 revision；双方起手确认字段均为 `true`，私有手牌应不同，且 `playerFaction/opponentFaction` 互为镜像。
+运行 `scripts/validate-online-demo.ps1` 会同时启动两个无图形 Windows Player。两个报告必须具有相同 Match ID、不同观察者 ID、`FINISHED` 状态、相同最终 revision 和相同胜者；双方起手确认字段均为 `true`，私有手牌不同，且 `playerFaction/opponentFaction` 互为镜像。验证器还会要求两个报告合计证明至少一次部署、攻击、结束回合与投降，并确认英雄生命确实下降、最终双方投影中都存在已部署单位。
 
 海洋河流对末地的权威双客户端验证截图：[`../design/assets/demo-authoritative-ocean-vs-end-v1.png`](../design/assets/demo-authoritative-ocean-vs-end-v1.png)。截图中的近端海洋与远端末地由各自玩家提交并经服务器快照确认，两块半场仍共用同一透视平面。
 

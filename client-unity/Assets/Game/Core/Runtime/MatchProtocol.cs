@@ -150,6 +150,17 @@ namespace BiomeRivals.Core
                 payload = new MatchCommandPayloadDto()
             };
 
+        public static MatchCommandDto Concede(string commandId, int revision) =>
+            new MatchCommandDto
+            {
+                protocolVersion = GameVersions.Protocol,
+                rulesetVersion = GameVersions.Ruleset,
+                commandId = commandId,
+                expectedRevision = revision,
+                type = MatchCommandTypes.Concede,
+                payload = new MatchCommandPayloadDto()
+            };
+
         public static MatchCommandDto PlayCard(
             string commandId,
             int revision,

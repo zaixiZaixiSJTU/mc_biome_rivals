@@ -60,10 +60,27 @@ try {
     if ($probeA.playerFaction -ne 'plains_forest' -or $probeB.playerFaction -ne 'desert_badlands') {
         throw 'Online demo faction projection does not match the submitted factions.'
     }
-    if ($probeA.matchStatus -ne 'ACTIVE' -or $probeB.matchStatus -ne 'ACTIVE') {
-        throw 'Online demo probes did not complete the opening-hand phase.'
+    if ($probeA.matchStatus -ne 'FINISHED' -or $probeB.matchStatus -ne 'FINISHED') {
+        throw 'Online demo probes did not complete the authoritative action scenario.'
     }
-    Write-Output "Online demo validation passed: $($probeA.matchId), revisions $($probeA.revision)/$($probeB.revision)."
+    if (-not $probeA.winnerPlayerId -or $probeA.winnerPlayerId -ne $probeB.winnerPlayerId) {
+        throw 'Online demo probes disagree about the concession winner.'
+    }
+    if ($probeA.revision -ne $probeB.revision) {
+        throw 'Online demo probes did not converge on the same final revision.'
+    }
+    if (-not ($probeA.performedDeploy -or $probeB.performedDeploy)) { throw 'No Unity client deployed a unit.' }
+    if (-not ($probeA.performedAttack -or $probeB.performedAttack)) { throw 'No Unity client attacked.' }
+    if (-not ($probeA.performedEndTurn -or $probeB.performedEndTurn)) { throw 'No Unity client ended a turn.' }
+    if (-not ($probeA.performedConcede -or $probeB.performedConcede)) { throw 'No Unity client conceded.' }
+    if ([Math]::Min([Math]::Min($probeA.playerLife, $probeA.opponentLife), [Math]::Min($probeB.playerLife, $probeB.opponentLife)) -ge 30) {
+        throw 'The authoritative hero attack did not change either projected life total.'
+    }
+    if (($probeA.playerUnitCount + $probeA.opponentUnitCount) -lt 1 -or
+        ($probeB.playerUnitCount + $probeB.opponentUnitCount) -lt 1) {
+        throw 'A deployed unit was not present in both final projections.'
+    }
+    Write-Output "Online demo validation passed: $($probeA.matchId), final revision $($probeA.revision), winner $($probeA.winnerPlayerId)."
 }
 finally {
     foreach ($process in @($processA,$processB)) {

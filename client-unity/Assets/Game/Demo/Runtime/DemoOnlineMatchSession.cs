@@ -72,6 +72,9 @@ namespace BiomeRivals.Demo
         public Task<MatchCommandDispatchResult> EndTurnAsync() =>
             Send(MatchCommandFactory.EndTurn(NewCommandId(), Revision));
 
+        public Task<MatchCommandDispatchResult> ConcedeAsync() =>
+            Send(MatchCommandFactory.Concede(NewCommandId(), Revision));
+
         private int Revision
         {
             get

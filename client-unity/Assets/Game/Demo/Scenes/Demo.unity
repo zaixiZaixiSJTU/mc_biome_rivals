@@ -162,9 +162,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   blockShader: {fileID: 46, guid: 0000000000000000f000000000000000, type: 0}
-  backdropShader: {fileID: 4800000, guid: a4acdf38867e1b247a3a93485a4374e3, type: 3}
   groundSurfaceShader: {fileID: 4800000, guid: 4caa64c1fe417b54fbbc756b21bbdd68, type: 3}
-  illustratedBackdrop: {fileID: 2800000, guid: e793d11426f45254ba9de848fff085ca, type: 3}
 --- !u!4 &796980675
 Transform:
   m_ObjectHideFlags: 0
