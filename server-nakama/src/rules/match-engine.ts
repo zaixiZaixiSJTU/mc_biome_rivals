@@ -212,6 +212,8 @@ namespace BiomeRivalsRules {
               keywords: object.keywords.slice(),
               temporaryAttackModifier: object.temporaryAttackModifier,
               temporaryAttackModifierExpiresOnTurn: object.temporaryAttackModifierExpiresOnTurn,
+              temporaryHealthModifier: object.temporaryHealthModifier,
+              temporaryHealthModifierExpiresOnTurn: object.temporaryHealthModifierExpiresOnTurn,
               statuses: object.statuses.map(function (status): BattlefieldStatusState {
                 return {
                   statusId: status.statusId,
@@ -355,6 +357,8 @@ namespace BiomeRivalsRules {
               keywords: object.keywords.slice(),
               temporaryAttackModifier: object.temporaryAttackModifier,
               temporaryAttackModifierExpiresOnTurn: object.temporaryAttackModifierExpiresOnTurn,
+              temporaryHealthModifier: object.temporaryHealthModifier,
+              temporaryHealthModifierExpiresOnTurn: object.temporaryHealthModifierExpiresOnTurn,
               statuses: object.statuses.map(function (status): BattlefieldStatusState {
                 return {
                   statusId: status.statusId,
@@ -414,6 +418,19 @@ namespace BiomeRivalsRules {
     const next = cloneState(state);
     const events: MatchEvent[] = [];
     function emit(type: EventType, payload: { [key: string]: unknown }): void {
+      if (type === 'OBJECT_STATS_CHANGED' && typeof payload.playerId === 'string' && typeof payload.instanceId === 'string') {
+        const eventPlayer = next.players.filter(function (candidate): boolean { return candidate.playerId === payload.playerId; })[0];
+        const eventObject = eventPlayer && eventPlayer.battlefield.filter(function (candidate): boolean { return candidate.instanceId === payload.instanceId; })[0];
+        if (!eventObject) throw new Error('stats event object is missing from the authoritative battlefield');
+        payload.attack = eventObject.attack;
+        payload.health = eventObject.health;
+        payload.maxHealth = eventObject.maxHealth;
+        payload.adjacencyHealthModifier = eventObject.adjacencyHealthModifier;
+        payload.temporaryAttackModifier = eventObject.temporaryAttackModifier;
+        payload.temporaryAttackModifierExpiresOnTurn = eventObject.temporaryAttackModifierExpiresOnTurn;
+        payload.temporaryHealthModifier = eventObject.temporaryHealthModifier;
+        payload.temporaryHealthModifierExpiresOnTurn = eventObject.temporaryHealthModifierExpiresOnTurn;
+      }
       next.lastEventId += 1;
       events.push({ eventId: next.lastEventId, type: type, payload: payload });
     }
@@ -639,6 +656,8 @@ namespace BiomeRivalsRules {
         keywords: definition.keywords.slice(),
         temporaryAttackModifier: 0,
         temporaryAttackModifierExpiresOnTurn: 0,
+        temporaryHealthModifier: 0,
+        temporaryHealthModifierExpiresOnTurn: 0,
         statuses: []
       };
       player.battlefield.push(battlefieldObject);
@@ -1692,6 +1711,8 @@ namespace BiomeRivalsRules {
         keywords: definition.keywords.slice(),
         temporaryAttackModifier: 0,
         temporaryAttackModifierExpiresOnTurn: 0,
+        temporaryHealthModifier: 0,
+        temporaryHealthModifierExpiresOnTurn: 0,
         statuses: []
       };
       next.nextInstanceId += 1;
@@ -2947,10 +2968,20 @@ namespace BiomeRivalsRules {
           const effectPlayer = next.players[playerIndex]!;
           for (let objectIndex = 0; objectIndex < effectPlayer.battlefield.length; objectIndex += 1) {
             const object = effectPlayer.battlefield[objectIndex]!;
-            if (object.temporaryAttackModifierExpiresOnTurn !== state.turn) continue;
-            object.attack -= object.temporaryAttackModifier;
-            object.temporaryAttackModifier = 0;
-            object.temporaryAttackModifierExpiresOnTurn = 0;
+            const attackExpired = object.temporaryAttackModifierExpiresOnTurn === state.turn;
+            const healthExpired = object.temporaryHealthModifierExpiresOnTurn === state.turn;
+            if (!attackExpired && !healthExpired) continue;
+            if (attackExpired) {
+              object.attack -= object.temporaryAttackModifier;
+              object.temporaryAttackModifier = 0;
+              object.temporaryAttackModifierExpiresOnTurn = 0;
+            }
+            if (healthExpired) {
+              object.maxHealth -= object.temporaryHealthModifier;
+              object.health = Math.min(object.health, object.maxHealth);
+              object.temporaryHealthModifier = 0;
+              object.temporaryHealthModifierExpiresOnTurn = 0;
+            }
             emit('OBJECT_STATS_CHANGED', {
               playerId: effectPlayer.playerId,
               instanceId: object.instanceId,
@@ -2959,8 +2990,11 @@ namespace BiomeRivalsRules {
               reason: 'TEMPORARY_EXPIRED',
               attack: object.attack,
               health: object.health,
+              maxHealth: object.maxHealth,
               temporaryAttackModifier: 0,
-              temporaryAttackModifierExpiresOnTurn: 0
+              temporaryAttackModifierExpiresOnTurn: 0,
+              temporaryHealthModifier: 0,
+              temporaryHealthModifierExpiresOnTurn: 0
             });
           }
         }

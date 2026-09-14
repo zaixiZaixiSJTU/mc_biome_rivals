@@ -3202,6 +3202,37 @@ namespace BiomeRivals.Demo.Tests
         }
 
         [Test]
+        public void TemporaryAttackAndHealthModifiersExpireTogetherInOfflineRules()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("pf_001", out var bee), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { bee.id });
+            Assert.That(match.ApplyDeploy(bee,
+                match.CreateDeployCommand(bee.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            var target = match.GetObject(true, DemoSlotKind.Unit, 0);
+            var baseAttack = target.Attack;
+            var baseMaxHealth = target.MaxHealth;
+            target.Attack += 2;
+            target.TemporaryAttackModifier = 2;
+            target.TemporaryAttackModifierExpiresOnRound = match.Round;
+            target.MaxHealth += 2;
+            target.Health = target.MaxHealth;
+            target.TemporaryHealthModifier = 2;
+            target.TemporaryHealthModifierExpiresOnRound = match.Round;
+
+            match.EndPlayerTurn();
+
+            Assert.That(target.Attack, Is.EqualTo(baseAttack));
+            Assert.That(target.MaxHealth, Is.EqualTo(baseMaxHealth));
+            Assert.That(target.Health, Is.EqualTo(baseMaxHealth));
+            Assert.That(target.TemporaryAttackModifier, Is.Zero);
+            Assert.That(target.TemporaryAttackModifierExpiresOnRound, Is.Zero);
+            Assert.That(target.TemporaryHealthModifier, Is.Zero);
+            Assert.That(target.TemporaryHealthModifierExpiresOnRound, Is.Zero);
+        }
+
+        [Test]
         public void GoatMaySkipItsOptionalVaultAndRemainAtBaseAttack()
         {
             var registry = CardContentLoader.Load();

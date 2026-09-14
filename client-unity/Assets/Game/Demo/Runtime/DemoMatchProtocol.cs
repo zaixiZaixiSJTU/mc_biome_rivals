@@ -52,6 +52,8 @@ namespace BiomeRivals.Demo
         public string[] Keywords { get; set; } = System.Array.Empty<string>();
         public int TemporaryAttackModifier { get; set; }
         public int TemporaryAttackModifierExpiresOnRound { get; set; }
+        public int TemporaryHealthModifier { get; set; }
+        public int TemporaryHealthModifierExpiresOnRound { get; set; }
         public BattlefieldStatusStateDto[] Statuses { get; set; } = System.Array.Empty<BattlefieldStatusStateDto>();
 
         public bool HasKeyword(string keyword) =>

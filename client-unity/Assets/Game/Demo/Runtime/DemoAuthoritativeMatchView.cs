@@ -213,6 +213,8 @@ namespace BiomeRivals.Demo
                 Keywords = value.keywords ?? Array.Empty<string>(),
                 TemporaryAttackModifier = value.temporaryAttackModifier,
                 TemporaryAttackModifierExpiresOnRound = value.temporaryAttackModifierExpiresOnTurn,
+                TemporaryHealthModifier = value.temporaryHealthModifier,
+                TemporaryHealthModifierExpiresOnRound = value.temporaryHealthModifierExpiresOnTurn,
                 Statuses = value.statuses ?? Array.Empty<BattlefieldStatusStateDto>()
             };
 

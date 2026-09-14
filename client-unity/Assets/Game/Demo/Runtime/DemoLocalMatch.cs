@@ -1127,8 +1127,8 @@ namespace BiomeRivals.Demo
                 return DemoCommandResult.Accept($"末影水晶脉冲 {crystalPulses} 次，敌方英雄生命归零，你获得胜利！", Revision);
             }
             ResolveCaveStructureEndPhase(true, out var mineTriggers, out var mansionSummons);
-            RestoreExpiredAttackModifiers(_playerBattlefield);
-            RestoreExpiredAttackModifiers(_opponentBattlefield);
+            RestoreExpiredTemporaryModifiers(_playerBattlefield);
+            RestoreExpiredTemporaryModifiers(_opponentBattlefield);
             _triggeredEffectKeysThisTurn.Clear();
             ExcavatedThisTurn = false;
             _playerCardsPlayedThisTurn = 0;
@@ -1596,14 +1596,23 @@ namespace BiomeRivals.Demo
             };
         }
 
-        private void RestoreExpiredAttackModifiers(List<DemoBattlefieldObject> battlefield)
+        private void RestoreExpiredTemporaryModifiers(List<DemoBattlefieldObject> battlefield)
         {
             foreach (var value in battlefield)
             {
-                if (value.TemporaryAttackModifierExpiresOnRound != Round) continue;
-                value.Attack -= value.TemporaryAttackModifier;
-                value.TemporaryAttackModifier = 0;
-                value.TemporaryAttackModifierExpiresOnRound = 0;
+                if (value.TemporaryAttackModifierExpiresOnRound == Round)
+                {
+                    value.Attack -= value.TemporaryAttackModifier;
+                    value.TemporaryAttackModifier = 0;
+                    value.TemporaryAttackModifierExpiresOnRound = 0;
+                }
+                if (value.TemporaryHealthModifierExpiresOnRound == Round)
+                {
+                    value.MaxHealth -= value.TemporaryHealthModifier;
+                    value.Health = Math.Min(value.Health, value.MaxHealth);
+                    value.TemporaryHealthModifier = 0;
+                    value.TemporaryHealthModifierExpiresOnRound = 0;
+                }
             }
         }
 

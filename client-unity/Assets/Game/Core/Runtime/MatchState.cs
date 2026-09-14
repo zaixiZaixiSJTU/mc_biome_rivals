@@ -46,6 +46,8 @@ namespace BiomeRivals.Core
         public string[] keywords = Array.Empty<string>();
         public int temporaryAttackModifier;
         public int temporaryAttackModifierExpiresOnTurn;
+        public int temporaryHealthModifier;
+        public int temporaryHealthModifierExpiresOnTurn;
         public BattlefieldStatusStateDto[] statuses = Array.Empty<BattlefieldStatusStateDto>();
     }
 
@@ -155,6 +157,11 @@ namespace BiomeRivals.Core
                 foreach (var battlefieldObject in player.battlefield ?? Array.Empty<BattlefieldObjectStateDto>())
                 {
                     if (battlefieldObject == null) throw new InvalidOperationException("Snapshot contains a missing battlefield object.");
+                    if (battlefieldObject.temporaryHealthModifier < 0 || battlefieldObject.temporaryHealthModifierExpiresOnTurn < 0 ||
+                        (battlefieldObject.temporaryHealthModifier == 0) != (battlefieldObject.temporaryHealthModifierExpiresOnTurn == 0) ||
+                        (battlefieldObject.temporaryHealthModifier > 0 &&
+                            battlefieldObject.maxHealth - battlefieldObject.temporaryHealthModifier < 1))
+                        throw new InvalidOperationException("Snapshot contains an invalid temporary health modifier.");
                     var seenStatuses = new HashSet<string>(StringComparer.Ordinal);
                     foreach (var status in battlefieldObject.statuses ?? Array.Empty<BattlefieldStatusStateDto>())
                     {
@@ -421,7 +428,8 @@ namespace BiomeRivals.Core
                     statsObject.attack = payload.attack;
                     statsObject.health = payload.health;
                     if (payload.reason == "AURA_RECALCULATED" || payload.reason == "PERMANENT_HEALTH_MODIFIER" ||
-                        payload.reason == "PERMANENT_STAT_MODIFIER")
+                        payload.reason == "PERMANENT_STAT_MODIFIER" || payload.reason == "TEMPORARY_HEALTH_MODIFIER" ||
+                        payload.reason == "TEMPORARY_EXPIRED")
                     {
                         statsObject.maxHealth = payload.maxHealth;
                         if (payload.reason == "AURA_RECALCULATED")
@@ -429,6 +437,8 @@ namespace BiomeRivals.Core
                     }
                     statsObject.temporaryAttackModifier = payload.temporaryAttackModifier;
                     statsObject.temporaryAttackModifierExpiresOnTurn = payload.temporaryAttackModifierExpiresOnTurn;
+                    statsObject.temporaryHealthModifier = payload.temporaryHealthModifier;
+                    statsObject.temporaryHealthModifierExpiresOnTurn = payload.temporaryHealthModifierExpiresOnTurn;
                     if ((payload.effectId == "effect.db_004.01" || payload.effectId == "effect.pf_005.01" ||
                         payload.effectId == "effect.or_002.01" || payload.effectId == "effect.or_004.01" ||
                         payload.effectId == "effect.or_007.01" || payload.effectId == "effect.si_007.01") &&
@@ -755,6 +765,8 @@ namespace BiomeRivals.Core
                     keywords = payload.keywords ?? Array.Empty<string>(),
                     temporaryAttackModifier = 0,
                     temporaryAttackModifierExpiresOnTurn = 0,
+                    temporaryHealthModifier = 0,
+                    temporaryHealthModifierExpiresOnTurn = 0,
                     statuses = Array.Empty<BattlefieldStatusStateDto>()
                 }
             };

@@ -286,6 +286,16 @@ namespace BiomeRivalsRules {
         if ((object.temporaryAttackModifier === 0) !== (object.temporaryAttackModifierExpiresOnTurn === 0)) {
           violations.push('temporary attack modifier and expiry must be cleared together');
         }
+        if (object.temporaryHealthModifier < 0 || object.temporaryHealthModifier % 1 !== 0 ||
+            object.temporaryHealthModifierExpiresOnTurn < 0 || object.temporaryHealthModifierExpiresOnTurn % 1 !== 0) {
+          violations.push('temporary health modifier state is invalid');
+        }
+        if ((object.temporaryHealthModifier === 0) !== (object.temporaryHealthModifierExpiresOnTurn === 0)) {
+          violations.push('temporary health modifier and expiry must be cleared together');
+        }
+        if (object.maxHealth - object.temporaryHealthModifier < 1) {
+          violations.push('temporary health modifier exceeds base max health');
+        }
         if (!Array.isArray(object.statuses)) violations.push('battlefield statuses must be an array');
         else {
           const seenStatuses: { [statusId: string]: boolean } = {};

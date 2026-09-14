@@ -1035,6 +1035,93 @@ namespace BiomeRivals.Core.Tests
         }
 
         [Test]
+        public void Apply_ReplaysTemporaryHealthModifierAndClampedExpiry()
+        {
+            var target = new BattlefieldObjectStateDto
+            {
+                instanceId = "object-7", cardId = "pf_001", cardType = "UNIT", attack = 1,
+                health = 2, maxHealth = 2, slotKind = "UNIT", slotIndex = 1, occupiedSlots = 1, summonedTurn = 1
+            };
+            var slots = new string[4];
+            slots[1] = target.instanceId;
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "match-health", protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice", unitSlots = slots, battlefield = new[] { target } },
+                    new PlayerStateDto { playerId = "bob" }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 1, type = MatchEventTypes.ObjectStatsChanged,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", instanceId = "object-7", reason = "TEMPORARY_HEALTH_MODIFIER",
+                            attack = 1, health = 4, maxHealth = 4,
+                            temporaryHealthModifier = 2, temporaryHealthModifierExpiresOnTurn = 1
+                        }
+                    }
+                }
+            });
+            Assert.That(target.health, Is.EqualTo(4));
+            Assert.That(target.maxHealth, Is.EqualTo(4));
+            Assert.That(target.temporaryHealthModifier, Is.EqualTo(2));
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 2,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 2, type = MatchEventTypes.ObjectStatsChanged,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", instanceId = "object-7", reason = "TEMPORARY_EXPIRED",
+                            attack = 1, health = 2, maxHealth = 2
+                        }
+                    }
+                }
+            });
+            Assert.That(target.health, Is.EqualTo(2));
+            Assert.That(target.maxHealth, Is.EqualTo(2));
+            Assert.That(target.temporaryHealthModifier, Is.Zero);
+            Assert.That(target.temporaryHealthModifierExpiresOnTurn, Is.Zero);
+        }
+
+        [Test]
+        public void Replace_RejectsContradictoryTemporaryHealthState()
+        {
+            var target = new BattlefieldObjectStateDto
+            {
+                instanceId = "object-7", cardId = "pf_001", cardType = "UNIT", attack = 1,
+                health = 2, maxHealth = 2, slotKind = "UNIT", slotIndex = 0, occupiedSlots = 1, summonedTurn = 1,
+                temporaryHealthModifier = 1, temporaryHealthModifierExpiresOnTurn = 0
+            };
+            var store = new MatchStateStore();
+            var snapshot = new MatchStateDto
+            {
+                matchId = "match-invalid-health", protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice", battlefield = new[] { target } },
+                    new PlayerStateDto { playerId = "bob" }
+                }
+            };
+
+            Assert.Throws<InvalidOperationException>(() => store.Replace(snapshot));
+        }
+
+        [Test]
         public void Apply_ReplaysFriendlyAttackBuffAndBuildingHeal()
         {
             var unit = new BattlefieldObjectStateDto

@@ -323,6 +323,8 @@ namespace BiomeRivals.Core
         public int amount;
         public int temporaryAttackModifier;
         public int temporaryAttackModifierExpiresOnTurn;
+        public int temporaryHealthModifier;
+        public int temporaryHealthModifierExpiresOnTurn;
         public string statusId = string.Empty;
         public int remainingDuration;
         public string sourcePlayerId = string.Empty;

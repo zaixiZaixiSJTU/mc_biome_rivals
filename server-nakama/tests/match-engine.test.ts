@@ -142,6 +142,8 @@ function placeUnit(
     keywords: definition.keywords.slice(),
     temporaryAttackModifier: 0,
     temporaryAttackModifierExpiresOnTurn: 0,
+    temporaryHealthModifier: 0,
+    temporaryHealthModifierExpiresOnTurn: 0,
     statuses: []
   });
 }
@@ -174,9 +176,92 @@ function placeBuilding(
     keywords: definition.keywords.slice(),
     temporaryAttackModifier: 0,
     temporaryAttackModifierExpiresOnTurn: 0,
+    temporaryHealthModifier: 0,
+    temporaryHealthModifierExpiresOnTurn: 0,
     statuses: []
   });
 }
+
+TestHarness.test('temporary health state survives authoritative snapshot projection', function (): void {
+  const state = activeState('match-temporary-health-snapshot', ['alice', 'bob']);
+  placeUnit(state, 0, 'pf_001', 0, 'object-1', state.turn);
+  const object = state.players[0]!.battlefield[0]!;
+  object.maxHealth += 2;
+  object.health += 2;
+  object.temporaryHealthModifier = 2;
+  object.temporaryHealthModifierExpiresOnTurn = state.turn;
+
+  const snapshot = BiomeRivalsRules.createClientSnapshot(state, state.players[0]!.playerId);
+  const projected = snapshot.players[0]!.battlefield[0]!;
+
+  TestHarness.equal(projected.temporaryHealthModifier, 2);
+  TestHarness.equal(projected.temporaryHealthModifierExpiresOnTurn, state.turn);
+  TestHarness.equal(projected.maxHealth, object.maxHealth);
+  TestHarness.equal(BiomeRivalsRules.validateState(state).length, 0);
+  assertSnapshotMatchesSchema(snapshot);
+});
+
+TestHarness.test('temporary attack and health expire together in one authoritative stats event', function (): void {
+  const state = activeState('match-temporary-stats-expiry', ['alice', 'bob']);
+  const actorIndex = state.activePlayerIndex;
+  placeUnit(state, actorIndex, 'pf_001', 0, 'object-1', state.turn);
+  const object = state.players[actorIndex]!.battlefield[0]!;
+  object.attack += 2;
+  object.temporaryAttackModifier = 2;
+  object.temporaryAttackModifierExpiresOnTurn = state.turn;
+  object.maxHealth += 2;
+  object.health = object.maxHealth - 1;
+  object.temporaryHealthModifier = 2;
+  object.temporaryHealthModifierExpiresOnTurn = state.turn;
+  const baseAttack = object.attack - 2;
+  const baseMaxHealth = object.maxHealth - 2;
+
+  const result = BiomeRivalsRules.applyCommand(state, state.players[actorIndex]!.playerId,
+    command('end-temporary-stats', 0, 'END_TURN'));
+
+  TestHarness.ok(result.accepted, JSON.stringify(result));
+  if (!result.accepted) return;
+  const expired = result.state.players[actorIndex]!.battlefield[0]!;
+  TestHarness.equal(expired.attack, baseAttack);
+  TestHarness.equal(expired.maxHealth, baseMaxHealth);
+  TestHarness.equal(expired.health, baseMaxHealth);
+  TestHarness.equal(expired.temporaryAttackModifier, 0);
+  TestHarness.equal(expired.temporaryAttackModifierExpiresOnTurn, 0);
+  TestHarness.equal(expired.temporaryHealthModifier, 0);
+  TestHarness.equal(expired.temporaryHealthModifierExpiresOnTurn, 0);
+  const expiryEvents = result.batch.events.filter(function (event): boolean {
+    return event.type === 'OBJECT_STATS_CHANGED' && event.payload.reason === 'TEMPORARY_EXPIRED';
+  });
+  TestHarness.equal(expiryEvents.length, 1);
+  TestHarness.equal(expiryEvents[0]!.payload.maxHealth, baseMaxHealth);
+  TestHarness.equal(expiryEvents[0]!.payload.health, baseMaxHealth);
+  TestHarness.equal(expiryEvents[0]!.payload.temporaryHealthModifier, 0);
+  TestHarness.equal(BiomeRivalsRules.validateState(result.state).length, 0);
+  assertEventBatchMatchesSchema(result.batch);
+});
+
+TestHarness.test('temporary health invariants reject contradictory or impossible state', function (): void {
+  const state = activeState('match-invalid-temporary-health', ['alice', 'bob']);
+  placeUnit(state, 0, 'pf_001', 0, 'object-1', state.turn);
+  const object = state.players[0]!.battlefield[0]!;
+
+  object.temporaryHealthModifier = -1;
+  TestHarness.ok(BiomeRivalsRules.validateState(state).some(function (value): boolean {
+    return value === 'temporary health modifier state is invalid';
+  }));
+  object.temporaryHealthModifier = 1;
+  object.temporaryHealthModifierExpiresOnTurn = 0;
+  TestHarness.ok(BiomeRivalsRules.validateState(state).some(function (value): boolean {
+    return value === 'temporary health modifier and expiry must be cleared together';
+  }));
+  const contradictorySnapshot = BiomeRivalsRules.createClientSnapshot(state, state.players[0]!.playerId);
+  TestHarness.equal(validateSnapshotSchema(contradictorySnapshot), false);
+  object.temporaryHealthModifierExpiresOnTurn = state.turn;
+  object.temporaryHealthModifier = object.maxHealth;
+  TestHarness.ok(BiomeRivalsRules.validateState(state).some(function (value): boolean {
+    return value === 'temporary health modifier exceeds base max health';
+  }));
+});
 
 TestHarness.test('creates a valid two-player initial state', function (): void {
   const state = BiomeRivalsRules.createInitialState('match-1', ['alice', 'bob'], undefined, 'fixed-secret-1');

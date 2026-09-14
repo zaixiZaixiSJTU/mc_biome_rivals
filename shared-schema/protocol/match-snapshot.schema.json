@@ -8,7 +8,7 @@
   "properties": {
     "matchId": { "type": "string", "minLength": 1 },
     "viewerPlayerId": { "type": "string", "minLength": 1 },
-    "protocolVersion": { "const": 31 },
+    "protocolVersion": { "const": 32 },
     "rulesetVersion": { "type": "string", "minLength": 1 },
     "revision": { "type": "integer", "minimum": 0 },
     "lastEventId": { "type": "integer", "minimum": 0 },
@@ -85,7 +85,7 @@
             "type": "array",
             "items": {
               "type": "object", "additionalProperties": false,
-              "required": ["instanceId", "cardId", "cardType", "attack", "health", "maxHealth", "adjacencyHealthModifier", "slotKind", "slotIndex", "occupiedSlots", "summonedTurn", "hasAttacked", "keywords", "temporaryAttackModifier", "temporaryAttackModifierExpiresOnTurn", "statuses"],
+              "required": ["instanceId", "cardId", "cardType", "attack", "health", "maxHealth", "adjacencyHealthModifier", "slotKind", "slotIndex", "occupiedSlots", "summonedTurn", "hasAttacked", "keywords", "temporaryAttackModifier", "temporaryAttackModifierExpiresOnTurn", "temporaryHealthModifier", "temporaryHealthModifierExpiresOnTurn", "statuses"],
               "properties": {
                 "instanceId": { "type": "string", "pattern": "^object-[0-9]+$" },
                 "cardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
@@ -102,6 +102,8 @@
                 "keywords": { "type": "array", "items": { "enum": ["TAUNT", "CHARGE"] }, "uniqueItems": true },
                 "temporaryAttackModifier": { "type": "integer" },
                 "temporaryAttackModifierExpiresOnTurn": { "type": "integer", "minimum": 0 },
+                "temporaryHealthModifier": { "type": "integer", "minimum": 0 },
+                "temporaryHealthModifierExpiresOnTurn": { "type": "integer", "minimum": 0 },
                 "statuses": {
                   "type": "array", "uniqueItems": true,
                   "items": {
@@ -119,7 +121,17 @@
                     }
                   }
                 }
-              }
+              },
+              "allOf": [
+                {
+                  "if": {
+                    "properties": { "temporaryHealthModifier": { "const": 0 } },
+                    "required": ["temporaryHealthModifier"]
+                  },
+                  "then": { "properties": { "temporaryHealthModifierExpiresOnTurn": { "const": 0 } } },
+                  "else": { "properties": { "temporaryHealthModifierExpiresOnTurn": { "minimum": 1 } } }
+                }
+              ]
             }
           }
         }
