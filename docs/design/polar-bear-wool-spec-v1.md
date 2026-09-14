@@ -1,9 +1,9 @@
 # SI-005 北极熊 / TK-001 羊毛：规则契约 v1
 
-状态：设计冻结，尚未实现
-对应基线：`protocolVersion 31`、`rulesetVersion prototype-0.48`、内容版本 40
+状态：SI-005 已实现，TK-001 尚未实现
+当前组合：`protocolVersion 31`、`rulesetVersion prototype-0.49`、内容版本 41
 
-本文只冻结两张牌的权威语义。版本升级、实现注册、生成内容和运行时代码分别由 RULE-030B 至 RULE-030E 完成。
+本文冻结两张牌的权威语义。RULE-030B 已完成北极熊纵向切片；临时生命协议、羊毛实现和集成演示仍分别留给 RULE-030C 至 RULE-030E。
 
 ## 1. 规范文本
 

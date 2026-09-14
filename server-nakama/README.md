@@ -16,7 +16,7 @@
 
 协议 opcode：`1` 命令、`2` 事件批次、`3` 命令拒绝、`4` 权威快照。协议结构以 `shared-schema/protocol` 为准。
 
-当前基础对局纵向切片使用 `protocolVersion: 31` 与 `rulesetVersion: prototype-0.48`。协议 31 将 `FIRE` 加入公开战场状态及其生命周期事件；`prototype-0.48` 接入 NT-003 烈焰人的战斗施火/掉落与 TK-013 烈焰棒的定向伤害。协议 30 的持续战场来源 `sourceInstanceId`、协议 29 的公开战场选择 `HEAL_UNIT` 及更早的隐藏牌库投影、`POISON`、DARK 生命周期继续兼容；`ATTACK.attackerInstanceId = "HERO"` 继续表示英雄发起的装备攻击。旧协议或规则集客户端不能静默兼容。
+当前基础对局纵向切片使用 `protocolVersion: 31` 与 `rulesetVersion: prototype-0.49`。协议 31 将 `FIRE` 加入公开战场状态及其生命周期事件；`prototype-0.49` 在 0.48 的烈焰人/烈焰棒闭环上新增 SI-005 北极熊的部署时低生命永久攻击加成。协议 30 的持续战场来源 `sourceInstanceId`、协议 29 的公开战场选择 `HEAL_UNIT` 及更早的隐藏牌库投影、`POISON`、DARK 生命周期继续兼容；`ATTACK.attackerInstanceId = "HERO"` 继续表示英雄发起的装备攻击。旧协议或规则集客户端不能静默兼容。
 
 运行：
 

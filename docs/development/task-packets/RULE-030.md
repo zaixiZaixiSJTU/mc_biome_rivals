@@ -27,7 +27,7 @@
 
 入口：
 
-- `docs/design/biome-card-design-v0.1.md`
+- `docs/design/Minecraft_Biome_Rivals_Prototype_Cards_v0.1.md`
 - `shared-schema/card-data/implemented-effect-registry.v1.json`
 - `server-nakama/src/rules/match-engine.ts`
 - `client-unity/Assets/Game/Demo/Runtime/DemoLocalMatch.cs`
@@ -38,7 +38,7 @@
 
 ## RULE-030B 北极熊纵向切片
 
-状态：**下一任务**。
+状态：**已完成**。北极熊已接入服务端权威结算、Unity 离线规则和权威事件回放。
 
 依赖：RULE-030A。
 
@@ -57,7 +57,7 @@
 
 ## RULE-030C 临时生命协议基础设施
 
-状态：**未开始**。
+状态：**下一任务**。
 
 依赖：RULE-030B。
 
@@ -112,7 +112,7 @@
 ## 子任务交接模板
 
 ```text
-任务编号：RULE-030B
+任务编号：RULE-030C
 只完成该子任务，不提前做后续子任务。
 仓库：D:\gitt\mc_biome_rivals
 基线提交：<启动时填写>

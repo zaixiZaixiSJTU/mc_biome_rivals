@@ -2,6 +2,13 @@
 
 本文件按时间倒序记录影响视觉表现、资源管线或运行时架构的改动。
 
+## 2026-09-15 北极熊低生命部署加成
+
+- **权威规则**：SI-005「北极熊」在部署时读取控制者英雄当前生命；生命不高于 15 时，基础 3/6 在 `CARD_DEPLOYED` 和既有动物入场监听之后永久获得 +1 攻击。生命 16 不触发，部署后的治疗或受伤不会追溯增减。
+- **事件与版本**：复用 `OBJECT_STATS_CHANGED(reason = PERMANENT_STAT_MODIFIER)`，携带北极熊来源实例和最终属性；协议结构保持 31，规则集升级为 `prototype-0.49`，内容版本升级为 41。实现注册状态变为 54 个 `IMPLEMENTED`、15 个 `PENDING`。
+- **Unity 同构**：离线 Demo 使用相同的 15 点边界与一次性部署检查，并提供范围校验的英雄生命重置入口供确定性测试；权威回放测试确认永久攻击变化不会破坏 `TAUNT` 或误写临时攻击字段。
+- **验证**：服务端规则测试 166/166；Unity `6000.0.28f1c1` EditMode 217/217。截图、Windows Player 和 Docker 双端验收按拆分边界留给 RULE-030E。
+
 ## 2026-09-14 账户服务与最小大厅外壳
 
 - **认证解耦**：新增 `IPlayerAccountService` / `IPlayerAccountBackend` / `IPlayerAccountSessionProvider`。设备认证、token 恢复、资料读取、改名和退出集中到 Nakama 账户适配器；实时传输只消费已认证 session，不再拥有身份生命周期。

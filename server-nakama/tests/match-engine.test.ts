@@ -3152,6 +3152,98 @@ TestHarness.test('Iron Golem stays at base stats when only the opponent controls
   TestHarness.equal(result.batch.events[0]!.type, 'CARD_DEPLOYED');
 });
 
+TestHarness.test('Polar Bear gains permanent attack when its hero is at exactly fifteen life', function (): void {
+  const state = activeState('match-polar-bear-low-life', ['alice', 'bob'], ['snow_ice', 'nether']);
+  const actorIndex = state.activePlayerIndex;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['si_005'];
+  actor.life = 15;
+  actor.redstone = 4;
+  actor.redstoneCapacity = 4;
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('polar-bear-low-life', 0, 'si_005', 'UNIT', 0));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  const polarBear = result.state.players[actorIndex]!.battlefield[0]!;
+  TestHarness.equal(polarBear.attack, 4);
+  TestHarness.equal(polarBear.health, 6);
+  TestHarness.equal(polarBear.maxHealth, 6);
+  TestHarness.equal(polarBear.keywords.join(','), 'TAUNT');
+  TestHarness.equal(result.batch.events.length, 2);
+  TestHarness.equal(result.batch.events[0]!.type, 'CARD_DEPLOYED');
+  TestHarness.equal(result.batch.events[0]!.payload.attack, 3);
+  TestHarness.equal((result.batch.events[0]!.payload.keywords as string[]).join(','), 'TAUNT');
+  TestHarness.equal(result.batch.events[1]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(result.batch.events[1]!.payload.sourceCardId, 'si_005');
+  TestHarness.equal(result.batch.events[1]!.payload.sourceInstanceId, polarBear.instanceId);
+  TestHarness.equal(result.batch.events[1]!.payload.effectId, 'effect.si_005.01');
+  TestHarness.equal(result.batch.events[1]!.payload.reason, 'PERMANENT_STAT_MODIFIER');
+  TestHarness.equal(result.batch.events[1]!.payload.attack, 4);
+  TestHarness.equal(result.batch.events[1]!.payload.health, 6);
+  TestHarness.equal(result.batch.events[1]!.payload.maxHealth, 6);
+  assertEventBatchMatchesSchema(result.batch);
+});
+
+TestHarness.test('Polar Bear checks hero life only once when deployed', function (): void {
+  const state = activeState('match-polar-bear-high-life', ['alice', 'bob'], ['snow_ice', 'nether']);
+  const actorIndex = state.activePlayerIndex;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['si_005'];
+  actor.life = 16;
+  actor.redstone = 4;
+  actor.redstoneCapacity = 4;
+
+  const deployed = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('polar-bear-high-life', 0, 'si_005', 'UNIT', 0));
+  TestHarness.equal(deployed.accepted, true, JSON.stringify(deployed));
+  if (!deployed.accepted) return;
+  TestHarness.equal(deployed.state.players[actorIndex]!.battlefield[0]!.attack, 3);
+  TestHarness.equal(deployed.batch.events.length, 1);
+  TestHarness.equal(deployed.batch.events[0]!.type, 'CARD_DEPLOYED');
+
+  deployed.state.players[actorIndex]!.life = 15;
+  const ended = BiomeRivalsRules.applyCommand(deployed.state, actor.playerId,
+    command('polar-bear-later-damage', 1, 'END_TURN'));
+  TestHarness.equal(ended.accepted, true, JSON.stringify(ended));
+  if (!ended.accepted) return;
+  TestHarness.equal(ended.state.players[actorIndex]!.battlefield[0]!.attack, 3,
+    'falling to the threshold after deployment must not grant the bonus');
+});
+
+TestHarness.test('Polar Bear resolves after existing animal entry listeners and keeps its bonus after healing', function (): void {
+  const state = activeState('match-polar-bear-listener-order', ['alice', 'bob'], ['snow_ice', 'nether']);
+  const actorIndex = state.activePlayerIndex;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['si_005'];
+  actor.life = 15;
+  actor.redstone = 4;
+  actor.redstoneCapacity = 4;
+  placeBuilding(state, actorIndex, 'pf_005', 0, 'object-10');
+
+  const deployed = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('polar-bear-listener-order', 0, 'si_005', 'UNIT', 0));
+  TestHarness.equal(deployed.accepted, true, JSON.stringify(deployed));
+  if (!deployed.accepted) return;
+  TestHarness.equal(deployed.batch.events.map(function (event): string { return event.type; }).join(','),
+    'CARD_DEPLOYED,OBJECT_STATS_CHANGED,OBJECT_STATS_CHANGED');
+  TestHarness.equal(deployed.batch.events[1]!.payload.effectId, 'effect.pf_005.01');
+  TestHarness.equal(deployed.batch.events[2]!.payload.effectId, 'effect.si_005.01');
+  TestHarness.equal(deployed.batch.events[2]!.payload.attack, 4);
+  TestHarness.equal(deployed.batch.events[2]!.payload.health, 7);
+  TestHarness.equal(deployed.batch.events[2]!.payload.maxHealth, 7);
+
+  deployed.state.players[actorIndex]!.life = 20;
+  const ended = BiomeRivalsRules.applyCommand(deployed.state, actor.playerId,
+    command('polar-bear-healed-turn-end', 1, 'END_TURN'));
+  TestHarness.equal(ended.accepted, true, JSON.stringify(ended));
+  if (!ended.accepted) return;
+  TestHarness.equal(ended.state.players[actorIndex]!.battlefield.filter(function (value): boolean {
+    return value.cardId === 'si_005';
+  })[0]!.attack, 4, 'healing after deployment must not remove the permanent bonus');
+});
+
 TestHarness.test('Vindicator gains temporary attack with a friendly building and expires at turn end', function (): void {
   const state = activeState('match-vindicator-building', ['alice', 'bob'], ['cave_dark_forest', 'plains_forest']);
   const actorIndex = state.activePlayerIndex;

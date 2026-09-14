@@ -765,6 +765,25 @@ namespace BiomeRivalsRules {
           }
         }
       } else if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
+          definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.si_005.01') {
+        if (player.life <= 15) {
+          battlefieldObject.attack += 1;
+          emit('OBJECT_STATS_CHANGED', {
+            playerId: player.playerId,
+            instanceId: battlefieldObject.instanceId,
+            sourceCardId: cardId,
+            sourceInstanceId: battlefieldObject.instanceId,
+            effectId: definition.effectIds[0],
+            reason: 'PERMANENT_STAT_MODIFIER',
+            attack: battlefieldObject.attack,
+            health: battlefieldObject.health,
+            maxHealth: battlefieldObject.maxHealth,
+            adjacencyHealthModifier: battlefieldObject.adjacencyHealthModifier,
+            temporaryAttackModifier: battlefieldObject.temporaryAttackModifier,
+            temporaryAttackModifierExpiresOnTurn: battlefieldObject.temporaryAttackModifierExpiresOnTurn
+          });
+        }
+      } else if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
           definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.or_003.01') {
         if (drownedBattlecryActive && battlecryTargetPlayer !== null && battlecryTarget !== null) {
           battlecryTarget.health = Math.max(0, battlecryTarget.health - 1);

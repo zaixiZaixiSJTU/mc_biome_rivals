@@ -2781,6 +2781,70 @@ namespace BiomeRivals.Demo.Tests
         }
 
         [Test]
+        public void PolarBearChecksTheFifteenLifeThresholdOnlyWhenDeployed()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("si_005", out var polarBearDefinition), Is.True);
+            Assert.That(polarBearDefinition.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+
+            var lowLife = new DemoLocalMatch();
+            lowLife.ResetPlayerLife(15);
+            lowLife.ResetHand(new[] { polarBearDefinition.id });
+            var empowered = lowLife.ApplyDeploy(polarBearDefinition,
+                lowLife.CreateDeployCommand(polarBearDefinition.id, DemoSlotKind.Unit, 0));
+            Assert.That(empowered.Accepted, Is.True, empowered.Message);
+            var empoweredBear = lowLife.GetObject(true, DemoSlotKind.Unit, 0);
+            Assert.That(empoweredBear.Attack, Is.EqualTo(4));
+            Assert.That(empoweredBear.Health, Is.EqualTo(6));
+            Assert.That(empoweredBear.MaxHealth, Is.EqualTo(6));
+            Assert.That(empoweredBear.Keywords, Does.Contain("TAUNT"));
+            Assert.That(empowered.Message, Does.Contain("寒地护卫触发"));
+            lowLife.ResetPlayerLife(20);
+            lowLife.EndPlayerTurn();
+            Assert.That(empoweredBear.Attack, Is.EqualTo(4));
+
+            var highLife = new DemoLocalMatch();
+            highLife.ResetPlayerLife(16);
+            highLife.ResetHand(new[] { polarBearDefinition.id });
+            var normal = highLife.ApplyDeploy(polarBearDefinition,
+                highLife.CreateDeployCommand(polarBearDefinition.id, DemoSlotKind.Unit, 0));
+            Assert.That(normal.Accepted, Is.True, normal.Message);
+            var normalBear = highLife.GetObject(true, DemoSlotKind.Unit, 0);
+            Assert.That(normalBear.Attack, Is.EqualTo(3));
+            Assert.That(normal.Message, Does.Contain("寒地护卫未触发"));
+            highLife.ResetPlayerLife(15);
+            highLife.EndPlayerTurn();
+            Assert.That(normalBear.Attack, Is.EqualTo(3));
+        }
+
+        [Test]
+        public void PolarBearResolvesAfterAnimalEntryGrowthLocally()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("pf_005", out var nursery), Is.True);
+            Assert.That(registry.TryGetDefinition("si_005", out var polarBearDefinition), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { nursery.id });
+            Assert.That(match.ApplyDeploy(nursery,
+                match.CreateDeployCommand(nursery.id, DemoSlotKind.Building, 0)).Accepted, Is.True);
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            match.ResetPlayerLife(15);
+            match.ResetHand(new[] { polarBearDefinition.id });
+
+            var result = match.ApplyDeploy(polarBearDefinition,
+                match.CreateDeployCommand(polarBearDefinition.id, DemoSlotKind.Unit, 0));
+
+            Assert.That(result.Accepted, Is.True, result.Message);
+            var polarBear = match.GetObject(true, DemoSlotKind.Unit, 0);
+            Assert.That(polarBear.Attack, Is.EqualTo(4));
+            Assert.That(polarBear.Health, Is.EqualTo(7));
+            Assert.That(polarBear.MaxHealth, Is.EqualTo(7));
+            Assert.That(result.Message.IndexOf("苗圃培育", System.StringComparison.Ordinal),
+                Is.LessThan(result.Message.IndexOf("寒地护卫", System.StringComparison.Ordinal)));
+        }
+
+        [Test]
         public void VindicatorBuildingBattlecryExpiresAtTurnEndLocally()
         {
             var registry = CardContentLoader.Load();

@@ -281,7 +281,7 @@
                         "nameKey":  "card.si_005.name",
                         "name":  "北极熊",
                         "rulesTextKey":  "card.si_005.rules",
-                        "rulesText":  "嘲讽。若己方英雄生命值不高于 15，本牌获得 +1 攻击力。",
+                        "rulesText":  "嘲讽。部署时，若己方英雄生命值不高于 15，本牌获得 +1 攻击力。",
                         "typeLabel":  "生物",
                         "rarityLabel":  "稀有",
                         "tagLabels":  [

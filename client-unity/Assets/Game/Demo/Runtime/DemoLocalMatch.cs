@@ -99,6 +99,12 @@ namespace BiomeRivals.Demo
             OpponentFactionId = factionId;
         }
 
+        public void ResetPlayerLife(int life)
+        {
+            if (life < 1 || life > 30) throw new ArgumentOutOfRangeException(nameof(life));
+            PlayerLife = life;
+        }
+
         public void ResetHand(IEnumerable<string> cardIds)
         {
             if (cardIds == null) throw new ArgumentNullException(nameof(cardIds));
@@ -406,6 +412,19 @@ namespace BiomeRivals.Demo
                     if (movementDeaths.Count > 0) deployMessage += " " + string.Join(" ", movementDeaths);
                 }
                 else deployMessage += "；已跳过可选的越位移动战吼。";
+            }
+            else if (definition.effectImplementationStatus == "IMPLEMENTED" &&
+                definition.effectIds != null && definition.effectIds.Contains("effect.si_005.01"))
+            {
+                if (PlayerLife <= 15)
+                {
+                    deployedObject.Attack += 1;
+                    deployMessage += "；寒地护卫触发，英雄生命不高于 15，永久获得 +1 攻击力。";
+                }
+                else
+                {
+                    deployMessage += "；英雄生命高于 15，寒地护卫未触发。";
+                }
             }
             else if (definition.effectImplementationStatus == "IMPLEMENTED" &&
                 definition.effectIds != null && definition.effectIds.Contains("effect.or_003.01"))

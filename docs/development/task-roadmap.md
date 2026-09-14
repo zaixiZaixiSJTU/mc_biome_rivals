@@ -16,9 +16,9 @@
 ## 当前基线与风险
 
 - 有效仓库：`D:\gitt\mc_biome_rivals`
-- 当前已提交基线：`1829e0a docs: advance roadmap to small card effects`
-- 开发中版本：协议 31、规则集 `prototype-0.48`、内容版本 40。
-- 卡牌效果状态：53 个 `IMPLEMENTED`，16 个 `PENDING`。
+- 当前已提交基线：`9777799 docs: freeze polar bear and wool rules`
+- 开发中版本：协议 31、规则集 `prototype-0.49`、内容版本 41。
+- 卡牌效果状态：54 个 `IMPLEMENTED`，15 个 `PENDING`。
 - 此前混合在工作区的体素场景、实体模型、资源管线和 FIRE 规则已在恢复基线 `6c9202e` 中固定。后续不得继续使用这种跨任务混提方式。
 - `docs/development/change-log.md`、本路线图和 BR-000 检查点均已纳入 Git。
 
@@ -154,12 +154,12 @@
 
 ### RULE-030 小型独立效果（已拆分）
 
-状态：**RULE-030A 已完成，RULE-030B 待开始**。规则契约见 [`../design/polar-bear-wool-spec-v1.md`](../design/polar-bear-wool-spec-v1.md)，详细交接边界见 [`task-packets/RULE-030.md`](task-packets/RULE-030.md)。
+状态：**RULE-030A/B 已完成，RULE-030C 待开始**。规则契约见 [`../design/polar-bear-wool-spec-v1.md`](../design/polar-bear-wool-spec-v1.md)，详细交接边界见 [`task-packets/RULE-030.md`](task-packets/RULE-030.md)。
 
 原目标：完成 `si_005` 北极熊、`tk_001` 羊毛。由于该目标同时涉及效果语义、协议字段、服务端权威结算、Unity 状态投影、离线交互和联机验收，现拆成五个顺序任务：
 
 1. `RULE-030A`：**已完成**。冻结两张牌的规则契约，只写规范，不改运行时代码。
-2. `RULE-030B`：仅完成北极熊纵向切片，不引入临时生命字段。
+2. `RULE-030B`：**已完成**。仅完成北极熊纵向切片，不引入临时生命字段。
 3. `RULE-030C`：仅建立临时生命修正的协议和状态基础设施，不让羊毛变成可打出的牌。
 4. `RULE-030D`：仅完成羊毛纵向切片，复用 030C 的基础设施。
 5. `RULE-030E`：仅做两张牌的集成演示、Windows 构建、Docker 双端 smoke 与文档收口。
@@ -223,7 +223,7 @@
 ## 新会话最小交接模板
 
 ```text
-任务编号：RULE-030B
+任务编号：RULE-030C
 只完成该任务，不顺带处理其他路线图项目。
 仓库：D:\gitt\mc_biome_rivals
 基线提交：<启动时填写>
@@ -234,4 +234,4 @@
 
 ## 当前唯一推荐下一步
 
-只执行 **RULE-030B：北极熊纵向切片**。依据 `polar-bear-wool-spec-v1.md` 实现 `si_005` 的服务端权威结算、Unity 回放与离线同构测试；不新增临时生命字段，也不提前实现羊毛。
+只执行 **RULE-030C：临时生命协议基础设施**。新增可回放、可校验、可在结束阶段过期的临时生命字段，但保持 `tk_001` 为 `PENDING`，不让羊毛成为可打出的牌。

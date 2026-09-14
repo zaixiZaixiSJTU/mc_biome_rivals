@@ -1931,6 +1931,53 @@ namespace BiomeRivals.Core.Tests
         }
 
         [Test]
+        public void Apply_ReplaysPolarBearPermanentAttackBonusAndKeepsTaunt()
+        {
+            var polarBear = new BattlefieldObjectStateDto
+            {
+                instanceId = "object-5", cardId = "si_005", cardType = "UNIT", attack = 3,
+                health = 6, maxHealth = 6, slotKind = "UNIT", slotIndex = 0, occupiedSlots = 1,
+                summonedTurn = 1, keywords = new[] { "TAUNT" }
+            };
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "polar-bear-replay", viewerPlayerId = "alice", protocolVersion = GameVersions.Protocol,
+                rulesetVersion = GameVersions.Ruleset, status = "ACTIVE", phase = "MAIN", turn = 1, activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto
+                    {
+                        playerId = "alice", life = 15, unitSlots = new[] { "object-5", null, null, null },
+                        buildingSlots = new string[3], battlefield = new[] { polarBear }
+                    },
+                    new PlayerStateDto { playerId = "bob", life = 30 }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 1, type = MatchEventTypes.ObjectStatsChanged, payload = new MatchEventPayloadDto
+                    {
+                        playerId = "alice", instanceId = "object-5", sourceCardId = "si_005", sourceInstanceId = "object-5",
+                        effectId = "effect.si_005.01", reason = "PERMANENT_STAT_MODIFIER",
+                        attack = 4, health = 6, maxHealth = 6,
+                        temporaryAttackModifier = 0, temporaryAttackModifierExpiresOnTurn = 0
+                    }}
+                }
+            });
+
+            Assert.That(polarBear.attack, Is.EqualTo(4));
+            Assert.That(polarBear.health, Is.EqualTo(6));
+            Assert.That(polarBear.maxHealth, Is.EqualTo(6));
+            Assert.That(polarBear.keywords, Does.Contain("TAUNT"));
+            Assert.That(polarBear.temporaryAttackModifier, Is.Zero);
+        }
+
+        [Test]
         public void Apply_ReplaysCactusReactionAndPreservesNurseryTriggerMarkers()
         {
             var attacker = new BattlefieldObjectStateDto

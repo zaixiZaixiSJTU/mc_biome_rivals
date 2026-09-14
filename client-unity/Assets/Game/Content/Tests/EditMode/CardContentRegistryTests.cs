@@ -54,10 +54,17 @@ namespace BiomeRivals.Content.Tests
             Assert.That(vindicator.effectIds, Is.EqualTo(new[] { "effect.cd_005.01" }));
             Assert.That(registry.TryGetDefinition("pf_008", out var ironGolem), Is.True);
             Assert.That(ironGolem.keywords, Is.EqualTo(new[] { "TAUNT" }));
+            Assert.That(registry.TryGetDefinition("si_005", out var polarBear), Is.True);
+            Assert.That(polarBear.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+            Assert.That(polarBear.effectIds, Is.EqualTo(new[] { "effect.si_005.01" }));
+            Assert.That(polarBear.keywords, Is.EqualTo(new[] { "TAUNT" }));
             Assert.That(registry.TryGetDefinition("pf_001", out var bee), Is.True);
             Assert.That(bee.keywords, Is.Empty);
             Assert.That(registry.TryGetText("db_007", out var templeText), Is.True);
             Assert.That(templeText.rulesText, Does.Contain("藏宝图"));
+            Assert.That(registry.TryGetText("si_005", out var polarBearText), Is.True);
+            Assert.That(polarBearText.rulesText,
+                Is.EqualTo("嘲讽。部署时，若己方英雄生命值不高于 15，本牌获得 +1 攻击力。"));
         }
     }
 }
