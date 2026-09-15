@@ -3,7 +3,7 @@
 更新时间：2026-09-15
 起始基线：`1829e0a docs: advance roadmap to small card effects`
 
-本文件把原 RULE-030 拆成五个可以在独立会话中完成、验证和提交的任务。执行者只读取当前子任务列出的入口，不需要重新加载整个项目历史。五项必须按 A → E 顺序推进。
+本文件把原 RULE-030 拆成 A → D 与 E1 → E3 七个可以在独立会话中完成、验证和提交的任务。执行者只读取当前子任务列出的入口，不需要重新加载整个项目历史。未达到当前任务的完成定义，不进入下一项。
 
 ## 全局边界
 
@@ -92,27 +92,50 @@
 
 版本边界：协议结构不再变化；规则集与内容版本按仓库策略递增。预期完成后效果计数为 55 个 `IMPLEMENTED`、14 个 `PENDING`。
 
-## RULE-030E 集成演示与发布前验证
+## RULE-030E1 确定性演示与视觉验收
 
-状态：**下一任务**。
+状态：**进行中**。启动基线 `f40932e`；当前未提交的 `DemoSceneController.cs` 预览入口和 `demo-polar-bear-wool-preview-v1.png` 归属本任务，不视为已验收。
 
 依赖：RULE-030D。
 
-目标：只验证和展示已经实现的行为，不再改规则语义。
+目标：只展示低生命英雄部署北极熊、再对其使用羊毛的已实现行为，不改规则语义或联机协议。
 
-范围：
+范围：演示入口、永久攻击/临时生命/嘲讽的可读标识、原版北极熊模型与现有统一卡面、确定性 Windows Player 截图。
 
-- 增加确定性演示入口，展示低生命英雄部署北极熊并对其使用羊毛。
-- UI 清楚区分永久攻击修正、临时生命修正与嘲讽；使用现有原版北极熊模型和统一卡面体系。
-- 运行完整仓库校验、Unity EditMode、Windows Player 构建和 Docker/Nakama 双客户端 smoke。
-- 保存一张视觉验收截图，更新 `change-log.md` 与主路线图。
+入口：`DemoSceneController.cs`、`DemoLocalMatch.cs`、`DemoMinecraftModelFactory.cs`、`DemoCardUiFactory.cs`、`scripts/build-demo.ps1`。
 
-完成定义：双方权威状态收敛、重连后临时生命状态可恢复、无协议/生成物漂移、截图无布局遮挡；记录准确测试数量、对局 ID、最终 revision、提交号及剩余风险。
+完成定义：启动命令可重复得到北极熊 4/7、临时生命 +1 和嘲讽；原版模型与卡面正确；截图在目标分辨率下无布局遮挡、文字溢出或错误；Unity 局部测试和 Windows Player 构建通过；单独提交。本任务不运行 Docker 对局，也不宣称重连验收完成。
+
+## RULE-030E2 权威联机与重连回归
+
+状态：**待 E1 完成后开始**。
+
+依赖：RULE-030E1。
+
+目标：只验证当前协议、羊毛临时生命快照与真实双端状态恢复，不改视觉或卡牌规则。
+
+范围：完整仓库校验、Unity EditMode、Docker/Nakama server smoke、两个真实 Windows Player 的对局与强制重连；如当前双端探针没有覆盖羊毛状态，补一个最小的针对性重连测试或探针。
+
+入口：`scripts/validate.ps1`、`scripts/validate-unity.ps1`、`scripts/validate-online-demo.ps1`、`server-nakama/scripts/smoke-nakama.mjs`、`server-nakama/src/match-handler.ts`、`docs/development/local-online-runbook.md`。
+
+完成定义：服务端临时生命状态在重入快照中可恢复；两个真实客户端以同一 Match ID、最终 revision 和胜者收敛；协议与生成内容无漂移；记录命令、测试数量、对局 ID、revision 与日志路径；单独提交。本任务不负责整理路线图。
+
+## RULE-030E3 证据与路线图收口
+
+状态：**待 E2 完成后开始**。
+
+依赖：RULE-030E2。
+
+目标：只把 E1/E2 的实测证据转成可供下一会话复用的交接信息，不再修改玩法或 UI。
+
+范围：复核截图、测试报告与 Git 提交；更新 `docs/development/change-log.md`、`docs/development/task-roadmap.md` 及本任务包状态。
+
+完成定义：文档准确记录 E1/E2 的提交号、版本、验证命令、通过数量、对局 ID、revision、截图链接及剩余风险；明确下一唯一任务；文档链接与 Git 状态校验通过；单独提交。
 
 ## 子任务交接模板
 
 ```text
-任务编号：RULE-030E
+任务编号：RULE-030E1
 只完成该子任务，不提前做后续子任务。
 仓库：D:\gitt\mc_biome_rivals
 基线提交：<启动时填写>
