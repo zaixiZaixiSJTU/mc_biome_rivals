@@ -2,12 +2,20 @@
 
 本文件按时间倒序记录影响视觉表现、资源管线或运行时架构的改动。
 
+## 2026-09-15 北极熊＋羊毛集成演示与联机回归
+
+- **演示提交 `c2ed046`**：`-previewPolarBearWool` 确定性预置英雄 15 点生命、原版北极熊部署和一张羊毛施放，场上北极熊为 4/7；世界内三行标签区别显示嘲讽、永久攻 +1、临时血 +1，右侧与手牌复用统一卡面。1920×1080 实机验收图见 [`demo-polar-bear-wool-preview-v1.png`](../design/assets/demo-polar-bear-wool-preview-v1.png)，无文字溢出或布局遮挡。`scripts/validate-unity.ps1` 为 223/223；`scripts/build-demo.ps1 -WithWindowsPlayer` 和 Player 截图捕获通过。
+- **恢复测试提交 `36ce93c`**：服务端通过权威 `PLAY_CARD` 施放羊毛后替换旧 session，重入者独享的 opcode 4 快照保留当前/最大生命、临时生命修正、过期回合、revision 与事件游标；Unity 状态仓库和 Demo 视图也验证快照替换后的属性恢复。`scripts/validate.ps1 -WithDockerConfig` 通过，服务端 174/174；`scripts/validate-unity.ps1` 通过，Unity EditMode 224/224。
+- **真实联机**：当前构建的 Nakama 日志确认模块加载为协议 32、规则集 `prototype-0.51`。`npm run smoke:integration --workspace server-nakama` 对局 `9b2a5a77-5ed6-4b27-a04f-d14fa799fb9b.biome-rivals` 到 revision 3；`scripts/validate-online-demo.ps1` 两个 Windows Player 在首端强制断线重入后收敛到对局 `c052f850-8cd6-4c1a-acd6-62cea846183a.biome-rivals` 的 FINISHED revision 11、胜者 `bfa161a4-f933-4244-b2f3-fb15a93e1ae8`。报告与日志位于 `artifacts/online-probe-{a,b}.json`、`client-unity/Logs/online-probe-{a,b}.log`。
+- **版本边界**：E1/E2 均未升级协议、规则集或卡牌版本。当前效果实现注册表 `contentVersion = 42`；卡牌定义注册表及生成 catalog 的 `contentVersion = 41`。内容校验通过且无生成物漂移，但两个版本字段的独立语义未被验证脚本明确约束，留给 DATA-040 决定是否统一。
+- **剩余风险**：真实双端对局没有施放羊毛，不能声称完成“带羊毛状态的双端端到端重连”；该字段恢复目前由服务端及 Unity 针对性测试证明。联机探针使用 `-nographics`，其日志有无 GPU 时的 Shader unsupported 报错，不能用它判断视觉质量；视觉验收来自独立 Player 截图。Unity 批处理有一次测试成功后未在 60 秒内退出，验证脚本仅在确认完成日志后停止了对应进程。
+
 ## 2026-09-15 羊毛临时生命纵向切片
 
 - **权威规则**：TK-001「羊毛」现在可在主行动阶段从手牌指定一个存活己方生物。0 费仍校验行动、阶段、手牌和稳定目标；合法施放进入弃牌并计入本回合出牌，产生 `CARD_PLAYED → OBJECT_STATS_CHANGED(reason = TEMPORARY_HEALTH_MODIFIER)`。每张牌令当前/最大生命同时 +1，并累计到施放者本回合结束时统一撤销。
 - **叠加与原子性**：两张羊毛叠加 +0/+2；过期时只发一个事件、保留受伤并在需要时夹取当前生命。缺失、敌方、建筑、英雄、离场目标均在支付前拒绝，不推进 revision、命令去重表或任何卡牌/资源状态。
 - **Unity 交互**：复用 3D 地表合法目标选择，只标记存活己方单位；权威属性事件和本地规则接受后才脉冲目标。世界标签区别显示“羊毛护持 +N 临时生命”，并从永久生命成长的计算中排除临时值。
-- **版本与内容**：协议维持 32；规则集升级至 `prototype-0.51`，内容版本升级至 42。74 张牌中 55 个效果 `IMPLEMENTED`、14 个 `PENDING`，其余待办效果未改变。
+- **版本与内容**：协议维持 32；规则集升级至 `prototype-0.51`，效果实现注册表版本升级至 42，卡牌定义/catalog 版本仍为 41。74 张牌中 55 个效果 `IMPLEMENTED`、14 个 `PENDING`，其余待办效果未改变。
 - **验证**：`scripts/validate.ps1` 通过，服务端 173/173；Unity `6000.0.28f1c1` EditMode 222/222。确定性演示、Windows Player、Docker/Nakama 双客户端和截图留给 RULE-030E。
 
 ## 2026-09-15 临时生命协议基础设施

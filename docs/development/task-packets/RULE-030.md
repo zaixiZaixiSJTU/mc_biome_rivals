@@ -94,7 +94,7 @@
 
 ## RULE-030E1 确定性演示与视觉验收
 
-状态：**已完成**。启动基线 `f40932e`；确定性入口、组合 EditMode 测试、Windows Player 构建与 [`../../design/assets/demo-polar-bear-wool-preview-v1.png`](../../design/assets/demo-polar-bear-wool-preview-v1.png) 已验收。Unity 223/223；提交号由 E3 汇总记录。
+状态：**已完成**，提交 `c2ed046`。启动基线 `f40932e`；确定性入口、组合 EditMode 测试、Windows Player 构建与 [`../../design/assets/demo-polar-bear-wool-preview-v1.png`](../../design/assets/demo-polar-bear-wool-preview-v1.png) 已验收。Unity 223/223。
 
 依赖：RULE-030D。
 
@@ -108,11 +108,11 @@
 
 ## RULE-030E2 权威联机与重连回归
 
-状态：**已完成**。服务端 174/174、Unity EditMode 224/224；`scripts/validate.ps1 -WithDockerConfig`、`scripts/validate-unity.ps1`、`npm run smoke:integration --workspace server-nakama` 与 `scripts/validate-online-demo.ps1` 均通过。
+状态：**已完成**，提交 `36ce93c`。服务端 174/174、Unity EditMode 224/224；`scripts/validate.ps1 -WithDockerConfig`、`scripts/validate-unity.ps1`、`npm run smoke:integration --workspace server-nakama` 与 `scripts/validate-online-demo.ps1` 均通过。
 
 针对性恢复测试先通过权威 `PLAY_CARD` 对羊施放羊毛，再替换旧 session；新 session 独享的 opcode 4 快照保留当前/最大生命、`temporaryHealthModifier = 1`、过期回合、revision 与事件游标。Unity 状态仓库及 Demo 视图也分别测试了重连快照替换后的临时生命恢复。
 
-Docker 集成 smoke 对局 `9b2a5a77-5ed6-4b27-a04f-d14fa799fb9b.biome-rivals` 到 revision 3；两个真实 Windows Player 对局 `c052f850-8cd6-4c1a-acd6-62cea846183a.biome-rivals` 在首端强制重连后收敛到 FINISHED revision 11、同一胜者，首端 `reconnectRecovered = true`。报告位于 `artifacts/online-probe-{a,b}.json`，日志位于 `client-unity/Logs/online-probe-{a,b}.log`。这次真实双端对局未施放羊毛，针对性恢复由服务端及 Unity 快照测试证明；提交号与该验证边界由 E3 汇总。
+Docker 集成 smoke 对局 `9b2a5a77-5ed6-4b27-a04f-d14fa799fb9b.biome-rivals` 到 revision 3；两个真实 Windows Player 对局 `c052f850-8cd6-4c1a-acd6-62cea846183a.biome-rivals` 在首端强制重连后收敛到 FINISHED revision 11、同一胜者，首端 `reconnectRecovered = true`。报告位于 `artifacts/online-probe-{a,b}.json`，日志位于 `client-unity/Logs/online-probe-{a,b}.log`。这次真实双端对局未施放羊毛，针对性恢复由服务端及 Unity 快照测试证明，不能扩大为带羊毛状态的双端端到端结论。
 
 依赖：RULE-030E1。
 
@@ -126,7 +126,7 @@ Docker 集成 smoke 对局 `9b2a5a77-5ed6-4b27-a04f-d14fa799fb9b.biome-rivals` �
 
 ## RULE-030E3 证据与路线图收口
 
-状态：**下一任务**。
+状态：**已完成**。证据、准确版本及剩余风险已汇总于 [`../change-log.md`](../change-log.md) 和 [`../task-roadmap.md`](../task-roadmap.md)；下一唯一任务为 [`RULE-031A`](RULE-031.md)。本项提交号在交接时报告。
 
 依赖：RULE-030E2。
 
@@ -139,11 +139,11 @@ Docker 集成 smoke 对局 `9b2a5a77-5ed6-4b27-a04f-d14fa799fb9b.biome-rivals` �
 ## 子任务交接模板
 
 ```text
-任务编号：RULE-030E3
+任务编号：RULE-031A
 只完成该子任务，不提前做后续子任务。
 仓库：D:\gitt\mc_biome_rivals
 基线提交：<启动时填写>
-先读：docs/development/task-packets/RULE-030.md 中当前子任务。
+先读：docs/development/task-packets/RULE-031.md 中当前子任务。
 开始前：记录 git status，保留两个已隔离的未追踪文件。
 结束时：报告改动文件、版本变化、验证命令与结果、未决问题和提交号。
 ```
