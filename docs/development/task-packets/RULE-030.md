@@ -108,7 +108,11 @@
 
 ## RULE-030E2 权威联机与重连回归
 
-状态：**下一任务**。
+状态：**已完成**。服务端 174/174、Unity EditMode 224/224；`scripts/validate.ps1 -WithDockerConfig`、`scripts/validate-unity.ps1`、`npm run smoke:integration --workspace server-nakama` 与 `scripts/validate-online-demo.ps1` 均通过。
+
+针对性恢复测试先通过权威 `PLAY_CARD` 对羊施放羊毛，再替换旧 session；新 session 独享的 opcode 4 快照保留当前/最大生命、`temporaryHealthModifier = 1`、过期回合、revision 与事件游标。Unity 状态仓库及 Demo 视图也分别测试了重连快照替换后的临时生命恢复。
+
+Docker 集成 smoke 对局 `9b2a5a77-5ed6-4b27-a04f-d14fa799fb9b.biome-rivals` 到 revision 3；两个真实 Windows Player 对局 `c052f850-8cd6-4c1a-acd6-62cea846183a.biome-rivals` 在首端强制重连后收敛到 FINISHED revision 11、同一胜者，首端 `reconnectRecovered = true`。报告位于 `artifacts/online-probe-{a,b}.json`，日志位于 `client-unity/Logs/online-probe-{a,b}.log`。这次真实双端对局未施放羊毛，针对性恢复由服务端及 Unity 快照测试证明；提交号与该验证边界由 E3 汇总。
 
 依赖：RULE-030E1。
 
@@ -116,13 +120,13 @@
 
 范围：完整仓库校验、Unity EditMode、Docker/Nakama server smoke、两个真实 Windows Player 的对局与强制重连；如当前双端探针没有覆盖羊毛状态，补一个最小的针对性重连测试或探针。
 
-入口：`scripts/validate.ps1`、`scripts/validate-unity.ps1`、`scripts/validate-online-demo.ps1`、`server-nakama/scripts/smoke-nakama.mjs`、`server-nakama/src/match-handler.ts`、`docs/development/local-online-runbook.md`。
+入口：`scripts/validate.ps1`、`scripts/validate-unity.ps1`、`scripts/validate-online-demo.ps1`、`server-nakama/scripts/smoke-nakama.mjs`、`server-nakama/src/matches/biome-rivals-match.ts`、`docs/development/local-online-runbook.md`。
 
 完成定义：服务端临时生命状态在重入快照中可恢复；两个真实客户端以同一 Match ID、最终 revision 和胜者收敛；协议与生成内容无漂移；记录命令、测试数量、对局 ID、revision 与日志路径；单独提交。本任务不负责整理路线图。
 
 ## RULE-030E3 证据与路线图收口
 
-状态：**待 E2 完成后开始**。
+状态：**下一任务**。
 
 依赖：RULE-030E2。
 
@@ -135,7 +139,7 @@
 ## 子任务交接模板
 
 ```text
-任务编号：RULE-030E2
+任务编号：RULE-030E3
 只完成该子任务，不提前做后续子任务。
 仓库：D:\gitt\mc_biome_rivals
 基线提交：<启动时填写>

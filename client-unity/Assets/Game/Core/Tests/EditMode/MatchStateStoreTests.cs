@@ -2351,6 +2351,12 @@ namespace BiomeRivals.Core.Tests
                     }
                 }
             };
+            var woolProtectedSheep = new BattlefieldObjectStateDto
+            {
+                instanceId = "object-5", cardId = "pf_002", cardType = "UNIT", attack = 1,
+                health = 4, maxHealth = 4, slotKind = "UNIT", slotIndex = 1, occupiedSlots = 1,
+                temporaryHealthModifier = 1, temporaryHealthModifierExpiresOnTurn = 3
+            };
             var recovered = new MatchStateDto
             {
                 matchId = "recovery-match", viewerPlayerId = "alice", protocolVersion = GameVersions.Protocol,
@@ -2365,8 +2371,8 @@ namespace BiomeRivals.Core.Tests
                         {
                             instanceId = "equipment-3", cardId = "or_006", attack = 2, durability = 1, maxDurability = 2
                         },
-                        unitSlots = new[] { "object-4", null, null, null }, buildingSlots = new string[3],
-                        battlefield = new[] { caveBat }
+                        unitSlots = new[] { "object-4", "object-5", null, null }, buildingSlots = new string[3],
+                        battlefield = new[] { caveBat, woolProtectedSheep }
                     },
                     new PlayerStateDto
                     {
@@ -2395,6 +2401,10 @@ namespace BiomeRivals.Core.Tests
             Assert.That(store.Current.lastEventId, Is.EqualTo(19));
             Assert.That(store.Current.players[0].equipment.cardId, Is.EqualTo("or_006"));
             Assert.That(store.Current.players[0].battlefield[0].statuses[0].statusId, Is.EqualTo("FIRE"));
+            Assert.That(store.Current.players[0].battlefield[1].temporaryHealthModifier, Is.EqualTo(1));
+            Assert.That(store.Current.players[0].battlefield[1].temporaryHealthModifierExpiresOnTurn, Is.EqualTo(3));
+            Assert.That(store.Current.players[0].battlefield[1].health, Is.EqualTo(4));
+            Assert.That(store.Current.players[0].battlefield[1].maxHealth, Is.EqualTo(4));
             Assert.That(store.Current.pendingChoice.options[0].cardId, Is.EqualTo("pf_004"));
             Assert.That(store.Current.players[1].hand, Is.All.Empty,
                 "A recovery snapshot must not reveal the opponent's private hand.");

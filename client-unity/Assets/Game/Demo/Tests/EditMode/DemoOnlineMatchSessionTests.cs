@@ -45,6 +45,48 @@ namespace BiomeRivals.Demo.Tests
         }
 
         [Test]
+        public void AuthoritativeViewProjectsWoolHealthAfterRecoverySnapshotReplacement()
+        {
+            var store = CreateStore(viewerIndex: 0);
+            var recovered = new MatchStateDto
+            {
+                matchId = "match-1", viewerPlayerId = "alice", protocolVersion = GameVersions.Protocol,
+                rulesetVersion = GameVersions.Ruleset, revision = 2, lastEventId = 5,
+                status = "ACTIVE", turn = 1, phase = "MAIN", activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto
+                    {
+                        playerId = "alice", factionId = FactionIds.OceanRiver,
+                        unitSlots = new[] { "object-1", null, null, null }, buildingSlots = new string[3],
+                        battlefield = new[]
+                        {
+                            new BattlefieldObjectStateDto
+                            {
+                                instanceId = "object-1", cardId = "pf_002", cardType = "UNIT",
+                                slotKind = "UNIT", slotIndex = 0, occupiedSlots = 1,
+                                attack = 1, health = 4, maxHealth = 4, summonedTurn = 1,
+                                temporaryHealthModifier = 1, temporaryHealthModifierExpiresOnTurn = 1
+                            }
+                        }
+                    },
+                    new PlayerStateDto { playerId = "bob", factionId = FactionIds.End,
+                        unitSlots = new string[4], buildingSlots = new string[3] }
+                }
+            };
+
+            store.Replace(recovered);
+            var view = new DemoAuthoritativeMatchView(store);
+            var sheep = view.GetObject(true, DemoSlotKind.Unit, 0);
+            Assert.That(view.Revision, Is.EqualTo(2));
+            Assert.That(sheep, Is.Not.Null);
+            Assert.That(sheep.Health, Is.EqualTo(4));
+            Assert.That(sheep.MaxHealth, Is.EqualTo(4));
+            Assert.That(sheep.TemporaryHealthModifier, Is.EqualTo(1));
+            Assert.That(sheep.TemporaryHealthModifierExpiresOnRound, Is.EqualTo(1));
+        }
+
+        [Test]
         public async Task OnlineSessionWaitsForAuthoritativeDeployAcknowledgement()
         {
             var store = CreateStore(viewerIndex: 0);

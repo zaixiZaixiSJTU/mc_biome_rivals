@@ -163,6 +163,77 @@ TestHarness.test('same player session can replace a stale presence and receives 
   TestHarness.equal(JSON.stringify(snapshot).indexOf('processedCommandIds'), -1);
 });
 
+TestHarness.test('Wool temporary health survives the private snapshot after session replacement', function (): void {
+  const logger = { info: function (): void { } } as unknown as nkruntime.Logger;
+  const fakeNakama = { uuidv4: function (): string { return 'wool-reconnect-seed'; } } as unknown as nkruntime.Nakama;
+  const broadcasts: Array<{ opCode: number; data: string; recipients: nkruntime.Presence[] }> = [];
+  const dispatcher = {
+    broadcastMessage: function (opCode: number, data: string, recipients: nkruntime.Presence[]): void {
+      broadcasts.push({ opCode: opCode, data: data, recipients: recipients });
+    }
+  } as unknown as nkruntime.MatchDispatcher;
+  const ctx = { matchId: 'wool-reconnect-match' } as nkruntime.Context;
+  const initialized = biomeRivalsMatchInit(ctx, logger, fakeNakama, {
+    playerFactions: JSON.stringify([
+      { playerId: 'alice', factionId: 'snow_ice' },
+      { playerId: 'bob', factionId: 'plains_forest' }
+    ])
+  });
+  const aliceOld = { userId: 'alice', sessionId: 'alice-old' } as nkruntime.Presence;
+  const bob = { userId: 'bob', sessionId: 'bob-session' } as nkruntime.Presence;
+  let state = biomeRivalsMatchJoin(ctx, logger, fakeNakama, dispatcher, 0, initialized.state, [aliceOld, bob]).state;
+  if (state.game === null) throw new Error('test match did not initialize');
+  const game = state.game;
+  const sheep = BiomeRivalsRules.getCardDefinition('pf_002')!;
+  game.status = 'ACTIVE';
+  game.players[0]!.mulliganCompleted = true;
+  game.players[1]!.mulliganCompleted = true;
+  game.players[0]!.hand = ['tk_001'];
+  game.players[0]!.unitSlots[0] = 'object-1';
+  game.players[0]!.battlefield.push({
+    instanceId: 'object-1', cardId: sheep.id, cardType: 'UNIT',
+    attack: sheep.attack, health: sheep.health, maxHealth: sheep.health,
+    adjacencyHealthModifier: 0, slotKind: 'UNIT', slotIndex: 0, occupiedSlots: 1,
+    summonedTurn: game.turn, hasAttacked: false, keywords: sheep.keywords.slice(),
+    temporaryAttackModifier: 0, temporaryAttackModifierExpiresOnTurn: 0,
+    temporaryHealthModifier: 0, temporaryHealthModifierExpiresOnTurn: 0, statuses: []
+  });
+  const played = BiomeRivalsRules.applyCommand(game, 'alice', {
+    protocolVersion: BiomeRivalsRules.PROTOCOL_VERSION,
+    rulesetVersion: BiomeRivalsRules.RULESET_VERSION,
+    commandId: 'play-wool-before-reconnect', expectedRevision: game.revision,
+    type: 'PLAY_CARD', payload: { cardId: 'tk_001', targetType: 'UNIT', targetInstanceId: 'object-1' }
+  });
+  TestHarness.ok(played.accepted, JSON.stringify(played));
+  if (!played.accepted) return;
+  state.game = played.state;
+  TestHarness.equal(played.batch.events[1]!.payload.reason, 'TEMPORARY_HEALTH_MODIFIER');
+  broadcasts.length = 0;
+
+  const aliceNew = { userId: 'alice', sessionId: 'alice-new' } as nkruntime.Presence;
+  const attempt = biomeRivalsMatchJoinAttempt(ctx, logger, fakeNakama, dispatcher, 1, state, aliceNew, {});
+  TestHarness.equal(attempt.accept, true);
+  state = biomeRivalsMatchJoin(ctx, logger, fakeNakama, dispatcher, 1, state, [aliceNew]).state;
+  TestHarness.equal(state.presences['alice-old'], undefined);
+  TestHarness.equal(broadcasts.length, 1);
+  TestHarness.equal(broadcasts[0]!.opCode, 4);
+  TestHarness.equal(broadcasts[0]!.recipients[0]!.sessionId, 'alice-new');
+  const snapshot = JSON.parse(broadcasts[0]!.data) as BiomeRivalsRules.MatchSnapshot;
+  const recovered = snapshot.players[0]!.battlefield[0]!;
+  TestHarness.equal(snapshot.viewerPlayerId, 'alice');
+  TestHarness.equal(snapshot.revision, played.state.revision);
+  TestHarness.equal(snapshot.lastEventId, played.state.lastEventId);
+  TestHarness.equal(recovered.instanceId, 'object-1');
+  TestHarness.equal(recovered.health, sheep.health + 1);
+  TestHarness.equal(recovered.maxHealth, sheep.health + 1);
+  TestHarness.equal(recovered.temporaryHealthModifier, 1);
+  TestHarness.equal(recovered.temporaryHealthModifierExpiresOnTurn, played.state.turn);
+  TestHarness.equal(snapshot.players[0]!.hand.length, 0);
+  TestHarness.equal(snapshot.players[1]!.hand[0], null);
+  TestHarness.equal(JSON.stringify(snapshot).indexOf('processedCommandIds'), -1);
+  TestHarness.equal(BiomeRivalsRules.validateState(state.game!).length, 0);
+});
+
 TestHarness.test('matchmaker rejects unsupported faction properties', function (): void {
   let rejected = false;
   try {
