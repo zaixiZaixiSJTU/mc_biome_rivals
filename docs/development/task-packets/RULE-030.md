@@ -94,7 +94,7 @@
 
 ## RULE-030E1 确定性演示与视觉验收
 
-状态：**进行中**。启动基线 `f40932e`；当前未提交的 `DemoSceneController.cs` 预览入口和 `demo-polar-bear-wool-preview-v1.png` 归属本任务，不视为已验收。
+状态：**已完成**。启动基线 `f40932e`；确定性入口、组合 EditMode 测试、Windows Player 构建与 [`../../design/assets/demo-polar-bear-wool-preview-v1.png`](../../design/assets/demo-polar-bear-wool-preview-v1.png) 已验收。Unity 223/223；提交号由 E3 汇总记录。
 
 依赖：RULE-030D。
 
@@ -108,7 +108,7 @@
 
 ## RULE-030E2 权威联机与重连回归
 
-状态：**待 E1 完成后开始**。
+状态：**下一任务**。
 
 依赖：RULE-030E1。
 
@@ -135,7 +135,7 @@
 ## 子任务交接模板
 
 ```text
-任务编号：RULE-030E1
+任务编号：RULE-030E2
 只完成该子任务，不提前做后续子任务。
 仓库：D:\gitt\mc_biome_rivals
 基线提交：<启动时填写>

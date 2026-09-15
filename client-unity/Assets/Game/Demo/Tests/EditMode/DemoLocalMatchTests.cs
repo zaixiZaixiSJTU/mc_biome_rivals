@@ -2878,6 +2878,38 @@ namespace BiomeRivals.Demo.Tests
         }
 
         [Test]
+        public void PolarBearAndWoolPreviewSequenceDistinguishesPermanentAndTemporaryStats()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("si_005", out var bearDefinition), Is.True);
+            Assert.That(registry.TryGetDefinition("tk_001", out var woolDefinition), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetPlayerLife(15);
+            match.ResetHand(new[] { bearDefinition.id });
+            Assert.That(match.ApplyDeploy(bearDefinition,
+                match.CreateDeployCommand(bearDefinition.id, DemoSlotKind.Unit, 1)).Accepted, Is.True);
+            var bear = match.GetObject(true, DemoSlotKind.Unit, 1);
+            match.ResetDeckAndHand(new[] { woolDefinition.id, woolDefinition.id }, System.Array.Empty<string>());
+            Assert.That(match.ApplyPlayCard(woolDefinition,
+                match.CreatePlayCardCommand(woolDefinition.id, "UNIT", bear.InstanceId)).Accepted, Is.True);
+
+            Assert.That(bear.Attack, Is.EqualTo(4));
+            Assert.That(bear.TemporaryAttackModifier, Is.Zero);
+            Assert.That(bear.Health, Is.EqualTo(7));
+            Assert.That(bear.MaxHealth, Is.EqualTo(7));
+            Assert.That(bear.TemporaryHealthModifier, Is.EqualTo(1));
+            Assert.That(bear.Keywords, Does.Contain("TAUNT"));
+            Assert.That(match.Hand, Is.EqualTo(new[] { woolDefinition.id }));
+
+            match.EndPlayerTurn();
+            Assert.That(bear.Attack, Is.EqualTo(4));
+            Assert.That(bear.MaxHealth, Is.EqualTo(6));
+            Assert.That(bear.Health, Is.EqualTo(6));
+            Assert.That(bear.TemporaryHealthModifier, Is.Zero);
+            Assert.That(bear.Keywords, Does.Contain("TAUNT"));
+        }
+
+        [Test]
         public void PolarBearChecksTheFifteenLifeThresholdOnlyWhenDeployed()
         {
             var registry = CardContentLoader.Load();

@@ -178,6 +178,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewBreedingSeason")) SetupBreedingSeasonPreview();
             else if (HasCommandLineFlag("-previewWoodlandRally")) SetupWoodlandRallyPreview();
             else if (HasCommandLineFlag("-previewIronGolem")) SetupIronGolemPreview();
+            else if (HasCommandLineFlag("-previewPolarBearWool")) SetupPolarBearWoolPreview();
             else if (HasCommandLineFlag("-previewVindicator")) SetupVindicatorPreview();
             else if (HasCommandLineFlag("-previewCactusFence")) SetupCactusFencePreview();
             else if (HasCommandLineFlag("-previewDesertTemple")) SetupDesertTemplePreview();
@@ -1913,6 +1914,38 @@ namespace BiomeRivals.Demo
                 : !nurseryDeployed.Accepted ? nurseryDeployed.Message : golemDeployed.Message,
                 !nurseryDeployed.Accepted || !golemDeployed.Accepted || golem?.Attack != 6 || golem.MaxHealth != 8);
             if (golem != null) StartCoroutine(PulseBattlefieldObject(golem.InstanceId));
+        }
+
+        private void SetupPolarBearWoolPreview()
+        {
+            SelectFaction("snow_ice");
+            SelectOpponentFaction("plains_forest");
+            if (!_registry.TryGetDefinition("si_005", out var polarBearDefinition) ||
+                !_registry.TryGetDefinition("tk_001", out var woolDefinition)) return;
+
+            _match.ResetPlayerLife(15);
+            _match.ResetDeckAndHand(new[] { polarBearDefinition.id }, new[] { "si_001" });
+            var deployed = _match.ApplyDeploy(polarBearDefinition,
+                _match.CreateDeployCommand(polarBearDefinition.id, DemoSlotKind.Unit, 1));
+            var bear = _match.GetObject(true, DemoSlotKind.Unit, 1);
+            if (!deployed.Accepted || bear == null)
+            {
+                ShowStatus(deployed.Message, true);
+                return;
+            }
+
+            _match.ResetDeckAndHand(new[] { woolDefinition.id, woolDefinition.id }, new[] { "si_001" });
+            var protectedBear = _match.ApplyPlayCard(woolDefinition,
+                _match.CreatePlayCardCommand(woolDefinition.id, "UNIT", bear.InstanceId));
+            _selectedCardId = woolDefinition.id;
+            RefreshAll();
+            ShowStatus(protectedBear.Accepted && bear.Attack == 4 && bear.MaxHealth == 7 &&
+                bear.TemporaryHealthModifier == 1 && bear.HasKeyword("TAUNT")
+                    ? "英雄 15 血：北极熊 4/7\n攻+1 永久 · 血+1 临时 · 嘲讽\n另一张羊毛可继续选己方目标"
+                    : protectedBear.Message,
+                !protectedBear.Accepted || bear.Attack != 4 || bear.MaxHealth != 7 ||
+                bear.TemporaryHealthModifier != 1 || !bear.HasKeyword("TAUNT"));
+            if (protectedBear.Accepted) StartCoroutine(PulseBattlefieldObject(bear.InstanceId));
         }
 
         private void SetupVindicatorPreview()
@@ -4161,11 +4194,30 @@ namespace BiomeRivals.Demo
                 stats = $"着火 {fire.remainingDuration} · {stats}";
                 accent = Hex("#FF8A2A");
             }
+            var polarBearBonus = battlefieldObject?.CardId == "si_005"
+                ? Mathf.Max(0, battlefieldObject.Attack - definition.attack - battlefieldObject.TemporaryAttackModifier)
+                : 0;
+            var polarBearModifiersVisible = polarBearBonus > 0 || (battlefieldObject?.TemporaryHealthModifier ?? 0) > 0;
+            if (polarBearModifiersVisible)
+            {
+                var modifierLines = new List<string> { $"{text.name} {attack}/{health}" };
+                var permanentLine = battlefieldObject.HasKeyword("TAUNT") ? "◆ 嘲讽" : string.Empty;
+                if (polarBearBonus > 0)
+                    permanentLine = string.IsNullOrEmpty(permanentLine)
+                        ? $"攻+{polarBearBonus}永久"
+                        : $"{permanentLine} · 攻+{polarBearBonus}永久";
+                if (!string.IsNullOrEmpty(permanentLine)) modifierLines.Add(permanentLine);
+                if (battlefieldObject.TemporaryHealthModifier > 0)
+                    modifierLines.Add($"血+{battlefieldObject.TemporaryHealthModifier}临时");
+                stats = string.Join("\n", modifierLines);
+                accent = polarBearBonus > 0 ? Gold : Pale;
+            }
             var labelY = -size.y * 0.34f;
-            var plate = CreatePanel(parent, "WorldLabel", new Vector2(0, labelY), new Vector2(size.x - 8, 30), new Color(Ink.r, Ink.g, Ink.b, 0.84f));
+            var labelHeight = polarBearModifiersVisible ? 54f : 30f;
+            var plate = CreatePanel(parent, "WorldLabel", new Vector2(0, labelY), new Vector2(size.x - 8, labelHeight), new Color(Ink.r, Ink.g, Ink.b, 0.84f));
             plate.raycastTarget = false;
-            CreatePanel(parent, "WorldLabelAccent", new Vector2(0, labelY + 14), new Vector2(size.x - 8, 2), new Color(accent.r, accent.g, accent.b, 0.82f)).raycastTarget = false;
-            CreateText(parent, "WorldLabelText", new Vector2(0, labelY), new Vector2(size.x - 14, 26), stats, 12, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
+            CreatePanel(parent, "WorldLabelAccent", new Vector2(0, labelY + labelHeight * 0.5f - 1), new Vector2(size.x - 8, 2), new Color(accent.r, accent.g, accent.b, 0.82f)).raycastTarget = false;
+            CreateText(parent, "WorldLabelText", new Vector2(0, labelY), new Vector2(size.x - 14, labelHeight - 4), stats, 12, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
         }
 
         private Image CreateTintBand(string name, Vector2 position, Vector2 size, Color color)
