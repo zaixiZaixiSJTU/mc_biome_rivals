@@ -81,6 +81,7 @@ namespace BiomeRivals.Core
         public bool heroHasAttacked;
         public int cardsPlayedThisTurn;
         public bool hasTargetedEnemyObjectThisTurn;
+        public bool heroLifeLostThisTurn;
         public string[] triggeredEffectKeysThisTurn = Array.Empty<string>();
         public PlayerStatusStateDto[] statuses = Array.Empty<PlayerStatusStateDto>();
         public string[] unitSlots = Array.Empty<string>();
@@ -208,13 +209,21 @@ namespace BiomeRivals.Core
                     throw new InvalidOperationException($"Expected event {nextEventId}, received {matchEvent?.eventId ?? 0}.");
                 nextEventId++;
             }
-            foreach (var matchEvent in batch.events ?? Array.Empty<MatchEventDto>()) Apply(matchEvent);
+            MatchEventDto previousEvent = null;
+            int[] lifeBeforePreviousEvent = null;
+            foreach (var matchEvent in batch.events ?? Array.Empty<MatchEventDto>())
+            {
+                var lifeBeforeEvent = Current.players.Select(player => player.life).ToArray();
+                Apply(matchEvent, previousEvent, lifeBeforePreviousEvent);
+                previousEvent = matchEvent;
+                lifeBeforePreviousEvent = lifeBeforeEvent;
+            }
             if (batch.events != null && batch.events.Length > 0) Current.lastEventId = batch.events[batch.events.Length - 1].eventId;
             Current.revision = batch.revision;
             Changed?.Invoke(Current);
         }
 
-        private void Apply(MatchEventDto matchEvent)
+        private void Apply(MatchEventDto matchEvent, MatchEventDto previousEvent, int[] lifeBeforePreviousEvent)
         {
             if (matchEvent == null || matchEvent.payload == null) throw new InvalidOperationException("Event payload is missing.");
             var payload = matchEvent.payload;
@@ -417,6 +426,28 @@ namespace BiomeRivals.Core
                     damagedPlayer.life = payload.life;
                     damagedPlayer.armor = payload.armor;
                     break;
+                case MatchEventTypes.HeroLifeLossMarked:
+                    var markedPlayer = FindPlayer(payload.playerId);
+                    var markedPlayerIndex = Array.IndexOf(Current.players, markedPlayer);
+                    var sourcePayload = previousEvent?.payload;
+                    var validSource = previousEvent != null && sourcePayload != null &&
+                        ((previousEvent.type == MatchEventTypes.HeroDamaged ||
+                          previousEvent.type == MatchEventTypes.FatigueDamage) &&
+                         sourcePayload.playerId == payload.playerId ||
+                         previousEvent.type == MatchEventTypes.AttackResolved &&
+                         (sourcePayload.targetType == "HERO" && sourcePayload.targetPlayerId == payload.playerId ||
+                          sourcePayload.attackerInstanceId == MatchAttackerIds.Hero &&
+                          sourcePayload.targetType != "HERO" && sourcePayload.attackerPlayerId == payload.playerId));
+                    if (markedPlayer.heroLifeLostThisTurn || markedPlayer.life <= 0 ||
+                        markedPlayer.life != payload.life || markedPlayer.armor != payload.armor ||
+                        !validSource || lifeBeforePreviousEvent == null ||
+                        lifeBeforePreviousEvent[markedPlayerIndex] <= markedPlayer.life ||
+                        Current.turn != payload.turn || payload.sourceEventId != previousEvent.eventId ||
+                        Current.activePlayerIndex < 0 || Current.activePlayerIndex >= Current.players.Length ||
+                        Current.players[Current.activePlayerIndex].playerId != payload.activePlayerId)
+                        throw new InvalidOperationException("Hero life-loss marker does not match the authoritative damage window.");
+                    markedPlayer.heroLifeLostThisTurn = true;
+                    break;
                 case MatchEventTypes.HeroHealed:
                     FindPlayer(payload.playerId).life = payload.life;
                     break;
@@ -604,7 +635,11 @@ namespace BiomeRivals.Core
                     endedPlayer.excavatedThisTurn = false;
                     endedPlayer.cardsPlayedThisTurn = 0;
                     endedPlayer.hasTargetedEnemyObjectThisTurn = false;
-                    foreach (var turnPlayer in Current.players) turnPlayer.triggeredEffectKeysThisTurn = Array.Empty<string>();
+                    foreach (var turnPlayer in Current.players)
+                    {
+                        turnPlayer.triggeredEffectKeysThisTurn = Array.Empty<string>();
+                        turnPlayer.heroLifeLostThisTurn = false;
+                    }
                     break;
                 case MatchEventTypes.MatchEnded:
                     Current.status = "FINISHED";

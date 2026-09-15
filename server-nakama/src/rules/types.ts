@@ -1,10 +1,10 @@
 namespace BiomeRivalsRules {
-  export const PROTOCOL_VERSION = 32;
-  export const RULESET_VERSION = 'prototype-0.51';
+  export const PROTOCOL_VERSION = 33;
+  export const RULESET_VERSION = 'prototype-0.52';
 
   export type MatchStatus = 'WAITING' | 'MULLIGAN' | 'ACTIVE' | 'FINISHED';
   export type CommandType = 'MULLIGAN' | 'DEPLOY_CARD' | 'PLAY_CARD' | 'RESOLVE_CHOICE' | 'ENTER_COMBAT' | 'ATTACK' | 'END_TURN' | 'CONCEDE';
-  export type EventType = 'MULLIGAN_COMPLETED' | 'MATCH_STARTED' | 'MATERIALS_CONSUMED' | 'CARD_DEPLOYED' | 'OBJECT_SUMMONED' | 'CARD_PLAYED' | 'CARD_EQUIPPED' | 'EQUIPMENT_DURABILITY_CHANGED' | 'EQUIPMENT_DESTROYED' | 'CARD_BURIED' | 'CHOICE_OFFERED' | 'CHOICE_RESOLVED' | 'CARD_EXCAVATED' | 'CARD_DRAWN' | 'CARD_BURNED' | 'CARD_GENERATED' | 'FATIGUE_DAMAGE' | 'HERO_DAMAGED' | 'HERO_HEALED' | 'ARMOR_GAINED' | 'OBJECT_STATS_CHANGED' | 'OBJECT_STATUS_APPLIED' | 'OBJECT_STATUS_TICKED' | 'OBJECT_STATUS_REMOVED' | 'PLAYER_STATUS_APPLIED' | 'PLAYER_STATUS_TICKED' | 'PLAYER_STATUS_REMOVED' | 'OBJECT_MOVED' | 'PHASE_CHANGED' | 'ATTACK_RESOLVED' | 'OBJECT_DIED' | 'TURN_ENDED' | 'TURN_STARTED' | 'PLAYER_CONCEDED' | 'MATCH_ENDED';
+  export type EventType = 'MULLIGAN_COMPLETED' | 'MATCH_STARTED' | 'MATERIALS_CONSUMED' | 'CARD_DEPLOYED' | 'OBJECT_SUMMONED' | 'CARD_PLAYED' | 'CARD_EQUIPPED' | 'EQUIPMENT_DURABILITY_CHANGED' | 'EQUIPMENT_DESTROYED' | 'CARD_BURIED' | 'CHOICE_OFFERED' | 'CHOICE_RESOLVED' | 'CARD_EXCAVATED' | 'CARD_DRAWN' | 'CARD_BURNED' | 'CARD_GENERATED' | 'FATIGUE_DAMAGE' | 'HERO_DAMAGED' | 'HERO_LIFE_LOSS_MARKED' | 'HERO_HEALED' | 'ARMOR_GAINED' | 'OBJECT_STATS_CHANGED' | 'OBJECT_STATUS_APPLIED' | 'OBJECT_STATUS_TICKED' | 'OBJECT_STATUS_REMOVED' | 'PLAYER_STATUS_APPLIED' | 'PLAYER_STATUS_TICKED' | 'PLAYER_STATUS_REMOVED' | 'OBJECT_MOVED' | 'PHASE_CHANGED' | 'ATTACK_RESOLVED' | 'OBJECT_DIED' | 'TURN_ENDED' | 'TURN_STARTED' | 'PLAYER_CONCEDED' | 'MATCH_ENDED';
   export type DeploySlotKind = 'UNIT' | 'BUILDING';
   export type PaymentMethod = 'REDSTONE' | 'CRAFTING';
   export type TurnPhase = 'MAIN' | 'COMBAT';
@@ -147,6 +147,7 @@ namespace BiomeRivalsRules {
     heroHasAttacked: boolean;
     cardsPlayedThisTurn: number;
     hasTargetedEnemyObjectThisTurn: boolean;
+    heroLifeLostThisTurn: boolean;
     triggeredEffectKeysThisTurn: string[];
     statuses: PlayerStatusState[];
     unitSlots: Array<string | null>;
@@ -201,6 +202,7 @@ namespace BiomeRivalsRules {
     heroHasAttacked: boolean;
     cardsPlayedThisTurn: number;
     hasTargetedEnemyObjectThisTurn: boolean;
+    heroLifeLostThisTurn: boolean;
     triggeredEffectKeysThisTurn: string[];
     statuses: PlayerStatusState[];
     unitSlots: Array<string | null>;

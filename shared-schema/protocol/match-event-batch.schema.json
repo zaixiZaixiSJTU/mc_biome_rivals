@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["protocolVersion", "rulesetVersion", "revision", "acknowledgedCommandId", "events"],
   "properties": {
-    "protocolVersion": { "const": 32 },
+    "protocolVersion": { "const": 33 },
     "rulesetVersion": { "type": "string" },
     "revision": { "type": "integer", "minimum": 0 },
     "acknowledgedCommandId": { "type": "string" },
@@ -18,7 +18,7 @@
         "required": ["eventId", "type", "payload"],
         "properties": {
           "eventId": { "type": "integer", "minimum": 1 },
-          "type": { "enum": ["MULLIGAN_COMPLETED", "MATCH_STARTED", "MATERIALS_CONSUMED", "CARD_DEPLOYED", "OBJECT_SUMMONED", "CARD_PLAYED", "CARD_EQUIPPED", "EQUIPMENT_DURABILITY_CHANGED", "EQUIPMENT_DESTROYED", "CARD_BURIED", "CHOICE_OFFERED", "CHOICE_RESOLVED", "CARD_EXCAVATED", "CARD_DRAWN", "CARD_BURNED", "CARD_GENERATED", "FATIGUE_DAMAGE", "HERO_DAMAGED", "HERO_HEALED", "ARMOR_GAINED", "OBJECT_STATS_CHANGED", "OBJECT_STATUS_APPLIED", "OBJECT_STATUS_TICKED", "OBJECT_STATUS_REMOVED", "PLAYER_STATUS_APPLIED", "PLAYER_STATUS_TICKED", "PLAYER_STATUS_REMOVED", "OBJECT_MOVED", "PHASE_CHANGED", "ATTACK_RESOLVED", "OBJECT_DIED", "TURN_ENDED", "TURN_STARTED", "PLAYER_CONCEDED", "MATCH_ENDED"] },
+          "type": { "enum": ["MULLIGAN_COMPLETED", "MATCH_STARTED", "MATERIALS_CONSUMED", "CARD_DEPLOYED", "OBJECT_SUMMONED", "CARD_PLAYED", "CARD_EQUIPPED", "EQUIPMENT_DURABILITY_CHANGED", "EQUIPMENT_DESTROYED", "CARD_BURIED", "CHOICE_OFFERED", "CHOICE_RESOLVED", "CARD_EXCAVATED", "CARD_DRAWN", "CARD_BURNED", "CARD_GENERATED", "FATIGUE_DAMAGE", "HERO_DAMAGED", "HERO_LIFE_LOSS_MARKED", "HERO_HEALED", "ARMOR_GAINED", "OBJECT_STATS_CHANGED", "OBJECT_STATUS_APPLIED", "OBJECT_STATUS_TICKED", "OBJECT_STATUS_REMOVED", "PLAYER_STATUS_APPLIED", "PLAYER_STATUS_TICKED", "PLAYER_STATUS_REMOVED", "OBJECT_MOVED", "PHASE_CHANGED", "ATTACK_RESOLVED", "OBJECT_DIED", "TURN_ENDED", "TURN_STARTED", "PLAYER_CONCEDED", "MATCH_ENDED"] },
           "payload": { "type": "object" }
         },
         "allOf": [
@@ -330,6 +330,25 @@
                     "damage": { "type": "integer", "minimum": 0 },
                     "damageType": { "enum": ["NORMAL", "TRUE"] },
                     "life": { "type": "integer", "minimum": 0 },
+                    "armor": { "type": "integer", "minimum": 0 }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": { "properties": { "type": { "const": "HERO_LIFE_LOSS_MARKED" } } },
+            "then": {
+              "properties": {
+                "payload": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["playerId", "activePlayerId", "turn", "sourceEventId", "life", "armor"],
+                  "properties": {
+                    "playerId": { "type": "string", "minLength": 1 },
+                    "activePlayerId": { "type": "string", "minLength": 1 },
+                    "turn": { "type": "integer", "minimum": 1 },
+                    "sourceEventId": { "type": "integer", "minimum": 1 },
+                    "life": { "type": "integer", "minimum": 1 },
                     "armor": { "type": "integer", "minimum": 0 }
                   }
                 }

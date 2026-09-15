@@ -2,6 +2,13 @@
 
 本文件按时间倒序记录影响视觉表现、资源管线或运行时架构的改动。
 
+## 2026-09-15 RULE-031B1 首次英雄实际掉血标记
+
+- **权威伤害窗口**：玩家状态新增 `heroLifeLostThisTurn`。每次英雄生命变化由统一事件出口观察：普通/真实伤害、攻击和装备反击、疲劳、建筑脉冲与亡语均使用同一判定；只消耗护甲或致死掉血不发布标记。首次非致死实际生命下降紧跟源事件发布 `HERO_LIFE_LOSS_MARKED`，同一单人回合中每名玩家至多一次；`TURN_ENDED` 对双方一起清零，回合交接后的疲劳可重新标记。
+- **协议与重连**：协议 32→33、规则集 `prototype-0.51`→`prototype-0.52`；玩家快照和事件 Schema、Nakama 私有重入快照、Unity 状态仓库与重放同步。Unity 核对源事件、前后生命、护甲、回合、操作者和事件编号，拒绝护甲-only 伪标记。卡牌定义/catalog 版本 41、效果实现注册表版本 42 不变，`nt_002`/`nt_007` 继续 `PENDING`，未增加临时能量字段。
+- **验证**：`scripts/validate.ps1 -WithDockerConfig` 通过，服务端 178/178；`scripts/validate-unity.ps1` 使用 Unity `6000.0.28f1c1_a1337fc966e0`，EditMode 226/226。覆盖双玩家、重复伤害、护甲-only、攻击/反击、疲劳、建筑、致死中止、单人回合重置、公开快照、私有重连和 Unity 回放。Docker 在线双客户端暂未在 B1 切片单独运行，留给 RULE-031E 拆分验收。
+- **提交边界**：只提交 B1 的权威模型、协议、Unity 投影、测试和任务文档；本机未追踪的 `client-unity/ProjectSettings/PackageManagerSettings.asset`、`scripts/add_units.py` 保持原状。
+
 ## 2026-09-15 北极熊＋羊毛集成演示与联机回归
 
 - **演示提交 `c2ed046`**：`-previewPolarBearWool` 确定性预置英雄 15 点生命、原版北极熊部署和一张羊毛施放，场上北极熊为 4/7；世界内三行标签区别显示嘲讽、永久攻 +1、临时血 +1，右侧与手牌复用统一卡面。1920×1080 实机验收图见 [`demo-polar-bear-wool-preview-v1.png`](../design/assets/demo-polar-bear-wool-preview-v1.png)，无文字溢出或布局遮挡。`scripts/validate-unity.ps1` 为 223/223；`scripts/build-demo.ps1 -WithWindowsPlayer` 和 Player 截图捕获通过。

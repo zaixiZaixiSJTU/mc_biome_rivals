@@ -112,6 +112,7 @@ TestHarness.test('same player session can replace a stale presence and receives 
   if (state.game === null) throw new Error('test match did not initialize');
   state.game.revision = 7;
   state.game.lastEventId = 19;
+  state.game.players[0]!.heroLifeLostThisTurn = true;
   state.game.pendingChoice = {
     choiceId: 'choice-reconnect',
     playerId: 'alice',
@@ -157,6 +158,8 @@ TestHarness.test('same player session can replace a stale presence and receives 
   TestHarness.equal(snapshot.viewerPlayerId, 'alice');
   TestHarness.equal(snapshot.revision, 7);
   TestHarness.equal(snapshot.lastEventId, 19);
+  TestHarness.equal(snapshot.players[0]!.heroLifeLostThisTurn, true);
+  TestHarness.equal(snapshot.players[1]!.heroLifeLostThisTurn, false);
   TestHarness.equal(snapshot.pendingChoice!.choiceId, 'choice-reconnect');
   TestHarness.equal(snapshot.pendingChoice!.options[0]!.cardId, state.game!.players[0]!.hand[0]!);
   TestHarness.equal(snapshot.players[1]!.hand[0], null);

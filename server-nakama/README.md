@@ -16,7 +16,7 @@
 
 协议 opcode：`1` 命令、`2` 事件批次、`3` 命令拒绝、`4` 权威快照。协议结构以 `shared-schema/protocol` 为准。
 
-当前基础对局纵向切片使用 `protocolVersion: 32` 与 `rulesetVersion: prototype-0.51`。协议 32 为公开战场对象和属性事件增加可回放的临时生命修正及过期回合；`prototype-0.51` 让 `tk_001` 羊毛可指定一个存活己方生物，使其本回合获得 +1 当前与最大生命，并在回合末精确回退及夹取。协议 31 的 `FIRE`、协议 30 的持续战场来源 `sourceInstanceId`、协议 29 的公开战场选择 `HEAL_UNIT` 及更早的隐藏牌库投影、`POISON`、DARK 生命周期继续兼容；`ATTACK.attackerInstanceId = "HERO"` 继续表示英雄发起的装备攻击。旧协议或规则集客户端不能静默兼容。
+当前基础对局纵向切片使用 `protocolVersion: 33` 与 `rulesetVersion: prototype-0.52`。协议 33 在玩家快照中增加 `heroLifeLostThisTurn`，并在首次非致死的实际生命下降后发布 `HERO_LIFE_LOSS_MARKED`；只消耗护甲不会标记，`TURN_ENDED` 对双方一并重置。`nt_002` 和 `nt_007` 仍为 `PENDING`，此版本尚无临时红石能量字段或新卡牌触发。协议 32 的临时生命修正、协议 31 的 `FIRE`、协议 30 的持续战场来源 `sourceInstanceId`、协议 29 的公开战场选择 `HEAL_UNIT` 及更早的隐藏牌库投影、`POISON`、DARK 生命周期继续兼容；`ATTACK.attackerInstanceId = "HERO"` 继续表示英雄发起的装备攻击。旧协议或规则集客户端不能静默兼容。
 
 运行：
 

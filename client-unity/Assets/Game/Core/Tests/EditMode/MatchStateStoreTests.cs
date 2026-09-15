@@ -2366,7 +2366,8 @@ namespace BiomeRivals.Core.Tests
                 {
                     new PlayerStateDto
                     {
-                        playerId = "alice", life = 24, armor = 2, hand = new[] { "cd_003", "tk_012" },
+                        playerId = "alice", life = 24, armor = 2, heroLifeLostThisTurn = true,
+                        hand = new[] { "cd_003", "tk_012" },
                         equipment = new EquipmentStateDto
                         {
                             instanceId = "equipment-3", cardId = "or_006", attack = 2, durability = 1, maxDurability = 2
@@ -2400,6 +2401,8 @@ namespace BiomeRivals.Core.Tests
             Assert.That(store.Current.revision, Is.EqualTo(7));
             Assert.That(store.Current.lastEventId, Is.EqualTo(19));
             Assert.That(store.Current.players[0].equipment.cardId, Is.EqualTo("or_006"));
+            Assert.That(store.Current.players[0].heroLifeLostThisTurn, Is.True);
+            Assert.That(store.Current.players[1].heroLifeLostThisTurn, Is.False);
             Assert.That(store.Current.players[0].battlefield[0].statuses[0].statusId, Is.EqualTo("FIRE"));
             Assert.That(store.Current.players[0].battlefield[1].temporaryHealthModifier, Is.EqualTo(1));
             Assert.That(store.Current.players[0].battlefield[1].temporaryHealthModifierExpiresOnTurn, Is.EqualTo(3));
@@ -2408,6 +2411,95 @@ namespace BiomeRivals.Core.Tests
             Assert.That(store.Current.pendingChoice.options[0].cardId, Is.EqualTo("pf_004"));
             Assert.That(store.Current.players[1].hand, Is.All.Empty,
                 "A recovery snapshot must not reveal the opponent's private hand.");
+        }
+
+        [Test]
+        public void Apply_ReplaysFirstHeroLifeLossForEitherPlayerAndClearsBothAtTurnEnd()
+        {
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "hero-loss-replay", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                status = "ACTIVE", phase = "MAIN", turn = 1, activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice", life = 30, armor = 2 },
+                    new PlayerStateDto { playerId = "bob", life = 30 }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 1, type = MatchEventTypes.HeroDamaged,
+                        payload = new MatchEventPayloadDto { playerId = "alice", life = 30, armor = 0 } },
+                    new MatchEventDto { eventId = 2, type = MatchEventTypes.HeroDamaged,
+                        payload = new MatchEventPayloadDto { playerId = "alice", life = 28, armor = 0 } },
+                    new MatchEventDto { eventId = 3, type = MatchEventTypes.HeroLifeLossMarked,
+                        payload = new MatchEventPayloadDto { playerId = "alice", activePlayerId = "alice",
+                            turn = 1, sourceEventId = 2, life = 28, armor = 0 } },
+                    new MatchEventDto { eventId = 4, type = MatchEventTypes.HeroDamaged,
+                        payload = new MatchEventPayloadDto { playerId = "bob", life = 27, armor = 0 } },
+                    new MatchEventDto { eventId = 5, type = MatchEventTypes.HeroLifeLossMarked,
+                        payload = new MatchEventPayloadDto { playerId = "bob", activePlayerId = "alice",
+                            turn = 1, sourceEventId = 4, life = 27, armor = 0 } }
+                }
+            });
+
+            Assert.That(store.Current.players[0].heroLifeLostThisTurn, Is.True);
+            Assert.That(store.Current.players[1].heroLifeLostThisTurn, Is.True);
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                revision = 2,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 6, type = MatchEventTypes.TurnEnded,
+                        payload = new MatchEventPayloadDto { playerId = "alice" } }
+                }
+            });
+
+            Assert.That(store.Current.players[0].life, Is.EqualTo(28));
+            Assert.That(store.Current.players[1].life, Is.EqualTo(27));
+            Assert.That(store.Current.players[0].heroLifeLostThisTurn, Is.False);
+            Assert.That(store.Current.players[1].heroLifeLostThisTurn, Is.False);
+        }
+
+        [Test]
+        public void Apply_RejectsHeroLifeLossMarkerAfterArmorOnlyDamage()
+        {
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "armor-only-marker", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                status = "ACTIVE", phase = "MAIN", turn = 1, activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice", life = 30, armor = 2 },
+                    new PlayerStateDto { playerId = "bob", life = 30 }
+                }
+            });
+
+            Assert.Throws<InvalidOperationException>(() => store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 1, type = MatchEventTypes.HeroDamaged,
+                        payload = new MatchEventPayloadDto { playerId = "alice", life = 30, armor = 0 } },
+                    new MatchEventDto { eventId = 2, type = MatchEventTypes.HeroLifeLossMarked,
+                        payload = new MatchEventPayloadDto { playerId = "alice", activePlayerId = "alice",
+                            turn = 1, sourceEventId = 1, life = 30, armor = 0 } }
+                }
+            }));
+            Assert.That(store.Current.players[0].heroLifeLostThisTurn, Is.False);
         }
     }
 }

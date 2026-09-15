@@ -263,6 +263,108 @@ TestHarness.test('temporary health invariants reject contradictory or impossible
   }));
 });
 
+TestHarness.test('first real hero life loss is public and replayable without either pending Nether card', function (): void {
+  const state = activeState('match-hero-loss-window', ['alice', 'bob']);
+  const actor = state.players[state.activePlayerIndex]!;
+  actor.hand = ['nt_006', 'nt_006'];
+  actor.deck = ['nt_001', 'nt_001'];
+  actor.redstone = 2;
+  actor.redstoneCapacity = 2;
+  const first = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('first-self-loss', 0, 'nt_006'));
+  TestHarness.ok(first.accepted, JSON.stringify(first));
+  if (!first.accepted) return;
+  TestHarness.equal(first.state.players[state.activePlayerIndex]!.heroLifeLostThisTurn, true);
+  TestHarness.equal(first.batch.events[1]!.type, 'HERO_DAMAGED');
+  TestHarness.equal(first.batch.events[2]!.type, 'HERO_LIFE_LOSS_MARKED');
+  TestHarness.equal(first.batch.events[2]!.payload.sourceEventId, first.batch.events[1]!.eventId);
+  TestHarness.equal(first.batch.events[2]!.payload.activePlayerId, actor.playerId);
+  TestHarness.equal(first.batch.events[2]!.payload.turn, state.turn);
+  assertEventBatchMatchesSchema(first.batch);
+  const viewer = BiomeRivalsRules.createClientSnapshot(first.state, actor.playerId);
+  const opponent = BiomeRivalsRules.createClientSnapshot(first.state,
+    first.state.players[state.activePlayerIndex === 0 ? 1 : 0]!.playerId);
+  TestHarness.equal(viewer.players[state.activePlayerIndex]!.heroLifeLostThisTurn, true);
+  TestHarness.equal(opponent.players[state.activePlayerIndex]!.heroLifeLostThisTurn, true);
+  assertSnapshotMatchesSchema(viewer);
+  assertSnapshotMatchesSchema(opponent);
+
+  const second = BiomeRivalsRules.applyCommand(first.state, actor.playerId,
+    playCommand('second-self-loss', 1, 'nt_006'));
+  TestHarness.ok(second.accepted, JSON.stringify(second));
+  if (!second.accepted) return;
+  TestHarness.equal(second.batch.events.some(function (event): boolean {
+    return event.type === 'HERO_LIFE_LOSS_MARKED';
+  }), false);
+  TestHarness.equal(second.state.players[state.activePlayerIndex]!.heroLifeLostThisTurn, true);
+});
+
+TestHarness.test('armor-only hero hit leaves the first life-loss window available for later combat', function (): void {
+  const state = activeState('match-hero-loss-armor', ['alice', 'bob']);
+  const actorIndex = state.activePlayerIndex;
+  const defenderIndex = actorIndex === 0 ? 1 : 0;
+  state.turn = 2;
+  state.phase = 'COMBAT';
+  state.players[defenderIndex]!.armor = 1;
+  placeUnit(state, actorIndex, 'pf_001', 0, 'object-1', 1);
+  placeUnit(state, actorIndex, 'pf_008', 1, 'object-2', 1);
+  const first = BiomeRivalsRules.applyCommand(state, state.players[actorIndex]!.playerId,
+    attackCommand('armor-only-hit', 0, 'object-1', 'HERO'));
+  TestHarness.ok(first.accepted, JSON.stringify(first));
+  if (!first.accepted) return;
+  TestHarness.equal(first.state.players[defenderIndex]!.life, 30);
+  TestHarness.equal(first.state.players[defenderIndex]!.armor, 0);
+  TestHarness.equal(first.state.players[defenderIndex]!.heroLifeLostThisTurn, false);
+  TestHarness.equal(first.batch.events.length, 1);
+
+  const second = BiomeRivalsRules.applyCommand(first.state, first.state.players[actorIndex]!.playerId,
+    attackCommand('first-real-hit', 1, 'object-2', 'HERO'));
+  TestHarness.ok(second.accepted, JSON.stringify(second));
+  if (!second.accepted) return;
+  TestHarness.equal(second.state.players[defenderIndex]!.heroLifeLostThisTurn, true);
+  TestHarness.equal(second.batch.events[0]!.type, 'ATTACK_RESOLVED');
+  TestHarness.equal(second.batch.events[1]!.type, 'HERO_LIFE_LOSS_MARKED');
+  TestHarness.equal(second.batch.events[1]!.payload.playerId, first.state.players[defenderIndex]!.playerId);
+  assertEventBatchMatchesSchema(second.batch);
+});
+
+TestHarness.test('turn handoff clears both old hero windows before new-turn nonlethal fatigue', function (): void {
+  const state = activeState('match-hero-loss-fatigue-reset', ['alice', 'bob']);
+  const previousActor = state.players[state.activePlayerIndex]!;
+  const nextActor = state.players[state.activePlayerIndex === 0 ? 1 : 0]!;
+  previousActor.heroLifeLostThisTurn = true;
+  nextActor.heroLifeLostThisTurn = true;
+  nextActor.deck = [];
+  const ended = BiomeRivalsRules.applyCommand(state, previousActor.playerId,
+    command('handoff-hero-loss', 0, 'END_TURN'));
+  TestHarness.ok(ended.accepted, JSON.stringify(ended));
+  if (!ended.accepted) return;
+  TestHarness.equal(ended.state.players[state.activePlayerIndex]!.heroLifeLostThisTurn, false);
+  TestHarness.equal(ended.state.players[state.activePlayerIndex === 0 ? 1 : 0]!.heroLifeLostThisTurn, true);
+  const fatigueIndex = ended.batch.events.map(function (event): string { return event.type; }).indexOf('FATIGUE_DAMAGE');
+  TestHarness.ok(fatigueIndex > 0);
+  TestHarness.equal(ended.batch.events[fatigueIndex + 1]!.type, 'HERO_LIFE_LOSS_MARKED');
+  TestHarness.equal(ended.batch.events[fatigueIndex + 1]!.payload.playerId, nextActor.playerId);
+  assertEventBatchMatchesSchema(ended.batch);
+});
+
+TestHarness.test('lethal self damage does not create a useless hero life-loss marker', function (): void {
+  const state = activeState('match-hero-loss-lethal', ['alice', 'bob']);
+  const actor = state.players[state.activePlayerIndex]!;
+  actor.life = 1;
+  actor.hand = ['nt_006'];
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('lethal-self-loss', 0, 'nt_006'));
+  TestHarness.ok(result.accepted, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.status, 'FINISHED');
+  TestHarness.equal(result.state.players[state.activePlayerIndex]!.heroLifeLostThisTurn, false);
+  TestHarness.equal(result.batch.events.some(function (event): boolean {
+    return event.type === 'HERO_LIFE_LOSS_MARKED';
+  }), false);
+  assertEventBatchMatchesSchema(result.batch);
+});
+
 TestHarness.test('creates a valid two-player initial state', function (): void {
   const state = BiomeRivalsRules.createInitialState('match-1', ['alice', 'bob'], undefined, 'fixed-secret-1');
   TestHarness.equal(state.revision, 0);
@@ -1097,9 +1199,9 @@ TestHarness.test('TNT Trap spends enemy armor, bypasses owner armor, repairs a f
   TestHarness.equal(result.state.players[ownerIndex]!.battlefield[0]!.health, 8);
   TestHarness.equal(result.state.players[ownerIndex]!.hand.slice(-2).join(','), 'tk_008,db_001');
   TestHarness.equal(result.batch.events.slice(2).map(function (event): string { return event.type; }).join(','),
-    'CARD_EXCAVATED,HERO_DAMAGED,HERO_DAMAGED,OBJECT_STATS_CHANGED,CARD_DRAWN');
-  TestHarness.equal(result.batch.events[5]!.payload.reason, 'HEAL');
-  TestHarness.equal(result.batch.events[5]!.payload.health, 8, 'full-health Temple still emits zero-effective repair feedback');
+    'CARD_EXCAVATED,HERO_DAMAGED,HERO_DAMAGED,HERO_LIFE_LOSS_MARKED,OBJECT_STATS_CHANGED,CARD_DRAWN');
+  TestHarness.equal(result.batch.events[6]!.payload.reason, 'HEAL');
+  TestHarness.equal(result.batch.events[6]!.payload.health, 8, 'full-health Temple still emits zero-effective repair feedback');
   TestHarness.equal(result.batch.events.some(function (event): boolean { return event.type === 'MATCH_ENDED'; }), false);
 });
 
@@ -1185,9 +1287,10 @@ TestHarness.test('resolves lava sacrifice self damage then a private draw', func
   TestHarness.equal(result.state.players[0]!.hand[0], 'nt_001');
   TestHarness.equal(result.state.players[0]!.discardPile[0], 'nt_006');
   TestHarness.equal(result.batch.events[1]!.type, 'HERO_DAMAGED');
-  TestHarness.equal(result.batch.events[2]!.type, 'CARD_DRAWN');
+  TestHarness.equal(result.batch.events[2]!.type, 'HERO_LIFE_LOSS_MARKED');
+  TestHarness.equal(result.batch.events[3]!.type, 'CARD_DRAWN');
   const opponentProjection = BiomeRivalsRules.createClientEventBatch(result.batch, 'bob');
-  TestHarness.equal(opponentProjection.events[2]!.payload.cardId, null);
+  TestHarness.equal(opponentProjection.events[3]!.payload.cardId, null);
 });
 
 TestHarness.test('applies a targeted snowball debuff and restores it when the caster turn ends', function (): void {
@@ -2282,6 +2385,10 @@ TestHarness.test('hero attack consumes durability, takes retaliation, and offers
   TestHarness.equal(attacked.state.players[0]!.equipment!.durability, 2);
   TestHarness.equal(attacked.state.players[0]!.armor, 0);
   TestHarness.equal(attacked.state.players[0]!.life, 28);
+  TestHarness.equal(attacked.state.players[0]!.heroLifeLostThisTurn, true);
+  const retaliationIndex = attacked.batch.events.map(function (event): string { return event.type; }).indexOf('ATTACK_RESOLVED');
+  TestHarness.equal(attacked.batch.events[retaliationIndex + 1]!.type, 'HERO_LIFE_LOSS_MARKED');
+  TestHarness.equal(attacked.batch.events[retaliationIndex + 1]!.payload.playerId, 'alice');
   TestHarness.equal(attacked.state.pendingChoice!.kind, 'MOVE_UNIT');
   TestHarness.equal(attacked.state.pendingChoice!.options.length, 2);
   TestHarness.equal(attacked.state.pendingChoice!.options[0]!.slotIndex, 1);
@@ -3558,14 +3665,15 @@ TestHarness.test('Cactus Fence damages the first enemy unit that attacks its her
   TestHarness.equal(result.state.players[actorIndex]!.battlefield[0]!.health, 1);
   TestHarness.equal(result.state.players[defenderIndex]!.triggeredEffectKeysThisTurn.join(','),
     'object-20:effect.db_004.01');
-  TestHarness.equal(result.batch.events.length, 2);
+  TestHarness.equal(result.batch.events.length, 3);
   TestHarness.equal(result.batch.events[0]!.type, 'ATTACK_RESOLVED');
-  TestHarness.equal(result.batch.events[1]!.type, 'OBJECT_STATS_CHANGED');
-  TestHarness.equal(result.batch.events[1]!.payload.sourceCardId, 'db_004');
-  TestHarness.equal(result.batch.events[1]!.payload.sourceInstanceId, 'object-20');
-  TestHarness.equal(result.batch.events[1]!.payload.effectId, 'effect.db_004.01');
-  TestHarness.equal(result.batch.events[1]!.payload.reason, 'DAMAGE');
-  TestHarness.equal(result.batch.events[1]!.payload.health, 1);
+  TestHarness.equal(result.batch.events[1]!.type, 'HERO_LIFE_LOSS_MARKED');
+  TestHarness.equal(result.batch.events[2]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(result.batch.events[2]!.payload.sourceCardId, 'db_004');
+  TestHarness.equal(result.batch.events[2]!.payload.sourceInstanceId, 'object-20');
+  TestHarness.equal(result.batch.events[2]!.payload.effectId, 'effect.db_004.01');
+  TestHarness.equal(result.batch.events[2]!.payload.reason, 'DAMAGE');
+  TestHarness.equal(result.batch.events[2]!.payload.health, 1);
 });
 
 TestHarness.test('Cactus Fence triggers only once before turn-end markers reset', function (): void {
@@ -3621,9 +3729,10 @@ TestHarness.test('Cactus Fence ignores an enemy hero equipment attack', function
   TestHarness.equal(result.state.players[defenderIndex]!.life, 28);
   TestHarness.equal(result.state.players[defenderIndex]!.triggeredEffectKeysThisTurn.length, 0);
   TestHarness.equal(result.state.players[actorIndex]!.equipment!.durability, 2);
-  TestHarness.equal(result.batch.events.length, 2);
+  TestHarness.equal(result.batch.events.length, 3);
   TestHarness.equal(result.batch.events[0]!.type, 'ATTACK_RESOLVED');
-  TestHarness.equal(result.batch.events[1]!.type, 'EQUIPMENT_DURABILITY_CHANGED');
+  TestHarness.equal(result.batch.events[1]!.type, 'HERO_LIFE_LOSS_MARKED');
+  TestHarness.equal(result.batch.events[2]!.type, 'EQUIPMENT_DURABILITY_CHANGED');
   TestHarness.equal(defender.battlefield[0]!.health, 5);
 });
 
@@ -3648,13 +3757,14 @@ TestHarness.test('Cactus Fences stop after a lethal reaction and award the enemy
   TestHarness.equal(result.state.players[defenderIndex]!.hand.indexOf('tk_005') >= 0, true);
   TestHarness.equal(result.state.players[defenderIndex]!.triggeredEffectKeysThisTurn.join(','),
     'object-20:effect.db_004.01');
-  TestHarness.equal(result.batch.events.length, 4);
+  TestHarness.equal(result.batch.events.length, 5);
   TestHarness.equal(result.batch.events[0]!.type, 'ATTACK_RESOLVED');
-  TestHarness.equal(result.batch.events[1]!.type, 'OBJECT_STATS_CHANGED');
-  TestHarness.equal(result.batch.events[2]!.type, 'OBJECT_DIED');
-  TestHarness.equal(result.batch.events[3]!.type, 'CARD_GENERATED');
-  TestHarness.equal(result.batch.events[3]!.payload.cardId, 'tk_005');
-  TestHarness.equal(result.batch.events[3]!.payload.playerId, defender.playerId);
+  TestHarness.equal(result.batch.events[1]!.type, 'HERO_LIFE_LOSS_MARKED');
+  TestHarness.equal(result.batch.events[2]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(result.batch.events[3]!.type, 'OBJECT_DIED');
+  TestHarness.equal(result.batch.events[4]!.type, 'CARD_GENERATED');
+  TestHarness.equal(result.batch.events[4]!.payload.cardId, 'tk_005');
+  TestHarness.equal(result.batch.events[4]!.payload.playerId, defender.playerId);
 });
 
 TestHarness.test('Cave Spider poisons a surviving creature after ordinary attack damage', function (): void {
@@ -4648,6 +4758,14 @@ TestHarness.test('End Crystals deal normal hero damage in stable building-slot o
   TestHarness.equal(crystalEvents[0]!.payload.life, 9);
   TestHarness.equal(crystalEvents[1]!.payload.sourceInstanceId, 'object-62');
   TestHarness.equal(crystalEvents[1]!.payload.life, 7);
+  const firstCrystalIndex = result.batch.events.map(function (event): number { return event.eventId; })
+    .indexOf(crystalEvents[0]!.eventId);
+  TestHarness.equal(result.batch.events[firstCrystalIndex + 1]!.type, 'HERO_LIFE_LOSS_MARKED');
+  TestHarness.equal(result.batch.events[firstCrystalIndex + 1]!.payload.playerId, opponent.playerId);
+  TestHarness.equal(result.batch.events.filter(function (event): boolean {
+    return event.type === 'HERO_LIFE_LOSS_MARKED';
+  }).length, 1);
+  TestHarness.equal(result.state.players[opponentIndex]!.heroLifeLostThisTurn, false);
   assertEventBatchMatchesSchema(result.batch);
 });
 

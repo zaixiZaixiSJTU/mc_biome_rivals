@@ -202,6 +202,7 @@ namespace BiomeRivalsRules {
       }
       if (!isFactionId(player.factionId)) violations.push('player faction is unsupported');
       if (typeof player.mulliganCompleted !== 'boolean') violations.push('player mulligan state is invalid');
+      if (typeof player.heroLifeLostThisTurn !== 'boolean') violations.push('player hero life-loss marker is invalid');
       if (player.life < 0 || player.armor < 0) violations.push('player combat values cannot be negative');
       if (player.redstone < 0 || player.redstone > player.redstoneCapacity || player.redstoneCapacity < 0 || player.redstoneCapacity > 10) {
         violations.push('player redstone is out of range');

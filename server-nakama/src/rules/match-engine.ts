@@ -91,6 +91,7 @@ namespace BiomeRivalsRules {
       heroHasAttacked: false,
       cardsPlayedThisTurn: 0,
       hasTargetedEnemyObjectThisTurn: false,
+      heroLifeLostThisTurn: false,
       triggeredEffectKeysThisTurn: [],
       statuses: [],
       unitSlots: [null, null, null, null],
@@ -189,6 +190,7 @@ namespace BiomeRivalsRules {
           heroHasAttacked: player.heroHasAttacked,
           cardsPlayedThisTurn: player.cardsPlayedThisTurn,
           hasTargetedEnemyObjectThisTurn: player.hasTargetedEnemyObjectThisTurn,
+          heroLifeLostThisTurn: player.heroLifeLostThisTurn,
           triggeredEffectKeysThisTurn: player.triggeredEffectKeysThisTurn.slice(),
           statuses: player.statuses.map(function (status): PlayerStatusState {
             return {
@@ -327,6 +329,7 @@ namespace BiomeRivalsRules {
           heroHasAttacked: player.heroHasAttacked,
           cardsPlayedThisTurn: player.cardsPlayedThisTurn,
           hasTargetedEnemyObjectThisTurn: player.hasTargetedEnemyObjectThisTurn,
+          heroLifeLostThisTurn: player.heroLifeLostThisTurn,
           triggeredEffectKeysThisTurn: player.triggeredEffectKeysThisTurn.slice(),
           statuses: player.statuses.map(function (status): PlayerStatusState {
             return {
@@ -417,6 +420,25 @@ namespace BiomeRivalsRules {
 
     const next = cloneState(state);
     const events: MatchEvent[] = [];
+    const observedHeroLife = next.players.map(function (player): number { return player.life; });
+    function observeHeroLife(playerId: string, sourceEventId: number, markLoss: boolean): void {
+      const playerIndex = next.players.map(function (player): string { return player.playerId; }).indexOf(playerId);
+      if (playerIndex < 0) throw new Error('hero event references a missing player');
+      const player = next.players[playerIndex]!;
+      const lifeBefore = observedHeroLife[playerIndex]!;
+      observedHeroLife[playerIndex] = player.life;
+      if (!markLoss || player.life >= lifeBefore || player.life <= 0 || player.heroLifeLostThisTurn) return;
+      player.heroLifeLostThisTurn = true;
+      next.lastEventId += 1;
+      events.push({ eventId: next.lastEventId, type: 'HERO_LIFE_LOSS_MARKED', payload: {
+        playerId: player.playerId,
+        activePlayerId: next.players[next.activePlayerIndex]!.playerId,
+        turn: next.turn,
+        sourceEventId: sourceEventId,
+        life: player.life,
+        armor: player.armor
+      } });
+    }
     function emit(type: EventType, payload: { [key: string]: unknown }): void {
       if (type === 'OBJECT_STATS_CHANGED' && typeof payload.playerId === 'string' && typeof payload.instanceId === 'string') {
         const eventPlayer = next.players.filter(function (candidate): boolean { return candidate.playerId === payload.playerId; })[0];
@@ -433,6 +455,19 @@ namespace BiomeRivalsRules {
       }
       next.lastEventId += 1;
       events.push({ eventId: next.lastEventId, type: type, payload: payload });
+      const sourceEventId = next.lastEventId;
+      if ((type === 'HERO_DAMAGED' || type === 'FATIGUE_DAMAGE' || type === 'HERO_HEALED') &&
+          typeof payload.playerId === 'string') {
+        observeHeroLife(payload.playerId, sourceEventId, type !== 'HERO_HEALED');
+      } else if (type === 'ATTACK_RESOLVED') {
+        if (payload.targetType === 'HERO' && typeof payload.targetPlayerId === 'string') {
+          observeHeroLife(payload.targetPlayerId, sourceEventId, true);
+        }
+        if (payload.attackerInstanceId === 'HERO' && payload.targetType !== 'HERO' &&
+            typeof payload.attackerPlayerId === 'string') {
+          observeHeroLife(payload.attackerPlayerId, sourceEventId, true);
+        }
+      }
     }
 
     function completeMulligan(): CommandRejected | null {
@@ -3026,6 +3061,7 @@ namespace BiomeRivalsRules {
         next.players[actorIndex]!.hasTargetedEnemyObjectThisTurn = false;
         for (let playerIndex = 0; playerIndex < next.players.length; playerIndex += 1) {
           next.players[playerIndex]!.triggeredEffectKeysThisTurn = [];
+          next.players[playerIndex]!.heroLifeLostThisTurn = false;
         }
         emit('TURN_ENDED', { playerId: actorPlayerId, turn: state.turn });
         next.activePlayerIndex = (state.activePlayerIndex + 1) % state.players.length;
