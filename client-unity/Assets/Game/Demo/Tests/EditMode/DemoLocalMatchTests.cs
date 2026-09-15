@@ -520,6 +520,7 @@ namespace BiomeRivals.Demo.Tests
         {
             var registry = CardContentLoader.Load();
             Assert.That(registry.TryGetDefinition("si_001", out var snowball), Is.True);
+            Assert.That(registry.TryGetDefinition("tk_001", out var wool), Is.True);
             Assert.That(registry.TryGetDefinition("tk_002", out var wheat), Is.True);
             Assert.That(registry.TryGetDefinition("tk_009", out var bone), Is.True);
             Assert.That(registry.TryGetDefinition("tk_010", out var cobblestone), Is.True);
@@ -529,6 +530,10 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(DemoCardTargeting.TryGetRule(snowball, out var snowballRule), Is.True);
             Assert.That(snowballRule.Owner, Is.EqualTo(DemoTargetOwner.Enemy));
             Assert.That(snowballRule.SlotKind, Is.EqualTo(DemoSlotKind.Unit));
+            Assert.That(DemoCardTargeting.TryGetRule(wool, out var woolRule), Is.True);
+            Assert.That(woolRule.Owner, Is.EqualTo(DemoTargetOwner.Friendly));
+            Assert.That(woolRule.SlotKind, Is.EqualTo(DemoSlotKind.Unit));
+            Assert.That(woolRule.TargetType, Is.EqualTo("UNIT"));
             Assert.That(DemoCardTargeting.TryGetRule(wheat, out var wheatRule), Is.True);
             Assert.That(wheatRule.Owner, Is.EqualTo(DemoTargetOwner.Friendly));
             Assert.That(wheatRule.TargetType, Is.EqualTo("UNIT"));
@@ -2687,6 +2692,98 @@ namespace BiomeRivals.Demo.Tests
             match.EndPlayerTurn();
             Assert.That(target.Attack, Is.EqualTo(2));
             Assert.That(target.TemporaryAttackModifier, Is.Zero);
+        }
+
+        [Test]
+        public void WoolStacksOnFriendlyUnitAndExpiresWithHealthClampedLocally()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("pf_002", out var sheep), Is.True);
+            Assert.That(registry.TryGetDefinition("tk_001", out var wool), Is.True);
+            Assert.That(wool.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { sheep.id });
+            Assert.That(match.ApplyDeploy(sheep,
+                match.CreateDeployCommand(sheep.id, DemoSlotKind.Unit, 1)).Accepted, Is.True);
+            var target = match.GetObject(true, DemoSlotKind.Unit, 1);
+            match.ResetDeckAndHand(new[] { wool.id, wool.id }, System.Array.Empty<string>());
+
+            var first = match.ApplyPlayCard(wool,
+                match.CreatePlayCardCommand(wool.id, "UNIT", target.InstanceId));
+            var second = match.ApplyPlayCard(wool,
+                match.CreatePlayCardCommand(wool.id, "UNIT", target.InstanceId));
+
+            Assert.That(first.Accepted, Is.True, first.Message);
+            Assert.That(second.Accepted, Is.True, second.Message);
+            Assert.That(target.Health, Is.EqualTo(5));
+            Assert.That(target.MaxHealth, Is.EqualTo(5));
+            Assert.That(target.TemporaryHealthModifier, Is.EqualTo(2));
+            Assert.That(target.TemporaryHealthModifierExpiresOnRound, Is.EqualTo(match.Round));
+            Assert.That(match.DiscardPile, Is.EqualTo(new[] { wool.id, wool.id }));
+            Assert.That(match.CardsPlayedThisTurn(true), Is.EqualTo(2));
+            target.Health -= 1;
+
+            match.EndPlayerTurn();
+
+            Assert.That(target.Health, Is.EqualTo(3));
+            Assert.That(target.MaxHealth, Is.EqualTo(3));
+            Assert.That(target.TemporaryHealthModifier, Is.Zero);
+            Assert.That(target.TemporaryHealthModifierExpiresOnRound, Is.Zero);
+        }
+
+        [Test]
+        public void WoolPreservesDamageAndRejectsInvalidTargetsAtomicallyLocally()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("pf_001", out var bee), Is.True);
+            Assert.That(registry.TryGetDefinition("db_004", out var fence), Is.True);
+            Assert.That(registry.TryGetDefinition("tk_001", out var wool), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { bee.id });
+            Assert.That(match.ApplyDeploy(bee,
+                match.CreateDeployCommand(bee.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            var friendly = match.GetObject(true, DemoSlotKind.Unit, 0);
+            friendly.Health = 1;
+            match.ResetHand(new[] { fence.id });
+            Assert.That(match.ApplyDeploy(fence,
+                match.CreateDeployCommand(fence.id, DemoSlotKind.Building, 0)).Accepted, Is.True);
+            var building = match.GetObject(true, DemoSlotKind.Building, 0);
+            match.ResetOpponent(new[] { bee }, new[] { 0 });
+            var enemy = match.GetObject(false, DemoSlotKind.Unit, 0);
+            match.ResetDeckAndHand(new[] { wool.id }, System.Array.Empty<string>());
+            var revisionBefore = match.Revision;
+            var energyBefore = match.Energy;
+            var invalidCommands = new[]
+            {
+                match.CreatePlayCardCommand(wool.id),
+                match.CreatePlayCardCommand(wool.id, "UNIT", enemy.InstanceId),
+                match.CreatePlayCardCommand(wool.id, "UNIT", building.InstanceId),
+                match.CreatePlayCardCommand(wool.id, "HERO", friendly.InstanceId),
+                match.CreatePlayCardCommand(wool.id, "UNIT", "departed-object")
+            };
+
+            foreach (var invalidCommand in invalidCommands)
+            {
+                var rejected = match.ApplyPlayCard(wool, invalidCommand);
+                Assert.That(rejected.Accepted, Is.False);
+                Assert.That(rejected.Code, Is.EqualTo(DemoCommandRejectionCode.InvalidTarget));
+                Assert.That(match.Revision, Is.EqualTo(revisionBefore));
+                Assert.That(match.Energy, Is.EqualTo(energyBefore));
+                Assert.That(match.Hand, Is.EqualTo(new[] { wool.id }));
+                Assert.That(match.DiscardPile, Is.Empty);
+                Assert.That(match.CardsPlayedThisTurn(true), Is.Zero);
+                Assert.That(friendly.Health, Is.EqualTo(1));
+                Assert.That(friendly.TemporaryHealthModifier, Is.Zero);
+            }
+
+            var accepted = match.ApplyPlayCard(wool,
+                match.CreatePlayCardCommand(wool.id, "UNIT", friendly.InstanceId));
+            Assert.That(accepted.Accepted, Is.True, accepted.Message);
+            Assert.That(friendly.Health, Is.EqualTo(2));
+            Assert.That(friendly.MaxHealth, Is.EqualTo(3));
+            match.EndPlayerTurn();
+            Assert.That(friendly.Health, Is.EqualTo(2));
+            Assert.That(friendly.MaxHealth, Is.EqualTo(2));
         }
 
         [Test]

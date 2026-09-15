@@ -17,8 +17,8 @@
 
 - 有效仓库：`D:\gitt\mc_biome_rivals`
 - 当前已提交基线：`7573817 feat: implement polar bear low-life deploy bonus`
-- 开发中版本：协议 32、规则集 `prototype-0.50`、内容版本 41。
-- 卡牌效果状态：54 个 `IMPLEMENTED`，15 个 `PENDING`。
+- 开发中版本：协议 32、规则集 `prototype-0.51`、内容版本 42。
+- 卡牌效果状态：55 个 `IMPLEMENTED`，14 个 `PENDING`。
 - 此前混合在工作区的体素场景、实体模型、资源管线和 FIRE 规则已在恢复基线 `6c9202e` 中固定。后续不得继续使用这种跨任务混提方式。
 - `docs/development/change-log.md`、本路线图和 BR-000 检查点均已纳入 Git。
 

@@ -2323,7 +2323,7 @@
                         "craftedAttackBonus":  0,
                         "craftedHealthBonus":  0,
                         "craftedDurabilityBonus":  0,
-                        "effectImplementationStatus":  "PENDING",
+                        "effectImplementationStatus":  "IMPLEMENTED",
                         "effectIds":  [
                                           "effect.tk_001.01"
                                       ]

@@ -669,6 +669,10 @@ namespace BiomeRivals.Demo
                             ShowStatus(ownEffect ? "小麦已喂给己方生物；若目标是动物，它本回合还会获得 +1 攻击。" : "对手使用小麦喂食了一个生物。", false);
                             yield return ShowTurnBanner("喂食", ownEffect ? Gold : Ember);
                             break;
+                        case "effect.tk_001.01":
+                            ShowStatus(ownEffect ? "羊毛已附着：己方目标本回合获得 +1 当前与最大生命。" : "对手用羊毛临时保护了一个生物。", false);
+                            yield return ShowTurnBanner("羊毛护持", ownEffect ? Pale : Ember);
+                            break;
                         case "effect.tk_009.01":
                             ShowStatus(ownEffect ? "骨头已生效：己方目标本回合获得 +1 攻击力。" : "对手使用骨头强化了一个生物。", false);
                             break;
@@ -879,6 +883,17 @@ namespace BiomeRivals.Demo
                     yield return healedViewer ? PulsePlayerHud(Cyan) : PulseOpponentHud(Cyan);
                     break;
                 case MatchEventTypes.ObjectStatsChanged:
+                    if (matchEvent.payload?.effectId == "effect.tk_001.01" && matchEvent.payload?.reason == "TEMPORARY_HEALTH_MODIFIER")
+                    {
+                        var woolFriendly = matchEvent.payload.playerId == GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
+                        ShowStatus(woolFriendly
+                            ? $"羊毛附着：目标当前生命 {matchEvent.payload.health} / 最大生命 {matchEvent.payload.maxHealth}，本回合临时生命 +{matchEvent.payload.temporaryHealthModifier}。"
+                            : "对手的羊毛附着在一个生物上，临时提高其当前与最大生命。", false);
+                    }
+                    else if (matchEvent.payload?.reason == "TEMPORARY_EXPIRED" && matchEvent.payload?.sourceCardId == null)
+                    {
+                        ShowStatus($"本回合临时修正已清除：当前生命 {matchEvent.payload.health} / 最大生命 {matchEvent.payload.maxHealth}。", false);
+                    }
                     if ((matchEvent.payload?.effectId == "effect.nt_003.01" || matchEvent.payload?.effectId == "effect.tk_013.01") &&
                         matchEvent.payload?.reason == "DAMAGE")
                     {
@@ -3476,7 +3491,11 @@ namespace BiomeRivals.Demo
             var message = result.Message.Replace(target.CardId, GetCardName(target.CardId));
             ShowStatus(result.Accepted ? $"{message} · 状态 r{result.Revision}" : message, !result.Accepted);
             RefreshAll();
-            if (result.Accepted) TryShowLocalMatchOutcome();
+            if (result.Accepted)
+            {
+                if (definition.id == "tk_001") StartCoroutine(PulseBattlefieldObject(target.InstanceId));
+                TryShowLocalMatchOutcome();
+            }
         }
 
         private async void ConfirmMultiTargetCard()
@@ -4056,6 +4075,11 @@ namespace BiomeRivals.Demo
                     : text.name;
             if (battlefieldObject?.HasKeyword("TAUNT") == true) stats = $"◆ 嘲讽   {stats}";
             else if (battlefieldObject?.HasKeyword("CHARGE") == true) stats = $"➤ 冲锋   {stats}";
+            if ((battlefieldObject?.TemporaryHealthModifier ?? 0) > 0)
+            {
+                stats = $"羊毛护持 +{battlefieldObject.TemporaryHealthModifier}临时生命 · {stats}";
+                accent = Pale;
+            }
             if ((battlefieldObject?.AdjacencyHealthModifier ?? 0) > 0)
             {
                 stats = $"海龟光环 +{battlefieldObject.AdjacencyHealthModifier}生命 · {stats}";
@@ -4104,7 +4128,7 @@ namespace BiomeRivals.Demo
             if (battlefieldObject?.CardId == "pf_003")
             {
                 var permanentGrowth = Mathf.Max(0,
-                    battlefieldObject.MaxHealth - definition.health - battlefieldObject.AdjacencyHealthModifier);
+                    battlefieldObject.MaxHealth - definition.health - battlefieldObject.AdjacencyHealthModifier - battlefieldObject.TemporaryHealthModifier);
                 if (permanentGrowth > 0)
                 {
                     stats = $"忠诚 +{permanentGrowth}生命 · {stats}";

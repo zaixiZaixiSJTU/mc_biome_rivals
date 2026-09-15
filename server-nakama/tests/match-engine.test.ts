@@ -1387,6 +1387,154 @@ TestHarness.test('bone buffs a friendly unit for the current turn only', functio
   TestHarness.equal(ended.state.players[0]!.battlefield[0]!.temporaryAttackModifier, 0);
 });
 
+TestHarness.test('Wool grants wounded friendly unit temporary current and maximum health', function (): void {
+  const state = activeState('match-wool-wounded', ['alice', 'bob']);
+  const actorIndex = state.activePlayerIndex;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['tk_001'];
+  actor.redstone = 0;
+  placeUnit(state, actorIndex, 'pf_002', 0, 'object-1', state.turn);
+  const original = actor.battlefield[0]!;
+  original.health = 2;
+
+  const played = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('play-wool-wounded', 0, 'tk_001', 'UNIT', original.instanceId));
+
+  TestHarness.ok(played.accepted, JSON.stringify(played));
+  if (!played.accepted) return;
+  const protectedUnit = played.state.players[actorIndex]!.battlefield[0]!;
+  TestHarness.equal(protectedUnit.health, 3);
+  TestHarness.equal(protectedUnit.maxHealth, 4);
+  TestHarness.equal(protectedUnit.temporaryHealthModifier, 1);
+  TestHarness.equal(protectedUnit.temporaryHealthModifierExpiresOnTurn, state.turn);
+  TestHarness.equal(played.state.players[actorIndex]!.redstone, 0);
+  TestHarness.equal(played.state.players[actorIndex]!.hand.length, 0);
+  TestHarness.equal(played.state.players[actorIndex]!.discardPile.join(','), 'tk_001');
+  TestHarness.equal(played.state.players[actorIndex]!.cardsPlayedThisTurn, 1);
+  TestHarness.equal(played.batch.events.map(function (event): string { return event.type; }).join(','),
+    'CARD_PLAYED,OBJECT_STATS_CHANGED');
+  const statsEvent = played.batch.events[1]!;
+  TestHarness.equal(statsEvent.payload.reason, 'TEMPORARY_HEALTH_MODIFIER');
+  TestHarness.equal(statsEvent.payload.sourceCardId, 'tk_001');
+  TestHarness.equal(statsEvent.payload.sourceInstanceId, 'effect-' + String(played.batch.events[0]!.eventId));
+  TestHarness.equal(statsEvent.payload.effectId, 'effect.tk_001.01');
+  TestHarness.equal(statsEvent.payload.health, 3);
+  TestHarness.equal(statsEvent.payload.maxHealth, 4);
+  TestHarness.equal(statsEvent.payload.temporaryHealthModifier, 1);
+  assertEventBatchMatchesSchema(played.batch);
+
+  const ended = BiomeRivalsRules.applyCommand(played.state, actor.playerId,
+    command('end-wool-wounded', 1, 'END_TURN'));
+  TestHarness.ok(ended.accepted, JSON.stringify(ended));
+  if (!ended.accepted) return;
+  const expired = ended.state.players[actorIndex]!.battlefield[0]!;
+  TestHarness.equal(expired.health, 3, 'damage remains after temporary maximum health expires');
+  TestHarness.equal(expired.maxHealth, 3);
+  TestHarness.equal(expired.temporaryHealthModifier, 0);
+  const expiryIndex = ended.batch.events.map(function (event): string { return event.type; }).indexOf('OBJECT_STATS_CHANGED');
+  const turnEndedIndex = ended.batch.events.map(function (event): string { return event.type; }).indexOf('TURN_ENDED');
+  TestHarness.ok(expiryIndex >= 0 && expiryIndex < turnEndedIndex);
+  TestHarness.equal(ended.batch.events[expiryIndex]!.payload.reason, 'TEMPORARY_EXPIRED');
+  assertEventBatchMatchesSchema(ended.batch);
+});
+
+TestHarness.test('two Wool cards stack and expire once with current health clamped', function (): void {
+  const state = activeState('match-wool-stack', ['alice', 'bob']);
+  const actorIndex = state.activePlayerIndex;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['tk_001', 'tk_001'];
+  actor.redstone = 0;
+  placeUnit(state, actorIndex, 'pf_002', 0, 'object-1', state.turn);
+
+  const first = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('play-wool-first', 0, 'tk_001', 'UNIT', 'object-1'));
+  TestHarness.ok(first.accepted, JSON.stringify(first));
+  if (!first.accepted) return;
+  const second = BiomeRivalsRules.applyCommand(first.state, actor.playerId,
+    playCommand('play-wool-second', 1, 'tk_001', 'UNIT', 'object-1'));
+  TestHarness.ok(second.accepted, JSON.stringify(second));
+  if (!second.accepted) return;
+  const stacked = second.state.players[actorIndex]!.battlefield[0]!;
+  TestHarness.equal(stacked.health, 5);
+  TestHarness.equal(stacked.maxHealth, 5);
+  TestHarness.equal(stacked.temporaryHealthModifier, 2);
+  TestHarness.equal(second.batch.events[1]!.payload.temporaryHealthModifier, 2);
+  stacked.health -= 1;
+
+  const ended = BiomeRivalsRules.applyCommand(second.state, actor.playerId,
+    command('end-wool-stack', 2, 'END_TURN'));
+  TestHarness.ok(ended.accepted, JSON.stringify(ended));
+  if (!ended.accepted) return;
+  const expired = ended.state.players[actorIndex]!.battlefield[0]!;
+  TestHarness.equal(expired.health, 3);
+  TestHarness.equal(expired.maxHealth, 3);
+  TestHarness.equal(expired.temporaryHealthModifier, 0);
+  const expiryEvents = ended.batch.events.filter(function (event): boolean {
+    return event.type === 'OBJECT_STATS_CHANGED' && event.payload.reason === 'TEMPORARY_EXPIRED';
+  });
+  TestHarness.equal(expiryEvents.length, 1);
+  TestHarness.equal(expiryEvents[0]!.payload.sourceCardId, null);
+  TestHarness.equal(expiryEvents[0]!.payload.effectId, null);
+  assertEventBatchMatchesSchema(ended.batch);
+});
+
+TestHarness.test('Wool rejects every non-friendly-unit target atomically even at zero cost', function (): void {
+  const state = activeState('match-wool-invalid-targets', ['alice', 'bob']);
+  const actorIndex = state.activePlayerIndex;
+  const enemyIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['tk_001'];
+  actor.redstone = 0;
+  placeUnit(state, actorIndex, 'pf_001', 0, 'object-1', state.turn);
+  placeBuilding(state, actorIndex, 'db_004', 0, 'object-2');
+  placeUnit(state, enemyIndex, 'nt_001', 0, 'object-3', state.turn);
+  const commands = [
+    playCommand('wool-missing', 0, 'tk_001'),
+    playCommand('wool-enemy', 0, 'tk_001', 'UNIT', 'object-3'),
+    playCommand('wool-building', 0, 'tk_001', 'UNIT', 'object-2'),
+    playCommand('wool-hero', 0, 'tk_001', 'HERO', 'object-1'),
+    playCommand('wool-departed', 0, 'tk_001', 'UNIT', 'departed-object')
+  ];
+
+  for (let index = 0; index < commands.length; index += 1) {
+    const rejected = BiomeRivalsRules.applyCommand(state, actor.playerId, commands[index]!);
+    TestHarness.equal(rejected.accepted, false);
+    if (!rejected.accepted) TestHarness.equal(rejected.code, 'INVALID_TARGET');
+    TestHarness.equal(state.revision, 0);
+    TestHarness.equal(actor.redstone, 0);
+    TestHarness.equal(actor.hand.join(','), 'tk_001');
+    TestHarness.equal(actor.discardPile.length, 0);
+    TestHarness.equal(actor.cardsPlayedThisTurn, 0);
+    TestHarness.equal(actor.battlefield[0]!.maxHealth, 2);
+    TestHarness.equal(actor.battlefield[0]!.temporaryHealthModifier, 0);
+    TestHarness.equal(state.processedCommandIds.length, 0);
+  }
+});
+
+TestHarness.test('Wool still requires a hand card and the main phase at zero cost', function (): void {
+  const state = activeState('match-wool-phase-hand', ['alice', 'bob']);
+  const actorIndex = state.activePlayerIndex;
+  const actor = state.players[actorIndex]!;
+  placeUnit(state, actorIndex, 'pf_001', 0, 'object-1', state.turn);
+  actor.hand = [];
+  actor.redstone = 0;
+  const missingHand = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('wool-without-hand', 0, 'tk_001', 'UNIT', 'object-1'));
+  TestHarness.equal(missingHand.accepted, false);
+  if (!missingHand.accepted) TestHarness.equal(missingHand.code, 'CARD_NOT_IN_HAND');
+  actor.hand = ['tk_001'];
+  state.phase = 'COMBAT';
+  const wrongPhase = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('wool-after-main', 0, 'tk_001', 'UNIT', 'object-1'));
+  TestHarness.equal(wrongPhase.accepted, false);
+  if (!wrongPhase.accepted) TestHarness.equal(wrongPhase.code, 'WRONG_PHASE');
+  TestHarness.equal(state.revision, 0);
+  TestHarness.equal(actor.hand.join(','), 'tk_001');
+  TestHarness.equal(actor.discardPile.length, 0);
+  TestHarness.equal(actor.cardsPlayedThisTurn, 0);
+  TestHarness.equal(actor.battlefield[0]!.temporaryHealthModifier, 0);
+});
+
 TestHarness.test('wheat heals a friendly Animal and grants temporary attack', function (): void {
   const state = activeState('match-wheat-animal', ['alice', 'bob'], ['plains_forest', 'nether']);
   const actorIndex = state.activePlayerIndex;

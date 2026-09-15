@@ -1,9 +1,9 @@
 # SI-005 北极熊 / TK-001 羊毛：规则契约 v1
 
-状态：SI-005 与临时生命协议基础设施已实现，TK-001 尚未实现
-当前组合：`protocolVersion 32`、`rulesetVersion prototype-0.50`、内容版本 41
+状态：SI-005、临时生命协议基础设施与 TK-001 均已实现
+当前组合：`protocolVersion 32`、`rulesetVersion prototype-0.51`、内容版本 42
 
-本文冻结两张牌的权威语义。RULE-030B 已完成北极熊纵向切片，RULE-030C 已建立临时生命协议基础设施；羊毛实现和集成演示仍分别留给 RULE-030D 与 RULE-030E。
+本文冻结两张牌的权威语义。RULE-030B 已完成北极熊纵向切片，RULE-030C 已建立临时生命协议基础设施，RULE-030D 已实现羊毛；集成演示与发布前验证留给 RULE-030E。
 
 ## 1. 规范文本
 

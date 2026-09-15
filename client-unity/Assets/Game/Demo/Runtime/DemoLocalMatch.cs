@@ -637,7 +637,7 @@ namespace BiomeRivals.Demo
             var effectId = definition.effectIds[0];
             if (effectId != "effect.cd_006.01" && effectId != "effect.db_002.01" && effectId != "effect.db_006.01" && effectId != "effect.nt_006.01" &&
                 effectId != "effect.si_001.01" && effectId != "effect.si_006.01" && effectId != "effect.tk_005.01" &&
-                effectId != "effect.tk_002.01" && effectId != "effect.tk_009.01" && effectId != "effect.tk_010.01" && effectId != "effect.or_006.01" &&
+                effectId != "effect.tk_001.01" && effectId != "effect.tk_002.01" && effectId != "effect.tk_009.01" && effectId != "effect.tk_010.01" && effectId != "effect.or_006.01" &&
                 effectId != "effect.tk_012.01" && effectId != "effect.tk_013.01" && effectId != "effect.tk_016.01" && effectId != "effect.pf_006.01" &&
                 effectId != "effect.pf_007.01")
                 return Reject(DemoCommandRejectionCode.EffectNotImplemented, "找不到该 effectId 的规则处理器。");
@@ -691,6 +691,13 @@ namespace BiomeRivals.Demo
             _discardPile.Add(definition.id);
             switch (effectId)
             {
+                case "effect.tk_001.01":
+                    targetedObject.MaxHealth += 1;
+                    targetedObject.Health += 1;
+                    targetedObject.TemporaryHealthModifier += 1;
+                    targetedObject.TemporaryHealthModifierExpiresOnRound = Round;
+                    message = $"羊毛：{targetedObject.CardId} 本回合获得 +1 当前与最大生命。";
+                    break;
                 case "effect.cd_006.01":
                     ApplyDark(_opponentStatuses, "local-player", definition.id, $"effect-{Revision + 1}", effectId);
                     var darkDraw = DrawCard();
