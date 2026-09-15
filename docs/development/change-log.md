@@ -2,6 +2,13 @@
 
 本文件按时间倒序记录影响视觉表现、资源管线或运行时架构的改动。
 
+## 2026-09-15 RULE-031B2b 临时红石优先支付
+
+- **权威费用**：部署、法术、材料与装备的红石费用统一检查基础＋临时总量，付款先用临时池、不足再扣基础池；合成材料支付不碰两池。可复用的 `trySpendRedstone` 在费用不足时返回 false 且两池均不改变，供后续岩浆自动支付使用。费用不足的实际命令保留原拒绝码，手牌、revision、事件游标、实例编号和去重表均不推进。
+- **Unity 回放**：卡牌支付事件和 `REDSTONE_CHANGED(reason = AUTOMATIC_PAYMENT)` 核对前后两池变化，拒绝“临时未用却先扣基础”的伪事件；合成事件核对两池完全不变。联机 HUD 与可打出条件沿用 B2a 的总可用量，部分支付后的临时余量可经 Nakama 私有重连快照恢复。
+- **版本与边界**：协议形状维持 34、规则集 `prototype-0.53`→`prototype-0.54`，内容版本 41/42 不变；`nt_002`/`nt_007` 仍 `PENDING`，没有实际自动授能或岩浆效果。后续将僵尸猪灵拆为 C1 永久成长、C2 岩浆与完整注册。
+- **验证**：`scripts/validate.ps1 -WithDockerConfig` 通过，服务端 191/191；`scripts/validate-unity.ps1` 使用 Unity `6000.0.28f1c1_a1337fc966e0`，EditMode 233/233。覆盖部署、法术、材料、装备跨池、合成不扣池、自动支付函数、双命令原子拒绝、回合末余量到期、重连投影及 Unity 逐事件拒错。Docker 真实在线对局未在 B2b 单独运行。
+
 ## 2026-09-15 RULE-031B2a 临时红石状态、回放与到期
 
 - **资源模型**：服务端保留 `redstone` 为基础可用量，新增当前行动方独有的 `temporaryRedstone`（0–3），快照派生并公开 `totalRedstone = redstone + temporaryRedstone`。基础上限仍为 10，故 10/10 + 临时 2 能公开显示总可用 12/10；结束阶段现有合法效果结算后、`TURN_ENDED` 前会发 `REDSTONE_CHANGED(reason = TEMPORARY_EXPIRED)` 并清空剩余临时量。若提前终局，同样先发布到期资源事件，再发布 `MATCH_ENDED`，避免最终快照留下非行动回合临时池。

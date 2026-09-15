@@ -364,6 +364,177 @@ TestHarness.test('terminal match settlement expires the active temporary pool wi
   assertEventBatchMatchesSchema(result.batch);
 });
 
+TestHarness.test('shared automatic redstone payment spends temporary first and is atomic when unaffordable', function (): void {
+  const state = activeState('match-automatic-pool-payment', ['alice', 'bob']);
+  const actor = state.players[state.activePlayerIndex]!;
+  actor.redstone = 1;
+  actor.redstoneCapacity = 1;
+  actor.temporaryRedstone = 2;
+  TestHarness.equal(BiomeRivalsRules.getAvailableRedstone(actor), 3);
+  TestHarness.equal(BiomeRivalsRules.trySpendRedstone(actor, 2), true);
+  TestHarness.equal(actor.temporaryRedstone, 0);
+  TestHarness.equal(actor.redstone, 1);
+  TestHarness.equal(BiomeRivalsRules.trySpendRedstone(actor, 2), false);
+  TestHarness.equal(actor.temporaryRedstone, 0);
+  TestHarness.equal(actor.redstone, 1);
+  TestHarness.equal(BiomeRivalsRules.trySpendRedstone(actor, 1), true);
+  TestHarness.equal(actor.redstone, 0);
+});
+
+TestHarness.test('redstone deployment and spell payment spend the temporary pool before base energy', function (): void {
+  const state = activeState('match-priority-unit-spell', ['alice', 'bob']);
+  const actorIndex = state.activePlayerIndex;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['pf_001', 'nt_006'];
+  actor.deck = ['nt_001'];
+  actor.redstone = 2;
+  actor.redstoneCapacity = 2;
+  actor.temporaryRedstone = 2;
+  const deployed = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('priority-unit', 0, 'pf_001', 'UNIT', 0));
+  TestHarness.ok(deployed.accepted, JSON.stringify(deployed));
+  if (!deployed.accepted) return;
+  TestHarness.equal(deployed.state.players[actorIndex]!.redstone, 2);
+  TestHarness.equal(deployed.state.players[actorIndex]!.temporaryRedstone, 1);
+  TestHarness.equal(deployed.batch.events[0]!.payload.totalRedstone, 3);
+  assertEventBatchMatchesSchema(deployed.batch);
+
+  const played = BiomeRivalsRules.applyCommand(deployed.state, actor.playerId,
+    playCommand('priority-spell', 1, 'nt_006'));
+  TestHarness.ok(played.accepted, JSON.stringify(played));
+  if (!played.accepted) return;
+  TestHarness.equal(played.state.players[actorIndex]!.redstone, 2);
+  TestHarness.equal(played.state.players[actorIndex]!.temporaryRedstone, 0);
+  TestHarness.equal(played.batch.events[0]!.type, 'CARD_PLAYED');
+  TestHarness.equal(played.batch.events[0]!.payload.totalRedstone, 2);
+  assertEventBatchMatchesSchema(played.batch);
+});
+
+TestHarness.test('played armor material uses temporary redstone and leaves base available', function (): void {
+  const state = activeState('match-priority-material', ['alice', 'bob']);
+  const actorIndex = state.activePlayerIndex;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['tk_016'];
+  actor.redstone = 1;
+  actor.redstoneCapacity = 1;
+  actor.temporaryRedstone = 1;
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('priority-material', 0, 'tk_016'));
+  TestHarness.ok(result.accepted, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[actorIndex]!.armor, 2);
+  TestHarness.equal(result.state.players[actorIndex]!.redstone, 1);
+  TestHarness.equal(result.state.players[actorIndex]!.temporaryRedstone, 0);
+  TestHarness.equal(result.batch.events[0]!.type, 'CARD_PLAYED');
+  TestHarness.equal(result.batch.events[0]!.payload.totalRedstone, 1);
+  assertEventBatchMatchesSchema(result.batch);
+});
+
+TestHarness.test('three-cost equipment crosses temporary and base pools in one paid card event', function (): void {
+  const state = activeState('match-priority-equipment', ['alice', 'bob']);
+  const actorIndex = state.activePlayerIndex;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['or_006'];
+  actor.redstone = 2;
+  actor.redstoneCapacity = 2;
+  actor.temporaryRedstone = 2;
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('priority-equipment', 0, 'or_006'));
+  TestHarness.ok(result.accepted, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[actorIndex]!.redstone, 1);
+  TestHarness.equal(result.state.players[actorIndex]!.temporaryRedstone, 0);
+  TestHarness.equal(result.batch.events[0]!.type, 'CARD_EQUIPPED');
+  TestHarness.equal(result.batch.events[0]!.payload.totalRedstone, 1);
+  assertEventBatchMatchesSchema(result.batch);
+});
+
+TestHarness.test('crafting materials never spend either redstone pool', function (): void {
+  const state = activeState('match-priority-crafting', ['alice', 'bob']);
+  const actorIndex = state.activePlayerIndex;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['db_002', 'db_007', 'tk_006', 'db_002'];
+  actor.redstone = 1;
+  actor.redstoneCapacity = 1;
+  actor.temporaryRedstone = 2;
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('priority-crafting', 0, 'db_007', 'BUILDING', 1, 'CRAFTING'));
+  TestHarness.ok(result.accepted, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[actorIndex]!.redstone, 1);
+  TestHarness.equal(result.state.players[actorIndex]!.temporaryRedstone, 2);
+  TestHarness.equal(result.batch.events[1]!.type, 'CARD_DEPLOYED');
+  TestHarness.equal(result.batch.events[1]!.payload.totalRedstone, 3);
+  assertEventBatchMatchesSchema(result.batch);
+});
+
+TestHarness.test('insufficient combined energy rejects equipment atomically without consuming a pool', function (): void {
+  const state = activeState('match-priority-insufficient', ['alice', 'bob']);
+  const actor = state.players[state.activePlayerIndex]!;
+  actor.hand = ['or_006'];
+  actor.redstone = 1;
+  actor.redstoneCapacity = 1;
+  actor.temporaryRedstone = 1;
+  const rejected = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('priority-insufficient', 0, 'or_006'));
+  TestHarness.equal(rejected.accepted, false);
+  if (rejected.accepted) return;
+  TestHarness.equal(rejected.code, 'INSUFFICIENT_REDSTONE');
+  TestHarness.equal(rejected.state, state);
+  TestHarness.equal(state.revision, 0);
+  TestHarness.equal(state.lastEventId, 0);
+  TestHarness.equal(actor.hand.join(','), 'or_006');
+  TestHarness.equal(actor.redstone, 1);
+  TestHarness.equal(actor.temporaryRedstone, 1);
+  TestHarness.equal(state.processedCommandIds.length, 0);
+});
+
+TestHarness.test('insufficient combined energy rejects unit deployment before allocating an instance', function (): void {
+  const state = activeState('match-priority-deploy-insufficient', ['alice', 'bob']);
+  const actor = state.players[state.activePlayerIndex]!;
+  actor.hand = ['pf_008'];
+  actor.redstone = 1;
+  actor.redstoneCapacity = 1;
+  actor.temporaryRedstone = 2;
+  const rejected = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('priority-deploy-insufficient', 0, 'pf_008', 'UNIT', 0));
+  TestHarness.equal(rejected.accepted, false);
+  if (rejected.accepted) return;
+  TestHarness.equal(rejected.code, 'INSUFFICIENT_REDSTONE');
+  TestHarness.equal(rejected.state, state);
+  TestHarness.equal(actor.hand.join(','), 'pf_008');
+  TestHarness.equal(actor.redstone, 1);
+  TestHarness.equal(actor.temporaryRedstone, 2);
+  TestHarness.equal(state.nextInstanceId, 1);
+  TestHarness.equal(state.revision, 0);
+  TestHarness.equal(state.lastEventId, 0);
+});
+
+TestHarness.test('spent temporary energy leaves only its unused remainder to expire at turn end', function (): void {
+  const state = activeState('match-priority-partial-expiry', ['alice', 'bob']);
+  const actorIndex = state.activePlayerIndex;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['pf_001'];
+  actor.redstone = 1;
+  actor.redstoneCapacity = 1;
+  actor.temporaryRedstone = 2;
+  const paid = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('priority-partial-unit', 0, 'pf_001', 'UNIT', 0));
+  TestHarness.ok(paid.accepted, JSON.stringify(paid));
+  if (!paid.accepted) return;
+  TestHarness.equal(paid.state.players[actorIndex]!.temporaryRedstone, 1);
+  const ended = BiomeRivalsRules.applyCommand(paid.state, actor.playerId,
+    command('priority-partial-end', 1, 'END_TURN'));
+  TestHarness.ok(ended.accepted, JSON.stringify(ended));
+  if (!ended.accepted) return;
+  TestHarness.equal(ended.state.players[actorIndex]!.temporaryRedstone, 0);
+  TestHarness.equal(ended.state.players[actorIndex]!.redstone, 1);
+  TestHarness.equal(ended.batch.events.filter(function (event): boolean {
+    return event.type === 'REDSTONE_CHANGED' && event.payload.reason === 'TEMPORARY_EXPIRED';
+  }).length, 1);
+  assertEventBatchMatchesSchema(ended.batch);
+});
+
 TestHarness.test('first real hero life loss is public and replayable without either pending Nether card', function (): void {
   const state = activeState('match-hero-loss-window', ['alice', 'bob']);
   const actor = state.players[state.activePlayerIndex]!;

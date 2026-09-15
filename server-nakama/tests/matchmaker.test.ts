@@ -114,6 +114,7 @@ TestHarness.test('same player session can replace a stale presence and receives 
   state.game.lastEventId = 19;
   state.game.players[0]!.heroLifeLostThisTurn = true;
   state.game.players[state.game.activePlayerIndex]!.temporaryRedstone = 2;
+  TestHarness.equal(BiomeRivalsRules.trySpendRedstone(state.game.players[state.game.activePlayerIndex]!, 1), true);
   state.game.pendingChoice = {
     choiceId: 'choice-reconnect',
     playerId: 'alice',
@@ -161,9 +162,9 @@ TestHarness.test('same player session can replace a stale presence and receives 
   TestHarness.equal(snapshot.lastEventId, 19);
   TestHarness.equal(snapshot.players[0]!.heroLifeLostThisTurn, true);
   TestHarness.equal(snapshot.players[1]!.heroLifeLostThisTurn, false);
-  TestHarness.equal(snapshot.players[state.game!.activePlayerIndex]!.temporaryRedstone, 2);
+  TestHarness.equal(snapshot.players[state.game!.activePlayerIndex]!.temporaryRedstone, 1);
   TestHarness.equal(snapshot.players[state.game!.activePlayerIndex]!.totalRedstone,
-    snapshot.players[state.game!.activePlayerIndex]!.redstone + 2);
+    snapshot.players[state.game!.activePlayerIndex]!.redstone + 1);
   TestHarness.equal(snapshot.pendingChoice!.choiceId, 'choice-reconnect');
   TestHarness.equal(snapshot.pendingChoice!.options[0]!.cardId, state.game!.players[0]!.hand[0]!);
   TestHarness.equal(snapshot.players[1]!.hand[0], null);

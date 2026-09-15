@@ -404,6 +404,20 @@ namespace BiomeRivalsRules {
     return { accepted: false, state: state, code: code, message: message };
   }
 
+  export function getAvailableRedstone(player: PlayerState): number {
+    return player.redstone + player.temporaryRedstone;
+  }
+
+  /** Charges a validated rule-state pool; false leaves both pools unchanged for automatic effects. */
+  export function trySpendRedstone(player: PlayerState, cost: number): boolean {
+    if (!Number.isInteger(cost) || cost < 0) throw new Error('redstone payment requires a nonnegative integer cost');
+    if (cost > getAvailableRedstone(player)) return false;
+    const temporaryPayment = Math.min(player.temporaryRedstone, cost);
+    player.temporaryRedstone -= temporaryPayment;
+    player.redstone -= cost - temporaryPayment;
+    return true;
+  }
+
   export function applyCommand(state: MatchState, actorPlayerId: string, command: MatchCommand): CommandResult {
     const violations = validateState(state);
     if (violations.length > 0) return reject(state, 'INVALID_STATE', violations.join('; '));
@@ -670,7 +684,7 @@ namespace BiomeRivalsRules {
       const consumedMaterials: string[] = [];
       const effectiveCost = getEffectiveCardCost(player, definition);
       if (paymentMethod === 'REDSTONE') {
-        if (effectiveCost > player.redstone) return reject(state, 'INSUFFICIENT_REDSTONE', 'not enough redstone');
+        if (effectiveCost > getAvailableRedstone(player)) return reject(state, 'INSUFFICIENT_REDSTONE', 'not enough redstone');
       } else {
         if (!definition.hasCraftingRecipe || !definition.recipeId || definition.craftingRecipe.length === 0) {
           return reject(state, 'INVALID_PAYMENT_METHOD', 'card does not have a crafting recipe');
@@ -739,7 +753,8 @@ namespace BiomeRivalsRules {
       const productHandIndex = player.hand.indexOf(cardId);
       if (productHandIndex < 0) return reject(state, 'INVALID_STATE', 'crafted product was removed while consuming materials');
       player.hand.splice(productHandIndex, 1);
-      if (paymentMethod === 'REDSTONE') player.redstone -= effectiveCost;
+      if (paymentMethod === 'REDSTONE' && !trySpendRedstone(player, effectiveCost))
+        throw new Error('validated deployment redstone payment unexpectedly failed');
       emit('CARD_DEPLOYED', {
         playerId: actorPlayerId,
         instanceId: instanceId,
@@ -2346,12 +2361,13 @@ namespace BiomeRivalsRules {
       }
       const handIndex = player.hand.indexOf(cardId);
       if (handIndex < 0) return reject(state, 'CARD_NOT_IN_HAND', 'card is not in the active players hand');
-      if (definition.cost > player.redstone) return reject(state, 'INSUFFICIENT_REDSTONE', 'not enough redstone');
+      if (definition.cost > getAvailableRedstone(player)) return reject(state, 'INSUFFICIENT_REDSTONE', 'not enough redstone');
 
       if (targetedPlayer === opponent && targetedObject !== null) player.hasTargetedEnemyObjectThisTurn = true;
       player.cardsPlayedThisTurn += 1;
       player.hand.splice(handIndex, 1);
-      player.redstone -= definition.cost;
+      if (!trySpendRedstone(player, definition.cost))
+        throw new Error('validated card redstone payment unexpectedly failed');
       if (definition.cardType === 'EQUIPMENT') {
         if (definition.durability <= 0 || definition.attack <= 0) {
           return reject(state, 'INVALID_STATE', 'equipment requires positive attack and durability');

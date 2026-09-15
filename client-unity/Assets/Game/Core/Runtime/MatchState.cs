@@ -259,6 +259,7 @@ namespace BiomeRivals.Core
                     break;
                 case MatchEventTypes.CardDeployed:
                     var player = FindPlayer(payload.playerId);
+                    ValidatePaidResourceProjection(player, payload, payload.paymentMethod);
                     player.hand = RemoveFirst(player.hand, payload.cardId);
                     ApplyResourceProjection(player, payload, false);
                     player.cardsPlayedThisTurn = payload.cardsPlayedThisTurn;
@@ -291,6 +292,7 @@ namespace BiomeRivals.Core
                     break;
                 case MatchEventTypes.CardPlayed:
                     var playingPlayer = FindPlayer(payload.playerId);
+                    ValidatePaidResourceProjection(playingPlayer, payload, "REDSTONE");
                     playingPlayer.hand = RemoveFirst(playingPlayer.hand, payload.cardId);
                     if (playingPlayer.hand.Length != payload.handCount) throw new InvalidOperationException("Play event hand count does not match projected hand.");
                     ApplyResourceProjection(playingPlayer, payload, false);
@@ -302,6 +304,7 @@ namespace BiomeRivals.Core
                     break;
                 case MatchEventTypes.CardEquipped:
                     var equippingPlayer = FindPlayer(payload.playerId);
+                    ValidatePaidResourceProjection(equippingPlayer, payload, "REDSTONE");
                     equippingPlayer.hand = RemoveFirst(equippingPlayer.hand, payload.cardId);
                     if (equippingPlayer.hand.Length != payload.handCount)
                         throw new InvalidOperationException("Equipment event hand count does not match projected hand.");
@@ -493,6 +496,8 @@ namespace BiomeRivals.Core
                               payload.totalRedstone >= resourcePlayer.totalRedstone ||
                               payload.redstoneCapacity != resourcePlayer.redstoneCapacity))
                         throw new InvalidOperationException("Redstone event does not match its resource change reason.");
+                    if (payload.reason == "AUTOMATIC_PAYMENT")
+                        ValidatePaidResourceProjection(resourcePlayer, payload, "REDSTONE");
                     ApplyResourceProjection(resourcePlayer, payload, true);
                     break;
                 case MatchEventTypes.ObjectStatsChanged:
@@ -701,6 +706,28 @@ namespace BiomeRivals.Core
             player.temporaryRedstone = payload.temporaryRedstone;
             player.totalRedstone = payload.totalRedstone;
             if (updateCapacity) player.redstoneCapacity = capacity;
+        }
+
+        private static void ValidatePaidResourceProjection(PlayerStateDto player, MatchEventPayloadDto payload,
+            string paymentMethod)
+        {
+            if (paymentMethod == "CRAFTING")
+            {
+                if (payload.redstone != player.redstone ||
+                    payload.temporaryRedstone != player.temporaryRedstone ||
+                    payload.totalRedstone != player.totalRedstone)
+                    throw new InvalidOperationException("Crafting material payment cannot spend redstone pools.");
+                return;
+            }
+            if (paymentMethod != "REDSTONE")
+                throw new InvalidOperationException("Resource payment method is unsupported.");
+            var cost = player.totalRedstone - payload.totalRedstone;
+            if (cost < 0 || cost > player.totalRedstone)
+                throw new InvalidOperationException("Payment event has an invalid redstone delta.");
+            var temporaryPayment = Math.Min(player.temporaryRedstone, cost);
+            if (payload.temporaryRedstone != player.temporaryRedstone - temporaryPayment ||
+                payload.redstone != player.redstone - (cost - temporaryPayment))
+                throw new InvalidOperationException("Payment event did not spend temporary redstone first.");
         }
 
         private PlayerStateDto FindPlayer(string playerId)

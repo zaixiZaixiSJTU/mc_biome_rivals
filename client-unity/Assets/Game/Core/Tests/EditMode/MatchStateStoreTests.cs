@@ -127,6 +127,211 @@ namespace BiomeRivals.Core.Tests
         }
 
         [Test]
+        public void Apply_ReplaysPaidCardThenAutomaticPaymentFromTemporaryPool()
+        {
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "priority-replay", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                status = "ACTIVE", turn = 2, activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice", life = 30, hand = new[] { "nt_006" },
+                        redstone = 1, temporaryRedstone = 2, totalRedstone = 3, redstoneCapacity = 1 },
+                    new PlayerStateDto { playerId = "bob" }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 1, type = MatchEventTypes.CardPlayed,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", cardId = "nt_006", redstone = 1,
+                            temporaryRedstone = 1, totalRedstone = 2,
+                            handCount = 0, discardCount = 1, cardsPlayedThisTurn = 1
+                        } }
+                }
+            });
+            Assert.That(store.Current.players[0].redstone, Is.EqualTo(1));
+            Assert.That(store.Current.players[0].temporaryRedstone, Is.EqualTo(1));
+            Assert.That(store.Current.players[0].totalRedstone, Is.EqualTo(2));
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                revision = 2,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 2, type = MatchEventTypes.RedstoneChanged,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", turn = 2, reason = "AUTOMATIC_PAYMENT",
+                            sourceCardId = "nt_002", sourceInstanceId = "object-2",
+                            effectId = "effect.nt_002.02", redstone = 1,
+                            temporaryRedstone = 0, totalRedstone = 1, redstoneCapacity = 1
+                        } }
+                }
+            });
+            Assert.That(store.Current.players[0].redstone, Is.EqualTo(1));
+            Assert.That(store.Current.players[0].temporaryRedstone, Is.Zero);
+            Assert.That(store.Current.players[0].totalRedstone, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void Apply_RejectsCardPaymentThatSpendsBaseBeforeTemporaryWithoutRemovingHand()
+        {
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "priority-malformed", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                status = "ACTIVE", turn = 1, activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice", hand = new[] { "nt_006" },
+                        redstone = 1, temporaryRedstone = 2, totalRedstone = 3, redstoneCapacity = 1 },
+                    new PlayerStateDto { playerId = "bob" }
+                }
+            });
+
+            Assert.Throws<InvalidOperationException>(() => store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 1, type = MatchEventTypes.CardPlayed,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", cardId = "nt_006", redstone = 0,
+                            temporaryRedstone = 2, totalRedstone = 2,
+                            handCount = 0, discardCount = 1
+                        } }
+                }
+            }));
+            Assert.That(store.Current.players[0].hand, Is.EqualTo(new[] { "nt_006" }));
+            Assert.That(store.Current.players[0].redstone, Is.EqualTo(1));
+            Assert.That(store.Current.players[0].temporaryRedstone, Is.EqualTo(2));
+            Assert.That(store.Current.revision, Is.Zero);
+        }
+
+        [Test]
+        public void Apply_ReplaysCrossPoolEquipmentPaymentAndRejectsBaseFirstAutomaticPayment()
+        {
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "priority-equipment-replay", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                status = "ACTIVE", turn = 1, activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice", hand = new[] { "or_006" },
+                        redstone = 2, temporaryRedstone = 2, totalRedstone = 4, redstoneCapacity = 2 },
+                    new PlayerStateDto { playerId = "bob" }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 1, type = MatchEventTypes.CardEquipped,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", instanceId = "equipment-1", cardId = "or_006",
+                            attack = 2, durability = 3, maxDurability = 3,
+                            redstone = 1, temporaryRedstone = 0, totalRedstone = 1,
+                            handCount = 0, discardCount = 0, nextInstanceId = 2
+                        } }
+                }
+            });
+            Assert.That(store.Current.players[0].redstone, Is.EqualTo(1));
+            Assert.That(store.Current.players[0].temporaryRedstone, Is.Zero);
+            Assert.That(store.Current.players[0].equipment.cardId, Is.EqualTo("or_006"));
+
+            store.Replace(new MatchStateDto
+            {
+                matchId = "priority-auto-malformed", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                status = "ACTIVE", turn = 1, activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice", redstone = 1,
+                        temporaryRedstone = 2, totalRedstone = 3, redstoneCapacity = 1 },
+                    new PlayerStateDto { playerId = "bob" }
+                }
+            });
+            Assert.Throws<InvalidOperationException>(() => store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 1, type = MatchEventTypes.RedstoneChanged,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", turn = 1, reason = "AUTOMATIC_PAYMENT",
+                            sourceCardId = "nt_002", sourceInstanceId = "object-2",
+                            effectId = "effect.nt_002.02", redstone = 0,
+                            temporaryRedstone = 2, totalRedstone = 2, redstoneCapacity = 1
+                        } }
+                }
+            }));
+            Assert.That(store.Current.players[0].redstone, Is.EqualTo(1));
+            Assert.That(store.Current.players[0].temporaryRedstone, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void Apply_ReplaysUnitDeploymentPaidEntirelyFromTemporaryEnergy()
+        {
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "priority-unit-replay", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                status = "ACTIVE", turn = 1, phase = "MAIN", activePlayerIndex = 0,
+                nextInstanceId = 1,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice", hand = new[] { "pf_001" },
+                        redstone = 1, temporaryRedstone = 1, totalRedstone = 2,
+                        redstoneCapacity = 1, unitSlots = new string[4], buildingSlots = new string[3] },
+                    new PlayerStateDto { playerId = "bob" }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 1, type = MatchEventTypes.CardDeployed,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", instanceId = "object-1", cardId = "pf_001", cardType = "UNIT",
+                            slotKind = "UNIT", slotIndex = 0, occupiedSlots = 1,
+                            paymentMethod = MatchPaymentMethods.Redstone,
+                            redstone = 1, temporaryRedstone = 0, totalRedstone = 1,
+                            attack = 1, health = 2, maxHealth = 2, summonedTurn = 1, nextInstanceId = 2
+                        } }
+                }
+            });
+            Assert.That(store.Current.players[0].redstone, Is.EqualTo(1));
+            Assert.That(store.Current.players[0].temporaryRedstone, Is.Zero);
+            Assert.That(store.Current.players[0].unitSlots[0], Is.EqualTo("object-1"));
+        }
+
+        [Test]
         public void Replace_RejectsUnsupportedAuthoritativeFaction()
         {
             var store = new MatchStateStore();
@@ -289,7 +494,8 @@ namespace BiomeRivals.Core.Tests
                         payload = new MatchEventPayloadDto
                         {
                             playerId = "alice", instanceId = "object-1", cardId = "pf_001", cardType = "UNIT", slotKind = "UNIT", slotIndex = 2,
-                            occupiedSlots = 1, redstone = 5, totalRedstone = 5,
+                            occupiedSlots = 1, paymentMethod = MatchPaymentMethods.Redstone,
+                            redstone = 5, totalRedstone = 5,
                             attack = 1, health = 2, maxHealth = 2, summonedTurn = 1,
                             keywords = new[] { "CHARGE" }, nextInstanceId = 2
                         }
@@ -371,7 +577,8 @@ namespace BiomeRivals.Core.Tests
                         payload = new MatchEventPayloadDto
                         {
                             playerId = "bob", instanceId = "object-2", cardId = "ed_008", cardType = "STRUCTURE",
-                            slotKind = "BUILDING", slotIndex = 0, occupiedSlots = 3, redstone = 0,
+                            slotKind = "BUILDING", slotIndex = 0, occupiedSlots = 3,
+                            paymentMethod = MatchPaymentMethods.Redstone, redstone = 0,
                             health = 12, maxHealth = 12, summonedTurn = 2, nextInstanceId = 3
                         }
                     },
@@ -432,7 +639,9 @@ namespace BiomeRivals.Core.Tests
                         payload = new MatchEventPayloadDto
                         {
                             playerId = "bob", instanceId = "object-1", cardId = "nt_001", cardType = "UNIT",
-                            slotKind = "UNIT", occupiedSlots = 1, health = 2, maxHealth = 2, nextInstanceId = 2
+                            slotKind = "UNIT", occupiedSlots = 1,
+                            paymentMethod = MatchPaymentMethods.Redstone,
+                            health = 2, maxHealth = 2, nextInstanceId = 2
                         }
                     }
                 }
@@ -451,12 +660,14 @@ namespace BiomeRivals.Core.Tests
             {
                 matchId = "match-crafting", viewerPlayerId = "alice",
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
-                revision = 0, lastEventId = 0, turn = 1, phase = "MAIN", activePlayerIndex = 0, nextInstanceId = 1,
+                revision = 0, lastEventId = 0, status = "ACTIVE", turn = 1,
+                phase = "MAIN", activePlayerIndex = 0, nextInstanceId = 1,
                 players = new[]
                 {
                     new PlayerStateDto
                     {
-                        playerId = "alice", redstone = 0, hand = new[] { "db_002", "db_007", "tk_006", "db_002" },
+                        playerId = "alice", redstone = 0, temporaryRedstone = 2, totalRedstone = 2,
+                        hand = new[] { "db_002", "db_007", "tk_006", "db_002" },
                         discardPile = Array.Empty<string>(), unitSlots = new string[4], buildingSlots = new string[3]
                     },
                     new PlayerStateDto { playerId = "bob", hand = Array.Empty<string>(), unitSlots = new string[4], buildingSlots = new string[3] }
@@ -489,7 +700,8 @@ namespace BiomeRivals.Core.Tests
                         {
                             playerId = "alice", instanceId = "object-1", cardId = "db_007", cardType = "STRUCTURE",
                             slotKind = "BUILDING", slotIndex = 1, occupiedSlots = 2, paymentMethod = MatchPaymentMethods.Crafting,
-                            redstone = 0, health = 10, maxHealth = 10, summonedTurn = 1, nextInstanceId = 2
+                            redstone = 0, temporaryRedstone = 2, totalRedstone = 2,
+                            health = 10, maxHealth = 10, summonedTurn = 1, nextInstanceId = 2
                         }
                     }
                 }
@@ -500,6 +712,8 @@ namespace BiomeRivals.Core.Tests
             Assert.That(store.Current.players[0].buildingSlots[1], Is.EqualTo("object-1"));
             Assert.That(store.Current.players[0].buildingSlots[2], Is.EqualTo("object-1"));
             Assert.That(store.Current.players[0].battlefield[0].maxHealth, Is.EqualTo(10));
+            Assert.That(store.Current.players[0].temporaryRedstone, Is.EqualTo(2));
+            Assert.That(store.Current.players[0].totalRedstone, Is.EqualTo(2));
             Assert.That(store.Current.lastEventId, Is.EqualTo(2));
         }
 

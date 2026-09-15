@@ -128,7 +128,8 @@ namespace BiomeRivals.Demo.Tests
                             payload = new MatchEventPayloadDto
                             {
                                 playerId = "alice", instanceId = "object-1", cardId = "pf_001", cardType = "UNIT",
-                                slotKind = "UNIT", slotIndex = 2, occupiedSlots = 1, redstone = 0,
+                                slotKind = "UNIT", slotIndex = 2, occupiedSlots = 1,
+                                paymentMethod = MatchPaymentMethods.Redstone, redstone = 0,
                                 attack = 1, health = 2, maxHealth = 2, summonedTurn = 1,
                                 keywords = Array.Empty<string>(), nextInstanceId = 2
                             }
