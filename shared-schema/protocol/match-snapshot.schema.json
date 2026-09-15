@@ -8,7 +8,7 @@
   "properties": {
     "matchId": { "type": "string", "minLength": 1 },
     "viewerPlayerId": { "type": "string", "minLength": 1 },
-    "protocolVersion": { "const": 33 },
+    "protocolVersion": { "const": 34 },
     "rulesetVersion": { "type": "string", "minLength": 1 },
     "revision": { "type": "integer", "minimum": 0 },
     "lastEventId": { "type": "integer", "minimum": 0 },
@@ -24,7 +24,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["playerId", "factionId", "mulliganCompleted", "life", "armor", "redstone", "redstoneCapacity", "hand", "deckCount", "buriedCount", "excavatedThisTurn", "discardPile", "fatigueCount", "equipment", "heroHasAttacked", "cardsPlayedThisTurn", "hasTargetedEnemyObjectThisTurn", "heroLifeLostThisTurn", "triggeredEffectKeysThisTurn", "statuses", "unitSlots", "buildingSlots", "battlefield"],
+        "required": ["playerId", "factionId", "mulliganCompleted", "life", "armor", "redstone", "temporaryRedstone", "totalRedstone", "redstoneCapacity", "hand", "deckCount", "buriedCount", "excavatedThisTurn", "discardPile", "fatigueCount", "equipment", "heroHasAttacked", "cardsPlayedThisTurn", "hasTargetedEnemyObjectThisTurn", "heroLifeLostThisTurn", "triggeredEffectKeysThisTurn", "statuses", "unitSlots", "buildingSlots", "battlefield"],
         "properties": {
           "playerId": { "type": "string", "minLength": 1 },
           "factionId": { "enum": ["plains_forest", "desert_badlands", "snow_ice", "cave_dark_forest", "ocean_river", "nether", "end"] },
@@ -32,6 +32,8 @@
           "life": { "type": "integer", "minimum": 0 },
           "armor": { "type": "integer", "minimum": 0 },
           "redstone": { "type": "integer", "minimum": 0, "maximum": 10 },
+          "temporaryRedstone": { "type": "integer", "minimum": 0, "maximum": 3 },
+          "totalRedstone": { "type": "integer", "minimum": 0, "maximum": 13 },
           "redstoneCapacity": { "type": "integer", "minimum": 0, "maximum": 10 },
           "hand": { "type": "array", "items": { "type": ["string", "null"], "pattern": "^[a-z0-9_]+$" } },
           "deckCount": { "type": "integer", "minimum": 0 },
@@ -167,5 +169,19 @@
       }
     },
     "winnerPlayerId": { "type": ["string", "null"] }
-  }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "ACTIVE" }, "activePlayerIndex": { "const": 0 } } },
+      "then": { "properties": { "players": { "prefixItems": [{}, { "properties": { "temporaryRedstone": { "const": 0 } } }] } } }
+    },
+    {
+      "if": { "properties": { "status": { "const": "ACTIVE" }, "activePlayerIndex": { "const": 1 } } },
+      "then": { "properties": { "players": { "prefixItems": [{ "properties": { "temporaryRedstone": { "const": 0 } } }, {}] } } }
+    },
+    {
+      "if": { "properties": { "status": { "not": { "const": "ACTIVE" } } } },
+      "then": { "properties": { "players": { "items": { "properties": { "temporaryRedstone": { "const": 0 } } } } } }
+    }
+  ]
 }

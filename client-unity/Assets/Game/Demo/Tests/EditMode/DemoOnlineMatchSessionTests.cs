@@ -31,6 +31,19 @@ namespace BiomeRivals.Demo.Tests
         }
 
         [Test]
+        public void AuthoritativeViewExposesTemporaryEnergyWithoutChangingBaseCapacity()
+        {
+            var store = CreateStore(viewerIndex: 1);
+            store.Current.players[1].temporaryRedstone = 2;
+            store.Current.players[1].totalRedstone = 4;
+            var view = new DemoAuthoritativeMatchView(store);
+
+            Assert.That(view.Energy, Is.EqualTo(4));
+            Assert.That(view.TemporaryEnergy, Is.EqualTo(2));
+            Assert.That(view.MaxEnergy, Is.EqualTo(2));
+        }
+
+        [Test]
         public void AuthoritativeViewDerivesRaiderCostFromSnapshotTurnMarker()
         {
             var store = CreateStore(viewerIndex: 0);
@@ -270,12 +283,14 @@ namespace BiomeRivals.Demo.Tests
             {
                 new PlayerStateDto
                 {
-                    playerId = "alice", factionId = FactionIds.OceanRiver, life = 30, armor = 2, redstone = 1, redstoneCapacity = 1,
+                    playerId = "alice", factionId = FactionIds.OceanRiver, life = 30, armor = 2,
+                    redstone = 1, totalRedstone = 1, redstoneCapacity = 1,
                     hand = new[] { "pf_001" }, unitSlots = new string[4], buildingSlots = new string[3]
                 },
                 new PlayerStateDto
                 {
-                    playerId = "bob", factionId = FactionIds.End, life = 27, armor = 3, redstone = 2, redstoneCapacity = 2,
+                    playerId = "bob", factionId = FactionIds.End, life = 27, armor = 3,
+                    redstone = 2, totalRedstone = 2, redstoneCapacity = 2,
                     hand = new[] { "nt_001" }, unitSlots = new string[4], buildingSlots = new string[3]
                 }
             };

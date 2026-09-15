@@ -59,6 +59,7 @@ namespace BiomeRivals.Demo
         public int Round { get; private set; } = 1;
         public int MaxEnergy { get; private set; } = 6;
         public int Energy { get; private set; } = 6;
+        public int TemporaryEnergy => 0;
         public bool IsPlayerTurn { get; private set; } = true;
         public DemoTurnPhase Phase { get; private set; } = DemoTurnPhase.Main;
         public int PlayerLife { get; private set; } = 30;

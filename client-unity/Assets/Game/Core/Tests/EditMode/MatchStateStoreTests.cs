@@ -26,6 +26,107 @@ namespace BiomeRivals.Core.Tests
         }
 
         [Test]
+        public void Replace_AcceptsTemporaryEnergyAboveBaseCapAndRejectsContradictoryPools()
+        {
+            var store = new MatchStateStore();
+            var snapshot = new MatchStateDto
+            {
+                matchId = "energy-12", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                status = "ACTIVE", turn = 3, activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice", redstone = 10,
+                        temporaryRedstone = 2, totalRedstone = 12, redstoneCapacity = 10 },
+                    new PlayerStateDto { playerId = "bob", redstone = 1,
+                        totalRedstone = 1, redstoneCapacity = 1 }
+                }
+            };
+
+            store.Replace(snapshot);
+            Assert.That(store.Current.players[0].totalRedstone, Is.EqualTo(12));
+            snapshot.players[0].totalRedstone = 11;
+            Assert.Throws<InvalidOperationException>(() => new MatchStateStore().Replace(snapshot));
+            snapshot.players[0].totalRedstone = 12;
+            snapshot.players[1].temporaryRedstone = 1;
+            snapshot.players[1].totalRedstone = 2;
+            Assert.Throws<InvalidOperationException>(() => new MatchStateStore().Replace(snapshot));
+        }
+
+        [Test]
+        public void Apply_ReplaysResourceGrantAndExpiryAndRejectsAnInconsistentTotal()
+        {
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "energy-replay", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                status = "ACTIVE", turn = 2, activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice", redstone = 1,
+                        totalRedstone = 1, redstoneCapacity = 1 },
+                    new PlayerStateDto { playerId = "bob" }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 1, type = MatchEventTypes.RedstoneChanged,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", turn = 2, reason = "TEMPORARY_GRANTED",
+                            sourceCardId = "nt_007", sourceInstanceId = "object-1",
+                            effectId = "effect.nt_007.01", redstone = 1,
+                            temporaryRedstone = 2, totalRedstone = 3, redstoneCapacity = 1
+                        } }
+                }
+            });
+            Assert.That(store.Current.players[0].totalRedstone, Is.EqualTo(3));
+            Assert.That(store.Current.players[0].temporaryRedstone, Is.EqualTo(2));
+
+            Assert.Throws<InvalidOperationException>(() => store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                revision = 2,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 2, type = MatchEventTypes.RedstoneChanged,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", turn = 2, reason = "AUTOMATIC_PAYMENT",
+                            sourceCardId = "nt_002", sourceInstanceId = "object-2",
+                            effectId = "effect.nt_002.02", redstone = 1,
+                            temporaryRedstone = 1, totalRedstone = 3, redstoneCapacity = 1
+                        } }
+                }
+            }));
+            Assert.That(store.Current.players[0].totalRedstone, Is.EqualTo(3));
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                revision = 2,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 2, type = MatchEventTypes.RedstoneChanged,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", turn = 2, reason = "TEMPORARY_EXPIRED",
+                            redstone = 1, temporaryRedstone = 0, totalRedstone = 1,
+                            redstoneCapacity = 1
+                        } }
+                }
+            });
+            Assert.That(store.Current.players[0].temporaryRedstone, Is.Zero);
+            Assert.That(store.Current.players[0].totalRedstone, Is.EqualTo(1));
+        }
+
+        [Test]
         public void Replace_RejectsUnsupportedAuthoritativeFaction()
         {
             var store = new MatchStateStore();
@@ -163,12 +264,12 @@ namespace BiomeRivals.Core.Tests
                 {
                     new PlayerStateDto
                     {
-                        playerId = "alice", redstone = 6, redstoneCapacity = 6,
+                        playerId = "alice", redstone = 6, totalRedstone = 6, redstoneCapacity = 6,
                         hand = new[] { "pf_001" }, unitSlots = new string[4], buildingSlots = new string[3]
                     },
                     new PlayerStateDto
                     {
-                        playerId = "bob", redstone = 6, redstoneCapacity = 6,
+                        playerId = "bob", redstone = 6, totalRedstone = 6, redstoneCapacity = 6,
                         hand = new[] { "nt_001" }, unitSlots = new string[4], buildingSlots = new string[3]
                     }
                 }
@@ -188,7 +289,8 @@ namespace BiomeRivals.Core.Tests
                         payload = new MatchEventPayloadDto
                         {
                             playerId = "alice", instanceId = "object-1", cardId = "pf_001", cardType = "UNIT", slotKind = "UNIT", slotIndex = 2,
-                            occupiedSlots = 1, redstone = 5, attack = 1, health = 2, maxHealth = 2, summonedTurn = 1,
+                            occupiedSlots = 1, redstone = 5, totalRedstone = 5,
+                            attack = 1, health = 2, maxHealth = 2, summonedTurn = 1,
                             keywords = new[] { "CHARGE" }, nextInstanceId = 2
                         }
                     }
@@ -216,7 +318,8 @@ namespace BiomeRivals.Core.Tests
                         type = MatchEventTypes.TurnStarted,
                         payload = new MatchEventPayloadDto
                         {
-                            playerId = "bob", turn = 1, phase = "MAIN", activePlayerIndex = 1, redstone = 6, redstoneCapacity = 6
+                            playerId = "bob", turn = 1, phase = "MAIN", activePlayerIndex = 1,
+                            redstone = 6, totalRedstone = 6, redstoneCapacity = 6
                         }
                     }
                 }
@@ -873,7 +976,8 @@ namespace BiomeRivals.Core.Tests
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
                 players = new[]
                 {
-                    new PlayerStateDto { playerId = "alice", life = 30, redstone = 2, hand = new[] { "nt_006", "tk_016" }, deckCount = 1 },
+                    new PlayerStateDto { playerId = "alice", life = 30, redstone = 2,
+                        totalRedstone = 2, redstoneCapacity = 2, hand = new[] { "nt_006", "tk_016" }, deckCount = 1 },
                     new PlayerStateDto { playerId = "bob", life = 30, hand = new string[0] }
                 }
             });
@@ -883,7 +987,7 @@ namespace BiomeRivals.Core.Tests
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
                 events = new[]
                 {
-                    new MatchEventDto { eventId = 1, type = MatchEventTypes.CardPlayed, payload = new MatchEventPayloadDto { playerId = "alice", cardId = "nt_006", redstone = 1, handCount = 1, discardCount = 1 } },
+                    new MatchEventDto { eventId = 1, type = MatchEventTypes.CardPlayed, payload = new MatchEventPayloadDto { playerId = "alice", cardId = "nt_006", redstone = 1, totalRedstone = 1, handCount = 1, discardCount = 1 } },
                     new MatchEventDto { eventId = 2, type = MatchEventTypes.HeroDamaged, payload = new MatchEventPayloadDto { playerId = "alice", damage = 2, damageType = "TRUE", life = 28, armor = 0 } },
                     new MatchEventDto { eventId = 3, type = MatchEventTypes.CardDrawn, payload = new MatchEventPayloadDto { playerId = "alice", cardId = "nt_001", handCount = 2, deckCount = 0 } }
                 }
@@ -1738,7 +1842,8 @@ namespace BiomeRivals.Core.Tests
                 rulesetVersion = GameVersions.Ruleset, status = "ACTIVE", phase = "MAIN", turn = 1, activePlayerIndex = 0,
                 players = new[]
                 {
-                    new PlayerStateDto { playerId = "alice", life = 30, redstone = 6, redstoneCapacity = 6, hand = new[] { "or_006" } },
+                    new PlayerStateDto { playerId = "alice", life = 30, redstone = 6, totalRedstone = 6,
+                        redstoneCapacity = 6, hand = new[] { "or_006" } },
                     new PlayerStateDto
                     {
                         playerId = "bob", life = 30, unitSlots = new[] { null, null, "object-7", null },
@@ -1754,7 +1859,8 @@ namespace BiomeRivals.Core.Tests
                     new MatchEventDto { eventId = 1, type = MatchEventTypes.CardEquipped, payload = new MatchEventPayloadDto
                     {
                         playerId = "alice", instanceId = "equipment-1", cardId = "or_006", attack = 2,
-                        durability = 3, maxDurability = 3, redstone = 3, handCount = 0, nextInstanceId = 2
+                        durability = 3, maxDurability = 3, redstone = 3, totalRedstone = 3,
+                        handCount = 0, nextInstanceId = 2
                     }},
                     new MatchEventDto { eventId = 2, type = MatchEventTypes.PhaseChanged, payload = new MatchEventPayloadDto { phase = "COMBAT" } },
                     new MatchEventDto { eventId = 3, type = MatchEventTypes.AttackResolved, payload = new MatchEventPayloadDto
@@ -2270,7 +2376,8 @@ namespace BiomeRivals.Core.Tests
                 {
                     new PlayerStateDto
                     {
-                        playerId = "alice", life = 30, redstone = 2, hand = new[] { "cd_006" },
+                        playerId = "alice", life = 30, redstone = 2, totalRedstone = 2,
+                        redstoneCapacity = 2, hand = new[] { "cd_006" },
                         discardPile = Array.Empty<string>()
                     },
                     new PlayerStateDto { playerId = "bob", life = 30 }
@@ -2367,6 +2474,7 @@ namespace BiomeRivals.Core.Tests
                     new PlayerStateDto
                     {
                         playerId = "alice", life = 24, armor = 2, heroLifeLostThisTurn = true,
+                        temporaryRedstone = 2, totalRedstone = 2,
                         hand = new[] { "cd_003", "tk_012" },
                         equipment = new EquipmentStateDto
                         {
@@ -2402,6 +2510,8 @@ namespace BiomeRivals.Core.Tests
             Assert.That(store.Current.lastEventId, Is.EqualTo(19));
             Assert.That(store.Current.players[0].equipment.cardId, Is.EqualTo("or_006"));
             Assert.That(store.Current.players[0].heroLifeLostThisTurn, Is.True);
+            Assert.That(store.Current.players[0].temporaryRedstone, Is.EqualTo(2));
+            Assert.That(store.Current.players[0].totalRedstone, Is.EqualTo(2));
             Assert.That(store.Current.players[1].heroLifeLostThisTurn, Is.False);
             Assert.That(store.Current.players[0].battlefield[0].statuses[0].statusId, Is.EqualTo("FIRE"));
             Assert.That(store.Current.players[0].battlefield[1].temporaryHealthModifier, Is.EqualTo(1));

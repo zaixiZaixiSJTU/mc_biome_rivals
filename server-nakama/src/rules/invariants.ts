@@ -204,8 +204,14 @@ namespace BiomeRivalsRules {
       if (typeof player.mulliganCompleted !== 'boolean') violations.push('player mulligan state is invalid');
       if (typeof player.heroLifeLostThisTurn !== 'boolean') violations.push('player hero life-loss marker is invalid');
       if (player.life < 0 || player.armor < 0) violations.push('player combat values cannot be negative');
-      if (player.redstone < 0 || player.redstone > player.redstoneCapacity || player.redstoneCapacity < 0 || player.redstoneCapacity > 10) {
+      if (!Number.isInteger(player.redstone) || !Number.isInteger(player.redstoneCapacity) ||
+          !Number.isInteger(player.temporaryRedstone) || player.redstone < 0 ||
+          player.redstone > player.redstoneCapacity || player.redstoneCapacity < 0 ||
+          player.redstoneCapacity > 10 || player.temporaryRedstone < 0 || player.temporaryRedstone > 3) {
         violations.push('player redstone is out of range');
+      }
+      if (player.temporaryRedstone > 0 && (state.status !== 'ACTIVE' || playerIndex !== state.activePlayerIndex)) {
+        violations.push('temporary redstone belongs only to the active player turn');
       }
       if (player.unitSlots.length !== 4) violations.push('each player requires four unit slots');
       if (player.buildingSlots.length !== 3) violations.push('each player requires three building slots');

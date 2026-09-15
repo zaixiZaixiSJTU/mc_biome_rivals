@@ -43,6 +43,7 @@ namespace BiomeRivals.Core
         public const string FatigueDamage = "FATIGUE_DAMAGE";
         public const string HeroDamaged = "HERO_DAMAGED";
         public const string HeroLifeLossMarked = "HERO_LIFE_LOSS_MARKED";
+        public const string RedstoneChanged = "REDSTONE_CHANGED";
         public const string HeroHealed = "HERO_HEALED";
         public const string ArmorGained = "ARMOR_GAINED";
         public const string ObjectStatsChanged = "OBJECT_STATS_CHANGED";
@@ -278,6 +279,8 @@ namespace BiomeRivals.Core
         public int occupiedSlots;
         public string paymentMethod = string.Empty;
         public int redstone;
+        public int temporaryRedstone;
+        public int totalRedstone;
         public int redstoneCapacity;
         public int activePlayerIndex;
         public string phase = string.Empty;

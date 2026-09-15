@@ -102,6 +102,7 @@ namespace BiomeRivals.Demo
         int Round { get; }
         int MaxEnergy { get; }
         int Energy { get; }
+        int TemporaryEnergy { get; }
         bool IsPlayerTurn { get; }
         DemoTurnPhase Phase { get; }
         int PlayerLife { get; }

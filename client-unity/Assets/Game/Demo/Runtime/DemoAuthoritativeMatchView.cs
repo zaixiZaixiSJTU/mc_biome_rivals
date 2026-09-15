@@ -39,7 +39,8 @@ namespace BiomeRivals.Demo
         public int OpponentHandCount => Opponent?.hand?.Length ?? 0;
         public int Round => Current?.turn ?? 0;
         public int MaxEnergy => Player?.redstoneCapacity ?? 0;
-        public int Energy => Player?.redstone ?? 0;
+        public int Energy => Player?.totalRedstone ?? 0;
+        public int TemporaryEnergy => Player?.temporaryRedstone ?? 0;
         public bool IsPlayerTurn => Current != null && ViewerIndex >= 0 && Current.activePlayerIndex == ViewerIndex;
         public DemoTurnPhase Phase => Current?.phase == "COMBAT" ? DemoTurnPhase.Combat : DemoTurnPhase.Main;
         public int PlayerLife => Player?.life ?? 0;

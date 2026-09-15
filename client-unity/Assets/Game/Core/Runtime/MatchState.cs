@@ -70,6 +70,8 @@ namespace BiomeRivals.Core
         public int life;
         public int armor;
         public int redstone;
+        public int temporaryRedstone;
+        public int totalRedstone;
         public int redstoneCapacity;
         public string[] hand = Array.Empty<string>();
         public int deckCount;
@@ -120,12 +122,21 @@ namespace BiomeRivals.Core
                 throw new InvalidOperationException("Snapshot protocol or ruleset version is unsupported.");
             if (snapshot.players == null || snapshot.players.Length != 2)
                 throw new InvalidOperationException("Snapshot must contain exactly two players.");
+            if (snapshot.activePlayerIndex < 0 || snapshot.activePlayerIndex >= snapshot.players.Length)
+                throw new InvalidOperationException("Snapshot contains an invalid active player index.");
             foreach (var player in snapshot.players)
             {
                 if (player == null || !FactionIds.IsSupported(player.factionId))
                     throw new InvalidOperationException("Snapshot contains an unsupported player faction.");
                 if (player.cardsPlayedThisTurn < 0)
                     throw new InvalidOperationException("Snapshot contains an invalid card play counter.");
+                if (player.redstoneCapacity < 0 || player.redstoneCapacity > 10 ||
+                    player.redstone < 0 || player.redstone > player.redstoneCapacity ||
+                    player.temporaryRedstone < 0 || player.temporaryRedstone > 3 ||
+                    player.totalRedstone != player.redstone + player.temporaryRedstone ||
+                    player.temporaryRedstone > 0 &&
+                    (snapshot.status != "ACTIVE" || snapshot.players[snapshot.activePlayerIndex] != player))
+                    throw new InvalidOperationException("Snapshot contains contradictory redstone pools.");
                 if (player.statuses == null) player.statuses = Array.Empty<PlayerStatusStateDto>();
                 var seenPlayerStatuses = new HashSet<string>(StringComparer.Ordinal);
                 foreach (var status in player.statuses)
@@ -249,7 +260,7 @@ namespace BiomeRivals.Core
                 case MatchEventTypes.CardDeployed:
                     var player = FindPlayer(payload.playerId);
                     player.hand = RemoveFirst(player.hand, payload.cardId);
-                    player.redstone = payload.redstone;
+                    ApplyResourceProjection(player, payload, false);
                     player.cardsPlayedThisTurn = payload.cardsPlayedThisTurn;
                     player.hasTargetedEnemyObjectThisTurn = payload.hasTargetedEnemyObjectThisTurn;
                     AddBattlefieldObject(player, payload, "Deployment");
@@ -282,7 +293,7 @@ namespace BiomeRivals.Core
                     var playingPlayer = FindPlayer(payload.playerId);
                     playingPlayer.hand = RemoveFirst(playingPlayer.hand, payload.cardId);
                     if (playingPlayer.hand.Length != payload.handCount) throw new InvalidOperationException("Play event hand count does not match projected hand.");
-                    playingPlayer.redstone = payload.redstone;
+                    ApplyResourceProjection(playingPlayer, payload, false);
                     playingPlayer.cardsPlayedThisTurn = payload.cardsPlayedThisTurn;
                     playingPlayer.hasTargetedEnemyObjectThisTurn = payload.hasTargetedEnemyObjectThisTurn;
                     var playedDiscard = new List<string>(playingPlayer.discardPile ?? Array.Empty<string>()) { payload.cardId };
@@ -294,7 +305,7 @@ namespace BiomeRivals.Core
                     equippingPlayer.hand = RemoveFirst(equippingPlayer.hand, payload.cardId);
                     if (equippingPlayer.hand.Length != payload.handCount)
                         throw new InvalidOperationException("Equipment event hand count does not match projected hand.");
-                    equippingPlayer.redstone = payload.redstone;
+                    ApplyResourceProjection(equippingPlayer, payload, false);
                     equippingPlayer.cardsPlayedThisTurn = payload.cardsPlayedThisTurn;
                     equippingPlayer.hasTargetedEnemyObjectThisTurn = payload.hasTargetedEnemyObjectThisTurn;
                     equippingPlayer.equipment = new EquipmentStateDto
@@ -453,6 +464,36 @@ namespace BiomeRivals.Core
                     break;
                 case MatchEventTypes.ArmorGained:
                     FindPlayer(payload.playerId).armor = payload.armor;
+                    break;
+                case MatchEventTypes.RedstoneChanged:
+                    var resourcePlayer = FindPlayer(payload.playerId);
+                    if (payload.turn != Current.turn ||
+                        (payload.reason != "TEMPORARY_GRANTED" && payload.reason != "AUTOMATIC_PAYMENT" &&
+                         payload.reason != "TEMPORARY_EXPIRED"))
+                        throw new InvalidOperationException("Redstone event has an invalid turn or reason.");
+                    if (payload.reason == "TEMPORARY_EXPIRED")
+                    {
+                        if (resourcePlayer.temporaryRedstone <= 0 || payload.temporaryRedstone != 0 ||
+                            payload.redstone != resourcePlayer.redstone ||
+                            !string.IsNullOrEmpty(payload.sourceCardId) ||
+                            !string.IsNullOrEmpty(payload.sourceInstanceId) || !string.IsNullOrEmpty(payload.effectId))
+                            throw new InvalidOperationException("Temporary redstone expiry is contradictory.");
+                    }
+                    else if (string.IsNullOrWhiteSpace(payload.sourceCardId) ||
+                             string.IsNullOrWhiteSpace(payload.sourceInstanceId) ||
+                             string.IsNullOrWhiteSpace(payload.effectId))
+                        throw new InvalidOperationException("Redstone event is missing its source.");
+                    else if (payload.reason == "TEMPORARY_GRANTED" &&
+                             (payload.redstone != resourcePlayer.redstone ||
+                              payload.temporaryRedstone <= resourcePlayer.temporaryRedstone ||
+                              payload.redstoneCapacity != resourcePlayer.redstoneCapacity) ||
+                             payload.reason == "AUTOMATIC_PAYMENT" &&
+                             (payload.redstone > resourcePlayer.redstone ||
+                              payload.temporaryRedstone > resourcePlayer.temporaryRedstone ||
+                              payload.totalRedstone >= resourcePlayer.totalRedstone ||
+                              payload.redstoneCapacity != resourcePlayer.redstoneCapacity))
+                        throw new InvalidOperationException("Redstone event does not match its resource change reason.");
+                    ApplyResourceProjection(resourcePlayer, payload, true);
                     break;
                 case MatchEventTypes.ObjectStatsChanged:
                     var statsObject = FindObject(FindPlayer(payload.playerId), payload.instanceId);
@@ -625,8 +666,7 @@ namespace BiomeRivals.Core
                     activePlayer.heroHasAttacked = false;
                     activePlayer.cardsPlayedThisTurn = 0;
                     activePlayer.hasTargetedEnemyObjectThisTurn = false;
-                    activePlayer.redstone = payload.redstone;
-                    activePlayer.redstoneCapacity = payload.redstoneCapacity;
+                    ApplyResourceProjection(activePlayer, payload, true);
                     foreach (var battlefieldObject in activePlayer.battlefield ?? Array.Empty<BattlefieldObjectStateDto>())
                         if (battlefieldObject != null) battlefieldObject.hasAttacked = false;
                     break;
@@ -646,6 +686,21 @@ namespace BiomeRivals.Core
                     Current.winnerPlayerId = payload.winnerPlayerId;
                     break;
             }
+        }
+
+        private void ApplyResourceProjection(PlayerStateDto player, MatchEventPayloadDto payload, bool updateCapacity)
+        {
+            var capacity = updateCapacity ? payload.redstoneCapacity : player.redstoneCapacity;
+            if (capacity < 0 || capacity > 10 || payload.redstone < 0 || payload.redstone > capacity ||
+                payload.temporaryRedstone < 0 || payload.temporaryRedstone > 3 ||
+                payload.totalRedstone != payload.redstone + payload.temporaryRedstone ||
+                payload.temporaryRedstone > 0 &&
+                (Current.status != "ACTIVE" || Current.players[Current.activePlayerIndex] != player))
+                throw new InvalidOperationException("Redstone event contains contradictory resource pools.");
+            player.redstone = payload.redstone;
+            player.temporaryRedstone = payload.temporaryRedstone;
+            player.totalRedstone = payload.totalRedstone;
+            if (updateCapacity) player.redstoneCapacity = capacity;
         }
 
         private PlayerStateDto FindPlayer(string playerId)

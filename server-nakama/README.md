@@ -16,7 +16,7 @@
 
 协议 opcode：`1` 命令、`2` 事件批次、`3` 命令拒绝、`4` 权威快照。协议结构以 `shared-schema/protocol` 为准。
 
-当前基础对局纵向切片使用 `protocolVersion: 33` 与 `rulesetVersion: prototype-0.52`。协议 33 在玩家快照中增加 `heroLifeLostThisTurn`，并在首次非致死的实际生命下降后发布 `HERO_LIFE_LOSS_MARKED`；只消耗护甲不会标记，`TURN_ENDED` 对双方一并重置。`nt_002` 和 `nt_007` 仍为 `PENDING`，此版本尚无临时红石能量字段或新卡牌触发。协议 32 的临时生命修正、协议 31 的 `FIRE`、协议 30 的持续战场来源 `sourceInstanceId`、协议 29 的公开战场选择 `HEAL_UNIT` 及更早的隐藏牌库投影、`POISON`、DARK 生命周期继续兼容；`ATTACK.attackerInstanceId = "HERO"` 继续表示英雄发起的装备攻击。旧协议或规则集客户端不能静默兼容。
+当前基础对局纵向切片使用 `protocolVersion: 34` 与 `rulesetVersion: prototype-0.53`。协议 34 将玩家基础红石 `redstone` 与 `temporaryRedstone` 分池，快照和资源事件公开派生的 `totalRedstone`；卡牌支付事件也携带三池最终量，并定义 `REDSTONE_CHANGED` 回放形状。当前行动方结束阶段在 `TURN_ENDED` 前清理未用临时量并发到期事件。标准 JSON Schema 校验各字段类型、范围和行动方归属，动态等式 `totalRedstone = redstone + temporaryRedstone` 由服务端派生、Unity 接收时校验。B2a 尚无实际授能或临时池优先支付；`nt_002` 和 `nt_007` 仍为 `PENDING`。协议 33 的 `heroLifeLostThisTurn`/`HERO_LIFE_LOSS_MARKED`、协议 32 的临时生命修正、协议 31 的 `FIRE` 及更早能力继续兼容；`ATTACK.attackerInstanceId = "HERO"` 仍表示英雄装备攻击。旧协议或规则集客户端不能静默兼容。
 
 运行：
 

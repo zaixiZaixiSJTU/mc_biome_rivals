@@ -80,6 +80,7 @@ namespace BiomeRivalsRules {
       life: 30,
       armor: 0,
       redstone: 1,
+      temporaryRedstone: 0,
       redstoneCapacity: 1,
       hand: hand,
       deck: deck,
@@ -173,6 +174,8 @@ namespace BiomeRivalsRules {
           life: player.life,
           armor: player.armor,
           redstone: player.redstone,
+          temporaryRedstone: player.temporaryRedstone,
+          totalRedstone: player.redstone + player.temporaryRedstone,
           redstoneCapacity: player.redstoneCapacity,
           hand: playerIndex === viewerIndex
             ? player.hand.slice()
@@ -314,6 +317,7 @@ namespace BiomeRivalsRules {
           life: player.life,
           armor: player.armor,
           redstone: player.redstone,
+          temporaryRedstone: player.temporaryRedstone,
           redstoneCapacity: player.redstoneCapacity,
           hand: player.hand.slice(),
           deck: player.deck.slice(),
@@ -439,7 +443,26 @@ namespace BiomeRivalsRules {
         armor: player.armor
       } });
     }
+    function expireTemporaryRedstone(player: PlayerState): void {
+      if (player.temporaryRedstone <= 0) return;
+      player.temporaryRedstone = 0;
+      emit('REDSTONE_CHANGED', {
+        playerId: player.playerId,
+        turn: next.turn,
+        reason: 'TEMPORARY_EXPIRED',
+        sourceCardId: null,
+        sourceInstanceId: null,
+        effectId: null,
+        redstone: player.redstone,
+        temporaryRedstone: 0,
+        totalRedstone: player.redstone,
+        redstoneCapacity: player.redstoneCapacity
+      });
+    }
     function emit(type: EventType, payload: { [key: string]: unknown }): void {
+      if (type === 'MATCH_ENDED') {
+        expireTemporaryRedstone(next.players[next.activePlayerIndex]!);
+      }
       if (type === 'OBJECT_STATS_CHANGED' && typeof payload.playerId === 'string' && typeof payload.instanceId === 'string') {
         const eventPlayer = next.players.filter(function (candidate): boolean { return candidate.playerId === payload.playerId; })[0];
         const eventObject = eventPlayer && eventPlayer.battlefield.filter(function (candidate): boolean { return candidate.instanceId === payload.instanceId; })[0];
@@ -727,6 +750,8 @@ namespace BiomeRivalsRules {
         occupiedSlots: occupiedSlots,
         paymentMethod: paymentMethod,
         redstone: player.redstone,
+        temporaryRedstone: player.temporaryRedstone,
+        totalRedstone: player.redstone + player.temporaryRedstone,
         attack: battlefieldObject.attack,
         health: battlefieldObject.health,
         maxHealth: battlefieldObject.maxHealth,
@@ -2347,7 +2372,10 @@ namespace BiomeRivalsRules {
         emit('CARD_EQUIPPED', {
           playerId: player.playerId, instanceId: equipment.instanceId, cardId: equipment.cardId,
           attack: equipment.attack, durability: equipment.durability, maxDurability: equipment.maxDurability,
-          effectId: effectId, redstone: player.redstone, handCount: player.hand.length,
+          effectId: effectId, redstone: player.redstone,
+          temporaryRedstone: player.temporaryRedstone,
+          totalRedstone: player.redstone + player.temporaryRedstone,
+          handCount: player.hand.length,
           discardCount: player.discardPile.length, nextInstanceId: next.nextInstanceId,
           cardsPlayedThisTurn: player.cardsPlayedThisTurn,
           hasTargetedEnemyObjectThisTurn: player.hasTargetedEnemyObjectThisTurn
@@ -2361,6 +2389,8 @@ namespace BiomeRivalsRules {
         cardType: definition.cardType,
         effectId: effectId,
         redstone: player.redstone,
+        temporaryRedstone: player.temporaryRedstone,
+        totalRedstone: player.redstone + player.temporaryRedstone,
         handCount: player.hand.length,
         discardCount: player.discardPile.length,
         cardsPlayedThisTurn: player.cardsPlayedThisTurn,
@@ -3056,6 +3086,7 @@ namespace BiomeRivalsRules {
             });
           }
         }
+        expireTemporaryRedstone(next.players[actorIndex]!);
         next.players[actorIndex]!.excavatedThisTurn = false;
         next.players[actorIndex]!.cardsPlayedThisTurn = 0;
         next.players[actorIndex]!.hasTargetedEnemyObjectThisTurn = false;
@@ -3082,6 +3113,8 @@ namespace BiomeRivalsRules {
           turn: next.turn,
           activePlayerIndex: next.activePlayerIndex,
           redstone: nextPlayer.redstone,
+          temporaryRedstone: nextPlayer.temporaryRedstone,
+          totalRedstone: nextPlayer.redstone + nextPlayer.temporaryRedstone,
           redstoneCapacity: nextPlayer.redstoneCapacity,
           phase: next.phase
         });

@@ -2347,7 +2347,9 @@ namespace BiomeRivals.Demo
             RefreshOpponentHeroTarget();
             _battlefield.SyncPieces(match.PlayerBattlefield, match.OpponentBattlefield, _registry);
             RefreshInspector();
-            _energyText.text = $"◆ {match.Energy}/{match.MaxEnergy}";
+            _energyText.text = match.TemporaryEnergy > 0
+                ? $"◆ {match.Energy}/{match.MaxEnergy}\n临时 +{match.TemporaryEnergy}"
+                : $"◆ {match.Energy}/{match.MaxEnergy}";
             _titleText.text = IsOnlineBoard ? "群系竞逐  ·  权威联机对局" : "群系竞逐  ·  本地战场演示";
             _roundText.text = match.IsMulligan ? "开局 · 起手调度" : $"第 {match.Round} 回合 · {(match.Phase == DemoTurnPhase.Main ? "主行动" : "战斗")}";
             _opponentHealthText.text = match.OpponentArmor > 0

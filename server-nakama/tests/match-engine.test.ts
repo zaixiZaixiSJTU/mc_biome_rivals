@@ -263,6 +263,107 @@ TestHarness.test('temporary health invariants reject contradictory or impossible
   }));
 });
 
+TestHarness.test('full base redstone can expose a higher temporary total in either public snapshot', function (): void {
+  const state = activeState('match-temporary-energy-snapshot', ['alice', 'bob']);
+  const actorIndex = state.activePlayerIndex;
+  const actor = state.players[actorIndex]!;
+  actor.redstone = 10;
+  actor.redstoneCapacity = 10;
+  actor.temporaryRedstone = 2;
+  TestHarness.equal(BiomeRivalsRules.validateState(state).length, 0);
+  for (const viewer of state.players) {
+    const snapshot = BiomeRivalsRules.createClientSnapshot(state, viewer.playerId);
+    TestHarness.equal(snapshot.players[actorIndex]!.redstone, 10);
+    TestHarness.equal(snapshot.players[actorIndex]!.temporaryRedstone, 2);
+    TestHarness.equal(snapshot.players[actorIndex]!.totalRedstone, 12);
+    TestHarness.equal(snapshot.players[actorIndex]!.redstoneCapacity, 10);
+    assertSnapshotMatchesSchema(snapshot);
+  }
+  const contradictory = BiomeRivalsRules.createClientSnapshot(state, actor.playerId);
+  contradictory.players[actorIndex === 0 ? 1 : 0]!.temporaryRedstone = 1;
+  TestHarness.equal(validateSnapshotSchema(contradictory), false);
+});
+
+TestHarness.test('temporary redstone rejects inactive, negative, fractional and out-of-capacity state', function (): void {
+  const state = activeState('match-invalid-temporary-energy', ['alice', 'bob']);
+  const actor = state.players[state.activePlayerIndex]!;
+  const opponent = state.players[state.activePlayerIndex === 0 ? 1 : 0]!;
+  opponent.temporaryRedstone = 1;
+  TestHarness.ok(BiomeRivalsRules.validateState(state).indexOf(
+    'temporary redstone belongs only to the active player turn') >= 0);
+  opponent.temporaryRedstone = 0;
+  actor.temporaryRedstone = -1;
+  TestHarness.ok(BiomeRivalsRules.validateState(state).indexOf('player redstone is out of range') >= 0);
+  actor.temporaryRedstone = 0.5;
+  TestHarness.ok(BiomeRivalsRules.validateState(state).indexOf('player redstone is out of range') >= 0);
+  actor.temporaryRedstone = 4;
+  TestHarness.ok(BiomeRivalsRules.validateState(state).indexOf('player redstone is out of range') >= 0);
+  actor.temporaryRedstone = 0;
+  actor.redstone = actor.redstoneCapacity + 1;
+  TestHarness.ok(BiomeRivalsRules.validateState(state).indexOf('player redstone is out of range') >= 0);
+});
+
+TestHarness.test('resource-change shape is schema replayable and rejects malformed typed pools', function (): void {
+  const state = activeState('match-resource-change-shape', ['alice', 'bob']);
+  const actor = state.players[state.activePlayerIndex]!;
+  const event = {
+    eventId: 1, type: 'REDSTONE_CHANGED', payload: {
+      playerId: actor.playerId, turn: state.turn, reason: 'TEMPORARY_GRANTED',
+      sourceCardId: 'nt_007', sourceInstanceId: 'object-1', effectId: 'effect.nt_007.01',
+      redstone: 1, temporaryRedstone: 1, totalRedstone: 2, redstoneCapacity: 1
+    }
+  } as BiomeRivalsRules.MatchEvent;
+  const batch: BiomeRivalsRules.MatchEventBatch = {
+    protocolVersion: BiomeRivalsRules.PROTOCOL_VERSION,
+    rulesetVersion: BiomeRivalsRules.RULESET_VERSION,
+    revision: 1, acknowledgedCommandId: 'resource-shape', events: [event]
+  };
+  assertEventBatchMatchesSchema(batch);
+  event.payload.temporaryRedstone = -1;
+  TestHarness.equal(validateEventBatchSchema(batch), false);
+});
+
+TestHarness.test('unspent temporary redstone expires after end effects and before turn handoff', function (): void {
+  const state = activeState('match-temporary-energy-expiry', ['alice', 'bob']);
+  const actorIndex = state.activePlayerIndex;
+  const actor = state.players[actorIndex]!;
+  actor.redstone = 10;
+  actor.redstoneCapacity = 10;
+  actor.temporaryRedstone = 2;
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    command('temporary-energy-expiry', 0, 'END_TURN'));
+  TestHarness.ok(result.accepted, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[actorIndex]!.redstone, 10);
+  TestHarness.equal(result.state.players[actorIndex]!.temporaryRedstone, 0);
+  const expiryIndex = result.batch.events.map(function (event): string { return event.type; })
+    .indexOf('REDSTONE_CHANGED');
+  TestHarness.ok(expiryIndex >= 0);
+  TestHarness.equal(result.batch.events[expiryIndex]!.payload.reason, 'TEMPORARY_EXPIRED');
+  TestHarness.equal(result.batch.events[expiryIndex]!.payload.totalRedstone, 10);
+  TestHarness.equal(result.batch.events[expiryIndex + 1]!.type, 'TURN_ENDED');
+  TestHarness.equal(BiomeRivalsRules.validateState(result.state).length, 0);
+  assertEventBatchMatchesSchema(result.batch);
+});
+
+TestHarness.test('terminal match settlement expires the active temporary pool without reopening play', function (): void {
+  const state = activeState('match-temporary-energy-terminal', ['alice', 'bob']);
+  const activeIndex = state.activePlayerIndex;
+  state.players[activeIndex]!.temporaryRedstone = 2;
+  const concedingPlayer = state.players[activeIndex === 0 ? 1 : 0]!;
+  const result = BiomeRivalsRules.applyCommand(state, concedingPlayer.playerId,
+    command('temporary-energy-terminal', 0, 'CONCEDE'));
+  TestHarness.ok(result.accepted, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.status, 'FINISHED');
+  TestHarness.equal(result.state.players[activeIndex]!.temporaryRedstone, 0);
+  TestHarness.equal(result.batch.events.map(function (event): string { return event.type; }).join(','),
+    'PLAYER_CONCEDED,REDSTONE_CHANGED,MATCH_ENDED');
+  TestHarness.equal(result.batch.events[1]!.payload.reason, 'TEMPORARY_EXPIRED');
+  TestHarness.equal(BiomeRivalsRules.validateState(result.state).length, 0);
+  assertEventBatchMatchesSchema(result.batch);
+});
+
 TestHarness.test('first real hero life loss is public and replayable without either pending Nether card', function (): void {
   const state = activeState('match-hero-loss-window', ['alice', 'bob']);
   const actor = state.players[state.activePlayerIndex]!;
