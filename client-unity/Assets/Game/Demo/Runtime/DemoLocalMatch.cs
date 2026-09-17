@@ -34,6 +34,9 @@ namespace BiomeRivals.Demo
         private bool _opponentHasTargetedEnemyObjectThisTurn;
         private bool _playerHeroLifeLostThisTurn;
         private bool _opponentHeroLifeLostThisTurn;
+        private int _temporaryEnergy;
+        private int _opponentEnergy = 6;
+        private int _opponentTemporaryEnergy;
 
         public IReadOnlyList<string> Hand => _hand;
         public IReadOnlyList<string> Deck => _deck;
@@ -61,7 +64,7 @@ namespace BiomeRivals.Demo
         public int Round { get; private set; } = 1;
         public int MaxEnergy { get; private set; } = 6;
         public int Energy { get; private set; } = 6;
-        public int TemporaryEnergy => 0;
+        public int TemporaryEnergy => _temporaryEnergy;
         public bool IsPlayerTurn { get; private set; } = true;
         public DemoTurnPhase Phase { get; private set; } = DemoTurnPhase.Main;
         public int PlayerLife { get; private set; } = 30;
@@ -204,8 +207,6 @@ namespace BiomeRivals.Demo
             if (definition == null) return Reject(DemoCommandRejectionCode.UnknownCard, "卡牌定义不存在。");
             if (!definition.manualPlayAllowed)
                 return Reject(DemoCommandRejectionCode.CardNotPlayable, "该卡牌只能由规则自动结算，不能主动部署。");
-            if (definition.id == "nt_002" && definition.effectImplementationStatus != "IMPLEMENTED")
-                return Reject(DemoCommandRejectionCode.CardNotPlayable, "Zombie Piglin is pending its complete effect and cannot be deployed yet.");
             if (command.payload == null || !string.Equals(command.payload.cardId, definition.id, StringComparison.Ordinal))
                 return Reject(DemoCommandRejectionCode.UnknownCard, "命令中的卡牌与注册定义不一致。");
             if (Phase != DemoTurnPhase.Main)
@@ -1158,18 +1159,33 @@ namespace BiomeRivals.Demo
             if (!IsPlayerTurn) return Reject(DemoCommandRejectionCode.NotActivePlayer, "当前不是你的回合。");
             var monumentDeathMessages = new List<string>();
             var monumentDamage = ResolveOceanMonumentEndPhase(monumentDeathMessages);
+            if (IsFinished)
+            {
+                ExpireTemporaryEnergy(true);
+                AcceptCommand(command);
+                return DemoCommandResult.Accept("海底神殿结算导致对局结束。", Revision);
+            }
+            var magmaPulses = ResolvePiglinMagmaEndPhase(true);
+            if (IsFinished)
+            {
+                ExpireTemporaryEnergy(true);
+                AcceptCommand(command);
+                return DemoCommandResult.Accept($"僵尸猪灵岩浆触发 {magmaPulses} 次，敌方英雄生命归零，你获得胜利！", Revision);
+            }
             var poisonDeathMessages = new List<string>();
             var poisonDamage = ResolveEndPhaseStatuses(_playerBattlefield, poisonDeathMessages, out var fireDamage);
             ResolvePlayerStatuses(_playerStatuses);
             var crystalPulses = ResolveEndCrystalEndPhase(true);
             if (IsFinished)
             {
+                ExpireTemporaryEnergy(true);
                 AcceptCommand(command);
                 return DemoCommandResult.Accept($"末影水晶脉冲 {crystalPulses} 次，敌方英雄生命归零，你获得胜利！", Revision);
             }
             ResolveCaveStructureEndPhase(true, out var mineTriggers, out var mansionSummons);
             RestoreExpiredTemporaryModifiers(_playerBattlefield);
             RestoreExpiredTemporaryModifiers(_opponentBattlefield);
+            ExpireTemporaryEnergy(true);
             _triggeredEffectKeysThisTurn.Clear();
             ExcavatedThisTurn = false;
             _playerCardsPlayedThisTurn = 0;
@@ -1177,6 +1193,8 @@ namespace BiomeRivals.Demo
             _playerHeroLifeLostThisTurn = false;
             _opponentHeroLifeLostThisTurn = false;
             IsPlayerTurn = false;
+            _opponentEnergy = Math.Min(10, 5 + Round);
+            _opponentTemporaryEnergy = 0;
             AcceptCommand(command);
             var monumentMessage = monumentDamage > 0
                 ? $"海底神殿对 {monumentDamage} 个孤立敌方生物各造成 1 点伤害。"
@@ -1187,6 +1205,7 @@ namespace BiomeRivals.Demo
             if (poisonDeathMessages.Count > 0) monumentMessage += " " + string.Join(" ", poisonDeathMessages);
             if (mineTriggers > 0) monumentMessage += $" 废弃矿井生成了 {mineTriggers} 张圆石。";
             if (mansionSummons > 0) monumentMessage += $" 林地府邸召唤了 {mansionSummons} 个卫道士新兵。";
+            if (magmaPulses > 0) monumentMessage += $" 僵尸猪灵消耗 {magmaPulses} 点红石并造成 {magmaPulses} 点岩浆伤害。";
             if (crystalPulses > 0) monumentMessage += $" 末影水晶对敌方英雄造成了 {crystalPulses * 2} 点普通伤害。";
             return DemoCommandResult.Accept(string.IsNullOrEmpty(monumentMessage) ? "已结束回合。" : monumentMessage + " 已结束回合。", Revision);
         }
@@ -1196,12 +1215,22 @@ namespace BiomeRivals.Demo
             if (IsFinished)
                 return RememberDraw(new DemoDrawResult(DemoDrawOutcome.MatchEnded, string.Empty, 0));
             ResolveSnowHutStartPhase(false, false);
+            ResolvePiglinMagmaEndPhase(false);
+            if (IsFinished)
+            {
+                ExpireTemporaryEnergy(false);
+                return RememberDraw(new DemoDrawResult(DemoDrawOutcome.MatchEnded, string.Empty, 0));
+            }
             ResolveEndPhaseStatuses(_opponentBattlefield, null, out _);
             ResolvePlayerStatuses(_opponentStatuses);
             ResolveEndCrystalEndPhase(false);
             if (IsFinished)
+            {
+                ExpireTemporaryEnergy(false);
                 return RememberDraw(new DemoDrawResult(DemoDrawOutcome.MatchEnded, string.Empty, 0));
+            }
             ResolveCaveStructureEndPhase(false, out _, out _);
+            ExpireTemporaryEnergy(false);
             _opponentCardsPlayedThisTurn = 0;
             _opponentHasTargetedEnemyObjectThisTurn = false;
             _playerHeroLifeLostThisTurn = false;
@@ -1470,7 +1499,8 @@ namespace BiomeRivals.Demo
 
         private void Consume(CardDefinitionEntry definition)
         {
-            Energy -= GetEffectiveCost(definition);
+            if (!TrySpendEnergy(true, GetEffectiveCost(definition)))
+                throw new InvalidOperationException("Validated local redstone payment unexpectedly failed.");
             _hand.Remove(definition.id);
         }
 
@@ -1824,6 +1854,76 @@ namespace BiomeRivals.Demo
                     deathMessages.AddRange(SettleDeaths(killCredits));
             }
             return totalDamage;
+        }
+
+        private bool TrySpendEnergy(bool player, int cost)
+        {
+            if (cost < 0) throw new ArgumentOutOfRangeException(nameof(cost));
+            var available = player ? Energy : _opponentEnergy;
+            if (available < cost) return false;
+            if (player)
+            {
+                var temporaryPayment = Math.Min(_temporaryEnergy, cost);
+                _temporaryEnergy -= temporaryPayment;
+                Energy -= cost;
+            }
+            else
+            {
+                var temporaryPayment = Math.Min(_opponentTemporaryEnergy, cost);
+                _opponentTemporaryEnergy -= temporaryPayment;
+                _opponentEnergy -= cost;
+            }
+            return true;
+        }
+
+        private void ExpireTemporaryEnergy(bool player)
+        {
+            if (player)
+            {
+                Energy -= _temporaryEnergy;
+                _temporaryEnergy = 0;
+            }
+            else
+            {
+                _opponentEnergy -= _opponentTemporaryEnergy;
+                _opponentTemporaryEnergy = 0;
+            }
+        }
+
+        private int ResolvePiglinMagmaEndPhase(bool player)
+        {
+            var battlefield = player ? _playerBattlefield : _opponentBattlefield;
+            var piglins = battlefield
+                .Where(value => value.CardId == "nt_002" && value.SlotKind == DemoSlotKind.Unit && value.Health > 0)
+                .OrderBy(value => value.SlotIndex)
+                .ThenBy(value => value.InstanceId, StringComparer.Ordinal)
+                .ToArray();
+            var triggered = 0;
+            foreach (var piglin in piglins)
+            {
+                if (!battlefield.Contains(piglin) || piglin.Health <= 0 || IsFinished || !TrySpendEnergy(player, 1)) continue;
+                if (player)
+                {
+                    var armorDamage = Math.Min(OpponentArmor, 1);
+                    OpponentArmor -= armorDamage;
+                    var lifeBefore = OpponentLife;
+                    OpponentLife = Math.Max(0, OpponentLife - (1 - armorDamage));
+                    ObserveHeroLifeLoss(false, lifeBefore);
+                    if (OpponentLife == 0) IsFinished = true;
+                }
+                else
+                {
+                    var armorDamage = Math.Min(PlayerArmor, 1);
+                    PlayerArmor -= armorDamage;
+                    var lifeBefore = PlayerLife;
+                    PlayerLife = Math.Max(0, PlayerLife - (1 - armorDamage));
+                    ObserveHeroLifeLoss(true, lifeBefore);
+                    if (PlayerLife == 0) IsFinished = true;
+                }
+                triggered++;
+                if (IsFinished) PendingChoice = null;
+            }
+            return triggered;
         }
 
         private int ResolveEndCrystalEndPhase(bool player)

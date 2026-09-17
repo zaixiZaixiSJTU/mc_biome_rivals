@@ -199,6 +199,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewGoat")) SetupGoatPreview();
             else if (HasCommandLineFlag("-previewSnowHut")) SetupSnowHutPreview();
             else if (HasCommandLineFlag("-previewEndCrystal")) SetupEndCrystalPreview();
+            else if (HasCommandLineFlag("-previewPiglinMagma")) SetupPiglinMagmaPreview();
             else if (HasCommandLineFlag("-previewCombat")) OnEndTurn();
             if (HasCommandLineFlag("-previewGroundHover")) _battlefield.SetSlotHovered(true, DemoSlotKind.Unit, 0, true);
             var capturePath = GetCommandLineValue("-captureDemo");
@@ -863,6 +864,15 @@ namespace BiomeRivals.Demo
                             yield return PulseBothHeroHuds(Danger);
                         else
                             yield return null;
+                    }
+                    else if (matchEvent.payload?.effectId == "effect.nt_002.01")
+                    {
+                        var damagedSide = damagedViewer ? "己方" : "敌方";
+                        ShowStatus($"僵尸猪灵岩浆：消耗 1 点红石，{damagedSide}英雄受到 1 点普通伤害。", false);
+                        if (!string.IsNullOrEmpty(matchEvent.payload.sourceInstanceId))
+                            yield return PulseBattlefieldObject(matchEvent.payload.sourceInstanceId);
+                        yield return ShowTurnBanner("岩浆喷射", Hex("#FF6A1A"));
+                        yield return damagedViewer ? PulsePlayerHud(Danger) : PulseOpponentHud(Danger);
                     }
                     else if (matchEvent.payload?.effectId == "effect.ed_007.01")
                     {
@@ -1572,6 +1582,31 @@ namespace BiomeRivals.Demo
                 : result.Message, !result.Accepted);
             var crystal = _match.GetObject(true, DemoSlotKind.Building, 1);
             if (crystal != null) StartCoroutine(PulseBattlefieldObject(crystal.InstanceId));
+        }
+
+        private void SetupPiglinMagmaPreview()
+        {
+            SelectFaction("nether");
+            SelectOpponentFaction("plains_forest");
+            if (!_registry.TryGetDefinition("nt_002", out var piglinDefinition)) return;
+            _match.ResetDeckAndHand(new[] { piglinDefinition.id, piglinDefinition.id }, new[] { "nt_001" });
+            var left = _match.ApplyDeploy(piglinDefinition,
+                _match.CreateDeployCommand(piglinDefinition.id, DemoSlotKind.Unit, 0));
+            var right = _match.ApplyDeploy(piglinDefinition,
+                _match.CreateDeployCommand(piglinDefinition.id, DemoSlotKind.Unit, 2));
+            var ended = left.Accepted && right.Accepted
+                ? _match.ApplyEndTurn(_match.CreateEndTurnCommand())
+                : DemoCommandResult.Reject(DemoCommandRejectionCode.InvalidCommand,
+                    !left.Accepted ? left.Message : right.Message, _match.Revision);
+            _match.ResetHand(new[] { piglinDefinition.id });
+            _selectedCardId = piglinDefinition.id;
+            RefreshAll();
+            var resolved = ended.Accepted && _match.OpponentLife == 28 && _match.Energy == 0;
+            ShowStatus(resolved
+                ? "两只僵尸猪灵按单位格顺序各支付 1 点红石，岩浆共造成 2 点普通伤害；当前能量为 0。"
+                : ended.Message, !resolved);
+            var firstPiglin = _match.GetObject(true, DemoSlotKind.Unit, 0);
+            if (firstPiglin != null) StartCoroutine(PulseBattlefieldObject(firstPiglin.InstanceId));
         }
 
         private void SetupSnowGolemPreview()

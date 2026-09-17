@@ -4,7 +4,6 @@ using BiomeRivals.Demo.Editor;
 using NUnit.Framework;
 using System.Linq;
 using System.Reflection;
-using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
@@ -777,6 +776,14 @@ namespace BiomeRivals.Demo.Tests
             property.SetValue(match, value);
         }
 
+        private static void SetPrivateField(DemoLocalMatch match, string fieldName, int value)
+        {
+            var field = typeof(DemoLocalMatch).GetField(fieldName,
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null, fieldName);
+            field.SetValue(match, value);
+        }
+
         [Test]
         public void LocalCombatReleasesEverySlotOfAThreeSlotStructure()
         {
@@ -1472,8 +1479,14 @@ namespace BiomeRivals.Demo.Tests
                 var themedRules = themedCard.transform.Find("Rules").GetComponent<UnityEngine.UI.Text>();
                 Assert.That(themedRules.alignment, Is.EqualTo(UnityEngine.TextAnchor.MiddleCenter));
                 Assert.That(themedRules.alignByGeometry, Is.True);
+                Assert.That(themedRules.resizeTextForBestFit, Is.True);
+                Assert.That(themedRules.resizeTextMinSize, Is.EqualTo(8));
                 Assert.That(themedRules.rectTransform.anchoredPosition.x, Is.Zero.Within(0.001f));
                 Assert.That(themedRules.rectTransform.anchoredPosition.y, Is.EqualTo(-themedCard.GetComponent<RectTransform>().sizeDelta.y * 0.21f).Within(0.01f));
+                var detailRules = detailCard.transform.Find("Rules").GetComponent<UnityEngine.UI.Text>();
+                Assert.That(detailRules.alignment, Is.EqualTo(UnityEngine.TextAnchor.MiddleCenter));
+                Assert.That(detailRules.resizeTextForBestFit, Is.True);
+                Assert.That(detailRules.resizeTextMinSize, Is.EqualTo(10));
                 var frameMappings = new[,]
                 {
                     { "plains_forest", "pf" },
@@ -3604,29 +3617,22 @@ namespace BiomeRivals.Demo.Tests
         }
 
         [Test]
-        public void SeededPendingPiglinGrowsOnlyOnFirstNonlethalSelfLossPerLocalTurn()
+        public void ImplementedPiglinGrowsOnlyOnFirstNonlethalSelfLossPerLocalTurn()
         {
             var registry = CardContentLoader.Load();
             Assert.That(registry.TryGetDefinition("nt_002", out var piglinDefinition), Is.True);
             Assert.That(registry.TryGetDefinition("nt_006", out var sacrifice), Is.True);
-            Assert.That(piglinDefinition.effectImplementationStatus, Is.EqualTo("PENDING"));
+            Assert.That(piglinDefinition.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
             var match = new DemoLocalMatch();
             match.ResetDeckAndHand(new[] { "nt_006", "nt_006", "nt_002" },
                 new[] { "nt_001", "nt_001", "nt_001", "nt_001" });
             Assert.That(match.ApplyDeploy(piglinDefinition,
-                match.CreateDeployCommand("nt_002", DemoSlotKind.Unit, 0)).Accepted, Is.False);
-
-            var piglin = new DemoBattlefieldObject
-            {
-                InstanceId = "object-9", CardId = "nt_002", Player = true,
-                SlotKind = DemoSlotKind.Unit, SlotIndex = 0, OccupiedSlots = 1,
-                Attack = 4, Health = 1, MaxHealth = 2, SummonedRound = 1,
-                TemporaryAttackModifier = 2, TemporaryAttackModifierExpiresOnRound = 1
-            };
-            var field = typeof(DemoLocalMatch).GetField("_playerBattlefield", BindingFlags.Instance | BindingFlags.NonPublic);
-            Assert.That(field, Is.Not.Null);
-            ((List<DemoBattlefieldObject>)field.GetValue(match)).Add(piglin);
-            match.UnitSlots[0] = piglin.CardId;
+                match.CreateDeployCommand("nt_002", DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            var piglin = match.GetObject(true, DemoSlotKind.Unit, 0);
+            piglin.Attack = 4;
+            piglin.Health = 1;
+            piglin.TemporaryAttackModifier = 2;
+            piglin.TemporaryAttackModifierExpiresOnRound = 1;
 
             Assert.That(match.TryCast(sacrifice, out _), Is.True);
             Assert.That(piglin.Attack, Is.EqualTo(5));
@@ -3645,6 +3651,58 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(piglin.Attack, Is.EqualTo(4));
             Assert.That(piglin.Health, Is.EqualTo(3));
             Assert.That(piglin.MaxHealth, Is.EqualTo(4));
+        }
+
+        [Test]
+        public void PiglinMagmaSpendsTemporaryEnergyFirstAndExpiresOnlyTheRemainderLocally()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("nt_002", out var piglinDefinition), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { piglinDefinition.id });
+            Assert.That(match.ApplyDeploy(piglinDefinition,
+                match.CreateDeployCommand(piglinDefinition.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            SetPrivateProperty(match, nameof(DemoLocalMatch.Energy), 2);
+            SetPrivateField(match, "_temporaryEnergy", 1);
+
+            var result = match.ApplyEndTurn(match.CreateEndTurnCommand());
+
+            Assert.That(result.Accepted, Is.True, result.Message);
+            Assert.That(match.OpponentLife, Is.EqualTo(29));
+            Assert.That(match.Energy, Is.EqualTo(1));
+            Assert.That(match.TemporaryEnergy, Is.Zero);
+            Assert.That(result.Message, Does.Contain("僵尸猪灵"));
+        }
+
+        [Test]
+        public void PiglinMagmaUsesArmorAndLethalDamageStopsLaterPiglinsLocally()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("nt_002", out var piglinDefinition), Is.True);
+            var armored = new DemoLocalMatch();
+            armored.ResetHand(new[] { piglinDefinition.id });
+            Assert.That(armored.ApplyDeploy(piglinDefinition,
+                armored.CreateDeployCommand(piglinDefinition.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            SetPrivateProperty(armored, nameof(DemoLocalMatch.Energy), 1);
+            SetPrivateProperty(armored, nameof(DemoLocalMatch.OpponentArmor), 1);
+            Assert.That(armored.ApplyEndTurn(armored.CreateEndTurnCommand()).Accepted, Is.True);
+            Assert.That(armored.OpponentLife, Is.EqualTo(30));
+            Assert.That(armored.OpponentArmor, Is.Zero);
+
+            var lethal = new DemoLocalMatch();
+            lethal.ResetHand(new[] { piglinDefinition.id, piglinDefinition.id });
+            Assert.That(lethal.ApplyDeploy(piglinDefinition,
+                lethal.CreateDeployCommand(piglinDefinition.id, DemoSlotKind.Unit, 3)).Accepted, Is.True);
+            Assert.That(lethal.ApplyDeploy(piglinDefinition,
+                lethal.CreateDeployCommand(piglinDefinition.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            SetPrivateProperty(lethal, nameof(DemoLocalMatch.Energy), 2);
+            SetPrivateProperty(lethal, nameof(DemoLocalMatch.OpponentLife), 1);
+            var lethalResult = lethal.ApplyEndTurn(lethal.CreateEndTurnCommand());
+            Assert.That(lethalResult.Accepted, Is.True, lethalResult.Message);
+            Assert.That(lethal.IsFinished, Is.True);
+            Assert.That(lethal.OpponentLife, Is.Zero);
+            Assert.That(lethal.Energy, Is.EqualTo(1));
+            Assert.That(lethal.IsPlayerTurn, Is.True);
         }
 
         [Test]

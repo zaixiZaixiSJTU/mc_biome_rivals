@@ -437,6 +437,25 @@ namespace BiomeRivals.Core
                     break;
                 case MatchEventTypes.HeroDamaged:
                     var damagedPlayer = FindPlayer(payload.playerId);
+                    if (payload.effectId == "effect.nt_002.01")
+                    {
+                        var payment = previousEvent?.payload;
+                        var sourceOwner = Current.players.FirstOrDefault(candidate =>
+                            (candidate?.battlefield ?? Array.Empty<BattlefieldObjectStateDto>()).Any(value =>
+                                value != null && value.instanceId == payload.sourceInstanceId && value.cardId == "nt_002" &&
+                                value.cardType == "UNIT" && value.health > 0));
+                        var expectedArmor = Math.Max(0, damagedPlayer.armor - 1);
+                        var expectedLife = Math.Max(0, damagedPlayer.life - Math.Max(0, 1 - damagedPlayer.armor));
+                        if (sourceOwner == null || sourceOwner == damagedPlayer ||
+                            Current.players[Current.activePlayerIndex] != sourceOwner || payload.sourceCardId != "nt_002" ||
+                            payload.damage != 1 || payload.damageType != "NORMAL" ||
+                            payload.armor != expectedArmor || payload.life != expectedLife ||
+                            previousEvent == null || previousEvent.type != MatchEventTypes.RedstoneChanged || payment == null ||
+                            payment.playerId != sourceOwner.playerId || payment.reason != "AUTOMATIC_PAYMENT" ||
+                            payment.sourceCardId != "nt_002" || payment.sourceInstanceId != payload.sourceInstanceId ||
+                            payment.effectId != "effect.nt_002.01")
+                            throw new InvalidOperationException("Piglin magma damage does not follow its authoritative payment.");
+                    }
                     damagedPlayer.life = payload.life;
                     damagedPlayer.armor = payload.armor;
                     break;
@@ -498,6 +517,15 @@ namespace BiomeRivals.Core
                         throw new InvalidOperationException("Redstone event does not match its resource change reason.");
                     if (payload.reason == "AUTOMATIC_PAYMENT")
                         ValidatePaidResourceProjection(resourcePlayer, payload, "REDSTONE");
+                    if (payload.effectId == "effect.nt_002.01")
+                    {
+                        var source = FindObject(resourcePlayer, payload.sourceInstanceId);
+                        if (payload.reason != "AUTOMATIC_PAYMENT" || payload.sourceCardId != "nt_002" ||
+                            source.cardId != "nt_002" || source.cardType != "UNIT" || source.health <= 0 ||
+                            Current.players[Current.activePlayerIndex] != resourcePlayer ||
+                            resourcePlayer.totalRedstone - payload.totalRedstone != 1)
+                            throw new InvalidOperationException("Piglin magma payment is not a valid one-energy end-phase payment.");
+                    }
                     ApplyResourceProjection(resourcePlayer, payload, true);
                     break;
                 case MatchEventTypes.ObjectStatsChanged:

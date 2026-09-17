@@ -17,7 +17,7 @@
 
 - 有效仓库：`D:\gitt\mc_biome_rivals`
 - 近期纵向切片：RULE-030E1 `c2ed046`、RULE-030E2 `36ce93c`；新任务启动基线以当时 `git HEAD` 为准。
-- 开发中版本：协议 34、规则集 `prototype-0.55`、效果实现注册表版本 42、卡牌定义/catalog 版本 41。两种内容版本的关系待 DATA-040 明确。
+- 开发中版本：协议 34、规则集 `prototype-0.56`、效果实现注册表版本 43、卡牌定义/catalog 版本 41。两种内容版本的关系待 DATA-040 明确。
 - 卡牌效果状态：55 个 `IMPLEMENTED`，14 个 `PENDING`。
 - 此前混合在工作区的体素场景、实体模型、资源管线和 FIRE 规则已在恢复基线 `6c9202e` 中固定。后续不得继续使用这种跨任务混提方式。
 - `docs/development/change-log.md`、本路线图和 BR-000 检查点均已纳入 Git。
@@ -170,7 +170,7 @@
 
 ### RULE-031 下界受伤与能量触发
 
-状态：**RULE-031A/B1/B2a/B2b/C1 已完成，RULE-031C2 下一唯一任务**；契约见 [`../design/nether-self-damage-energy-spec-v1.md`](../design/nether-self-damage-energy-spec-v1.md)，细分边界见 [`task-packets/RULE-031.md`](task-packets/RULE-031.md)。依赖：BR-002。
+状态：**RULE-031A/B1/B2a/B2b/C1/C2 已完成，RULE-031D 下一唯一任务**；契约见 [`../design/nether-self-damage-energy-spec-v1.md`](../design/nether-self-damage-energy-spec-v1.md)，细分边界见 [`task-packets/RULE-031.md`](task-packets/RULE-031.md)。依赖：BR-002。
 
 目标：完成 `nt_002` 僵尸猪灵、`nt_007` 重生锚；A 已冻结规则契约，B1 建首次实际生命损失标记，B2a 建临时能量状态/回放/到期，B2b 建优先支付，C1 建僵尸猪灵永久成长，C2 建岩浆并完成本牌注册，D 实现重生锚纵向切片。集成验收 E 在启动时再拆成独立的演示、联机和证据任务，不直接执行一个大任务。
 
@@ -225,7 +225,7 @@
 ## 新会话最小交接模板
 
 ```text
-任务编号：RULE-031C2
+任务编号：RULE-031D
 只完成该任务，不顺带处理其他路线图项目。
 仓库：D:\gitt\mc_biome_rivals
 基线提交：<启动时填写>
@@ -236,4 +236,4 @@
 
 ## 当前唯一推荐下一步
 
-只执行 **RULE-031C2：僵尸猪灵岩浆与完整注册**。只做结束阶段逐实例支付与普通伤害、服务端/Unity 离线同构与回放，并在两段完整后开放本牌；不得修改重生锚。
+只执行 **RULE-031D：重生锚纵向切片**。只做己方回合首次实际掉血后的临时红石授能、多实例稳定顺序、回放与离线同构；不得扩展其他下界卡。

@@ -108,8 +108,8 @@ namespace BiomeRivals.Demo
             if (!usesStudyFrame) CreateImage("RulesSurface", new Vector2(0, rulesY), new Vector2(w - 18, rulesHeight), theme.RulesSurface);
             var rules = CreateText("Rules", new Vector2(0, rulesY), new Vector2(w - (usesStudyFrame ? 38 : 30), rulesHeight - (usesStudyFrame ? 15 : 8)), text.rulesText, compact ? 11 : 14, theme.BodyText, TextAnchor.MiddleCenter, FontStyle.Normal, font);
             rules.alignByGeometry = usesStudyFrame;
-            rules.resizeTextForBestFit = compact;
-            rules.resizeTextMinSize = 9;
+            rules.resizeTextForBestFit = true;
+            rules.resizeTextMinSize = compact ? 8 : 10;
             rules.resizeTextMaxSize = compact ? 11 : 14;
 
             var typeY = -h * 0.5f + (compact ? 20f : 24f);

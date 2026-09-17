@@ -2900,5 +2900,109 @@ namespace BiomeRivals.Core.Tests
             invalid.Replace(InitialState());
             Assert.Throws<InvalidOperationException>(() => invalid.Apply(GrowthBatch(6)));
         }
+
+        [Test]
+        public void Apply_ReplaysPiglinMagmaTemporaryFirstPaymentAndHeroDamage()
+        {
+            var piglin = new BattlefieldObjectStateDto
+            {
+                instanceId = "object-2", cardId = "nt_002", cardType = "UNIT", attack = 2,
+                health = 2, maxHealth = 2, slotKind = "UNIT", slotIndex = 2, occupiedSlots = 1, summonedTurn = 1
+            };
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "piglin-magma-replay", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                status = "ACTIVE", phase = "MAIN", turn = 1, activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto
+                    {
+                        playerId = "alice", life = 30, redstone = 1, temporaryRedstone = 1,
+                        totalRedstone = 2, redstoneCapacity = 1,
+                        unitSlots = new[] { null, null, "object-2", null }, battlefield = new[] { piglin }
+                    },
+                    new PlayerStateDto { playerId = "bob", life = 30, redstoneCapacity = 1 }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 1, type = MatchEventTypes.RedstoneChanged,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", turn = 1, reason = "AUTOMATIC_PAYMENT",
+                            sourceCardId = "nt_002", sourceInstanceId = "object-2", effectId = "effect.nt_002.01",
+                            redstone = 1, temporaryRedstone = 0, totalRedstone = 1, redstoneCapacity = 1
+                        } },
+                    new MatchEventDto { eventId = 2, type = MatchEventTypes.HeroDamaged,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "bob", sourceCardId = "nt_002", sourceInstanceId = "object-2",
+                            effectId = "effect.nt_002.01", damage = 1, damageType = "NORMAL", life = 29, armor = 0
+                        } },
+                    new MatchEventDto { eventId = 3, type = MatchEventTypes.HeroLifeLossMarked,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "bob", activePlayerId = "alice", turn = 1,
+                            sourceEventId = 2, life = 29, armor = 0
+                        } }
+                }
+            });
+
+            Assert.That(store.Current.players[0].redstone, Is.EqualTo(1));
+            Assert.That(store.Current.players[0].temporaryRedstone, Is.Zero);
+            Assert.That(store.Current.players[0].totalRedstone, Is.EqualTo(1));
+            Assert.That(store.Current.players[1].life, Is.EqualTo(29));
+            Assert.That(store.Current.players[1].heroLifeLostThisTurn, Is.True);
+        }
+
+        [Test]
+        public void Apply_RejectsPiglinMagmaDamageWithoutMatchingPayment()
+        {
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "piglin-magma-invalid", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                status = "ACTIVE", phase = "MAIN", turn = 1, activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto
+                    {
+                        playerId = "alice", life = 30, redstone = 1, totalRedstone = 1, redstoneCapacity = 1,
+                        unitSlots = new[] { "object-1", null, null, null },
+                        battlefield = new[]
+                        {
+                            new BattlefieldObjectStateDto
+                            {
+                                instanceId = "object-1", cardId = "nt_002", cardType = "UNIT", attack = 2,
+                                health = 2, maxHealth = 2, slotKind = "UNIT", slotIndex = 0, occupiedSlots = 1
+                            }
+                        }
+                    },
+                    new PlayerStateDto { playerId = "bob", life = 30 }
+                }
+            });
+
+            Assert.Throws<InvalidOperationException>(() => store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 1, type = MatchEventTypes.HeroDamaged,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "bob", sourceCardId = "nt_002", sourceInstanceId = "object-1",
+                            effectId = "effect.nt_002.01", damage = 1, damageType = "NORMAL", life = 29, armor = 0
+                        } }
+                }
+            }));
+            Assert.That(store.Current.players[1].life, Is.EqualTo(30));
+        }
     }
 }

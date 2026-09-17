@@ -597,9 +597,6 @@ namespace BiomeRivalsRules {
       const definition = getCardDefinition(cardId);
       if (definition === null) return reject(state, 'UNKNOWN_CARD', 'card definition is not registered');
       if (!definition.manualPlayAllowed) return reject(state, 'CARD_NOT_PLAYABLE', 'card resolves automatically and cannot be deployed');
-      if (definition.id === 'nt_002' && definition.effectImplementationStatus !== 'IMPLEMENTED') {
-        return reject(state, 'CARD_NOT_PLAYABLE', 'zombie piglin cannot be deployed before its complete effect is implemented');
-      }
       const player = next.players[actorIndex]!;
       const opponentPlayer = next.players[actorIndex === 0 ? 1 : 0]!;
       const handIndex = player.hand.indexOf(cardId);
@@ -1596,6 +1593,48 @@ namespace BiomeRivalsRules {
         if (targets.length > 0) settleDeaths(player, opponent, killCredits);
       }
       return totalDamage;
+    }
+
+    function resolvePiglinMagmaEndPhase(player: PlayerState, opponent: PlayerState): boolean {
+      if (next.status === 'FINISHED') return true;
+      const piglins = player.battlefield.filter(function (object): boolean {
+        if (object.cardId !== 'nt_002' || object.cardType !== 'UNIT' || object.health <= 0) return false;
+        const definition = getCardDefinition(object.cardId);
+        return definition !== null && definition.effectImplementationStatus === 'IMPLEMENTED' &&
+          definition.effectIds.indexOf('effect.nt_002.01') >= 0;
+      }).slice().sort(function (left, right): number {
+        if (left.slotIndex !== right.slotIndex) return left.slotIndex - right.slotIndex;
+        return left.instanceId < right.instanceId ? -1 : left.instanceId > right.instanceId ? 1 : 0;
+      });
+      for (let piglinIndex = 0; piglinIndex < piglins.length; piglinIndex += 1) {
+        const piglin = piglins[piglinIndex]!;
+        if (player.battlefield.indexOf(piglin) < 0 || piglin.health <= 0 || !trySpendRedstone(player, 1)) continue;
+        emit('REDSTONE_CHANGED', {
+          playerId: player.playerId,
+          turn: next.turn,
+          reason: 'AUTOMATIC_PAYMENT',
+          sourceCardId: piglin.cardId,
+          sourceInstanceId: piglin.instanceId,
+          effectId: 'effect.nt_002.01',
+          redstone: player.redstone,
+          temporaryRedstone: player.temporaryRedstone,
+          totalRedstone: getAvailableRedstone(player),
+          redstoneCapacity: player.redstoneCapacity
+        });
+        damageHero(opponent, 1);
+        emit('HERO_DAMAGED', {
+          playerId: opponent.playerId,
+          sourceCardId: piglin.cardId,
+          sourceInstanceId: piglin.instanceId,
+          effectId: 'effect.nt_002.01',
+          damage: 1,
+          damageType: 'NORMAL',
+          life: opponent.life,
+          armor: opponent.armor
+        });
+        if (finishForSelfDefeat(opponent, 'HERO_DEFEATED')) return true;
+      }
+      return false;
     }
 
     function resolveEndCrystalEndPhase(player: PlayerState, opponent: PlayerState): boolean {
@@ -3086,6 +3125,7 @@ namespace BiomeRivalsRules {
         if (state.status !== 'ACTIVE') return reject(state, 'MULLIGAN_REQUIRED', 'both players must confirm their opening hands first');
         if (actorIndex !== state.activePlayerIndex) return reject(state, 'NOT_ACTIVE_PLAYER', 'only the active player may end the turn');
         resolveOceanMonumentEndPhase(next.players[actorIndex]!, next.players[actorIndex === 0 ? 1 : 0]!);
+        if (resolvePiglinMagmaEndPhase(next.players[actorIndex]!, next.players[actorIndex === 0 ? 1 : 0]!)) break;
         if (resolveEndPhaseStatuses(next.players[actorIndex]!, next.players[actorIndex === 0 ? 1 : 0]!)) break;
         resolveEndPhasePlayerStatuses(next.players[actorIndex]!);
         if (resolveEndCrystalEndPhase(next.players[actorIndex]!, next.players[actorIndex === 0 ? 1 : 0]!)) break;

@@ -719,27 +719,138 @@ TestHarness.test('piglin owner grows on the opponent active turn only after armo
   assertEventBatchMatchesSchema(real.batch);
 });
 
-TestHarness.test('pending piglin cannot be manually deployed and lethal loss cannot grow a seeded survivor', function (): void {
-  const state = activeState('match-piglin-pending-lethal', ['alice', 'bob']);
+TestHarness.test('implemented piglin can be deployed while lethal self loss still cannot grow it', function (): void {
+  const state = activeState('match-piglin-deploy-lethal', ['alice', 'bob']);
   const actorIndex = state.activePlayerIndex;
   const actor = state.players[actorIndex]!;
   actor.hand = ['nt_002', 'nt_006'];
-  const rejected = BiomeRivalsRules.applyCommand(state, actor.playerId,
-    deployCommand('piglin-pending-deploy', 0, 'nt_002', 'UNIT', 0));
-  TestHarness.equal(rejected.accepted, false);
-  if (rejected.accepted) return;
-  TestHarness.equal(rejected.code, 'CARD_NOT_PLAYABLE');
-  TestHarness.equal(rejected.state.revision, 0);
-  placeUnit(state, actorIndex, 'nt_002', 0, 'object-1', 1);
-  actor.life = 1;
-  const lethal = BiomeRivalsRules.applyCommand(state, actor.playerId,
-    playCommand('piglin-lethal-loss', 0, 'nt_006'));
+  actor.redstone = 3;
+  actor.redstoneCapacity = 3;
+  const deployed = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('piglin-implemented-deploy', 0, 'nt_002', 'UNIT', 0));
+  TestHarness.ok(deployed.accepted, JSON.stringify(deployed));
+  if (!deployed.accepted) return;
+  deployed.state.players[actorIndex]!.life = 1;
+  const lethal = BiomeRivalsRules.applyCommand(deployed.state, actor.playerId,
+    playCommand('piglin-lethal-loss', 1, 'nt_006'));
   TestHarness.ok(lethal.accepted, JSON.stringify(lethal));
   if (!lethal.accepted) return;
   TestHarness.equal(lethal.state.players[actorIndex]!.battlefield[0]!.attack, 2);
   TestHarness.equal(lethal.batch.events.some(function (event): boolean {
     return event.type === 'OBJECT_STATS_CHANGED' && event.payload.effectId === 'effect.nt_002.01';
   }), false);
+});
+
+TestHarness.test('piglin magma spends temporary redstone first and damages before turn handoff', function (): void {
+  const state = activeState('match-piglin-magma-temporary', ['alice', 'bob']);
+  const actorIndex = state.activePlayerIndex;
+  const opponentIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  actor.redstone = 2;
+  actor.redstoneCapacity = 2;
+  actor.temporaryRedstone = 1;
+  placeUnit(state, actorIndex, 'nt_002', 2, 'object-2', 1);
+  actor.battlefield[0]!.statuses.push({
+    statusId: 'FIRE', remainingDuration: 2, sourcePlayerId: state.players[opponentIndex]!.playerId,
+    sourceCardId: 'nt_003', sourceInstanceId: 'object-9', effectId: 'effect.nt_003.01',
+    attackModifier: 0, boundAttackModifier: 0
+  });
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    command('piglin-magma-temporary-end', 0, 'END_TURN'));
+  TestHarness.ok(result.accepted, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.batch.events[0]!.type, 'REDSTONE_CHANGED');
+  TestHarness.equal(result.batch.events[0]!.payload.reason, 'AUTOMATIC_PAYMENT');
+  TestHarness.equal(result.batch.events[0]!.payload.sourceCardId, 'nt_002');
+  TestHarness.equal(result.batch.events[0]!.payload.sourceInstanceId, 'object-2');
+  TestHarness.equal(result.batch.events[0]!.payload.effectId, 'effect.nt_002.01');
+  TestHarness.equal(result.batch.events[0]!.payload.redstone, 2);
+  TestHarness.equal(result.batch.events[0]!.payload.temporaryRedstone, 0);
+  TestHarness.equal(result.batch.events[0]!.payload.totalRedstone, 2);
+  TestHarness.equal(result.batch.events[1]!.type, 'HERO_DAMAGED');
+  TestHarness.equal(result.batch.events[1]!.payload.damage, 1);
+  TestHarness.equal(result.batch.events[1]!.payload.damageType, 'NORMAL');
+  const fireIndex = result.batch.events.map(function (event): string {
+    return event.type === 'OBJECT_STATS_CHANGED' && event.payload.effectId === 'effect.nt_003.01'
+      ? 'FIRE' : event.type;
+  }).indexOf('FIRE');
+  TestHarness.ok(fireIndex > 1, 'piglin magma must resolve before end-phase status damage');
+  TestHarness.equal(result.state.players[opponentIndex]!.life, 29);
+  TestHarness.equal(result.batch.events.some(function (event): boolean { return event.type === 'TURN_ENDED'; }), true);
+  assertEventBatchMatchesSchema(result.batch);
+  assertSnapshotMatchesSchema(BiomeRivalsRules.createClientSnapshot(result.state, actor.playerId));
+});
+
+TestHarness.test('multiple piglins compete for the last energy in stable unit-slot order', function (): void {
+  const state = activeState('match-piglin-magma-last-energy', ['alice', 'bob']);
+  const actorIndex = state.activePlayerIndex;
+  const opponentIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  actor.redstone = 1;
+  actor.redstoneCapacity = 1;
+  placeUnit(state, actorIndex, 'nt_002', 3, 'object-3', 1);
+  placeUnit(state, actorIndex, 'nt_002', 0, 'object-4', 1);
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    command('piglin-magma-last-energy-end', 0, 'END_TURN'));
+  TestHarness.ok(result.accepted, JSON.stringify(result));
+  if (!result.accepted) return;
+  const payments = result.batch.events.filter(function (event): boolean {
+    return event.type === 'REDSTONE_CHANGED' && event.payload.effectId === 'effect.nt_002.01';
+  });
+  const damages = result.batch.events.filter(function (event): boolean {
+    return event.type === 'HERO_DAMAGED' && event.payload.effectId === 'effect.nt_002.01';
+  });
+  TestHarness.equal(payments.length, 1);
+  TestHarness.equal(payments[0]!.payload.sourceInstanceId, 'object-4');
+  TestHarness.equal(damages.length, 1);
+  TestHarness.equal(result.state.players[opponentIndex]!.life, 29);
+  assertEventBatchMatchesSchema(result.batch);
+});
+
+TestHarness.test('armor can absorb piglin magma without consuming the life-loss window', function (): void {
+  const state = activeState('match-piglin-magma-armor', ['alice', 'bob']);
+  const actorIndex = state.activePlayerIndex;
+  const opponentIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  actor.redstone = 1;
+  actor.redstoneCapacity = 1;
+  state.players[opponentIndex]!.armor = 1;
+  placeUnit(state, actorIndex, 'nt_002', 0, 'object-1', 1);
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    command('piglin-magma-armor-end', 0, 'END_TURN'));
+  TestHarness.ok(result.accepted, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[opponentIndex]!.life, 30);
+  TestHarness.equal(result.state.players[opponentIndex]!.armor, 0);
+  TestHarness.equal(result.batch.events.some(function (event): boolean {
+    return event.type === 'HERO_LIFE_LOSS_MARKED';
+  }), false);
+  assertEventBatchMatchesSchema(result.batch);
+});
+
+TestHarness.test('lethal piglin magma stops later piglins statuses and turn handoff', function (): void {
+  const state = activeState('match-piglin-magma-lethal', ['alice', 'bob']);
+  const actorIndex = state.activePlayerIndex;
+  const opponentIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  actor.redstone = 2;
+  actor.redstoneCapacity = 2;
+  state.players[opponentIndex]!.life = 1;
+  placeUnit(state, actorIndex, 'nt_002', 0, 'object-1', 1);
+  placeUnit(state, actorIndex, 'nt_002', 1, 'object-2', 1);
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    command('piglin-magma-lethal-end', 0, 'END_TURN'));
+  TestHarness.ok(result.accepted, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.status, 'FINISHED');
+  TestHarness.equal(result.state.players[opponentIndex]!.life, 0);
+  TestHarness.equal(result.state.players[actorIndex]!.redstone, 1);
+  TestHarness.equal(result.batch.events.filter(function (event): boolean {
+    return event.type === 'REDSTONE_CHANGED' && event.payload.effectId === 'effect.nt_002.01';
+  }).length, 1);
+  TestHarness.equal(result.batch.events.some(function (event): boolean { return event.type === 'TURN_ENDED'; }), false);
+  TestHarness.equal(result.batch.events[result.batch.events.length - 1]!.type, 'MATCH_ENDED');
+  assertEventBatchMatchesSchema(result.batch);
 });
 
 TestHarness.test('creates a valid two-player initial state', function (): void {
