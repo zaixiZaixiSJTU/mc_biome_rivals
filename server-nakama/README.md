@@ -16,7 +16,7 @@
 
 协议 opcode：`1` 命令、`2` 事件批次、`3` 命令拒绝、`4` 权威快照。协议结构以 `shared-schema/protocol` 为准。
 
-当前基础对局纵向切片使用 `protocolVersion: 34` 与 `rulesetVersion: prototype-0.54`。协议 34 将玩家基础红石 `redstone` 与 `temporaryRedstone` 分池，快照和资源事件公开派生的 `totalRedstone`；卡牌支付事件也携带三池最终量，并定义 `REDSTONE_CHANGED` 回放形状。规则集 0.54 对红石部署、法术、材料和装备统一先消耗临时池，不足再消耗基础池；合成材料不消耗能量，费用不足仍原子拒绝。自动效果可复用同一支付函数，但 `nt_002`/`nt_007` 仍为 `PENDING`，尚无实际岩浆支付或授能。当前行动方结束阶段在 `TURN_ENDED` 前清理未用临时量并发到期事件。标准 JSON Schema 校验各字段类型、范围和行动方归属，动态等式 `totalRedstone = redstone + temporaryRedstone` 由服务端派生、Unity 接收时校验。协议 33 的 `heroLifeLostThisTurn`/`HERO_LIFE_LOSS_MARKED`、协议 32 的临时生命修正、协议 31 的 `FIRE` 及更早能力继续兼容；`ATTACK.attackerInstanceId = "HERO"` 仍表示英雄装备攻击。旧协议或规则集客户端不能静默兼容。
+当前基础对局纵向切片使用 `protocolVersion: 34` 与 `rulesetVersion: prototype-0.55`。协议 34 将玩家基础红石 `redstone` 与 `temporaryRedstone` 分池，快照和资源事件公开派生的 `totalRedstone`；卡牌支付事件也携带三池最终量，并定义 `REDSTONE_CHANGED` 回放形状。规则集 0.55 对红石部署、法术、材料和装备统一先消耗临时池，不足再消耗基础池；合成材料不消耗能量，费用不足仍原子拒绝。`nt_002` 的拥有者英雄在当前单人回合首次非致死实际掉血后，每个存活实例按单位格稳定顺序永久获得 +1 攻击与 +1 当前/最大生命；护甲-only、同回合后续掉血、晚入场和致死伤害不触发。其岩浆段尚未实现，因此 `nt_002` 仍为 `PENDING` 并拒绝手牌部署；`nt_007` 也仍为 `PENDING`。当前行动方结束阶段在 `TURN_ENDED` 前清理未用临时量并发到期事件。标准 JSON Schema 校验各字段类型、范围和行动方归属，动态等式 `totalRedstone = redstone + temporaryRedstone` 由服务端派生、Unity 接收时校验。协议 33 的 `heroLifeLostThisTurn`/`HERO_LIFE_LOSS_MARKED`、协议 32 的临时生命修正、协议 31 的 `FIRE` 及更早能力继续兼容；`ATTACK.attackerInstanceId = "HERO"` 仍表示英雄装备攻击。旧协议或规则集客户端不能静默兼容。
 
 运行：
 

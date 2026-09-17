@@ -2825,5 +2825,80 @@ namespace BiomeRivals.Core.Tests
             }));
             Assert.That(store.Current.players[0].heroLifeLostThisTurn, Is.False);
         }
+
+        [Test]
+        public void Apply_ReplaysPiglinPermanentGrowthAndRejectsContradictoryStats()
+        {
+            MatchStateDto InitialState() => new MatchStateDto
+            {
+                matchId = "piglin-growth-replay", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                status = "ACTIVE", phase = "MAIN", turn = 1, activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto
+                    {
+                        playerId = "alice", life = 30, unitSlots = new[] { "object-4", null, null, null },
+                        battlefield = new[]
+                        {
+                            new BattlefieldObjectStateDto
+                            {
+                                instanceId = "object-4", cardId = "nt_002", cardType = "UNIT",
+                                slotKind = "UNIT", slotIndex = 0, occupiedSlots = 1, summonedTurn = 1,
+                                attack = 4, health = 1, maxHealth = 2,
+                                temporaryAttackModifier = 2, temporaryAttackModifierExpiresOnTurn = 1
+                            }
+                        }
+                    },
+                    new PlayerStateDto { playerId = "bob", life = 30 }
+                }
+            };
+            MatchEventBatchDto GrowthBatch(int attack) => new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 1, type = MatchEventTypes.HeroDamaged,
+                        payload = new MatchEventPayloadDto { playerId = "alice", life = 28, armor = 0 } },
+                    new MatchEventDto { eventId = 2, type = MatchEventTypes.HeroLifeLossMarked,
+                        payload = new MatchEventPayloadDto { playerId = "alice", activePlayerId = "alice",
+                            turn = 1, sourceEventId = 1, life = 28, armor = 0 } },
+                    new MatchEventDto { eventId = 3, type = MatchEventTypes.ObjectStatsChanged,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", instanceId = "object-4", reason = "PERMANENT_STAT_MODIFIER",
+                            sourceCardId = "nt_002", sourceInstanceId = "object-4", effectId = "effect.nt_002.01",
+                            attack = attack, health = 2, maxHealth = 3,
+                            temporaryAttackModifier = 2, temporaryAttackModifierExpiresOnTurn = 1
+                        } }
+                }
+            };
+
+            var store = new MatchStateStore();
+            store.Replace(InitialState());
+            store.Apply(GrowthBatch(5));
+            var piglin = store.Current.players[0].battlefield[0];
+            Assert.That(store.Current.players[0].heroLifeLostThisTurn, Is.True);
+            Assert.That(piglin.attack, Is.EqualTo(5));
+            Assert.That(piglin.health, Is.EqualTo(2));
+            Assert.That(piglin.maxHealth, Is.EqualTo(3));
+            Assert.That(piglin.temporaryAttackModifier, Is.EqualTo(2));
+            Assert.That(piglin.temporaryAttackModifierExpiresOnTurn, Is.EqualTo(1));
+
+            var recovered = InitialState();
+            recovered.revision = 1;
+            recovered.lastEventId = 3;
+            recovered.players[0].heroLifeLostThisTurn = true;
+            recovered.players[0].life = 28;
+            recovered.players[0].battlefield[0].attack = 5;
+            recovered.players[0].battlefield[0].health = 2;
+            recovered.players[0].battlefield[0].maxHealth = 3;
+            store.Replace(recovered);
+            Assert.That(store.Current.players[0].battlefield[0].attack, Is.EqualTo(5));
+
+            var invalid = new MatchStateStore();
+            invalid.Replace(InitialState());
+            Assert.Throws<InvalidOperationException>(() => invalid.Apply(GrowthBatch(6)));
+        }
     }
 }

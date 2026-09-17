@@ -456,6 +456,25 @@ namespace BiomeRivalsRules {
         life: player.life,
         armor: player.armor
       } });
+      for (let slotIndex = 0; slotIndex < player.unitSlots.length; slotIndex += 1) {
+        const instanceId = player.unitSlots[slotIndex];
+        const piglin = player.battlefield.filter(function (candidate): boolean {
+          return candidate.instanceId === instanceId && candidate.cardId === 'nt_002' &&
+            candidate.slotKind === 'UNIT' && candidate.slotIndex === slotIndex && candidate.health > 0;
+        })[0];
+        if (!piglin) continue;
+        piglin.attack += 1;
+        piglin.health += 1;
+        piglin.maxHealth += 1;
+        emit('OBJECT_STATS_CHANGED', {
+          playerId: player.playerId,
+          instanceId: piglin.instanceId,
+          reason: 'PERMANENT_STAT_MODIFIER',
+          sourceCardId: 'nt_002',
+          sourceInstanceId: piglin.instanceId,
+          effectId: 'effect.nt_002.01'
+        });
+      }
     }
     function expireTemporaryRedstone(player: PlayerState): void {
       if (player.temporaryRedstone <= 0) return;
@@ -578,6 +597,9 @@ namespace BiomeRivalsRules {
       const definition = getCardDefinition(cardId);
       if (definition === null) return reject(state, 'UNKNOWN_CARD', 'card definition is not registered');
       if (!definition.manualPlayAllowed) return reject(state, 'CARD_NOT_PLAYABLE', 'card resolves automatically and cannot be deployed');
+      if (definition.id === 'nt_002' && definition.effectImplementationStatus !== 'IMPLEMENTED') {
+        return reject(state, 'CARD_NOT_PLAYABLE', 'zombie piglin cannot be deployed before its complete effect is implemented');
+      }
       const player = next.players[actorIndex]!;
       const opponentPlayer = next.players[actorIndex === 0 ? 1 : 0]!;
       const handIndex = player.hand.indexOf(cardId);

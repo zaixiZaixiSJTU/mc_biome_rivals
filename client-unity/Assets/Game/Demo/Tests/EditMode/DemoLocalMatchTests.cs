@@ -4,6 +4,7 @@ using BiomeRivals.Demo.Editor;
 using NUnit.Framework;
 using System.Linq;
 using System.Reflection;
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
@@ -3600,6 +3601,75 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(match.OpponentLife, Is.EqualTo(0));
             Assert.That(match.OpponentArmor, Is.EqualTo(6));
             Assert.That(result.Message, Does.Contain("末影水晶亡语"));
+        }
+
+        [Test]
+        public void SeededPendingPiglinGrowsOnlyOnFirstNonlethalSelfLossPerLocalTurn()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("nt_002", out var piglinDefinition), Is.True);
+            Assert.That(registry.TryGetDefinition("nt_006", out var sacrifice), Is.True);
+            Assert.That(piglinDefinition.effectImplementationStatus, Is.EqualTo("PENDING"));
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(new[] { "nt_006", "nt_006", "nt_002" },
+                new[] { "nt_001", "nt_001", "nt_001", "nt_001" });
+            Assert.That(match.ApplyDeploy(piglinDefinition,
+                match.CreateDeployCommand("nt_002", DemoSlotKind.Unit, 0)).Accepted, Is.False);
+
+            var piglin = new DemoBattlefieldObject
+            {
+                InstanceId = "object-9", CardId = "nt_002", Player = true,
+                SlotKind = DemoSlotKind.Unit, SlotIndex = 0, OccupiedSlots = 1,
+                Attack = 4, Health = 1, MaxHealth = 2, SummonedRound = 1,
+                TemporaryAttackModifier = 2, TemporaryAttackModifierExpiresOnRound = 1
+            };
+            var field = typeof(DemoLocalMatch).GetField("_playerBattlefield", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null);
+            ((List<DemoBattlefieldObject>)field.GetValue(match)).Add(piglin);
+            match.UnitSlots[0] = piglin.CardId;
+
+            Assert.That(match.TryCast(sacrifice, out _), Is.True);
+            Assert.That(piglin.Attack, Is.EqualTo(5));
+            Assert.That(piglin.Health, Is.EqualTo(2));
+            Assert.That(piglin.MaxHealth, Is.EqualTo(3));
+            Assert.That(piglin.TemporaryAttackModifier, Is.EqualTo(2));
+            Assert.That(match.TryCast(sacrifice, out _), Is.True);
+            Assert.That(piglin.Attack, Is.EqualTo(5));
+
+            match.EndPlayerTurn();
+            Assert.That(piglin.Attack, Is.EqualTo(3));
+            Assert.That(piglin.TemporaryAttackModifier, Is.Zero);
+            match.BeginNextPlayerTurn();
+            match.ResetHand(new[] { "nt_006" });
+            Assert.That(match.TryCast(sacrifice, out _), Is.True);
+            Assert.That(piglin.Attack, Is.EqualTo(4));
+            Assert.That(piglin.Health, Is.EqualTo(3));
+            Assert.That(piglin.MaxHealth, Is.EqualTo(4));
+        }
+
+        [Test]
+        public void SeededOpponentPiglinGrowsWhenItsHeroLosesLifeDuringPlayerCombat()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("nt_002", out var piglinDefinition), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_001", out var bee), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(new[] { bee.id }, new[] { "pf_002" });
+            match.ResetOpponent(new[] { piglinDefinition }, new[] { 1 });
+            Assert.That(match.ApplyDeploy(bee, match.CreateDeployCommand(bee.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            Assert.That(match.ApplyEnterCombat(match.CreateEnterCombatCommand()).Accepted, Is.True);
+            var attacker = match.GetObject(true, DemoSlotKind.Unit, 0);
+            var piglin = match.GetObject(false, DemoSlotKind.Unit, 1);
+
+            var result = match.ApplyAttack(match.CreateAttackCommand(attacker.InstanceId, "HERO"));
+
+            Assert.That(result.Accepted, Is.True, result.Message);
+            Assert.That(match.OpponentLife, Is.LessThan(30));
+            Assert.That(piglin.Attack, Is.EqualTo(3));
+            Assert.That(piglin.Health, Is.EqualTo(3));
+            Assert.That(piglin.MaxHealth, Is.EqualTo(3));
         }
 
         private static float ProjectedWidth(Camera camera, Transform surface, Vector3[] vertices)

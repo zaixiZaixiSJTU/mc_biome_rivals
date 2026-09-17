@@ -502,6 +502,21 @@ namespace BiomeRivals.Core
                     break;
                 case MatchEventTypes.ObjectStatsChanged:
                     var statsObject = FindObject(FindPlayer(payload.playerId), payload.instanceId);
+                    if (payload.effectId == "effect.nt_002.01")
+                    {
+                        var piglinOwner = FindPlayer(payload.playerId);
+                        if (!piglinOwner.heroLifeLostThisTurn || statsObject.cardId != "nt_002" ||
+                            statsObject.cardType != "UNIT" || statsObject.health <= 0 ||
+                            payload.reason != "PERMANENT_STAT_MODIFIER" ||
+                            payload.sourceCardId != "nt_002" || payload.sourceInstanceId != statsObject.instanceId ||
+                            payload.attack != statsObject.attack + 1 || payload.health != statsObject.health + 1 ||
+                            payload.maxHealth != statsObject.maxHealth + 1 ||
+                            payload.temporaryAttackModifier != statsObject.temporaryAttackModifier ||
+                            payload.temporaryAttackModifierExpiresOnTurn != statsObject.temporaryAttackModifierExpiresOnTurn ||
+                            payload.temporaryHealthModifier != statsObject.temporaryHealthModifier ||
+                            payload.temporaryHealthModifierExpiresOnTurn != statsObject.temporaryHealthModifierExpiresOnTurn)
+                            throw new InvalidOperationException("Piglin growth does not match a first-life-loss permanent stat change.");
+                    }
                     statsObject.attack = payload.attack;
                     statsObject.health = payload.health;
                     if (payload.reason == "AURA_RECALCULATED" || payload.reason == "PERMANENT_HEALTH_MODIFIER" ||

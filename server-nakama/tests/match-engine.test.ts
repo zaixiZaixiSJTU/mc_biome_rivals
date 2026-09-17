@@ -637,6 +637,111 @@ TestHarness.test('lethal self damage does not create a useless hero life-loss ma
   assertEventBatchMatchesSchema(result.batch);
 });
 
+TestHarness.test('first actual self life loss grows surviving piglins in slot order and preserves wounds and temporary stats', function (): void {
+  const state = activeState('match-piglin-first-loss', ['alice', 'bob']);
+  const actorIndex = state.activePlayerIndex;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['nt_006', 'nt_006'];
+  actor.deck = ['nt_001', 'nt_001'];
+  actor.redstone = 2;
+  actor.redstoneCapacity = 2;
+  placeUnit(state, actorIndex, 'nt_002', 3, 'object-3', 1);
+  placeUnit(state, actorIndex, 'nt_002', 0, 'object-4', 1);
+  const wounded = actor.battlefield.filter(function (value): boolean { return value.instanceId === 'object-4'; })[0]!;
+  wounded.health = 1;
+  wounded.attack += 2;
+  wounded.temporaryAttackModifier = 2;
+  wounded.temporaryAttackModifierExpiresOnTurn = state.turn;
+  const first = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('piglin-self-first', 0, 'nt_006'));
+  TestHarness.ok(first.accepted, JSON.stringify(first));
+  if (!first.accepted) return;
+  const events = first.batch.events;
+  const markerIndex = events.map(function (event): string { return event.type; }).indexOf('HERO_LIFE_LOSS_MARKED');
+  TestHarness.ok(markerIndex >= 0);
+  TestHarness.equal(events[markerIndex + 1]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(events[markerIndex + 1]!.payload.instanceId, 'object-4');
+  TestHarness.equal(events[markerIndex + 2]!.payload.instanceId, 'object-3');
+  TestHarness.equal(events[markerIndex + 1]!.payload.reason, 'PERMANENT_STAT_MODIFIER');
+  TestHarness.equal(events[markerIndex + 1]!.payload.sourceCardId, 'nt_002');
+  TestHarness.equal(events[markerIndex + 1]!.payload.sourceInstanceId, 'object-4');
+  TestHarness.equal(events[markerIndex + 1]!.payload.effectId, 'effect.nt_002.01');
+  const grown = first.state.players[actorIndex]!.battlefield.filter(function (value): boolean { return value.instanceId === 'object-4'; })[0]!;
+  TestHarness.equal(grown.attack, 5);
+  TestHarness.equal(grown.health, 2);
+  TestHarness.equal(grown.maxHealth, 3);
+  TestHarness.equal(grown.temporaryAttackModifier, 2);
+  TestHarness.equal(grown.temporaryAttackModifierExpiresOnTurn, state.turn);
+  assertEventBatchMatchesSchema(first.batch);
+  assertSnapshotMatchesSchema(BiomeRivalsRules.createClientSnapshot(first.state, actor.playerId));
+
+  placeUnit(first.state, actorIndex, 'nt_002', 1, 'object-5', state.turn);
+  const second = BiomeRivalsRules.applyCommand(first.state, actor.playerId,
+    playCommand('piglin-self-second', 1, 'nt_006'));
+  TestHarness.ok(second.accepted, JSON.stringify(second));
+  if (!second.accepted) return;
+  TestHarness.equal(second.batch.events.some(function (event): boolean {
+    return event.type === 'OBJECT_STATS_CHANGED' && event.payload.effectId === 'effect.nt_002.01';
+  }), false);
+  TestHarness.equal(second.state.players[actorIndex]!.battlefield.filter(function (value): boolean {
+    return value.instanceId === 'object-4';
+  })[0]!.attack, 5);
+  TestHarness.equal(second.state.players[actorIndex]!.battlefield.filter(function (value): boolean {
+    return value.instanceId === 'object-5';
+  })[0]!.attack, 2);
+});
+
+TestHarness.test('piglin owner grows on the opponent active turn only after armor is exhausted', function (): void {
+  const state = activeState('match-piglin-opponent-turn', ['alice', 'bob']);
+  const attackerIndex = state.activePlayerIndex;
+  const ownerIndex = attackerIndex === 0 ? 1 : 0;
+  state.turn = 2;
+  state.phase = 'COMBAT';
+  state.players[ownerIndex]!.armor = 1;
+  placeUnit(state, ownerIndex, 'nt_002', 2, 'object-1', 1);
+  placeUnit(state, attackerIndex, 'pf_001', 0, 'object-2', 1);
+  placeUnit(state, attackerIndex, 'pf_008', 1, 'object-3', 1);
+  const attackerId = state.players[attackerIndex]!.playerId;
+  const armored = BiomeRivalsRules.applyCommand(state, attackerId,
+    attackCommand('piglin-armor-hit', 0, 'object-2', 'HERO'));
+  TestHarness.ok(armored.accepted, JSON.stringify(armored));
+  if (!armored.accepted) return;
+  TestHarness.equal(armored.state.players[ownerIndex]!.battlefield[0]!.attack, 2);
+  TestHarness.equal(armored.state.players[ownerIndex]!.heroLifeLostThisTurn, false);
+  const real = BiomeRivalsRules.applyCommand(armored.state, attackerId,
+    attackCommand('piglin-real-hit', 1, 'object-3', 'HERO'));
+  TestHarness.ok(real.accepted, JSON.stringify(real));
+  if (!real.accepted) return;
+  TestHarness.equal(real.state.players[ownerIndex]!.battlefield[0]!.attack, 3);
+  TestHarness.equal(real.batch.events[1]!.type, 'HERO_LIFE_LOSS_MARKED');
+  TestHarness.equal(real.batch.events[2]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(real.batch.events[2]!.payload.playerId, state.players[ownerIndex]!.playerId);
+  assertEventBatchMatchesSchema(real.batch);
+});
+
+TestHarness.test('pending piglin cannot be manually deployed and lethal loss cannot grow a seeded survivor', function (): void {
+  const state = activeState('match-piglin-pending-lethal', ['alice', 'bob']);
+  const actorIndex = state.activePlayerIndex;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['nt_002', 'nt_006'];
+  const rejected = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('piglin-pending-deploy', 0, 'nt_002', 'UNIT', 0));
+  TestHarness.equal(rejected.accepted, false);
+  if (rejected.accepted) return;
+  TestHarness.equal(rejected.code, 'CARD_NOT_PLAYABLE');
+  TestHarness.equal(rejected.state.revision, 0);
+  placeUnit(state, actorIndex, 'nt_002', 0, 'object-1', 1);
+  actor.life = 1;
+  const lethal = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('piglin-lethal-loss', 0, 'nt_006'));
+  TestHarness.ok(lethal.accepted, JSON.stringify(lethal));
+  if (!lethal.accepted) return;
+  TestHarness.equal(lethal.state.players[actorIndex]!.battlefield[0]!.attack, 2);
+  TestHarness.equal(lethal.batch.events.some(function (event): boolean {
+    return event.type === 'OBJECT_STATS_CHANGED' && event.payload.effectId === 'effect.nt_002.01';
+  }), false);
+});
+
 TestHarness.test('creates a valid two-player initial state', function (): void {
   const state = BiomeRivalsRules.createInitialState('match-1', ['alice', 'bob'], undefined, 'fixed-secret-1');
   TestHarness.equal(state.revision, 0);
