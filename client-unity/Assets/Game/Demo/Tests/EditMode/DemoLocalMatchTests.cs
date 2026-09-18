@@ -1398,6 +1398,10 @@ namespace BiomeRivals.Demo.Tests
                 var scaler = root.transform.Find("DemoCanvas").GetComponent<UnityEngine.UI.CanvasScaler>();
                 Assert.That(canvas.pixelPerfect, Is.True);
                 Assert.That(scaler.referencePixelsPerUnit, Is.EqualTo(DemoUiMetrics.PixelsPerUnit));
+                var statusText = root.transform.Find("DemoCanvas/StatusPlate/Status").GetComponent<UnityEngine.UI.Text>();
+                Assert.That(statusText.resizeTextForBestFit, Is.True);
+                Assert.That(statusText.resizeTextMinSize, Is.EqualTo(10));
+                Assert.That(statusText.resizeTextMaxSize, Is.EqualTo(14));
                 Assert.That(GameObject.Find("EndTurnButton"), Is.Not.Null);
                 Assert.That(GameObject.Find("Faction_plains_forest"), Is.Not.Null);
                 Assert.That(root.transform.Find("DemoCanvas/OnlineStatusPanel/Status").GetComponent<UnityEngine.UI.Text>().text, Is.EqualTo("本地模式"));
@@ -3789,6 +3793,78 @@ namespace BiomeRivals.Demo.Tests
             fatigue.EndPlayerTurn();
             Assert.That(fatigue.TemporaryEnergy, Is.Zero);
             Assert.That(fatigue.Energy, Is.EqualTo(fatigue.MaxEnergy));
+        }
+
+        [Test]
+        public void NetherTriggerLifecycleGrowsPiglinSpendsOneAnchorEnergyAndExpiresTheOtherLocally()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("nt_002", out var piglinDefinition), Is.True);
+            Assert.That(registry.TryGetDefinition("nt_007", out var anchorDefinition), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(new string[0], new[] { "nt_001", "nt_001", "nt_001" });
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            match.EndPlayerTurn();
+            match.BeginNextPlayerTurn();
+            Assert.That(match.MaxEnergy, Is.EqualTo(8));
+
+            match.ResetDeckAndHand(
+                new[] { piglinDefinition.id, anchorDefinition.id, anchorDefinition.id }, new string[0]);
+            Assert.That(match.ApplyDeploy(piglinDefinition,
+                match.CreateDeployCommand(piglinDefinition.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            Assert.That(match.ApplyDeploy(anchorDefinition,
+                match.CreateDeployCommand(anchorDefinition.id, DemoSlotKind.Building, 0)).Accepted, Is.True);
+            Assert.That(match.ApplyDeploy(anchorDefinition,
+                match.CreateDeployCommand(anchorDefinition.id, DemoSlotKind.Building, 2)).Accepted, Is.True);
+            Assert.That(match.Energy, Is.Zero);
+
+            match.EndPlayerTurn();
+            var fatigue = match.BeginNextPlayerTurn();
+            var piglin = match.GetObject(true, DemoSlotKind.Unit, 0);
+            Assert.That(fatigue.Outcome, Is.EqualTo(DemoDrawOutcome.Fatigue));
+            Assert.That(match.PlayerLife, Is.EqualTo(29));
+            Assert.That(piglin.Attack, Is.EqualTo(3));
+            Assert.That(piglin.Health, Is.EqualTo(3));
+            Assert.That(piglin.MaxHealth, Is.EqualTo(3));
+            Assert.That(match.MaxEnergy, Is.EqualTo(9));
+            Assert.That(match.Energy, Is.EqualTo(11));
+            Assert.That(match.TemporaryEnergy, Is.EqualTo(2));
+
+            var ended = match.ApplyEndTurn(match.CreateEndTurnCommand());
+            Assert.That(ended.Accepted, Is.True, ended.Message);
+            Assert.That(match.OpponentLife, Is.EqualTo(29));
+            Assert.That(match.Energy, Is.EqualTo(9));
+            Assert.That(match.TemporaryEnergy, Is.Zero);
+            Assert.That(ended.Message, Does.Contain("僵尸猪灵"));
+        }
+
+        [Test]
+        public void NetherTriggerLifecyclePreviewLocksHandHintsDuringOpponentTurn()
+        {
+            var root = new GameObject("NetherTriggerLifecyclePreviewTest");
+            try
+            {
+                var battlefield = root.AddComponent<DemoBattlefield3D>();
+                battlefield.Configure(
+                    Shader.Find("Standard") ?? Shader.Find("Universal Render Pipeline/Lit"),
+                    Shader.Find("BiomeRivals/Demo/GroundSurface"));
+                var controller = root.AddComponent<DemoSceneController>();
+                controller.BuildNow();
+                typeof(DemoSceneController).GetMethod("SetupNetherTriggerLifecyclePreview",
+                    BindingFlags.Instance | BindingFlags.NonPublic).Invoke(controller, null);
+
+                var lockedHint = root.transform.Find("DemoCanvas/CardDetailsPanel/InspectorContent/TurnLockedHint");
+                Assert.That(lockedHint, Is.Not.Null);
+                Assert.That(lockedHint.GetComponent<UnityEngine.UI.Text>().text, Does.Contain("对手行动中"));
+                var unitMarker = root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Unit_1/InteractiveGround");
+                Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.Zero,
+                    "deployment highlights stay disabled during the opponent turn");
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
         }
 
         [Test]

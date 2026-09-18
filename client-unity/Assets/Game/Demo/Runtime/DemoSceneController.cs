@@ -199,6 +199,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewGoat")) SetupGoatPreview();
             else if (HasCommandLineFlag("-previewSnowHut")) SetupSnowHutPreview();
             else if (HasCommandLineFlag("-previewEndCrystal")) SetupEndCrystalPreview();
+            else if (HasCommandLineFlag("-previewNetherTriggerLifecycle")) SetupNetherTriggerLifecyclePreview();
             else if (HasCommandLineFlag("-previewRespawnAnchor")) SetupRespawnAnchorPreview();
             else if (HasCommandLineFlag("-previewPiglinMagma")) SetupPiglinMagmaPreview();
             else if (HasCommandLineFlag("-previewCombat")) OnEndTurn();
@@ -1195,6 +1196,10 @@ namespace BiomeRivals.Demo
 
             var statusPlate = CreateBasePanel(_canvasRoot, "StatusPlate", new Vector2(780, -462), new Vector2(315, 94));
             _statusText = CreateText(statusPlate, "Status", Vector2.zero, new Vector2(285, 70), string.Empty, 14, Pale, TextAnchor.MiddleCenter, FontStyle.Normal);
+            _statusText.resizeTextForBestFit = true;
+            _statusText.resizeTextMinSize = 10;
+            _statusText.resizeTextMaxSize = 14;
+            _statusText.lineSpacing = 0.92f;
         }
 
         private void BuildBanner()
@@ -1650,6 +1655,54 @@ namespace BiomeRivals.Demo
             var secondAnchor = _match.GetObject(true, DemoSlotKind.Building, 2);
             if (firstAnchor != null) StartCoroutine(PulseBattlefieldObject(firstAnchor.InstanceId));
             if (secondAnchor != null) StartCoroutine(PulseBattlefieldObject(secondAnchor.InstanceId));
+        }
+
+        private void SetupNetherTriggerLifecyclePreview()
+        {
+            SelectFaction("nether");
+            SelectOpponentFaction("plains_forest");
+            if (!_registry.TryGetDefinition("nt_002", out var piglinDefinition) ||
+                !_registry.TryGetDefinition("nt_007", out var anchorDefinition)) return;
+
+            _match.ResetDeckAndHand(Array.Empty<string>(), new[] { "nt_001", "nt_001", "nt_001" });
+            _match.EndPlayerTurn();
+            _match.BeginNextPlayerTurn();
+            _match.EndPlayerTurn();
+            _match.BeginNextPlayerTurn();
+            _match.ResetDeckAndHand(
+                new[] { piglinDefinition.id, anchorDefinition.id, anchorDefinition.id },
+                Array.Empty<string>());
+            var piglinResult = _match.ApplyDeploy(piglinDefinition,
+                _match.CreateDeployCommand(piglinDefinition.id, DemoSlotKind.Unit, 0));
+            var leftAnchorResult = _match.ApplyDeploy(anchorDefinition,
+                _match.CreateDeployCommand(anchorDefinition.id, DemoSlotKind.Building, 0));
+            var rightAnchorResult = _match.ApplyDeploy(anchorDefinition,
+                _match.CreateDeployCommand(anchorDefinition.id, DemoSlotKind.Building, 2));
+            var setupReady = piglinResult.Accepted && leftAnchorResult.Accepted && rightAnchorResult.Accepted;
+            if (setupReady)
+            {
+                _match.EndPlayerTurn();
+                _match.BeginNextPlayerTurn();
+            }
+            var piglin = _match.GetObject(true, DemoSlotKind.Unit, 0);
+            var triggered = setupReady && piglin != null && piglin.Attack == 3 && piglin.Health == 3 &&
+                _match.PlayerLife == 29 && _match.TemporaryEnergy == 2 && _match.Energy == 11 && _match.MaxEnergy == 9;
+            var ended = triggered
+                ? _match.ApplyEndTurn(_match.CreateEndTurnCommand())
+                : DemoCommandResult.Reject(DemoCommandRejectionCode.InvalidCommand,
+                    "下界触发生命周期预览初始化失败。", _match.Revision);
+
+            _match.ResetHand(new[] { piglinDefinition.id });
+            _selectedCardId = piglinDefinition.id;
+            RefreshAll();
+            var resolved = ended.Accepted && piglin != null && piglin.Attack == 3 && piglin.Health == 3 &&
+                _match.OpponentLife == 29 && _match.TemporaryEnergy == 0 && _match.Energy == 9 && _match.MaxEnergy == 9;
+            ShowStatus(resolved
+                ? "完整链路：疲劳首次掉血 → 猪灵成长 3/3 → 两座锚获得临时红石 +2 → 岩浆消耗 1 并造成 1 伤害 → 剩余 1 点过期；基础红石保持 9/9。"
+                : ended.Message, !resolved);
+            if (piglin != null) StartCoroutine(PulseBattlefieldObject(piglin.InstanceId));
+            var firstAnchor = _match.GetObject(true, DemoSlotKind.Building, 0);
+            if (firstAnchor != null) StartCoroutine(PulseBattlefieldObject(firstAnchor.InstanceId));
         }
 
         private void SetupSnowGolemPreview()
@@ -3016,7 +3069,12 @@ namespace BiomeRivals.Demo
             var isDiscounted = effectiveCost < definition.cost;
             _cardDetailsView.ShowCard(_selectedCardId, new Vector2(238, 350), new Vector2(0, 100), effectiveCost);
             var deployType = definition.cardType == "UNIT" || definition.cardType == "BUILDING" || definition.cardType == "STRUCTURE";
-            if (deployType)
+            if (!match.IsPlayerTurn)
+            {
+                CreateText(_inspectorRoot, "TurnLockedHint", new Vector2(0, -126), new Vector2(246, 82),
+                    "对手行动中\n手牌操作已锁定", 16, Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
+            }
+            else if (deployType)
             {
                 var target = definition.cardType == "UNIT" ? "单位格" : $"建筑格（占 {Mathf.Max(1, definition.buildingSlots)} 格）";
                 var requiresBattlecryTarget = DemoCardTargeting.TryGetRule(definition, out var battlecryTargetRule);
@@ -3174,7 +3232,7 @@ namespace BiomeRivals.Demo
         private bool IsPreviewingDeployment(bool player, out int occupiedSlots)
         {
             occupiedSlots = 1;
-            if (MatchView.IsFinished || !player || !string.IsNullOrEmpty(_pendingTargetCardId) || MatchView.Phase != DemoTurnPhase.Main ||
+            if (MatchView.IsFinished || !MatchView.IsPlayerTurn || !player || !string.IsNullOrEmpty(_pendingTargetCardId) || MatchView.Phase != DemoTurnPhase.Main ||
                 string.IsNullOrEmpty(_selectedCardId) || !_registry.TryGetDefinition(_selectedCardId, out var definition)) return false;
             if (definition.cardType != "UNIT" && definition.cardType != "BUILDING" && definition.cardType != "STRUCTURE") return false;
             if (DemoCardTargeting.TryGetRule(definition, out var targetRule) && !targetRule.Optional && FindSelectedDeploymentTarget() == null &&
