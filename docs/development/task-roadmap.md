@@ -178,7 +178,7 @@
 
 ### RULE-032 下界状态与召唤
 
-状态：**已拆分，RULE-032A 为下一唯一任务**。详细边界见 [`task-packets/RULE-032.md`](task-packets/RULE-032.md)。依赖：RULE-031。
+状态：**RULE-032A 已完成，RULE-032B 为下一唯一任务**。规则契约见 [`../design/nether-status-summon-spec-v1.md`](../design/nether-status-summon-spec-v1.md)，详细边界见 [`task-packets/RULE-032.md`](task-packets/RULE-032.md)。依赖：RULE-031。
 
 目标：完成 `nt_004` 炽足兽、`nt_005` 凋灵骷髅、`nt_008` 下界要塞。
 
@@ -225,15 +225,15 @@
 ## 新会话最小交接模板
 
 ```text
-任务编号：RULE-032A
+任务编号：RULE-032B
 只完成该任务，不顺带处理其他路线图项目。
 仓库：D:\gitt\mc_biome_rivals
 基线提交：<启动时填写>
-先读：docs/development/task-packets/RULE-031.md 中对应子任务；只在需要时读取该子任务列出的入口文件。
-开始前记录 git status；保留无关用户修改。
+先读：docs/design/nether-status-summon-spec-v1.md 第 2、6 节、任务包 RULE-032B 和最近相关 change-log。
+开始前记录 git status；保留来源未明的本机文件。
 结束时报告：改动文件、协议/内容版本、验证命令与结果、截图或复现步骤、剩余风险、提交号。
 ```
 
 ## 当前唯一推荐下一步
 
-只执行 **RULE-032A：规则契约冻结**。只消除炽足兽、凋灵骷髅和下界要塞的规则歧义并产出规范；不得修改运行时代码、注册状态或版本。
+只执行 **RULE-032B：炽足兽纵向切片**。按冻结契约完成服务端权威战吼、协议/Unity 回放、离线 Demo、3D 世界内目标选择、内容注册和针对性测试；不得引入 WITHER 或下界要塞逻辑，审查时直接调用 Unity。

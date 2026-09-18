@@ -1,13 +1,13 @@
 # RULE-032 下界状态与召唤任务包
 
 更新时间：2026-09-18
-起始基线：`<RULE-031E3 提交完成后填写>`
+起始基线：`c26ada1 docs: close RULE-031 evidence and scope next contract`
 
 本任务只处理 `nt_004` 炽足兽、`nt_005` 凋灵骷髅与 `nt_008` 下界要塞。服务端继续作为规则事实源，Unity 离线 Demo 保持同构。每个子任务独立验证、独立提交；不得顺带实现悬置/回手、末地奖励、交易或其他预留效果。保留来源未明的两个本机未追踪文件。
 
 ## RULE-032A 规则契约冻结
 
-状态：**下一唯一任务**。
+状态：**已完成**。冻结裁决见 [`../../design/nether-status-summon-spec-v1.md`](../../design/nether-status-summon-spec-v1.md)；本项只提交契约与任务状态文档，未改运行时代码、协议、注册状态或版本。
 
 目标：只消除三张牌的实现歧义，不改运行时代码、协议、注册状态或版本。
 
@@ -30,7 +30,7 @@
 
 ## RULE-032B 炽足兽纵向切片
 
-状态：**等待 A**。只实现 `nt_004`：服务端权威战吼、Unity 回放、离线 Demo、3D 目标选择、内容注册和针对性测试。不得引入 WITHER 或下界要塞逻辑。
+状态：**下一唯一任务**。只实现 `nt_004`：服务端权威战吼、Unity 回放、离线 Demo、3D 目标选择、内容注册和针对性测试。不得引入 WITHER 或下界要塞逻辑。
 
 ## RULE-032C WITHER 状态基础设施
 
@@ -59,11 +59,12 @@
 ## 最小交接
 
 ```text
-任务编号：RULE-032A
-只冻结 NT-004/NT-005/NT-008 的规则契约；不得修改运行时代码、注册状态或版本。
+任务编号：RULE-032B
+只实现 NT-004 炽足兽纵向切片；不得引入 WITHER 或下界要塞运行时逻辑。
 仓库：D:\gitt\mc_biome_rivals
-基线提交：<RULE-031E3 提交完成后填写>
-先读：docs/development/task-packets/RULE-032.md 中 RULE-032A 列出的入口。
+基线提交：<RULE-032A 提交完成后填写>
+先读：docs/design/nether-status-summon-spec-v1.md 的第 2、6 节，以及 docs/development/task-packets/RULE-032.md 的 RULE-032B。
 开始前记录 git status；保留无关本机文件。
-结束时报文档、歧义裁决、验证、风险和提交号。
+完成服务端权威战吼、协议/Unity 回放、离线 Demo、3D 目标选择、注册与针对性测试；审查时直接调用 Unity。
+结束时报告改动、版本、验证、风险和提交号。
 ```
