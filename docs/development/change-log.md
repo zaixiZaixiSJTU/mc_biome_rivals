@@ -2,6 +2,13 @@
 
 本文件按时间倒序记录影响视觉表现、资源管线或运行时架构的改动。
 
+## 2026-09-18 RULE-031E2 下界触发器 Docker 双端与重连验收
+
+- **专项权威探针**：新增 `scripts/validate-nether-trigger-online.ps1` 与 `smoke:nether-trigger`。两个真实 Nakama WebSocket 客户端使用正常下界牌库、起手替换、抽牌、部署与出牌命令，在不注入测试状态的前提下凑齐至少两座重生锚、僵尸猪灵和熔岩献祭；随机牌序导致手牌无法继续时会有界重匹配，不能把未完成对局误报为通过。
+- **事件与恢复证据**：成功对局 `7b1263ac-b44c-4079-96e4-bed08c708e83.biome-rivals` 在 revision 26 依次发布 `CARD_PLAYED → HERO_DAMAGED → HERO_LIFE_LOSS_MARKED → OBJECT_STATS_CHANGED → REDSTONE_CHANGED ×2 → CARD_DRAWN`。触发端随即替换 socket，私有恢复快照仍为 revision 26、临时红石 2、猪灵 3/3、两座锚；revision 28 的结束批次按序完成猪灵自动支付、1 点普通伤害、剩余临时红石到期和回合移交。双方对每个 revision 的公开事件 ID/类型完全一致，完整报告位于 `artifacts/nether-trigger-online-probe.json`。
+- **Unity 双客户端回归**：直接调用 Unity `6000.0.28f1c1_a1337fc966e0` 重新生成 Demo 场景与 Windows Player。两个 `-batchmode -nographics` Player 在对局 `d1150229-86b1-410d-8b73-01377f1fe08a.biome-rivals` 中完成设备认证、匹配、起手、部署、回合切换、攻击、强制断线重连、继续操作与投降，最终共同收敛到 FINISHED revision 12 和同一胜者。无网络/状态异常；无 GPU 模式下的 Shader unsupported 日志不作为视觉证据。
+- **验证与版本**：服务端 201/201；Docker Desktop 28.5.1、Nakama 3.40.0，运行模块确认为协议 34 / `prototype-0.57`。本项未修改规则、协议、卡牌内容或 Unity 视觉，版本均不变。
+
 ## 2026-09-18 RULE-031E1 下界触发器确定性演示审查
 
 - **完整本地链路**：新增 `-previewNetherTriggerLifecycle`，在同一确定性 Play Mode 场景中串联疲劳首次掉血、僵尸猪灵永久成长至 3/3、两座重生锚授予 2 点临时红石、猪灵岩浆优先消耗其中 1 点并造成 1 点伤害、剩余 1 点到期；最终双方英雄均为 29、基础红石保持 9/9。

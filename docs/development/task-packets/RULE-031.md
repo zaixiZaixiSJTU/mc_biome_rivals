@@ -43,19 +43,19 @@
 
 ## RULE-031E 集成验收
 
-状态：**已拆分，E1 已完成，E2 为下一唯一任务**。不得把以下三项合并执行：
+状态：**已拆分，E1/E2 已完成，E3 为下一唯一任务**。不得把以下三项合并执行：
 
 - **RULE-031E1 确定性演示审查**：**已完成**。同一 Play Mode 场景已串联猪灵成长、两锚授能、临时优先支付、岩浆伤害与余量到期；修复对手回合提示和状态文本适配。Unity 246/246，实机证据为 `client-unity/Logs/nether-trigger-lifecycle-e1-final-20260918.png`；未改 Nakama/Docker。
-- **RULE-031E2 Docker 双端与重连**：只运行权威 Nakama 双客户端流程，核对事件批次、双方投影、临时能量支付/到期和中途重连恢复；记录 match ID、revision 与探针产物。除修复验收阻断缺陷外不得改视觉。
+- **RULE-031E2 Docker 双端与重连**：**已完成**。专项双 socket 对局通过正常牌库与命令触发两锚、猪灵成长、临时授能、重连恢复、自动支付和余量到期；触发/恢复 revision 26，最终 revision 28。另由两个真实 Unity Windows Player 完成通用断线重连动作链并收敛到 FINISHED revision 12。证据见 `change-log.md` 与 `artifacts/nether-trigger-online-probe.json`；未改视觉或规则版本。
 - **RULE-031E3 证据收口**：只复核 E1/E2 的提交、版本、测试、截图和在线产物，更新日志/路线图/交接，关闭 RULE-031；不得新增玩法。
 
 ## 最小交接
 
 ```text
-任务编号：RULE-031E2
-只运行 NT-002/NT-007 的 Docker/Nakama 双客户端与重连验收；不得顺带修改视觉或新增玩法。
+任务编号：RULE-031E3
+只复核 E1/E2 的提交、版本、测试、截图和在线产物并关闭 RULE-031；不得新增玩法或重构。
 仓库：D:\gitt\mc_biome_rivals
-基线提交：<E1 提交完成后填写>
+基线提交：<E2 提交完成后填写>
 先读：docs/development/task-packets/RULE-031.md 中当前任务和列出的入口。
 开始前记录 git status；保留无关本机文件。
 结束时报文档、歧义裁决、验证、风险和提交号。

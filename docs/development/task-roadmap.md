@@ -170,11 +170,11 @@
 
 ### RULE-031 下界受伤与能量触发
 
-状态：**RULE-031A/B1/B2a/B2b/C1/C2/D/E1 已完成，E2 为下一唯一任务**；契约见 [`../design/nether-self-damage-energy-spec-v1.md`](../design/nether-self-damage-energy-spec-v1.md)，细分边界见 [`task-packets/RULE-031.md`](task-packets/RULE-031.md)。依赖：BR-002。
+状态：**RULE-031A/B1/B2a/B2b/C1/C2/D/E1/E2 已完成，E3 为下一唯一任务**；契约见 [`../design/nether-self-damage-energy-spec-v1.md`](../design/nether-self-damage-energy-spec-v1.md)，细分边界见 [`task-packets/RULE-031.md`](task-packets/RULE-031.md)。依赖：BR-002。
 
 目标：完成 `nt_002` 僵尸猪灵、`nt_007` 重生锚；A 已冻结规则契约，B1 建首次实际生命损失标记，B2a 建临时能量状态/回放/到期，B2b 建优先支付，C1 建僵尸猪灵永久成长，C2 建岩浆并完成本牌注册，D 实现重生锚纵向切片。集成验收 E 在启动时再拆成独立的演示、联机和证据任务，不直接执行一个大任务。
 
-重点：实际生命下降与护甲-only 的边界、单人回合首次标记、临时红石能量及多实例稳定顺序。`nt_002` 与 `nt_007` 均已为 `IMPLEMENTED`；剩余 E2/E3 仅做联机验收与证据收口。
+重点：实际生命下降与护甲-only 的边界、单人回合首次标记、临时红石能量及多实例稳定顺序。`nt_002` 与 `nt_007` 均已为 `IMPLEMENTED`；剩余 E3 只做证据收口。
 
 ### RULE-032 下界状态与召唤
 
@@ -225,7 +225,7 @@
 ## 新会话最小交接模板
 
 ```text
-任务编号：RULE-031E2
+任务编号：RULE-031E3
 只完成该任务，不顺带处理其他路线图项目。
 仓库：D:\gitt\mc_biome_rivals
 基线提交：<启动时填写>
@@ -236,4 +236,4 @@
 
 ## 当前唯一推荐下一步
 
-只执行 **RULE-031E2：Docker 双端与重连**。只验证猪灵成长/岩浆与重生锚授能、临时支付、到期的权威 Nakama 双客户端事件投影和中途重连恢复；不得混入视觉重构或新卡效果。
+只执行 **RULE-031E3：证据收口**。只复核 E1/E2 的提交、版本、测试、Unity 截图、Docker Match ID/revision 与探针产物，更新最终交接并关闭 RULE-031；不得新增玩法或重构。

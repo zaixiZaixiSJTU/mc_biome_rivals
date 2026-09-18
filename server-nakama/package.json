@@ -6,6 +6,7 @@
     "clean": "node scripts/clean.mjs",
     "build": "npm run clean && tsc -p tsconfig.json",
     "smoke:integration": "node scripts/smoke-nakama.mjs",
+    "smoke:nether-trigger": "node scripts/smoke-nether-trigger.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsc -p tsconfig.test.json && node .test-build/tests.js"
   },
