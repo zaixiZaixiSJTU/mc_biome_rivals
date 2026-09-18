@@ -475,6 +475,32 @@ namespace BiomeRivalsRules {
           effectId: 'effect.nt_002.01'
         });
       }
+      if (next.players[next.activePlayerIndex] !== player) return;
+      for (let slotIndex = 0; slotIndex < player.buildingSlots.length; slotIndex += 1) {
+        const instanceId = player.buildingSlots[slotIndex];
+        const anchor = player.battlefield.filter(function (candidate): boolean {
+          if (candidate.instanceId !== instanceId || candidate.cardId !== 'nt_007' ||
+              candidate.cardType !== 'BUILDING' || candidate.slotKind !== 'BUILDING' ||
+              candidate.slotIndex !== slotIndex || candidate.health <= 0) return false;
+          const definition = getCardDefinition(candidate.cardId);
+          return definition !== null && definition.effectImplementationStatus === 'IMPLEMENTED' &&
+            definition.effectIds.indexOf('effect.nt_007.01') >= 0;
+        })[0];
+        if (!anchor) continue;
+        player.temporaryRedstone += 1;
+        emit('REDSTONE_CHANGED', {
+          playerId: player.playerId,
+          turn: next.turn,
+          reason: 'TEMPORARY_GRANTED',
+          sourceCardId: anchor.cardId,
+          sourceInstanceId: anchor.instanceId,
+          effectId: 'effect.nt_007.01',
+          redstone: player.redstone,
+          temporaryRedstone: player.temporaryRedstone,
+          totalRedstone: getAvailableRedstone(player),
+          redstoneCapacity: player.redstoneCapacity
+        });
+      }
     }
     function expireTemporaryRedstone(player: PlayerState): void {
       if (player.temporaryRedstone <= 0) return;

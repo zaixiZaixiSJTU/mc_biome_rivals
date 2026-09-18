@@ -98,6 +98,26 @@ namespace BiomeRivals.Demo
                 piglin.Health += 1;
                 piglin.MaxHealth += 1;
             }
+            if (player != IsPlayerTurn) return;
+            var buildingSlots = player ? BuildingSlots : OpponentBuildingSlots;
+            for (var slotIndex = 0; slotIndex < buildingSlots.Length; slotIndex++)
+            {
+                if (buildingSlots[slotIndex] != "nt_007") continue;
+                var anchor = battlefield.FirstOrDefault(value => value.CardId == "nt_007" &&
+                    value.SlotKind == DemoSlotKind.Building &&
+                    value.SlotIndex == slotIndex && value.Health > 0);
+                if (anchor == null) continue;
+                if (player)
+                {
+                    _temporaryEnergy += 1;
+                    Energy += 1;
+                }
+                else
+                {
+                    _opponentTemporaryEnergy += 1;
+                    _opponentEnergy += 1;
+                }
+            }
         }
 
         public bool HasTriggeredEffect(bool player, string sourceInstanceId, string effectId) =>

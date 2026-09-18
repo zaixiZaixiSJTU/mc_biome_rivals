@@ -784,6 +784,14 @@ namespace BiomeRivals.Demo.Tests
             field.SetValue(match, value);
         }
 
+        private static int GetPrivateIntField(DemoLocalMatch match, string fieldName)
+        {
+            var field = typeof(DemoLocalMatch).GetField(fieldName,
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null, fieldName);
+            return (int)field.GetValue(match);
+        }
+
         [Test]
         public void LocalCombatReleasesEverySlotOfAThreeSlotStructure()
         {
@@ -1777,6 +1785,22 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(endCrystalPiece.Find("EndCrystalFloatingAssembly/EndCrystalWireCage/EndCrystalCageX_0"), Is.Not.Null);
                 Assert.That(endCrystalPiece.Find("EndCrystalFoundation").GetComponent<MeshRenderer>().sharedMaterial.mainTexture.name,
                     Is.EqualTo("obsidian"));
+
+                battlefield.SyncPieces(new[]
+                {
+                    new DemoBattlefieldObject
+                    {
+                        InstanceId = "object-render-anchor", CardId = "nt_007", Player = true,
+                        SlotKind = DemoSlotKind.Building, SlotIndex = 0, OccupiedSlots = 1, Health = 5, MaxHealth = 5
+                    }
+                }, System.Array.Empty<DemoBattlefieldObject>(), registry);
+                var anchorPiece = piecesRoot.Find("Piece_object-render-anchor_nt_007");
+                Assert.That(anchorPiece, Is.Not.Null);
+                Assert.That(anchorPiece.Find("RespawnAnchorBody"), Is.Not.Null);
+                Assert.That(anchorPiece.Find("RespawnAnchorTop"), Is.Not.Null);
+                Assert.That(anchorPiece.Find("RespawnAnchorCore"), Is.Not.Null);
+                Assert.That(anchorPiece.Find("RespawnAnchorTop").GetComponent<MeshRenderer>().sharedMaterial.mainTexture.name,
+                    Is.EqualTo("respawn_anchor_top"));
 
                 battlefield.SyncPieces(new[]
                 {
@@ -3703,6 +3727,68 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(lethal.OpponentLife, Is.Zero);
             Assert.That(lethal.Energy, Is.EqualTo(1));
             Assert.That(lethal.IsPlayerTurn, Is.True);
+        }
+
+        [Test]
+        public void RespawnAnchorsGrantOnceInBuildingOrderAndTemporaryEnergyPaysFirstLocally()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("nt_007", out var anchor), Is.True);
+            Assert.That(registry.TryGetDefinition("nt_006", out var sacrifice), Is.True);
+            Assert.That(anchor.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(new[] { anchor.id, anchor.id, sacrifice.id, sacrifice.id },
+                new[] { "nt_001" });
+            Assert.That(match.ApplyDeploy(anchor,
+                match.CreateDeployCommand(anchor.id, DemoSlotKind.Building, 2)).Accepted, Is.True);
+            Assert.That(match.ApplyDeploy(anchor,
+                match.CreateDeployCommand(anchor.id, DemoSlotKind.Building, 0)).Accepted, Is.True);
+            SetPrivateProperty(match, nameof(DemoLocalMatch.Energy), 2);
+
+            Assert.That(match.TryCast(sacrifice, out _), Is.True);
+            Assert.That(match.TemporaryEnergy, Is.EqualTo(2));
+            Assert.That(match.Energy, Is.EqualTo(3));
+            Assert.That(match.TryCast(sacrifice, out _), Is.True);
+            Assert.That(match.TemporaryEnergy, Is.EqualTo(1));
+            Assert.That(match.Energy, Is.EqualTo(2));
+
+            var ended = match.ApplyEndTurn(match.CreateEndTurnCommand());
+            Assert.That(ended.Accepted, Is.True, ended.Message);
+            Assert.That(match.TemporaryEnergy, Is.Zero);
+            Assert.That(match.Energy, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void RespawnAnchorIgnoresOpponentTurnDamageAndTriggersOnOwnTurnFatigueLocally()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("nt_007", out var anchor), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_001", out var bee), Is.True);
+
+            var offTurn = new DemoLocalMatch();
+            offTurn.ResetDeckAndHand(new[] { bee.id }, new[] { "pf_002" });
+            offTurn.ResetOpponent(new[] { anchor }, new[] { 0 });
+            Assert.That(offTurn.ApplyDeploy(bee,
+                offTurn.CreateDeployCommand(bee.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            offTurn.EndPlayerTurn();
+            offTurn.BeginNextPlayerTurn();
+            Assert.That(offTurn.ApplyEnterCombat(offTurn.CreateEnterCombatCommand()).Accepted, Is.True);
+            var attacker = offTurn.GetObject(true, DemoSlotKind.Unit, 0);
+            Assert.That(offTurn.ApplyAttack(offTurn.CreateAttackCommand(attacker.InstanceId, "HERO")).Accepted, Is.True);
+            Assert.That(GetPrivateIntField(offTurn, "_opponentTemporaryEnergy"), Is.Zero);
+
+            var fatigue = new DemoLocalMatch();
+            fatigue.ResetDeckAndHand(new[] { anchor.id }, new string[0]);
+            Assert.That(fatigue.ApplyDeploy(anchor,
+                fatigue.CreateDeployCommand(anchor.id, DemoSlotKind.Building, 1)).Accepted, Is.True);
+            fatigue.EndPlayerTurn();
+            var draw = fatigue.BeginNextPlayerTurn();
+            Assert.That(draw.Outcome, Is.EqualTo(DemoDrawOutcome.Fatigue));
+            Assert.That(fatigue.TemporaryEnergy, Is.EqualTo(1));
+            Assert.That(fatigue.Energy, Is.EqualTo(fatigue.MaxEnergy + 1));
+            fatigue.EndPlayerTurn();
+            Assert.That(fatigue.TemporaryEnergy, Is.Zero);
+            Assert.That(fatigue.Energy, Is.EqualTo(fatigue.MaxEnergy));
         }
 
         [Test]

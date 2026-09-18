@@ -1002,6 +1002,7 @@ namespace BiomeRivals.Demo
                 else if (cardId == "cd_007") BuildAbandonedMine(root, footprintWidth);
                 else if (cardId == "cd_008") BuildWoodlandMansion(root, footprintWidth);
                 else if (cardId == "ed_007") BuildEndCrystal(root, footprintWidth, battlefieldObject.InstanceId);
+                else if (cardId == "nt_007") BuildRespawnAnchor(root, footprintWidth);
                 else if (cardId == "si_007") BuildSnowHut(root, footprintWidth);
                 else if (cardId == "si_008") BuildIceSpire(root, footprintWidth);
                 else if (cardId == "or_007") BuildCoralReef(root, material, footprintWidth);
@@ -1066,6 +1067,23 @@ namespace BiomeRivals.Demo
             CreateBlock(root, "TowerL", new Vector3(-towerOffset, 0.9f, 0), new Vector3(0.48f, 1.25f, 0.55f), material);
             CreateBlock(root, "TowerR", new Vector3(towerOffset, 0.9f, 0), new Vector3(0.48f, 1.25f, 0.55f), material);
             CreateBlock(root, "Core", new Vector3(0, 0.82f, 0), new Vector3(0.50f, 0.50f, 0.60f), accentMaterial);
+        }
+
+        private void BuildRespawnAnchor(Transform root, float footprintWidth)
+        {
+            var width = Mathf.Min(Mathf.Max(1.56f, footprintWidth - 0.42f), 1.96f);
+            var obsidian = GetWorldMaterial("anchor_obsidian", "obsidian", Hex("#24152D"));
+            var side = GetWorldMaterial("anchor_side", "respawn_anchor_side1", Hex("#321A48"));
+            var top = GetWorldMaterial("anchor_top", "respawn_anchor_top", Hex("#6125A0"));
+            var glow = GetWorldMaterial("anchor_glow", "glowstone", Hex("#FFB34A"));
+            CreateBlock(root, "RespawnAnchorFoot", new Vector3(0f, 0.12f, 0f),
+                new Vector3(width, 0.18f, 0.84f), obsidian);
+            CreateBlock(root, "RespawnAnchorBody", new Vector3(0f, 0.50f, 0f),
+                new Vector3(width * 0.92f, 0.62f, 0.76f), side);
+            CreateBlock(root, "RespawnAnchorTop", new Vector3(0f, 0.84f, 0f),
+                new Vector3(width * 0.96f, 0.10f, 0.80f), top);
+            CreateBlock(root, "RespawnAnchorCore", new Vector3(0f, 0.51f, -0.40f),
+                new Vector3(width * 0.38f, 0.30f, 0.08f), glow);
         }
 
         private void BuildSculkSensor(Transform root, float footprintWidth)

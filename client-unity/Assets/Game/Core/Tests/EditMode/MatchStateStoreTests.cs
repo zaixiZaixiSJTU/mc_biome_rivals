@@ -80,8 +80,8 @@ namespace BiomeRivals.Core.Tests
                         payload = new MatchEventPayloadDto
                         {
                             playerId = "alice", turn = 2, reason = "TEMPORARY_GRANTED",
-                            sourceCardId = "nt_007", sourceInstanceId = "object-1",
-                            effectId = "effect.nt_007.01", redstone = 1,
+                            sourceCardId = "test_source", sourceInstanceId = "object-1",
+                            effectId = "effect.test.temporary", redstone = 1,
                             temporaryRedstone = 2, totalRedstone = 3, redstoneCapacity = 1
                         } }
                 }
@@ -3003,6 +3003,129 @@ namespace BiomeRivals.Core.Tests
                 }
             }));
             Assert.That(store.Current.players[1].life, Is.EqualTo(30));
+        }
+
+        [Test]
+        public void Apply_ReplaysOrderedRespawnAnchorTemporaryGrantsAboveBaseCapacity()
+        {
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "anchor-grant-replay", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                status = "ACTIVE", phase = "MAIN", turn = 3, activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto
+                    {
+                        playerId = "alice", life = 30, redstone = 10, totalRedstone = 10, redstoneCapacity = 10,
+                        buildingSlots = new[] { "object-1", null, "object-2" },
+                        battlefield = new[]
+                        {
+                            new BattlefieldObjectStateDto
+                            {
+                                instanceId = "object-1", cardId = "nt_007", cardType = "BUILDING",
+                                health = 5, maxHealth = 5, slotKind = "BUILDING", slotIndex = 0, occupiedSlots = 1
+                            },
+                            new BattlefieldObjectStateDto
+                            {
+                                instanceId = "object-2", cardId = "nt_007", cardType = "BUILDING",
+                                health = 5, maxHealth = 5, slotKind = "BUILDING", slotIndex = 2, occupiedSlots = 1
+                            }
+                        }
+                    },
+                    new PlayerStateDto { playerId = "bob", life = 30 }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 1, type = MatchEventTypes.HeroDamaged,
+                        payload = new MatchEventPayloadDto { playerId = "alice", life = 28, armor = 0 } },
+                    new MatchEventDto { eventId = 2, type = MatchEventTypes.HeroLifeLossMarked,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", activePlayerId = "alice", turn = 3,
+                            sourceEventId = 1, life = 28, armor = 0
+                        } },
+                    new MatchEventDto { eventId = 3, type = MatchEventTypes.RedstoneChanged,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", turn = 3, reason = "TEMPORARY_GRANTED",
+                            sourceCardId = "nt_007", sourceInstanceId = "object-1", effectId = "effect.nt_007.01",
+                            redstone = 10, temporaryRedstone = 1, totalRedstone = 11, redstoneCapacity = 10
+                        } },
+                    new MatchEventDto { eventId = 4, type = MatchEventTypes.RedstoneChanged,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", turn = 3, reason = "TEMPORARY_GRANTED",
+                            sourceCardId = "nt_007", sourceInstanceId = "object-2", effectId = "effect.nt_007.01",
+                            redstone = 10, temporaryRedstone = 2, totalRedstone = 12, redstoneCapacity = 10
+                        } }
+                }
+            });
+
+            Assert.That(store.Current.players[0].heroLifeLostThisTurn, Is.True);
+            Assert.That(store.Current.players[0].redstone, Is.EqualTo(10));
+            Assert.That(store.Current.players[0].temporaryRedstone, Is.EqualTo(2));
+            Assert.That(store.Current.players[0].totalRedstone, Is.EqualTo(12));
+            Assert.That(store.Current.players[0].redstoneCapacity, Is.EqualTo(10));
+        }
+
+        [Test]
+        public void Apply_RejectsRespawnAnchorGrantDuringOpponentsTurn()
+        {
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "anchor-off-turn-invalid", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                status = "ACTIVE", phase = "COMBAT", turn = 2, activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice", life = 30 },
+                    new PlayerStateDto
+                    {
+                        playerId = "bob", life = 30, redstone = 1, totalRedstone = 1, redstoneCapacity = 1,
+                        buildingSlots = new[] { "object-1", null, null },
+                        battlefield = new[]
+                        {
+                            new BattlefieldObjectStateDto
+                            {
+                                instanceId = "object-1", cardId = "nt_007", cardType = "BUILDING",
+                                health = 5, maxHealth = 5, slotKind = "BUILDING", slotIndex = 0, occupiedSlots = 1
+                            }
+                        }
+                    }
+                }
+            });
+
+            Assert.Throws<InvalidOperationException>(() => store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 1, type = MatchEventTypes.HeroDamaged,
+                        payload = new MatchEventPayloadDto { playerId = "bob", life = 28, armor = 0 } },
+                    new MatchEventDto { eventId = 2, type = MatchEventTypes.HeroLifeLossMarked,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "bob", activePlayerId = "alice", turn = 2,
+                            sourceEventId = 1, life = 28, armor = 0
+                        } },
+                    new MatchEventDto { eventId = 3, type = MatchEventTypes.RedstoneChanged,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "bob", turn = 2, reason = "TEMPORARY_GRANTED",
+                            sourceCardId = "nt_007", sourceInstanceId = "object-1", effectId = "effect.nt_007.01",
+                            redstone = 1, temporaryRedstone = 1, totalRedstone = 2, redstoneCapacity = 1
+                        } }
+                }
+            }));
+            Assert.That(store.Current.players[1].temporaryRedstone, Is.Zero);
         }
     }
 }

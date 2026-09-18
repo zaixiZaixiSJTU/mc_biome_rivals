@@ -199,6 +199,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewGoat")) SetupGoatPreview();
             else if (HasCommandLineFlag("-previewSnowHut")) SetupSnowHutPreview();
             else if (HasCommandLineFlag("-previewEndCrystal")) SetupEndCrystalPreview();
+            else if (HasCommandLineFlag("-previewRespawnAnchor")) SetupRespawnAnchorPreview();
             else if (HasCommandLineFlag("-previewPiglinMagma")) SetupPiglinMagmaPreview();
             else if (HasCommandLineFlag("-previewCombat")) OnEndTurn();
             if (HasCommandLineFlag("-previewGroundHover")) _battlefield.SetSlotHovered(true, DemoSlotKind.Unit, 0, true);
@@ -892,6 +893,19 @@ namespace BiomeRivals.Demo
                 case MatchEventTypes.ArmorGained:
                     var healedViewer = matchEvent.payload?.playerId == GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
                     yield return healedViewer ? PulsePlayerHud(Cyan) : PulseOpponentHud(Cyan);
+                    break;
+                case MatchEventTypes.RedstoneChanged:
+                    if (matchEvent.payload?.effectId == "effect.nt_007.01" &&
+                        matchEvent.payload.reason == "TEMPORARY_GRANTED")
+                    {
+                        var grantedViewer = matchEvent.payload.playerId ==
+                            GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
+                        ShowStatus($"重生锚：{(grantedViewer ? "己方" : "敌方")}获得 1 点本回合临时红石能量。", false);
+                        if (!string.IsNullOrEmpty(matchEvent.payload.sourceInstanceId))
+                            yield return PulseBattlefieldObject(matchEvent.payload.sourceInstanceId);
+                        yield return ShowTurnBanner("重生锚充能", Hex("#B95CFF"));
+                        yield return grantedViewer ? PulsePlayerHud(Cyan) : PulseOpponentHud(Cyan);
+                    }
                     break;
                 case MatchEventTypes.ObjectStatsChanged:
                     if (matchEvent.payload?.effectId == "effect.tk_001.01" && matchEvent.payload?.reason == "TEMPORARY_HEALTH_MODIFIER")
@@ -1607,6 +1621,35 @@ namespace BiomeRivals.Demo
                 : ended.Message, !resolved);
             var firstPiglin = _match.GetObject(true, DemoSlotKind.Unit, 0);
             if (firstPiglin != null) StartCoroutine(PulseBattlefieldObject(firstPiglin.InstanceId));
+        }
+
+        private void SetupRespawnAnchorPreview()
+        {
+            SelectFaction("nether");
+            SelectOpponentFaction("plains_forest");
+            if (!_registry.TryGetDefinition("nt_007", out var anchorDefinition) ||
+                !_registry.TryGetDefinition("nt_006", out var sacrificeDefinition)) return;
+            _match.EndPlayerTurn();
+            _match.BeginNextPlayerTurn();
+            _match.ResetDeckAndHand(new[] { anchorDefinition.id, anchorDefinition.id, sacrificeDefinition.id },
+                new[] { "nt_001" });
+            var left = _match.ApplyDeploy(anchorDefinition,
+                _match.CreateDeployCommand(anchorDefinition.id, DemoSlotKind.Building, 0));
+            var right = _match.ApplyDeploy(anchorDefinition,
+                _match.CreateDeployCommand(anchorDefinition.id, DemoSlotKind.Building, 2));
+            var castMessage = !left.Accepted ? left.Message : right.Message;
+            var cast = left.Accepted && right.Accepted && _match.TryCast(sacrificeDefinition, out castMessage);
+            _match.ResetHand(new[] { anchorDefinition.id });
+            _selectedCardId = anchorDefinition.id;
+            RefreshAll();
+            var resolved = cast && _match.TemporaryEnergy == 2 && _match.Energy == 2;
+            ShowStatus(resolved
+                ? "己方英雄首次实际掉血：两座重生锚按建筑格顺序各提供 1 点临时红石；当前 2 点均会在本回合结束时过期。"
+                : castMessage, !resolved);
+            var firstAnchor = _match.GetObject(true, DemoSlotKind.Building, 0);
+            var secondAnchor = _match.GetObject(true, DemoSlotKind.Building, 2);
+            if (firstAnchor != null) StartCoroutine(PulseBattlefieldObject(firstAnchor.InstanceId));
+            if (secondAnchor != null) StartCoroutine(PulseBattlefieldObject(secondAnchor.InstanceId));
         }
 
         private void SetupSnowGolemPreview()

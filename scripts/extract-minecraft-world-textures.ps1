@@ -67,6 +67,41 @@ $textures = [ordered]@{
 }
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
+Add-Type -AssemblyName System.Drawing
+
+function Copy-MinecraftPngFirstFrame {
+    param($Entry, [string]$TargetPath)
+    $temporaryPath = $null
+    $inputStream = $Entry.Open()
+    try {
+        $outputStream = [System.IO.File]::Open($TargetPath, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write)
+        try { $inputStream.CopyTo($outputStream) } finally { $outputStream.Dispose() }
+    }
+    finally { $inputStream.Dispose() }
+
+    $sourceBitmap = [System.Drawing.Bitmap]::FromFile($TargetPath)
+    try {
+        if ($sourceBitmap.Height -le $sourceBitmap.Width -or $sourceBitmap.Height % $sourceBitmap.Width -ne 0) { return }
+        $frameSize = $sourceBitmap.Width
+        $frameBitmap = [System.Drawing.Bitmap]::new($frameSize, $frameSize, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+        try {
+            $graphics = [System.Drawing.Graphics]::FromImage($frameBitmap)
+            try {
+                $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::NearestNeighbor
+                $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::Half
+                $rect = [System.Drawing.Rectangle]::new(0, 0, $frameSize, $frameSize)
+                $graphics.DrawImage($sourceBitmap, $rect, $rect, [System.Drawing.GraphicsUnit]::Pixel)
+            }
+            finally { $graphics.Dispose() }
+            $temporaryPath = "$TargetPath.first-frame.png"
+            $frameBitmap.Save($temporaryPath, [System.Drawing.Imaging.ImageFormat]::Png)
+        }
+        finally { $frameBitmap.Dispose() }
+    }
+    finally { $sourceBitmap.Dispose() }
+    if ($temporaryPath) { Move-Item -LiteralPath $temporaryPath -Destination $TargetPath -Force }
+}
+
 $archive = [System.IO.Compression.ZipFile]::OpenRead($MinecraftJar)
 try {
     $entries = @{}
@@ -79,12 +114,7 @@ try {
     $provenance = [System.Collections.Generic.List[object]]::new()
     foreach ($item in $textures.GetEnumerator()) {
         $targetPath = Join-Path $outputRoot "$($item.Key).png"
-        $inputStream = $entries[$item.Value].Open()
-        try {
-            $outputStream = [System.IO.File]::Open($targetPath, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write)
-            try { $inputStream.CopyTo($outputStream) } finally { $outputStream.Dispose() }
-        }
-        finally { $inputStream.Dispose() }
+        Copy-MinecraftPngFirstFrame -Entry $entries[$item.Value] -TargetPath $targetPath
 
         $provenance.Add([ordered]@{
             key = [string]$item.Key

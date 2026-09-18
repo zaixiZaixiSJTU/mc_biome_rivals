@@ -526,6 +526,23 @@ namespace BiomeRivals.Core
                             resourcePlayer.totalRedstone - payload.totalRedstone != 1)
                             throw new InvalidOperationException("Piglin magma payment is not a valid one-energy end-phase payment.");
                     }
+                    else if (payload.effectId == "effect.nt_007.01")
+                    {
+                        var source = FindObject(resourcePlayer, payload.sourceInstanceId);
+                        var previousPayload = previousEvent?.payload;
+                        if (payload.reason != "TEMPORARY_GRANTED" || payload.sourceCardId != "nt_007" ||
+                            source.cardId != "nt_007" || source.cardType != "BUILDING" || source.health <= 0 ||
+                            Current.players[Current.activePlayerIndex] != resourcePlayer ||
+                            !resourcePlayer.heroLifeLostThisTurn ||
+                            previousEvent == null || previousEvent.type != MatchEventTypes.HeroLifeLossMarked &&
+                            !(previousEvent.type == MatchEventTypes.RedstoneChanged &&
+                              previousPayload?.effectId == "effect.nt_007.01" &&
+                              previousPayload.playerId == resourcePlayer.playerId) ||
+                            payload.redstone != resourcePlayer.redstone ||
+                            payload.temporaryRedstone != resourcePlayer.temporaryRedstone + 1 ||
+                            payload.totalRedstone != resourcePlayer.totalRedstone + 1)
+                            throw new InvalidOperationException("Respawn Anchor grant does not match an own-turn first-life-loss trigger.");
+                    }
                     ApplyResourceProjection(resourcePlayer, payload, true);
                     break;
                 case MatchEventTypes.ObjectStatsChanged:

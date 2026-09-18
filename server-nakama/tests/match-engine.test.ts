@@ -853,6 +853,132 @@ TestHarness.test('lethal piglin magma stops later piglins statuses and turn hand
   assertEventBatchMatchesSchema(result.batch);
 });
 
+TestHarness.test('respawn anchors grant temporary redstone in stable building-slot order on own-turn first loss', function (): void {
+  const state = activeState('match-anchor-own-turn', ['alice', 'bob']);
+  const actorIndex = state.activePlayerIndex;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['nt_006', 'nt_006'];
+  actor.redstone = 2;
+  actor.redstoneCapacity = 2;
+  placeBuilding(state, actorIndex, 'nt_007', 2, 'object-3');
+  placeBuilding(state, actorIndex, 'nt_007', 0, 'object-4');
+
+  const first = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('anchor-first-loss', 0, 'nt_006'));
+  TestHarness.ok(first.accepted, JSON.stringify(first));
+  if (!first.accepted) return;
+  const grants = first.batch.events.filter(function (event): boolean {
+    return event.type === 'REDSTONE_CHANGED' && event.payload.effectId === 'effect.nt_007.01';
+  });
+  TestHarness.equal(grants.length, 2);
+  TestHarness.equal(grants[0]!.payload.sourceInstanceId, 'object-4');
+  TestHarness.equal(grants[0]!.payload.reason, 'TEMPORARY_GRANTED');
+  TestHarness.equal(grants[0]!.payload.redstone, 1);
+  TestHarness.equal(grants[0]!.payload.temporaryRedstone, 1);
+  TestHarness.equal(grants[1]!.payload.sourceInstanceId, 'object-3');
+  TestHarness.equal(grants[1]!.payload.temporaryRedstone, 2);
+  TestHarness.equal(first.state.players[actorIndex]!.temporaryRedstone, 2);
+  TestHarness.equal(first.state.players[actorIndex]!.redstoneCapacity, 2);
+  assertEventBatchMatchesSchema(first.batch);
+  assertSnapshotMatchesSchema(BiomeRivalsRules.createClientSnapshot(first.state, actor.playerId));
+
+  const second = BiomeRivalsRules.applyCommand(first.state, actor.playerId,
+    playCommand('anchor-second-loss', 1, 'nt_006'));
+  TestHarness.ok(second.accepted, JSON.stringify(second));
+  if (!second.accepted) return;
+  TestHarness.equal(second.batch.events.some(function (event): boolean {
+    return event.type === 'REDSTONE_CHANGED' && event.payload.effectId === 'effect.nt_007.01';
+  }), false);
+  TestHarness.equal(second.state.players[actorIndex]!.temporaryRedstone, 1);
+});
+
+TestHarness.test('respawn anchor ignores armor-only lethal and opponent-turn life loss', function (): void {
+  const armorState = activeState('match-anchor-armor', ['alice', 'bob']);
+  const armorActorIndex = armorState.activePlayerIndex;
+  const armorDefenderIndex = armorActorIndex === 0 ? 1 : 0;
+  armorState.turn = 2;
+  armorState.phase = 'COMBAT';
+  armorState.players[armorDefenderIndex]!.armor = 1;
+  placeBuilding(armorState, armorDefenderIndex, 'nt_007', 0, 'object-1');
+  placeUnit(armorState, armorActorIndex, 'pf_001', 0, 'object-2', 1);
+  const armored = BiomeRivalsRules.applyCommand(armorState, armorState.players[armorActorIndex]!.playerId,
+    attackCommand('anchor-armor-only', 0, 'object-2', 'HERO'));
+  TestHarness.ok(armored.accepted, JSON.stringify(armored));
+  if (!armored.accepted) return;
+  TestHarness.equal(armored.state.players[armorDefenderIndex]!.temporaryRedstone, 0);
+  TestHarness.equal(armored.state.players[armorDefenderIndex]!.heroLifeLostThisTurn, false);
+
+  armored.state.phase = 'COMBAT';
+  placeUnit(armored.state, armorActorIndex, 'pf_008', 1, 'object-3', 1);
+  const opponentTurnLoss = BiomeRivalsRules.applyCommand(armored.state,
+    armored.state.players[armorActorIndex]!.playerId,
+    attackCommand('anchor-opponent-turn-loss', 1, 'object-3', 'HERO'));
+  TestHarness.ok(opponentTurnLoss.accepted, JSON.stringify(opponentTurnLoss));
+  if (!opponentTurnLoss.accepted) return;
+  TestHarness.equal(opponentTurnLoss.state.players[armorDefenderIndex]!.heroLifeLostThisTurn, true);
+  TestHarness.equal(opponentTurnLoss.state.players[armorDefenderIndex]!.temporaryRedstone, 0);
+  TestHarness.equal(opponentTurnLoss.batch.events.some(function (event): boolean {
+    return event.type === 'REDSTONE_CHANGED' && event.payload.effectId === 'effect.nt_007.01';
+  }), false);
+
+  const lethalState = activeState('match-anchor-lethal', ['alice', 'bob']);
+  const lethalActor = lethalState.players[lethalState.activePlayerIndex]!;
+  lethalActor.life = 1;
+  lethalActor.hand = ['nt_006'];
+  placeBuilding(lethalState, lethalState.activePlayerIndex, 'nt_007', 0, 'object-4');
+  const lethal = BiomeRivalsRules.applyCommand(lethalState, lethalActor.playerId,
+    playCommand('anchor-lethal-loss', 0, 'nt_006'));
+  TestHarness.ok(lethal.accepted, JSON.stringify(lethal));
+  if (!lethal.accepted) return;
+  TestHarness.equal(lethal.state.status, 'FINISHED');
+  TestHarness.equal(lethal.state.players[lethalState.activePlayerIndex]!.temporaryRedstone, 0);
+  TestHarness.equal(lethal.batch.events.some(function (event): boolean {
+    return event.type === 'REDSTONE_CHANGED' && event.payload.effectId === 'effect.nt_007.01';
+  }), false);
+  assertEventBatchMatchesSchema(lethal.batch);
+});
+
+TestHarness.test('fatigue-triggered anchor exceeds full base capacity then pays temporary first and expires remainder', function (): void {
+  const state = activeState('match-anchor-fatigue', ['alice', 'bob']);
+  const endingIndex = state.activePlayerIndex;
+  const nextIndex = endingIndex === 0 ? 1 : 0;
+  const endingPlayer = state.players[endingIndex]!;
+  const nextPlayer = state.players[nextIndex]!;
+  nextPlayer.deck = [];
+  nextPlayer.redstoneCapacity = 10;
+  nextPlayer.redstone = 10;
+  placeBuilding(state, nextIndex, 'nt_007', 1, 'object-7');
+
+  const handoff = BiomeRivalsRules.applyCommand(state, endingPlayer.playerId,
+    command('anchor-fatigue-handoff', 0, 'END_TURN'));
+  TestHarness.ok(handoff.accepted, JSON.stringify(handoff));
+  if (!handoff.accepted) return;
+  TestHarness.equal(handoff.state.activePlayerIndex, nextIndex);
+  TestHarness.equal(handoff.state.players[nextIndex]!.redstone, 10);
+  TestHarness.equal(handoff.state.players[nextIndex]!.redstoneCapacity, 10);
+  TestHarness.equal(handoff.state.players[nextIndex]!.temporaryRedstone, 1);
+  TestHarness.equal(BiomeRivalsRules.getAvailableRedstone(handoff.state.players[nextIndex]!), 11);
+  const grant = handoff.batch.events.filter(function (event): boolean {
+    return event.type === 'REDSTONE_CHANGED' && event.payload.effectId === 'effect.nt_007.01';
+  })[0]!;
+  TestHarness.equal(grant.payload.totalRedstone, 11);
+
+  handoff.state.players[nextIndex]!.hand = ['nt_001'];
+  const paid = BiomeRivalsRules.applyCommand(handoff.state, nextPlayer.playerId,
+    deployCommand('anchor-temp-payment', 1, 'nt_001', 'UNIT', 0));
+  TestHarness.ok(paid.accepted, JSON.stringify(paid));
+  if (!paid.accepted) return;
+  TestHarness.equal(paid.state.players[nextIndex]!.redstone, 10);
+  TestHarness.equal(paid.state.players[nextIndex]!.temporaryRedstone, 0);
+  const ended = BiomeRivalsRules.applyCommand(paid.state, nextPlayer.playerId,
+    command('anchor-expiry-end', 2, 'END_TURN'));
+  TestHarness.ok(ended.accepted, JSON.stringify(ended));
+  if (!ended.accepted) return;
+  TestHarness.equal(ended.state.players[nextIndex]!.temporaryRedstone, 0);
+  assertEventBatchMatchesSchema(handoff.batch);
+  assertSnapshotMatchesSchema(BiomeRivalsRules.createClientSnapshot(handoff.state, nextPlayer.playerId));
+});
+
 TestHarness.test('creates a valid two-player initial state', function (): void {
   const state = BiomeRivalsRules.createInitialState('match-1', ['alice', 'bob'], undefined, 'fixed-secret-1');
   TestHarness.equal(state.revision, 0);

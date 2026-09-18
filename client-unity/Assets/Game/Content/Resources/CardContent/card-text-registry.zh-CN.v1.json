@@ -636,7 +636,7 @@
                         "nameKey":  "card.nt_007.name",
                         "name":  "重生锚",
                         "rulesTextKey":  "card.nt_007.rules",
-                        "rulesText":  "每回合第一次己方英雄在己方回合受到伤害后，获得 1 点临时红石能量。",
+                        "rulesText":  "每个己方回合中，己方英雄首次实际失去生命后，若本建筑在场且存活，获得 1 点只在本回合可用的临时红石能量；不提高红石能量基础上限。",
                         "typeLabel":  "建筑",
                         "rarityLabel":  "稀有",
                         "tagLabels":  [
