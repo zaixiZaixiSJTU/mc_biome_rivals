@@ -2,6 +2,13 @@
 
 本文件按时间倒序记录影响视觉表现、资源管线或运行时架构的改动。
 
+## 2026-09-18 RULE-031E3 下界自伤与临时能量证据收口
+
+- **提交链闭合**：规则契约 `399c7a9`、首次掉血标记 `e61d1b7`、临时红石状态/到期 `f9f622e`、临时优先支付 `3d1a70d`、猪灵成长 `2f79a7d`、猪灵岩浆 `b758f31`、重生锚 `2a006ef`、Unity 确定性演示 `72032e6`、Docker/重连探针 `6825ee5` 形成连续祖先链。`nt_002` 与 `nt_007` 均为 `IMPLEMENTED`，RULE-031 无未提交的玩法或验收工作。
+- **最终版本与验证**：协议 34、规则集 `prototype-0.57`、效果实现注册表 44、卡牌定义/catalog 41；69 个有文本效果中 57 个已实现、12 个预留。服务端 201/201；最终审查再次直接调用 Unity `6000.0.28f1c1_a1337fc966e0`，EditMode 246/246。内容、TypeScript、构建与 Compose 配置均通过。
+- **可复核证据**：E1 1920×1080 Play Mode 图为 `client-unity/Logs/nether-trigger-lifecycle-e1-final-20260918.png`（SHA-256 `D3BBDE29A6BAB47A4660D75AF8470AEC3C883E91698FD2D185D3A8CEAC6AA8ED`）；E2 专项对局 `7b1263ac-b44c-4079-96e4-bed08c708e83.biome-rivals` 为 trigger/reconnect revision 26、final revision 28；Unity 双 Player 对局 `d1150229-86b1-410d-8b73-01377f1fe08a.biome-rivals` 收敛到 FINISHED revision 12。
+- **边界与后续**：两种内容版本字段仍按不同职责独立存在，交由 DATA-040 明确约束；无 GPU 联机探针的 Shader unsupported 日志不代表视觉失败，视觉证据只取实际 Play Mode 截图。下一唯一任务为 RULE-032A，仅冻结炽足兽、凋灵骷髅与下界要塞的规则契约。
+
 ## 2026-09-18 RULE-031E2 下界触发器 Docker 双端与重连验收
 
 - **专项权威探针**：新增 `scripts/validate-nether-trigger-online.ps1` 与 `smoke:nether-trigger`。两个真实 Nakama WebSocket 客户端使用正常下界牌库、起手替换、抽牌、部署与出牌命令，在不注入测试状态的前提下凑齐至少两座重生锚、僵尸猪灵和熔岩献祭；随机牌序导致手牌无法继续时会有界重匹配，不能把未完成对局误报为通过。

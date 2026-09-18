@@ -43,20 +43,31 @@
 
 ## RULE-031E 集成验收
 
-状态：**已拆分，E1/E2 已完成，E3 为下一唯一任务**。不得把以下三项合并执行：
+状态：**全部完成**。E1/E2/E3 均已独立验收和提交；RULE-031 关闭。
 
 - **RULE-031E1 确定性演示审查**：**已完成**。同一 Play Mode 场景已串联猪灵成长、两锚授能、临时优先支付、岩浆伤害与余量到期；修复对手回合提示和状态文本适配。Unity 246/246，实机证据为 `client-unity/Logs/nether-trigger-lifecycle-e1-final-20260918.png`；未改 Nakama/Docker。
 - **RULE-031E2 Docker 双端与重连**：**已完成**。专项双 socket 对局通过正常牌库与命令触发两锚、猪灵成长、临时授能、重连恢复、自动支付和余量到期；触发/恢复 revision 26，最终 revision 28。另由两个真实 Unity Windows Player 完成通用断线重连动作链并收敛到 FINISHED revision 12。证据见 `change-log.md` 与 `artifacts/nether-trigger-online-probe.json`；未改视觉或规则版本。
-- **RULE-031E3 证据收口**：只复核 E1/E2 的提交、版本、测试、截图和在线产物，更新日志/路线图/交接，关闭 RULE-031；不得新增玩法。
+- **RULE-031E3 证据收口**：**已完成**。提交链、版本、测试、Unity 截图与两组在线产物均已交叉复核；最终 Unity 246/246。准确证据见 `change-log.md`，RULE-031 正式关闭。
+
+## 最终证据索引
+
+| 层级 | 证据 |
+|---|---|
+| 提交链 | `399c7a9 → e61d1b7 → f9f622e → 3d1a70d → 2f79a7d → b758f31 → 2a006ef → 72032e6 → 6825ee5` |
+| 版本 | 协议 34；规则集 `prototype-0.57`；效果注册表 44；卡牌定义/catalog 41 |
+| 自动测试 | 服务端 201/201；Unity EditMode 246/246 |
+| 本地视觉 | `client-unity/Logs/nether-trigger-lifecycle-e1-final-20260918.png` |
+| 专项在线 | `7b1263ac-b44c-4079-96e4-bed08c708e83.biome-rivals`，revision 26 恢复、28 结算 |
+| Unity 双端 | `d1150229-86b1-410d-8b73-01377f1fe08a.biome-rivals`，FINISHED revision 12 |
 
 ## 最小交接
 
 ```text
-任务编号：RULE-031E3
-只复核 E1/E2 的提交、版本、测试、截图和在线产物并关闭 RULE-031；不得新增玩法或重构。
+任务编号：RULE-032A
+只冻结 NT-004/NT-005/NT-008 的规则契约；不得修改运行时代码、注册状态或版本。
 仓库：D:\gitt\mc_biome_rivals
-基线提交：<E2 提交完成后填写>
-先读：docs/development/task-packets/RULE-031.md 中当前任务和列出的入口。
+基线提交：<RULE-031E3 提交完成后填写>
+先读：docs/development/task-packets/RULE-032.md 中 RULE-032A。
 开始前记录 git status；保留无关本机文件。
 结束时报文档、歧义裁决、验证、风险和提交号。
 ```
