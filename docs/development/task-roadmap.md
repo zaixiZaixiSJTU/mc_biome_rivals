@@ -178,7 +178,7 @@
 
 ### RULE-032 下界状态与召唤
 
-状态：**RULE-032A/B 已完成，RULE-032C 为下一唯一任务**。规则契约见 [`../design/nether-status-summon-spec-v1.md`](../design/nether-status-summon-spec-v1.md)，详细边界见 [`task-packets/RULE-032.md`](task-packets/RULE-032.md)。依赖：RULE-031。
+状态：**RULE-032A/B/C 已完成，RULE-032D 为下一唯一任务**。规则契约见 [`../design/nether-status-summon-spec-v1.md`](../design/nether-status-summon-spec-v1.md)，详细边界见 [`task-packets/RULE-032.md`](task-packets/RULE-032.md)。依赖：RULE-031。
 
 目标：完成 `nt_004` 炽足兽、`nt_005` 凋灵骷髅、`nt_008` 下界要塞。
 
@@ -225,15 +225,15 @@
 ## 新会话最小交接模板
 
 ```text
-任务编号：RULE-032C
+任务编号：RULE-032D
 只完成该任务，不顺带处理其他路线图项目。
 仓库：D:\gitt\mc_biome_rivals
-基线提交：`1bfb63a feat: implement strider fire cleanse`
-先读：docs/design/nether-status-summon-spec-v1.md 第 3、6 节、任务包 RULE-032C 和最近相关 change-log。
+基线提交：`b09d3aa feat: add wither status foundation`
+先读：docs/design/nether-status-summon-spec-v1.md 第 3、6 节、任务包 RULE-032D 和最近相关 change-log。
 开始前记录 git status；保留来源未明的本机文件。
 结束时报告：改动文件、协议/内容版本、验证命令与结果、截图或复现步骤、剩余风险、提交号。
 ```
 
 ## 当前唯一推荐下一步
 
-只执行 **RULE-032C：WITHER 状态基础设施**。完成状态枚举、快照/事件 Schema、服务端生命周期、Unity 校验回放、重连与针对性测试；`nt_005` 必须保持 `PENDING`，不得由卡牌创建 WITHER，也不得实现下界要塞，审查时直接调用 Unity。
+只执行 **RULE-032D：凋灵骷髅纵向切片**。仅让 `nt_005` 在合法普通战斗伤害后创建 WITHER，覆盖主动攻击、反击、死亡目标、刷新/非叠加、来源和终局；同步 Unity、离线 Demo 与内容注册，不得实现下界要塞，审查时直接调用 Unity。

@@ -38,11 +38,13 @@ Unity 状态仓库核验炽足兽来源、同控制者、FIRE 移除与紧邻治
 
 ## RULE-032C WITHER 状态基础设施
 
-状态：**下一唯一任务**。只建立契约要求的 WITHER 快照/事件/校验/结算/重连模型与服务端、Unity 测试；`nt_005` 保持 `PENDING`，不得从卡牌创建 WITHER。
+状态：**已完成**（实现提交 `b09d3aa`）。已建立契约要求的 WITHER 枚举、Schema、快照/重连、非叠加刷新、完整来源、稳定结束阶段顺序、真实伤害、致死击杀/掉落和 Unity 因果回放；离线 Demo 同构结算。协议 36、规则集 `prototype-0.59`，效果实现注册表 45、卡牌定义/catalog 41；`nt_005` 保持 `PENDING`，白板部署不会创建 WITHER。
+
+验证：`scripts/validate.ps1` 通过，服务端 209/209；直接调用 Unity `6000.0.28f1c1`，EditMode 256/256，结果为 `client-unity/Logs/rule032c-editmode-results.xml`。两个本机未追踪文件保持隔离，未实现 `nt_005` 触发或 `nt_008`。
 
 ## RULE-032D 凋灵骷髅纵向切片
 
-状态：**等待 C**。只让 `nt_005` 在合法普通战斗伤害后创建 WITHER，覆盖主动攻击、反击、目标死亡、刷新/叠加、击杀归属和终局；同步 Unity 与内容注册。
+状态：**下一唯一任务**。只让 `nt_005` 在合法普通战斗伤害后创建 WITHER，覆盖主动攻击、反击、目标死亡、刷新/叠加、击杀归属和终局；同步 Unity 与内容注册。
 
 ## RULE-032E 下界要塞纵向切片
 
@@ -63,12 +65,12 @@ Unity 状态仓库核验炽足兽来源、同控制者、FIRE 移除与紧邻治
 ## 最小交接
 
 ```text
-任务编号：RULE-032C
-只建立 WITHER 状态基础设施；NT-005 保持 PENDING，不得从卡牌创建 WITHER，也不得实现下界要塞。
+任务编号：RULE-032D
+只实现凋灵骷髅在合法普通战斗伤害后的 WITHER 触发；不得实现下界要塞。
 仓库：D:\gitt\mc_biome_rivals
-基线提交：`1bfb63a feat: implement strider fire cleanse`
-先读：docs/design/nether-status-summon-spec-v1.md 的第 3、6 节，以及 docs/development/task-packets/RULE-032.md 的 RULE-032C。
+基线提交：`b09d3aa feat: add wither status foundation`
+先读：docs/design/nether-status-summon-spec-v1.md 的第 3、6 节，以及 docs/development/task-packets/RULE-032.md 的 RULE-032D。
 开始前记录 git status；保留无关本机文件。
-完成 WITHER 的服务端状态生命周期、协议/快照、Unity 回放与重连模型及针对性测试；审查时直接调用 Unity。
+接通 NT-005 的主动攻击与反击触发、刷新/不叠加、目标死亡边界、事件顺序、Unity/离线同构和内容注册；审查时直接调用 Unity。
 结束时报告改动、版本、验证、风险和提交号。
 ```
