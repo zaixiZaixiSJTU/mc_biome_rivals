@@ -595,7 +595,7 @@
                         "nameKey":  "card.nt_004.name",
                         "name":  "炽足兽",
                         "rulesTextKey":  "card.nt_004.rules",
-                        "rulesText":  "战吼：移除一个己方角色的“着火”。若成功移除，为其恢复 1 点生命。",
+                        "rulesText":  "战吼：若己方有处于“着火”的角色，选择其中一个，移除其“着火”，然后为其恢复 1 点生命。没有合法目标时仍可部署，本战吼不产生效果。",
                         "typeLabel":  "生物",
                         "rarityLabel":  "常见",
                         "tagLabels":  [

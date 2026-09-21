@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using BiomeRivals.Content;
+using BiomeRivals.Core;
 
 namespace BiomeRivals.Demo
 {
@@ -22,7 +23,8 @@ namespace BiomeRivals.Demo
             string missingTargetMessage,
             Func<IDemoMatchView, DemoBattlefieldObject, bool> additionalValidation = null,
             int requiredTargetCount = 1,
-            bool optional = false)
+            bool optional = false,
+            bool allowNoTargetWhenNoLegalTarget = false)
         {
             EffectId = effectId ?? throw new ArgumentNullException(nameof(effectId));
             Owner = owner;
@@ -34,6 +36,7 @@ namespace BiomeRivals.Demo
             AdditionalValidation = additionalValidation;
             RequiredTargetCount = Math.Max(1, requiredTargetCount);
             Optional = optional;
+            AllowNoTargetWhenNoLegalTarget = allowNoTargetWhenNoLegalTarget;
         }
 
         public string EffectId { get; }
@@ -45,6 +48,7 @@ namespace BiomeRivals.Demo
         public string MissingTargetMessage { get; }
         public int RequiredTargetCount { get; }
         public bool Optional { get; }
+        public bool AllowNoTargetWhenNoLegalTarget { get; }
         private Func<IDemoMatchView, DemoBattlefieldObject, bool> AdditionalValidation { get; }
 
         public bool IsLegal(IDemoMatchView match, bool player, DemoSlotKind kind, DemoBattlefieldObject target) =>
@@ -80,6 +84,12 @@ namespace BiomeRivals.Demo
         private static readonly DemoCardTargetRule Drowned = new DemoCardTargetRule(
             "effect.or_003.01", DemoTargetOwner.Enemy, DemoSlotKind.Unit, "UNIT",
             "选择战吼目标", "先选择一个发出金光的敌方生物；部署到水生友军相邻格时造成 1 点伤害。", "当前没有可选择的敌方生物。");
+
+        private static readonly DemoCardTargetRule Strider = new DemoCardTargetRule(
+            "effect.nt_004.01", DemoTargetOwner.Friendly, DemoSlotKind.Unit, "UNIT",
+            "选择着火友军", "先选择一个发出暖金光的着火己方生物，再选择己方部署格。", "当前没有着火的己方角色；炽足兽仍可直接部署。",
+            (match, target) => (target.Statuses ?? Array.Empty<BattlefieldStatusStateDto>())
+                .Any(status => status != null && status.statusId == "FIRE"), 1, false, true);
 
         private static readonly DemoCardTargetRule Bone = new DemoCardTargetRule(
             "effect.tk_009.01", DemoTargetOwner.Friendly, DemoSlotKind.Unit, "UNIT",
@@ -120,6 +130,7 @@ namespace BiomeRivals.Demo
                     case "effect.si_004.01": rule = Goat; return true;
                     case "effect.si_006.01": rule = PowderSnowBucket; return true;
                     case "effect.or_003.01": rule = Drowned; return true;
+                    case "effect.nt_004.01": rule = Strider; return true;
                     case "effect.tk_001.01": rule = Wool; return true;
                     case "effect.tk_002.01": rule = Wheat; return true;
                     case "effect.tk_009.01": rule = Bone; return true;
@@ -146,6 +157,9 @@ namespace BiomeRivals.Demo
             }
             return false;
         }
+
+        public static bool RequiresTargetNow(IDemoMatchView match, DemoCardTargetRule rule) =>
+            rule != null && !rule.Optional && (!rule.AllowNoTargetWhenNoLegalTarget || HasLegalTarget(match, rule));
 
         public static bool IsLegalTarget(
             IDemoMatchView match,

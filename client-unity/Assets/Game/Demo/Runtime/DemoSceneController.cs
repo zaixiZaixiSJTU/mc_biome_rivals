@@ -3082,20 +3082,26 @@ namespace BiomeRivals.Demo
                 var conditionalDrowned = IsDrowned(definition);
                 var drownedCanActivate = conditionalDrowned && HasPotentialDrownedBattlecrySlot();
                 var drownedHasTarget = conditionalDrowned && DemoCardTargeting.HasLegalTarget(match, battlecryTargetRule);
-                if (requiresBattlecryTarget && (!conditionalDrowned || drownedCanActivate && drownedHasTarget))
+                var hasLegalBattlecryTarget = requiresBattlecryTarget && DemoCardTargeting.HasLegalTarget(match, battlecryTargetRule);
+                var requiresBattlecryTargetNow = requiresBattlecryTarget &&
+                    (conditionalDrowned
+                        ? drownedCanActivate && drownedHasTarget
+                        : DemoCardTargeting.RequiresTargetNow(match, battlecryTargetRule));
+                var canDeployWithoutBattlecryTarget = requiresBattlecryTarget &&
+                    battlecryTargetRule.AllowNoTargetWhenNoLegalTarget && !hasLegalBattlecryTarget;
+                if (requiresBattlecryTarget && (battlecryTargetRule.Optional || requiresBattlecryTargetNow))
                 {
                     var targeting = _pendingTargetCardId == definition.id;
-                    var hasLegalTarget = DemoCardTargeting.HasLegalTarget(match, battlecryTargetRule);
                     var actionLabel = targeting
                         ? "取消目标选择"
                         : selectedBattlecryTarget != null
                             ? battlecryTargetRule.Optional
                                 ? $"取消战吼：{GetCardName(selectedBattlecryTarget.CardId)}"
                                 : $"战吼目标：{GetCardName(selectedBattlecryTarget.CardId)}"
-                            : hasLegalTarget ? battlecryTargetRule.ActionLabel : battlecryTargetRule.Optional ? "没有可移动友军（可直接部署）" : "没有合法目标";
+                            : hasLegalBattlecryTarget ? battlecryTargetRule.ActionLabel : battlecryTargetRule.Optional ? "没有可移动友军（可直接部署）" : "没有合法目标";
                     var targetButton = CreateSecondaryButton(_inspectorRoot, "BattlecryTarget", new Vector2(0, -118), new Vector2(235, 54), actionLabel, 15);
                     targetButton.interactable = targeting || selectedBattlecryTarget != null ||
-                        (hasLegalTarget && match.IsPlayerTurn && match.Hand.Contains(definition.id) &&
+                        (hasLegalBattlecryTarget && match.IsPlayerTurn && match.Hand.Contains(definition.id) &&
                          (!IsOnlineBoard || _onlineSession.CanIssueCommand));
                     targetButton.onClick.AddListener(targeting
                         ? (UnityEngine.Events.UnityAction)CancelTargetSelection
@@ -3105,13 +3111,21 @@ namespace BiomeRivals.Demo
                     targetButton.gameObject.AddComponent<DemoHoverScale>().Configure(1.04f, 16f);
                     var targetHint = selectedBattlecryTarget == null
                         ? battlecryTargetRule.Optional
-                            ? hasLegalTarget ? "可直接部署并跳过战吼，或先锁定友军再选择金色中间格。" : "当前没有合法越位路径；仍可把山羊部署到任意空单位格。"
-                            : "先锁定敌方战吼目标，再选择己方单位格。"
+                            ? hasLegalBattlecryTarget ? "可直接部署并跳过战吼，或先锁定友军再选择金色中间格。" : "当前没有合法越位路径；仍可把山羊部署到任意空单位格。"
+                            : battlecryTargetRule.Owner == DemoTargetOwner.Friendly
+                                ? "先锁定发光的着火友军，再选择己方单位格。"
+                                : "先锁定敌方战吼目标，再选择己方单位格。"
                         : battlecryTargetRule.Optional
                             ? $"已锁定 {GetCardName(selectedBattlecryTarget.CardId)} · 仅金色中间格可触发越位"
                             : $"已锁定 {GetCardName(selectedBattlecryTarget.CardId)} · 选择发光的{target}部署";
                     CreateText(_inspectorRoot, "DeployHint", new Vector2(0, -174), new Vector2(246, 48), targetHint, 13,
                         selectedBattlecryTarget == null ? Gold : Cyan, TextAnchor.MiddleCenter, FontStyle.Bold);
+                }
+                else if (canDeployWithoutBattlecryTarget)
+                {
+                    CreateText(_inspectorRoot, "DeployHint", new Vector2(0, -126), new Vector2(246, 82),
+                        "当前没有着火友军；\n可直接部署，战吼不会触发。",
+                        14, Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
                 }
                 else if (conditionalDrowned)
                 {
@@ -3235,8 +3249,14 @@ namespace BiomeRivals.Demo
             if (MatchView.IsFinished || !MatchView.IsPlayerTurn || !player || !string.IsNullOrEmpty(_pendingTargetCardId) || MatchView.Phase != DemoTurnPhase.Main ||
                 string.IsNullOrEmpty(_selectedCardId) || !_registry.TryGetDefinition(_selectedCardId, out var definition)) return false;
             if (definition.cardType != "UNIT" && definition.cardType != "BUILDING" && definition.cardType != "STRUCTURE") return false;
-            if (DemoCardTargeting.TryGetRule(definition, out var targetRule) && !targetRule.Optional && FindSelectedDeploymentTarget() == null &&
-                (!IsDrowned(definition) || HasPotentialDrownedBattlecrySlot() && DemoCardTargeting.HasLegalTarget(MatchView, targetRule))) return false;
+            if (DemoCardTargeting.TryGetRule(definition, out var targetRule) && !targetRule.Optional &&
+                FindSelectedDeploymentTarget() == null)
+            {
+                var targetRequiredNow = IsDrowned(definition)
+                    ? HasPotentialDrownedBattlecrySlot() && DemoCardTargeting.HasLegalTarget(MatchView, targetRule)
+                    : DemoCardTargeting.RequiresTargetNow(MatchView, targetRule);
+                if (targetRequiredNow) return false;
+            }
             occupiedSlots = definition.cardType == "UNIT" ? 1 : Mathf.Max(1, definition.buildingSlots);
             return true;
         }
@@ -3353,7 +3373,9 @@ namespace BiomeRivals.Demo
             }
             if (DemoCardTargeting.TryGetRule(definition, out var deploymentTargetRule) && !deploymentTargetRule.Optional &&
                 FindSelectedDeploymentTarget() == null &&
-                (!IsDrowned(definition) || DrownedBattlecryActivatesAt(index) && DemoCardTargeting.HasLegalTarget(MatchView, deploymentTargetRule)))
+                (IsDrowned(definition)
+                    ? DrownedBattlecryActivatesAt(index) && DemoCardTargeting.HasLegalTarget(MatchView, deploymentTargetRule)
+                    : DemoCardTargeting.RequiresTargetNow(MatchView, deploymentTargetRule)))
             {
                 CastSelectedCard();
                 return;
@@ -3397,6 +3419,11 @@ namespace BiomeRivals.Demo
                 {
                     StartCoroutine(PulseBattlefieldObject(deploymentTarget.InstanceId));
                     StartCoroutine(ShowTurnBanner("山羊越位", Cyan));
+                }
+                else if (deploymentTarget != null && IsStrider(definition))
+                {
+                    StartCoroutine(PulseBattlefieldObject(deploymentTarget.InstanceId));
+                    StartCoroutine(ShowTurnBanner("净火疗愈", Gold));
                 }
             }
             ShowStatus(result.Accepted ? $"{result.Message} · 状态 r{result.Revision}" : result.Message, !result.Accepted);
@@ -3760,6 +3787,9 @@ namespace BiomeRivals.Demo
 
         private static bool IsGoat(CardDefinitionEntry definition) =>
             definition?.effectIds?.Contains("effect.si_004.01") == true;
+
+        private static bool IsStrider(CardDefinitionEntry definition) =>
+            definition?.effectIds?.Contains("effect.nt_004.01") == true;
 
         private bool TamedWolfBattlecryActivatesAt(int slotIndex)
         {

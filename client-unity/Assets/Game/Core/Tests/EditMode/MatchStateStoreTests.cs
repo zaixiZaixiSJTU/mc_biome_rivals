@@ -2042,6 +2042,144 @@ namespace BiomeRivals.Core.Tests
         }
 
         [Test]
+        public void Apply_ReplaysStriderDeploymentFireRemovalAndHealingInOrder()
+        {
+            var burningTarget = new BattlefieldObjectStateDto
+            {
+                instanceId = "object-20", cardId = "pf_004", cardType = "UNIT", attack = 2,
+                health = 3, maxHealth = 4, slotKind = "UNIT", slotIndex = 0, occupiedSlots = 1, summonedTurn = 1,
+                statuses = new[]
+                {
+                    new BattlefieldStatusStateDto
+                    {
+                        statusId = "FIRE", remainingDuration = 2, sourcePlayerId = "bob",
+                        sourceCardId = "nt_003", sourceInstanceId = "object-30", effectId = "effect.nt_003.01"
+                    }
+                }
+            };
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "strider-replay", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                status = "ACTIVE", phase = "MAIN", turn = 1, activePlayerIndex = 0, nextInstanceId = 1,
+                players = new[]
+                {
+                    new PlayerStateDto
+                    {
+                        playerId = "alice", hand = new[] { "nt_004" }, redstone = 2, totalRedstone = 2,
+                        redstoneCapacity = 2, unitSlots = new[] { "object-20", null, null, null },
+                        buildingSlots = new string[3], battlefield = new[] { burningTarget }
+                    },
+                    new PlayerStateDto { playerId = "bob", unitSlots = new string[4], buildingSlots = new string[3] }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 1, type = MatchEventTypes.CardDeployed,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", instanceId = "object-1", cardId = "nt_004", cardType = "UNIT",
+                            slotKind = "UNIT", slotIndex = 1, occupiedSlots = 1,
+                            paymentMethod = MatchPaymentMethods.Redstone, redstone = 0, totalRedstone = 0,
+                            attack = 2, health = 4, maxHealth = 4, summonedTurn = 1, nextInstanceId = 2,
+                            cardsPlayedThisTurn = 1
+                        }
+                    },
+                    new MatchEventDto
+                    {
+                        eventId = 2, type = MatchEventTypes.ObjectStatusRemoved,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", instanceId = "object-20", statusId = "FIRE",
+                            sourcePlayerId = "alice", sourceCardId = "nt_004", sourceInstanceId = "object-1",
+                            effectId = "effect.nt_004.01", reason = "EFFECT_REMOVED", attack = 2, health = 3
+                        }
+                    },
+                    new MatchEventDto
+                    {
+                        eventId = 3, type = MatchEventTypes.ObjectStatsChanged,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", instanceId = "object-20", sourcePlayerId = "alice",
+                            sourceCardId = "nt_004", sourceInstanceId = "object-1", effectId = "effect.nt_004.01",
+                            reason = "HEAL", attack = 2, health = 4, maxHealth = 4
+                        }
+                    }
+                }
+            });
+
+            Assert.That(store.Current.players[0].hand, Is.Empty);
+            Assert.That(store.Current.players[0].unitSlots[1], Is.EqualTo("object-1"));
+            Assert.That(burningTarget.statuses, Is.Empty);
+            Assert.That(burningTarget.health, Is.EqualTo(4));
+            Assert.That(store.Current.lastEventId, Is.EqualTo(3));
+        }
+
+        [Test]
+        public void Apply_RejectsStriderHealingWithoutTheMatchingFireRemoval()
+        {
+            var target = new BattlefieldObjectStateDto
+            {
+                instanceId = "object-20", cardId = "pf_004", cardType = "UNIT", attack = 2,
+                health = 3, maxHealth = 4, slotKind = "UNIT", slotIndex = 0, occupiedSlots = 1,
+                statuses = new[]
+                {
+                    new BattlefieldStatusStateDto { statusId = "FIRE", remainingDuration = 1,
+                        sourcePlayerId = "bob", sourceCardId = "nt_003", sourceInstanceId = "object-30",
+                        effectId = "effect.nt_003.01" }
+                }
+            };
+            var strider = new BattlefieldObjectStateDto
+            {
+                instanceId = "object-1", cardId = "nt_004", cardType = "UNIT", attack = 2,
+                health = 4, maxHealth = 4, slotKind = "UNIT", slotIndex = 1, occupiedSlots = 1
+            };
+            var store = new MatchStateStore();
+            store.Replace(new MatchStateDto
+            {
+                matchId = "strider-invalid-replay", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                status = "ACTIVE", phase = "MAIN", turn = 1, activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto
+                    {
+                        playerId = "alice", unitSlots = new[] { "object-20", "object-1", null, null },
+                        buildingSlots = new string[3], battlefield = new[] { target, strider }
+                    },
+                    new PlayerStateDto { playerId = "bob", unitSlots = new string[4], buildingSlots = new string[3] }
+                }
+            });
+
+            Assert.Throws<InvalidOperationException>(() => store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 1, type = MatchEventTypes.ObjectStatsChanged,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", instanceId = "object-20", sourcePlayerId = "alice",
+                            sourceCardId = "nt_004", sourceInstanceId = "object-1", effectId = "effect.nt_004.01",
+                            reason = "HEAL", attack = 2, health = 4, maxHealth = 4
+                        }
+                    }
+                }
+            }));
+            Assert.That(target.health, Is.EqualTo(3));
+            Assert.That(target.statuses.Single().statusId, Is.EqualTo("FIRE"));
+        }
+
+        [Test]
         public void Apply_ReplaysHeroEquipmentAttackAndTridentMovementChoice()
         {
             var target = new BattlefieldObjectStateDto

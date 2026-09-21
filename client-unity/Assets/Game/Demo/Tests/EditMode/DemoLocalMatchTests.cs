@@ -376,6 +376,70 @@ namespace BiomeRivals.Demo.Tests
         }
 
         [Test]
+        public void LocalStriderCanDeployWithoutATargetWhenNoFriendlyUnitIsBurning()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("nt_004", out var strider), Is.True);
+            Assert.That(strider.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+            Assert.That(DemoCardTargeting.TryGetRule(strider, out var targetRule), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { strider.id });
+
+            Assert.That(DemoCardTargeting.HasLegalTarget(match, targetRule), Is.False);
+            Assert.That(DemoCardTargeting.RequiresTargetNow(match, targetRule), Is.False);
+            var result = match.ApplyDeploy(strider,
+                match.CreateDeployCommand(strider.id, DemoSlotKind.Unit, 0));
+
+            Assert.That(result.Accepted, Is.True, result.Message);
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 0).CardId, Is.EqualTo("nt_004"));
+            Assert.That(result.Message, Does.Contain("战吼无目标"));
+        }
+
+        [Test]
+        public void LocalStriderRequiresABurningFriendlyTargetThenRemovesFireAndHeals()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("pf_001", out var bee), Is.True);
+            Assert.That(registry.TryGetDefinition("nt_004", out var strider), Is.True);
+            Assert.That(DemoCardTargeting.TryGetRule(strider, out var targetRule), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { bee.id, strider.id });
+            Assert.That(match.ApplyDeploy(bee,
+                match.CreateDeployCommand(bee.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            var target = match.GetObject(true, DemoSlotKind.Unit, 0);
+            target.Health = target.MaxHealth - 1;
+            target.Statuses = new[]
+            {
+                new BattlefieldStatusStateDto
+                {
+                    statusId = "FIRE", remainingDuration = 2, sourcePlayerId = "opponent",
+                    sourceCardId = "nt_003", sourceInstanceId = "object-99", effectId = "effect.nt_003.01"
+                }
+            };
+            Assert.That(DemoCardTargeting.HasLegalTarget(match, targetRule), Is.True);
+            Assert.That(DemoCardTargeting.RequiresTargetNow(match, targetRule), Is.True);
+            Assert.That(DemoCardTargeting.IsLegalTarget(match, targetRule, true, DemoSlotKind.Unit, target), Is.True);
+
+            var energyBefore = match.Energy;
+            var missing = match.ApplyDeploy(strider,
+                match.CreateDeployCommand(strider.id, DemoSlotKind.Unit, 1));
+            Assert.That(missing.Accepted, Is.False);
+            Assert.That(missing.Code, Is.EqualTo(DemoCommandRejectionCode.InvalidTarget));
+            Assert.That(match.Energy, Is.EqualTo(energyBefore));
+            Assert.That(match.Hand, Does.Contain(strider.id));
+
+            var result = match.ApplyDeploy(strider,
+                match.CreateDeployCommand(strider.id, DemoSlotKind.Unit, 1, MatchPaymentMethods.Redstone,
+                    "UNIT", target.InstanceId));
+
+            Assert.That(result.Accepted, Is.True, result.Message);
+            Assert.That(target.Statuses, Is.Empty);
+            Assert.That(target.Health, Is.EqualTo(target.MaxHealth));
+            Assert.That(result.Message, Does.Contain("移除"));
+            Assert.That(result.Message, Does.Contain("恢复 1 点生命"));
+        }
+
+        [Test]
         public void LocalArchaeologistRequiresAChoiceAndExcavatesTheSelectedBuriedCard()
         {
             var registry = CardContentLoader.Load();

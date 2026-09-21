@@ -266,9 +266,12 @@ namespace BiomeRivals.Demo
                     value.SlotKind == DemoSlotKind.Unit && value.Health > 0);
                 var optionalTargetSupplied = !string.IsNullOrEmpty(command.payload.targetType) ||
                     !string.IsNullOrEmpty(command.payload.targetInstanceId);
+                var striderConditionalTarget = targetRule.EffectId == "effect.nt_004.01";
                 var shouldResolveTarget = targetRule.Optional
                     ? optionalTargetSupplied
-                    : targetRule.EffectId != "effect.or_003.01" || drownedNeedsTarget;
+                    : targetRule.EffectId == "effect.or_003.01"
+                        ? drownedNeedsTarget
+                        : !striderConditionalTarget || optionalTargetSupplied || DemoCardTargeting.HasLegalTarget(this, targetRule);
                 if (shouldResolveTarget)
                 {
                     if (command.payload == null || command.payload.targetType != targetRule.TargetType)
@@ -494,6 +497,22 @@ namespace BiomeRivals.Demo
             {
                 OfferUnitMove(deployedObject, true, definition.id, deployedObject.InstanceId, "effect.or_001.01");
                 if (PendingChoice != null) deployMessage += "；水流：选择一个相邻空格移动，或保持原位。";
+            }
+            else if (definition.effectImplementationStatus == "IMPLEMENTED" &&
+                definition.effectIds != null && definition.effectIds.Contains("effect.nt_004.01"))
+            {
+                var currentTarget = battlecryTarget == null
+                    ? null
+                    : _playerBattlefield.FirstOrDefault(value => value.InstanceId == battlecryTarget.InstanceId && value.Health > 0);
+                var fire = currentTarget?.Statuses?.FirstOrDefault(value => value != null && value.statusId == "FIRE");
+                if (currentTarget != null && fire != null)
+                {
+                    currentTarget.Statuses = currentTarget.Statuses.Where(value => value != fire).ToArray();
+                    var healthBefore = currentTarget.Health;
+                    currentTarget.Health = Math.Min(currentTarget.MaxHealth, currentTarget.Health + 1);
+                    deployMessage += $"；炽足兽移除 {currentTarget.CardId} 的着火并恢复 {currentTarget.Health - healthBefore} 点生命。";
+                }
+                else deployMessage += "；当前没有着火的己方角色，战吼无目标。";
             }
             var sensorTriggers = CompletePlayerCardPlay();
             if (sensorTriggers > 0)

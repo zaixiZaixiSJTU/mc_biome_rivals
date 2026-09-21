@@ -643,6 +643,30 @@ namespace BiomeRivalsRules {
         }
       }
 
+      if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
+          definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.nt_004.01') {
+        const burningCharacters = player.battlefield.filter(function (candidate): boolean {
+          return candidate.cardType === 'UNIT' && candidate.health > 0 && candidate.statuses.some(function (status): boolean {
+            return status.statusId === 'FIRE';
+          });
+        });
+        const suppliedTargetType = command.payload.targetType;
+        const suppliedTargetInstanceId = command.payload.targetInstanceId;
+        const hasSuppliedTarget = (suppliedTargetType !== undefined && suppliedTargetType !== '') ||
+          (suppliedTargetInstanceId !== undefined && suppliedTargetInstanceId !== '');
+        if (burningCharacters.length > 0 || hasSuppliedTarget) {
+          if (suppliedTargetType !== 'UNIT' || typeof suppliedTargetInstanceId !== 'string' || suppliedTargetInstanceId.length === 0) {
+            return reject(state, 'INVALID_TARGET', 'strider requires a burning friendly character while one is available');
+          }
+          battlecryTargetPlayer = player;
+          battlecryTarget = findObject(player, suppliedTargetInstanceId);
+          if (battlecryTarget === null || battlecryTarget.cardType !== 'UNIT' || battlecryTarget.health <= 0 ||
+              !battlecryTarget.statuses.some(function (status): boolean { return status.statusId === 'FIRE'; })) {
+            return reject(state, 'INVALID_TARGET', 'strider battlecry target must be a living burning friendly character');
+          }
+        }
+      }
+
       let occupiedSlots = 1;
       let objectCardType: 'UNIT' | 'BUILDING' | 'STRUCTURE';
       if (definition.cardType === 'UNIT') {
@@ -945,6 +969,46 @@ namespace BiomeRivalsRules {
       } else if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
           definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.or_001.01') {
         offerMoveChoice(player, cardId, battlefieldObject.instanceId, player, battlefieldObject, definition.effectIds[0]);
+      } else if (definition.effectImplementationStatus === 'IMPLEMENTED' &&
+          definition.effectIds.length === 1 && definition.effectIds[0] === 'effect.nt_004.01') {
+        if (battlecryTarget !== null) {
+          const currentTarget = findObject(player, battlecryTarget.instanceId);
+          const fireIndex = currentTarget === null || currentTarget.health <= 0 || currentTarget.cardType !== 'UNIT'
+            ? -1
+            : currentTarget.statuses.map(function (status): BattlefieldStatusId { return status.statusId; }).indexOf('FIRE');
+          if (currentTarget !== null && fireIndex >= 0) {
+            currentTarget.statuses.splice(fireIndex, 1);
+            emit('OBJECT_STATUS_REMOVED', {
+              playerId: player.playerId,
+              instanceId: currentTarget.instanceId,
+              statusId: 'FIRE',
+              sourcePlayerId: player.playerId,
+              sourceCardId: battlefieldObject.cardId,
+              sourceInstanceId: battlefieldObject.instanceId,
+              effectId: 'effect.nt_004.01',
+              reason: 'EFFECT_REMOVED',
+              attack: currentTarget.attack,
+              health: currentTarget.health
+            });
+            currentTarget.health = Math.min(currentTarget.maxHealth, currentTarget.health + 1);
+            emit('OBJECT_STATS_CHANGED', {
+              playerId: player.playerId,
+              instanceId: currentTarget.instanceId,
+              sourcePlayerId: player.playerId,
+              sourceCardId: battlefieldObject.cardId,
+              sourceInstanceId: battlefieldObject.instanceId,
+              effectId: 'effect.nt_004.01',
+              reason: 'HEAL',
+              attack: currentTarget.attack,
+              health: currentTarget.health,
+              maxHealth: currentTarget.maxHealth,
+              temporaryAttackModifier: currentTarget.temporaryAttackModifier,
+              temporaryAttackModifierExpiresOnTurn: currentTarget.temporaryAttackModifierExpiresOnTurn,
+              temporaryHealthModifier: currentTarget.temporaryHealthModifier,
+              temporaryHealthModifierExpiresOnTurn: currentTarget.temporaryHealthModifierExpiresOnTurn
+            });
+          }
+        }
       }
       return completePlayedCard(player, opponentPlayer);
     }

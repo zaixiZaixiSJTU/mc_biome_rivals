@@ -1,6 +1,6 @@
 # Biome Rivals 分阶段任务路线图
 
-更新时间：2026-09-18
+更新时间：2026-09-22
 
 本文用于把跨 Unity、权威规则、联机、内容与资源管线的大目标拆成可独立进入新会话、独立验证和独立提交的任务。`change-log.md` 记录已经发生的改动；本文只记录尚待推进的工作与依赖关系。
 
@@ -17,8 +17,8 @@
 
 - 有效仓库：`D:\gitt\mc_biome_rivals`
 - 近期纵向切片：RULE-030E1 `c2ed046`、RULE-030E2 `36ce93c`；新任务启动基线以当时 `git HEAD` 为准。
-- 开发中版本：协议 34、规则集 `prototype-0.57`、效果实现注册表版本 44、卡牌定义/catalog 版本 41。两种内容版本的关系待 DATA-040 明确。
-- 卡牌效果状态：57 个 `IMPLEMENTED`，12 个 `PENDING`。
+- 开发中版本：协议 35、规则集 `prototype-0.58`、效果实现注册表版本 45、卡牌定义/catalog 版本 41。两种内容版本的关系待 DATA-040 明确。
+- 卡牌效果状态：58 个 `IMPLEMENTED`，11 个 `PENDING`。
 - 此前混合在工作区的体素场景、实体模型、资源管线和 FIRE 规则已在恢复基线 `6c9202e` 中固定。后续不得继续使用这种跨任务混提方式。
 - `docs/development/change-log.md`、本路线图和 BR-000 检查点均已纳入 Git。
 
@@ -178,7 +178,7 @@
 
 ### RULE-032 下界状态与召唤
 
-状态：**RULE-032A 已完成，RULE-032B 为下一唯一任务**。规则契约见 [`../design/nether-status-summon-spec-v1.md`](../design/nether-status-summon-spec-v1.md)，详细边界见 [`task-packets/RULE-032.md`](task-packets/RULE-032.md)。依赖：RULE-031。
+状态：**RULE-032A/B 已完成，RULE-032C 为下一唯一任务**。规则契约见 [`../design/nether-status-summon-spec-v1.md`](../design/nether-status-summon-spec-v1.md)，详细边界见 [`task-packets/RULE-032.md`](task-packets/RULE-032.md)。依赖：RULE-031。
 
 目标：完成 `nt_004` 炽足兽、`nt_005` 凋灵骷髅、`nt_008` 下界要塞。
 
@@ -225,15 +225,15 @@
 ## 新会话最小交接模板
 
 ```text
-任务编号：RULE-032B
+任务编号：RULE-032C
 只完成该任务，不顺带处理其他路线图项目。
 仓库：D:\gitt\mc_biome_rivals
-基线提交：<启动时填写>
-先读：docs/design/nether-status-summon-spec-v1.md 第 2、6 节、任务包 RULE-032B 和最近相关 change-log。
+基线提交：<RULE-032B 完成提交>
+先读：docs/design/nether-status-summon-spec-v1.md 第 3、6 节、任务包 RULE-032C 和最近相关 change-log。
 开始前记录 git status；保留来源未明的本机文件。
 结束时报告：改动文件、协议/内容版本、验证命令与结果、截图或复现步骤、剩余风险、提交号。
 ```
 
 ## 当前唯一推荐下一步
 
-只执行 **RULE-032B：炽足兽纵向切片**。按冻结契约完成服务端权威战吼、协议/Unity 回放、离线 Demo、3D 世界内目标选择、内容注册和针对性测试；不得引入 WITHER 或下界要塞逻辑，审查时直接调用 Unity。
+只执行 **RULE-032C：WITHER 状态基础设施**。完成状态枚举、快照/事件 Schema、服务端生命周期、Unity 校验回放、重连与针对性测试；`nt_005` 必须保持 `PENDING`，不得由卡牌创建 WITHER，也不得实现下界要塞，审查时直接调用 Unity。

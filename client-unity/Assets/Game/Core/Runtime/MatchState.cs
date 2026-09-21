@@ -546,7 +546,8 @@ namespace BiomeRivals.Core
                     ApplyResourceProjection(resourcePlayer, payload, true);
                     break;
                 case MatchEventTypes.ObjectStatsChanged:
-                    var statsObject = FindObject(FindPlayer(payload.playerId), payload.instanceId);
+                    var statsOwner = FindPlayer(payload.playerId);
+                    var statsObject = FindObject(statsOwner, payload.instanceId);
                     if (payload.effectId == "effect.nt_002.01")
                     {
                         var piglinOwner = FindPlayer(payload.playerId);
@@ -561,6 +562,27 @@ namespace BiomeRivals.Core
                             payload.temporaryHealthModifier != statsObject.temporaryHealthModifier ||
                             payload.temporaryHealthModifierExpiresOnTurn != statsObject.temporaryHealthModifierExpiresOnTurn)
                             throw new InvalidOperationException("Piglin growth does not match a first-life-loss permanent stat change.");
+                    }
+                    else if (payload.effectId == "effect.nt_004.01")
+                    {
+                        var source = FindObject(statsOwner, payload.sourceInstanceId);
+                        var removal = previousEvent?.payload;
+                        if (payload.reason != "HEAL" || payload.sourcePlayerId != statsOwner.playerId ||
+                            payload.sourceCardId != "nt_004" || source.cardId != "nt_004" ||
+                            source.cardType != "UNIT" || source.health <= 0 || statsObject.cardType != "UNIT" ||
+                            statsObject.health <= 0 || payload.attack != statsObject.attack ||
+                            payload.health != Math.Min(statsObject.maxHealth, statsObject.health + 1) ||
+                            payload.maxHealth != statsObject.maxHealth ||
+                            payload.temporaryAttackModifier != statsObject.temporaryAttackModifier ||
+                            payload.temporaryAttackModifierExpiresOnTurn != statsObject.temporaryAttackModifierExpiresOnTurn ||
+                            payload.temporaryHealthModifier != statsObject.temporaryHealthModifier ||
+                            payload.temporaryHealthModifierExpiresOnTurn != statsObject.temporaryHealthModifierExpiresOnTurn ||
+                            previousEvent == null || previousEvent.type != MatchEventTypes.ObjectStatusRemoved || removal == null ||
+                            removal.playerId != payload.playerId || removal.instanceId != payload.instanceId ||
+                            removal.statusId != "FIRE" || removal.reason != "EFFECT_REMOVED" ||
+                            removal.sourcePlayerId != payload.sourcePlayerId || removal.sourceCardId != payload.sourceCardId ||
+                            removal.sourceInstanceId != payload.sourceInstanceId || removal.effectId != payload.effectId)
+                            throw new InvalidOperationException("Strider healing does not follow its matching Fire removal.");
                     }
                     statsObject.attack = payload.attack;
                     statsObject.health = payload.health;
@@ -627,8 +649,19 @@ namespace BiomeRivals.Core
                     tickedObject.health = payload.health;
                     break;
                 case MatchEventTypes.ObjectStatusRemoved:
-                    var clearedObject = FindObject(FindPlayer(payload.playerId), payload.instanceId);
+                    var clearedOwner = FindPlayer(payload.playerId);
+                    var clearedObject = FindObject(clearedOwner, payload.instanceId);
                     var remainingStatuses = new List<BattlefieldStatusStateDto>(clearedObject.statuses ?? Array.Empty<BattlefieldStatusStateDto>());
+                    if (payload.effectId == "effect.nt_004.01")
+                    {
+                        var source = FindObject(clearedOwner, payload.sourceInstanceId);
+                        if (payload.reason != "EFFECT_REMOVED" || payload.statusId != "FIRE" ||
+                            payload.sourcePlayerId != clearedOwner.playerId || payload.sourceCardId != "nt_004" ||
+                            source.cardId != "nt_004" || source.cardType != "UNIT" || source.health <= 0 ||
+                            clearedObject.cardType != "UNIT" || clearedObject.health <= 0 ||
+                            payload.attack != clearedObject.attack || payload.health != clearedObject.health)
+                            throw new InvalidOperationException("Strider Fire removal is not sourced from a living friendly Strider.");
+                    }
                     if (remainingStatuses.RemoveAll(value => value != null && value.statusId == payload.statusId) != 1)
                         throw new InvalidOperationException("Status removal does not match exactly one projected status.");
                     clearedObject.statuses = remainingStatuses.ToArray();

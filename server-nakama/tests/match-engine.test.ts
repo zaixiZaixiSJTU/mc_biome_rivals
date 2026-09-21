@@ -4533,6 +4533,130 @@ TestHarness.test('Lethal poison credits its source controller for enemy drops', 
   assertEventBatchMatchesSchema(result.batch);
 });
 
+TestHarness.test('Strider can deploy without a target when no friendly unit is burning', function (): void {
+  const state = activeState('match-strider-no-fire', ['alice', 'bob'], ['nether', 'plains_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const opponentIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['nt_004'];
+  actor.redstone = 2;
+  actor.redstoneCapacity = 2;
+  placeBuilding(state, actorIndex, 'nt_007', 0, 'object-20');
+  actor.battlefield[0]!.statuses.push({
+    statusId: 'FIRE', remainingDuration: 2, sourcePlayerId: state.players[opponentIndex]!.playerId,
+    sourceCardId: 'nt_003', sourceInstanceId: 'object-30', effectId: 'effect.nt_003.01',
+    attackModifier: 0, boundAttackModifier: 0
+  });
+  placeUnit(state, opponentIndex, 'pf_008', 0, 'object-30', 1);
+  state.players[opponentIndex]!.battlefield[0]!.statuses.push({
+    statusId: 'FIRE', remainingDuration: 2, sourcePlayerId: actor.playerId,
+    sourceCardId: 'nt_003', sourceInstanceId: 'object-99', effectId: 'effect.nt_003.01',
+    attackModifier: 0, boundAttackModifier: 0
+  });
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('strider-no-fire', 0, 'nt_004', 'UNIT', 0));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[actorIndex]!.battlefield.length, 2);
+  TestHarness.equal(result.state.players[actorIndex]!.battlefield.some(function (value): boolean {
+    return value.cardId === 'nt_004';
+  }), true);
+  TestHarness.equal(result.batch.events.length, 1);
+  TestHarness.equal(result.batch.events[0]!.type, 'CARD_DEPLOYED');
+  TestHarness.equal(BiomeRivalsRules.validateState(result.state).length, 0);
+  assertEventBatchMatchesSchema(result.batch);
+});
+
+TestHarness.test('Strider requires a burning friendly unit then removes Fire and heals exactly once', function (): void {
+  const state = activeState('match-strider-cleanses-fire', ['alice', 'bob'], ['nether', 'plains_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const opponentIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['nt_004'];
+  actor.redstone = 2;
+  actor.redstoneCapacity = 2;
+  placeUnit(state, actorIndex, 'pf_008', 0, 'object-20', 1);
+  placeUnit(state, opponentIndex, 'pf_008', 0, 'object-30', 1);
+  const target = actor.battlefield[0]!;
+  target.health = target.maxHealth - 2;
+  target.statuses.push({
+    statusId: 'FIRE', remainingDuration: 2, sourcePlayerId: state.players[opponentIndex]!.playerId,
+    sourceCardId: 'nt_003', sourceInstanceId: 'object-30', effectId: 'effect.nt_003.01',
+    attackModifier: 0, boundAttackModifier: 0
+  });
+
+  const missing = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('strider-missing-target', 0, 'nt_004', 'UNIT', 1));
+  TestHarness.equal(missing.accepted, false);
+  if (!missing.accepted) TestHarness.equal(missing.code, 'INVALID_TARGET');
+  TestHarness.equal(state.players[actorIndex]!.hand.length, 1, 'rejection must not spend the card');
+  TestHarness.equal(state.players[actorIndex]!.redstone, 2, 'rejection must not spend energy');
+
+  const enemy = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('strider-enemy-target', 0, 'nt_004', 'UNIT', 1, 'REDSTONE', 'UNIT', 'object-30'));
+  TestHarness.equal(enemy.accepted, false);
+  if (!enemy.accepted) TestHarness.equal(enemy.code, 'INVALID_TARGET');
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('strider-valid-target', 0, 'nt_004', 'UNIT', 1, 'REDSTONE', 'UNIT', 'object-20'));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  const cleansed = result.state.players[actorIndex]!.battlefield.find(function (value): boolean {
+    return value.instanceId === 'object-20';
+  })!;
+  const strider = result.state.players[actorIndex]!.battlefield.find(function (value): boolean {
+    return value.cardId === 'nt_004';
+  })!;
+  TestHarness.equal(cleansed.statuses.length, 0);
+  TestHarness.equal(cleansed.health, cleansed.maxHealth - 1);
+  TestHarness.equal(result.batch.events.length, 3);
+  TestHarness.equal(result.batch.events[0]!.type, 'CARD_DEPLOYED');
+  TestHarness.equal(result.batch.events[1]!.type, 'OBJECT_STATUS_REMOVED');
+  TestHarness.equal(result.batch.events[1]!.payload.reason, 'EFFECT_REMOVED');
+  TestHarness.equal(result.batch.events[1]!.payload.instanceId, 'object-20');
+  TestHarness.equal(result.batch.events[1]!.payload.sourceInstanceId, strider.instanceId);
+  TestHarness.equal(result.batch.events[2]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(result.batch.events[2]!.payload.reason, 'HEAL');
+  TestHarness.equal(result.batch.events[2]!.payload.health, cleansed.health);
+  TestHarness.equal(result.batch.events[2]!.payload.sourceInstanceId, strider.instanceId);
+  TestHarness.equal(BiomeRivalsRules.validateState(result.state).length, 0);
+  assertEventBatchMatchesSchema(result.batch);
+});
+
+TestHarness.test('Strider still emits its authoritative heal result for a full-health burning target', function (): void {
+  const state = activeState('match-strider-full-health', ['alice', 'bob'], ['nether', 'plains_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const opponentIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  actor.hand = ['nt_004'];
+  actor.redstone = 2;
+  actor.redstoneCapacity = 2;
+  placeUnit(state, actorIndex, 'pf_008', 0, 'object-20', 1);
+  const target = actor.battlefield[0]!;
+  target.statuses.push({
+    statusId: 'FIRE', remainingDuration: 1, sourcePlayerId: state.players[opponentIndex]!.playerId,
+    sourceCardId: 'nt_003', sourceInstanceId: 'object-30', effectId: 'effect.nt_003.01',
+    attackModifier: 0, boundAttackModifier: 0
+  });
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    deployCommand('strider-full-health', 0, 'nt_004', 'UNIT', 1, 'REDSTONE', 'UNIT', 'object-20'));
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  const healed = result.batch.events.filter(function (event): boolean {
+    return event.type === 'OBJECT_STATS_CHANGED' && event.payload.reason === 'HEAL';
+  });
+  TestHarness.equal(healed.length, 1);
+  TestHarness.equal(healed[0]!.payload.health, target.maxHealth);
+  TestHarness.equal(result.state.players[actorIndex]!.battlefield[0]!.health, target.maxHealth);
+  TestHarness.equal(result.state.players[actorIndex]!.battlefield[0]!.statuses.length, 0);
+  assertEventBatchMatchesSchema(result.batch);
+});
+
 TestHarness.test('Blaze applies Fire after attack damage and drops a Blaze Rod when retaliation kills it', function (): void {
   const state = activeState('match-blaze-attack', ['alice', 'bob'], ['nether', 'plains_forest']);
   const actorIndex = state.activePlayerIndex;
