@@ -228,7 +228,7 @@
 任务编号：RULE-032C
 只完成该任务，不顺带处理其他路线图项目。
 仓库：D:\gitt\mc_biome_rivals
-基线提交：<RULE-032B 完成提交>
+基线提交：`1bfb63a feat: implement strider fire cleanse`
 先读：docs/design/nether-status-summon-spec-v1.md 第 3、6 节、任务包 RULE-032C 和最近相关 change-log。
 开始前记录 git status；保留来源未明的本机文件。
 结束时报告：改动文件、协议/内容版本、验证命令与结果、截图或复现步骤、剩余风险、提交号。

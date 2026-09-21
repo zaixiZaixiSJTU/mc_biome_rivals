@@ -66,7 +66,7 @@ Unity 状态仓库核验炽足兽来源、同控制者、FIRE 移除与紧邻治
 任务编号：RULE-032C
 只建立 WITHER 状态基础设施；NT-005 保持 PENDING，不得从卡牌创建 WITHER，也不得实现下界要塞。
 仓库：D:\gitt\mc_biome_rivals
-基线提交：<RULE-032B 完成提交>
+基线提交：`1bfb63a feat: implement strider fire cleanse`
 先读：docs/design/nether-status-summon-spec-v1.md 的第 3、6 节，以及 docs/development/task-packets/RULE-032.md 的 RULE-032C。
 开始前记录 git status；保留无关本机文件。
 完成 WITHER 的服务端状态生命周期、协议/快照、Unity 回放与重连模型及针对性测试；审查时直接调用 Unity。
