@@ -920,7 +920,16 @@ namespace BiomeRivals.Demo
                     {
                         ShowStatus($"本回合临时修正已清除：当前生命 {matchEvent.payload.health} / 最大生命 {matchEvent.payload.maxHealth}。", false);
                     }
-                    if ((matchEvent.payload?.effectId == "effect.nt_003.01" || matchEvent.payload?.effectId == "effect.tk_013.01") &&
+                    if (matchEvent.payload?.effectId == "effect.nt_005.01" && matchEvent.payload?.reason == "DAMAGE")
+                    {
+                        var witherViewerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
+                        var witheredFriendly = matchEvent.payload?.playerId == witherViewerId;
+                        ShowStatus(witheredFriendly
+                            ? "己方生物的凋零发作，受到 1 点真实伤害。"
+                            : "敌方生物的凋零发作，受到 1 点真实伤害。", false);
+                        yield return ShowTurnBanner("凋零发作", Hex("#8E61C7"));
+                    }
+                    else if ((matchEvent.payload?.effectId == "effect.nt_003.01" || matchEvent.payload?.effectId == "effect.tk_013.01") &&
                         matchEvent.payload?.reason == "DAMAGE")
                     {
                         var fireViewerId = GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
@@ -1084,23 +1093,29 @@ namespace BiomeRivals.Demo
                 case MatchEventTypes.ObjectStatusApplied:
                     var poisonApplied = matchEvent.payload?.statusId == "POISON";
                     var fireApplied = matchEvent.payload?.statusId == "FIRE";
+                    var witherApplied = matchEvent.payload?.statusId == "WITHER";
                     var iceSpireApplied = matchEvent.payload?.effectId == "effect.si_008.01";
-                    ShowStatus(fireApplied
+                    ShowStatus(witherApplied
+                        ? $"凋零侵蚀目标：剩余 {matchEvent.payload?.remainingDuration} 次；目标控制者每次结束阶段受到 1 点真实伤害。"
+                        : fireApplied
                         ? $"烈焰附着目标：着火 {matchEvent.payload?.remainingDuration}；目标控制者每次结束阶段受到 1 点真实伤害。"
                         : poisonApplied
                         ? $"洞穴蜘蛛的毒素附着目标：中毒 {matchEvent.payload?.remainingDuration}；目标控制者每次结束阶段受到 1 点普通伤害。"
                         : iceSpireApplied
                             ? $"冰刺之巅截获边缘召唤：目标获得缓慢 {matchEvent.payload?.remainingDuration}，期间不能普通攻击。"
                             : $"粉雪覆盖目标：缓慢 {matchEvent.payload?.remainingDuration}，期间不能普通攻击。", false);
-                    yield return ShowTurnBanner(fireApplied ? "着火" : poisonApplied ? "中毒" : iceSpireApplied ? "冰刺封锁" : "缓慢",
-                        fireApplied ? Hex("#FF8A2A") : poisonApplied ? Hex("#A6F04D") : Cyan);
+                    yield return ShowTurnBanner(witherApplied ? "凋零" : fireApplied ? "着火" : poisonApplied ? "中毒" : iceSpireApplied ? "冰刺封锁" : "缓慢",
+                        witherApplied ? Hex("#8E61C7") : fireApplied ? Hex("#FF8A2A") : poisonApplied ? Hex("#A6F04D") : Cyan);
                     if (iceSpireApplied) yield return PulseBattlefieldObject(matchEvent.payload?.sourceInstanceId);
                     yield return PulseBattlefieldObject(matchEvent.payload?.instanceId);
                     break;
                 case MatchEventTypes.ObjectStatusRemoved:
                     var poisonRemoved = matchEvent.payload?.statusId == "POISON";
                     var fireRemoved = matchEvent.payload?.statusId == "FIRE";
-                    ShowStatus(fireRemoved
+                    var witherRemoved = matchEvent.payload?.statusId == "WITHER";
+                    ShowStatus(witherRemoved
+                        ? "第二次凋零真实伤害已经结算，凋零状态移除。"
+                        : fireRemoved
                         ? "第二次真实火焰伤害已经结算，着火状态移除。"
                         : poisonRemoved
                         ? "第三次毒伤已经结算，中毒状态移除。"
@@ -4361,6 +4376,13 @@ namespace BiomeRivals.Demo
             {
                 stats = $"着火 {fire.remainingDuration} · {stats}";
                 accent = Hex("#FF8A2A");
+            }
+            var wither = (battlefieldObject?.Statuses ?? Array.Empty<BattlefieldStatusStateDto>())
+                .FirstOrDefault(value => value != null && value.statusId == "WITHER");
+            if (wither != null)
+            {
+                stats = $"凋零 {wither.remainingDuration} · {stats}";
+                accent = Hex("#8E61C7");
             }
             var polarBearBonus = battlefieldObject?.CardId == "si_005"
                 ? Mathf.Max(0, battlefieldObject.Attack - definition.attack - battlefieldObject.TemporaryAttackModifier)

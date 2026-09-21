@@ -17,7 +17,7 @@
 
 - 有效仓库：`D:\gitt\mc_biome_rivals`
 - 近期纵向切片：RULE-030E1 `c2ed046`、RULE-030E2 `36ce93c`；新任务启动基线以当时 `git HEAD` 为准。
-- 开发中版本：协议 35、规则集 `prototype-0.58`、效果实现注册表版本 45、卡牌定义/catalog 版本 41。两种内容版本的关系待 DATA-040 明确。
+- 开发中版本：协议 36、规则集 `prototype-0.59`、效果实现注册表版本 45、卡牌定义/catalog 版本 41。两种内容版本的关系待 DATA-040 明确。
 - 卡牌效果状态：58 个 `IMPLEMENTED`，11 个 `PENDING`。
 - 此前混合在工作区的体素场景、实体模型、资源管线和 FIRE 规则已在恢复基线 `6c9202e` 中固定。后续不得继续使用这种跨任务混提方式。
 - `docs/development/change-log.md`、本路线图和 BR-000 检查点均已纳入 Git。

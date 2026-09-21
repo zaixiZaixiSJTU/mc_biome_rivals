@@ -5562,3 +5562,176 @@ TestHarness.test('End Crystal deathrattle deals true damage to its owner and can
   TestHarness.equal(deathrattle.payload.life, 0);
   assertEventBatchMatchesSchema(result.batch);
 });
+
+TestHarness.test('WITHER infrastructure refreshes in place and only replaces source when duration increases', function (): void {
+  const state = activeState('match-wither-refresh-foundation', ['alice', 'bob'], ['nether', 'plains_forest']);
+  placeUnit(state, 0, 'pf_008', 0, 'object-10', 1);
+  const target = state.players[0]!.battlefield[0]!;
+  target.statuses.push({
+    statusId: 'FIRE', remainingDuration: 1, sourcePlayerId: 'bob', sourceCardId: 'nt_003',
+    sourceInstanceId: 'object-fire', effectId: 'effect.nt_003.01', attackModifier: 0, boundAttackModifier: 0
+  });
+  const created = BiomeRivalsRules.applyWitherStatus(target, 'alice', 'nt_005', 'object-old', 'effect.nt_005.01');
+  target.statuses.push({
+    statusId: 'POISON', remainingDuration: 1, sourcePlayerId: 'bob', sourceCardId: 'cd_002',
+    sourceInstanceId: 'object-poison', effectId: 'effect.cd_002.01', attackModifier: 0, boundAttackModifier: 0
+  });
+  TestHarness.equal(created.remainingDuration, 2);
+  TestHarness.equal(target.statuses.map(function (status): string { return status.statusId; }).join(','), 'FIRE,WITHER,POISON');
+
+  const fullRefresh = BiomeRivalsRules.applyWitherStatus(target, 'bob', 'nt_005', 'object-new', 'effect.nt_005.01');
+  TestHarness.equal(fullRefresh.sourcePlayerId, 'alice');
+  TestHarness.equal(fullRefresh.sourceInstanceId, 'object-old');
+  TestHarness.equal(target.statuses.map(function (status): string { return status.statusId; }).join(','), 'FIRE,WITHER,POISON');
+
+  fullRefresh.remainingDuration = 1;
+  const increased = BiomeRivalsRules.applyWitherStatus(target, 'bob', 'nt_005', 'object-new', 'effect.nt_005.01');
+  TestHarness.equal(increased.remainingDuration, 2);
+  TestHarness.equal(increased.sourcePlayerId, 'bob');
+  TestHarness.equal(increased.sourceInstanceId, 'object-new');
+  TestHarness.equal(target.statuses.map(function (status): string { return status.statusId; }).join(','), 'FIRE,WITHER,POISON');
+  TestHarness.equal(BiomeRivalsRules.validateState(state).length, 0);
+});
+
+TestHarness.test('WITHER snapshot preserves its complete source while NT-005 remains unimplemented', function (): void {
+  const state = activeState('match-wither-snapshot-foundation', ['alice', 'bob'], ['nether', 'plains_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const opponentIndex = actorIndex === 0 ? 1 : 0;
+  placeUnit(state, actorIndex, 'pf_008', 0, 'object-10', 1);
+  BiomeRivalsRules.applyWitherStatus(
+    state.players[actorIndex]!.battlefield[0]!,
+    state.players[opponentIndex]!.playerId,
+    'nt_005',
+    'object-77',
+    'effect.nt_005.01'
+  );
+  const snapshot = BiomeRivalsRules.createClientSnapshot(state, state.players[actorIndex]!.playerId);
+  const status = snapshot.players[actorIndex]!.battlefield[0]!.statuses[0]!;
+  TestHarness.equal(status.statusId, 'WITHER');
+  TestHarness.equal(status.remainingDuration, 2);
+  TestHarness.equal(status.sourcePlayerId, state.players[opponentIndex]!.playerId);
+  TestHarness.equal(status.sourceCardId, 'nt_005');
+  TestHarness.equal(status.sourceInstanceId, 'object-77');
+  TestHarness.equal(status.effectId, 'effect.nt_005.01');
+  assertSnapshotMatchesSchema(snapshot);
+
+  const definition = BiomeRivalsRules.getCardDefinition('nt_005')!;
+  TestHarness.equal(definition.effectImplementationStatus, 'PENDING');
+  state.players[actorIndex]!.hand = ['nt_005'];
+  state.players[actorIndex]!.redstone = 10;
+  state.players[actorIndex]!.redstoneCapacity = 10;
+  const deployedAsVanilla = BiomeRivalsRules.applyCommand(state, state.players[actorIndex]!.playerId,
+    deployCommand('wither-pending-card', state.revision, 'nt_005', 'UNIT', 1));
+  TestHarness.equal(deployedAsVanilla.accepted, true, JSON.stringify(deployedAsVanilla));
+  if (!deployedAsVanilla.accepted) return;
+  TestHarness.equal(deployedAsVanilla.batch.events.some(function (event): boolean {
+    return event.type === 'OBJECT_STATUS_APPLIED' && event.payload.statusId === 'WITHER';
+  }), false);
+  TestHarness.equal(deployedAsVanilla.state.players.some(function (player): boolean {
+    return player.battlefield.some(function (object): boolean {
+      return object.statuses.some(function (candidate): boolean { return candidate.statusId === 'WITHER'; });
+    });
+  }), true, 'the manually seeded target remains the only Wither state');
+});
+
+TestHarness.test('WITHER deals true damage twice in stable object order and then expires', function (): void {
+  const state = activeState('match-wither-duration-foundation', ['alice', 'bob'], ['nether', 'plains_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const opponentIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  const source = state.players[opponentIndex]!;
+  placeUnit(state, actorIndex, 'pf_008', 2, 'object-20', 1);
+  placeUnit(state, actorIndex, 'pf_008', 0, 'object-10', 1);
+  BiomeRivalsRules.applyWitherStatus(actor.battlefield[0]!, source.playerId, 'nt_005', 'object-92', 'effect.nt_005.01');
+  BiomeRivalsRules.applyWitherStatus(actor.battlefield[1]!, source.playerId, 'nt_005', 'object-91', 'effect.nt_005.01');
+
+  const first = BiomeRivalsRules.applyCommand(state, actor.playerId, command('wither-first-tick', 0, 'END_TURN'));
+  TestHarness.equal(first.accepted, true, JSON.stringify(first));
+  if (!first.accepted) return;
+  const firstDamage = first.batch.events.filter(function (event): boolean {
+    return event.type === 'OBJECT_STATS_CHANGED' && event.payload.effectId === 'effect.nt_005.01';
+  });
+  TestHarness.equal(firstDamage.length, 2);
+  TestHarness.equal(firstDamage[0]!.payload.instanceId, 'object-10');
+  TestHarness.equal(firstDamage[1]!.payload.instanceId, 'object-20');
+  TestHarness.equal(firstDamage[0]!.payload.damageType, 'TRUE');
+  TestHarness.equal(first.batch.events.filter(function (event): boolean {
+    return event.type === 'OBJECT_STATUS_TICKED' && event.payload.statusId === 'WITHER';
+  }).length, 2);
+  assertEventBatchMatchesSchema(first.batch);
+
+  const pass = BiomeRivalsRules.applyCommand(first.state, source.playerId, command('wither-pass', 1, 'END_TURN'));
+  TestHarness.ok(pass.accepted, JSON.stringify(pass));
+  if (!pass.accepted) return;
+  const second = BiomeRivalsRules.applyCommand(pass.state, actor.playerId, command('wither-final-tick', 2, 'END_TURN'));
+  TestHarness.ok(second.accepted, JSON.stringify(second));
+  if (!second.accepted) return;
+  TestHarness.equal(second.state.players[actorIndex]!.battlefield.every(function (object): boolean {
+    return object.statuses.every(function (status): boolean { return status.statusId !== 'WITHER'; });
+  }), true);
+  TestHarness.equal(second.batch.events.filter(function (event): boolean {
+    return event.type === 'OBJECT_STATUS_REMOVED' && event.payload.statusId === 'WITHER';
+  }).length, 2);
+  assertEventBatchMatchesSchema(second.batch);
+});
+
+TestHarness.test('WITHER resolves in authoritative status-array order beside other end-phase statuses', function (): void {
+  const state = activeState('match-wither-status-order', ['alice', 'bob'], ['nether', 'cave_dark_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const opponentIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  const source = state.players[opponentIndex]!;
+  placeUnit(state, actorIndex, 'pf_008', 0, 'object-10', 1);
+  const target = actor.battlefield[0]!;
+  target.statuses.push({
+    statusId: 'POISON', remainingDuration: 2, sourcePlayerId: source.playerId, sourceCardId: 'cd_002',
+    sourceInstanceId: 'object-90', effectId: 'effect.cd_002.01', attackModifier: 0, boundAttackModifier: 0
+  });
+  BiomeRivalsRules.applyWitherStatus(target, source.playerId, 'nt_005', 'object-91', 'effect.nt_005.01');
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId, command('wither-status-order', 0, 'END_TURN'));
+  TestHarness.ok(result.accepted, JSON.stringify(result));
+  if (!result.accepted) return;
+  const statusEvents = result.batch.events.filter(function (event): boolean {
+    return event.type === 'OBJECT_STATS_CHANGED' || event.type === 'OBJECT_STATUS_TICKED';
+  });
+  TestHarness.equal(statusEvents.length, 4);
+  TestHarness.equal(statusEvents[0]!.payload.effectId, 'effect.cd_002.01');
+  TestHarness.equal(statusEvents[0]!.payload.damageType, 'NORMAL');
+  TestHarness.equal(statusEvents[1]!.payload.statusId, 'POISON');
+  TestHarness.equal(statusEvents[2]!.payload.effectId, 'effect.nt_005.01');
+  TestHarness.equal(statusEvents[2]!.payload.damageType, 'TRUE');
+  TestHarness.equal(statusEvents[3]!.payload.statusId, 'WITHER');
+  assertEventBatchMatchesSchema(result.batch);
+});
+
+TestHarness.test('Lethal WITHER uses its saved departed source for drop credit and emits no status tail', function (): void {
+  const state = activeState('match-wither-lethal-foundation', ['alice', 'bob'], ['nether', 'cave_dark_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const opponentIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  const source = state.players[opponentIndex]!;
+  placeUnit(state, actorIndex, 'cd_003', 0, 'object-10', 1);
+  const target = actor.battlefield[0]!;
+  target.health = 1;
+  BiomeRivalsRules.applyWitherStatus(target, source.playerId, 'nt_005', 'object-88', 'effect.nt_005.01');
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId, command('wither-lethal', 0, 'END_TURN'));
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[actorIndex]!.battlefield.length, 0);
+  TestHarness.equal(result.state.players[opponentIndex]!.hand.indexOf('tk_009') >= 0, true);
+  TestHarness.equal(result.batch.events[0]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(result.batch.events[0]!.payload.sourceInstanceId, 'object-88');
+  TestHarness.equal(result.batch.events[1]!.type, 'OBJECT_DIED');
+  TestHarness.equal(result.batch.events.some(function (event): boolean {
+    return (event.type === 'OBJECT_STATUS_TICKED' || event.type === 'OBJECT_STATUS_REMOVED') &&
+      event.payload.statusId === 'WITHER';
+  }), false);
+  const generated = result.batch.events.filter(function (event): boolean {
+    return event.type === 'CARD_GENERATED' && event.payload.cardId === 'tk_009';
+  });
+  TestHarness.equal(generated.length, 1);
+  TestHarness.equal(generated[0]!.payload.playerId, source.playerId);
+  assertEventBatchMatchesSchema(result.batch);
+});

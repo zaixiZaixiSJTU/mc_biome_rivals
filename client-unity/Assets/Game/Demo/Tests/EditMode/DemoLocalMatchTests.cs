@@ -3956,6 +3956,42 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(piglin.MaxHealth, Is.EqualTo(3));
         }
 
+        [Test]
+        public void SeededWitherTicksTwiceAtItsControllersEndPhaseWithoutImplementingNt005()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("pf_004", out var targetDefinition), Is.True);
+            Assert.That(registry.TryGetDefinition("nt_005", out var witherSkeleton), Is.True);
+            Assert.That(witherSkeleton.effectImplementationStatus, Is.EqualTo("PENDING"));
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(new[] { targetDefinition.id }, new[] { "pf_001" });
+            Assert.That(match.ApplyDeploy(targetDefinition,
+                match.CreateDeployCommand(targetDefinition.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            var target = match.GetObject(true, DemoSlotKind.Unit, 0);
+            target.Statuses = new[]
+            {
+                new BattlefieldStatusStateDto
+                {
+                    statusId = "WITHER", remainingDuration = 2, sourcePlayerId = "opponent",
+                    sourceCardId = "nt_005", sourceInstanceId = "object-99", effectId = "effect.nt_005.01"
+                }
+            };
+            var healthBefore = target.Health;
+
+            var first = match.ApplyEndTurn(match.CreateEndTurnCommand());
+            Assert.That(first.Accepted, Is.True, first.Message);
+            Assert.That(target.Health, Is.EqualTo(healthBefore - 1));
+            Assert.That(target.Statuses.Single().remainingDuration, Is.EqualTo(1));
+            Assert.That(first.Message, Does.Contain("凋零造成 1 点真实伤害"));
+
+            match.BeginNextPlayerTurn();
+            var second = match.ApplyEndTurn(match.CreateEndTurnCommand());
+            Assert.That(second.Accepted, Is.True, second.Message);
+            Assert.That(target.Health, Is.EqualTo(healthBefore - 2));
+            Assert.That(target.Statuses, Is.Empty);
+            Assert.That(second.Message, Does.Contain("凋零造成 1 点真实伤害"));
+        }
+
         private static float ProjectedWidth(Camera camera, Transform surface, Vector3[] vertices)
         {
             var min = vertices.Min(vertex => camera.WorldToViewportPoint(surface.TransformPoint(vertex)).x);

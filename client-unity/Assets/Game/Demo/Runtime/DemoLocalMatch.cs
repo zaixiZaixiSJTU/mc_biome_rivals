@@ -1212,7 +1212,7 @@ namespace BiomeRivals.Demo
                 return DemoCommandResult.Accept($"僵尸猪灵岩浆触发 {magmaPulses} 次，敌方英雄生命归零，你获得胜利！", Revision);
             }
             var poisonDeathMessages = new List<string>();
-            var poisonDamage = ResolveEndPhaseStatuses(_playerBattlefield, poisonDeathMessages, out var fireDamage);
+            var poisonDamage = ResolveEndPhaseStatuses(_playerBattlefield, poisonDeathMessages, out var fireDamage, out var witherDamage);
             ResolvePlayerStatuses(_playerStatuses);
             var crystalPulses = ResolveEndCrystalEndPhase(true);
             if (IsFinished)
@@ -1241,6 +1241,7 @@ namespace BiomeRivals.Demo
             if (monumentDeathMessages.Count > 0) monumentMessage += " " + string.Join(" ", monumentDeathMessages);
             if (poisonDamage > 0) monumentMessage += $" 中毒造成 {poisonDamage} 点伤害。";
             if (fireDamage > 0) monumentMessage += $" 着火造成 {fireDamage} 点真实伤害。";
+            if (witherDamage > 0) monumentMessage += $" 凋零造成 {witherDamage} 点真实伤害。";
             if (poisonDeathMessages.Count > 0) monumentMessage += " " + string.Join(" ", poisonDeathMessages);
             if (mineTriggers > 0) monumentMessage += $" 废弃矿井生成了 {mineTriggers} 张圆石。";
             if (mansionSummons > 0) monumentMessage += $" 林地府邸召唤了 {mansionSummons} 个卫道士新兵。";
@@ -1260,7 +1261,7 @@ namespace BiomeRivals.Demo
                 ExpireTemporaryEnergy(false);
                 return RememberDraw(new DemoDrawResult(DemoDrawOutcome.MatchEnded, string.Empty, 0));
             }
-            ResolveEndPhaseStatuses(_opponentBattlefield, null, out _);
+            ResolveEndPhaseStatuses(_opponentBattlefield, null, out _, out _);
             ResolvePlayerStatuses(_opponentStatuses);
             ResolveEndCrystalEndPhase(false);
             if (IsFinished)
@@ -2217,10 +2218,15 @@ namespace BiomeRivals.Demo
             target.Statuses = statuses.ToArray();
         }
 
-        private int ResolveEndPhaseStatuses(List<DemoBattlefieldObject> battlefield, List<string> deathMessages, out int fireDamage)
+        private int ResolveEndPhaseStatuses(
+            List<DemoBattlefieldObject> battlefield,
+            List<string> deathMessages,
+            out int fireDamage,
+            out int witherDamage)
         {
             var totalPoisonDamage = 0;
             fireDamage = 0;
+            witherDamage = 0;
             var objects = battlefield.OrderBy(value => value.SlotIndex)
                 .ThenBy(value => value.InstanceId, StringComparer.Ordinal).ToArray();
             foreach (var value in objects)
@@ -2241,7 +2247,12 @@ namespace BiomeRivals.Demo
                         value.Health = Math.Max(0, value.Health - 1);
                         fireDamage++;
                     }
-                    if ((status.statusId == "POISON" || status.statusId == "FIRE") && value.Health == 0)
+                    else if (status.statusId == "WITHER")
+                    {
+                        value.Health = Math.Max(0, value.Health - 1);
+                        witherDamage++;
+                    }
+                    if ((status.statusId == "POISON" || status.statusId == "FIRE" || status.statusId == "WITHER") && value.Health == 0)
                     {
                         value.Statuses = statuses.ToArray();
                         var killCredits = new Dictionary<string, bool>(StringComparer.Ordinal)

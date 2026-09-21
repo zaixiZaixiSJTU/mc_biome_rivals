@@ -418,6 +418,48 @@ namespace BiomeRivalsRules {
     return true;
   }
 
+  /**
+   * Creates or refreshes the battlefield-only WITHER state. This deliberately does not emit an
+   * event or connect a card trigger: RULE-032C establishes the reusable state transition while
+   * NT-005 remains PENDING. The combat trigger introduced by RULE-032D owns event emission.
+   */
+  export function applyWitherStatus(
+    target: BattlefieldObjectState,
+    sourcePlayerId: string,
+    sourceCardId: string,
+    sourceInstanceId: string,
+    effectId: string
+  ): BattlefieldStatusState {
+    if (target.cardType !== 'UNIT' || target.health <= 0) throw new Error('wither requires a living battlefield unit');
+    if (!sourcePlayerId || sourceCardId !== 'nt_005' || !sourceInstanceId || effectId !== 'effect.nt_005.01') {
+      throw new Error('wither source metadata is invalid');
+    }
+    let status: BattlefieldStatusState | null = null;
+    for (let index = 0; index < target.statuses.length; index += 1) {
+      if (target.statuses[index]!.statusId === 'WITHER') status = target.statuses[index]!;
+    }
+    if (status === null) {
+      status = {
+        statusId: 'WITHER',
+        remainingDuration: 2,
+        sourcePlayerId: sourcePlayerId,
+        sourceCardId: sourceCardId,
+        sourceInstanceId: sourceInstanceId,
+        effectId: effectId,
+        attackModifier: 0,
+        boundAttackModifier: 0
+      };
+      target.statuses.push(status);
+    } else if (status.remainingDuration < 2) {
+      status.remainingDuration = 2;
+      status.sourcePlayerId = sourcePlayerId;
+      status.sourceCardId = sourceCardId;
+      status.sourceInstanceId = sourceInstanceId;
+      status.effectId = effectId;
+    }
+    return status;
+  }
+
   export function applyCommand(state: MatchState, actorPlayerId: string, command: MatchCommand): CommandResult {
     const violations = validateState(state);
     if (violations.length > 0) return reject(state, 'INVALID_STATE', violations.join('; '));
@@ -1311,7 +1353,7 @@ namespace BiomeRivalsRules {
         let statusIndex = 0;
         while (statusIndex < object.statuses.length) {
           const status = object.statuses[statusIndex]!;
-          if (status.statusId === 'POISON' || status.statusId === 'FIRE') {
+          if (status.statusId === 'POISON' || status.statusId === 'FIRE' || status.statusId === 'WITHER') {
             object.health = Math.max(0, object.health - 1);
             emit('OBJECT_STATS_CHANGED', {
               playerId: player.playerId,
@@ -1321,11 +1363,14 @@ namespace BiomeRivalsRules {
               sourceInstanceId: status.sourceInstanceId,
               effectId: status.effectId,
               reason: 'DAMAGE',
-              damageType: status.statusId === 'FIRE' ? 'TRUE' : 'NORMAL',
+              damageType: status.statusId === 'FIRE' || status.statusId === 'WITHER' ? 'TRUE' : 'NORMAL',
               attack: object.attack,
               health: object.health,
+              maxHealth: object.maxHealth,
               temporaryAttackModifier: object.temporaryAttackModifier,
-              temporaryAttackModifierExpiresOnTurn: object.temporaryAttackModifierExpiresOnTurn
+              temporaryAttackModifierExpiresOnTurn: object.temporaryAttackModifierExpiresOnTurn,
+              temporaryHealthModifier: object.temporaryHealthModifier,
+              temporaryHealthModifierExpiresOnTurn: object.temporaryHealthModifierExpiresOnTurn
             });
             if (object.health === 0) {
               const killCredits: { [instanceId: string]: string } = {};

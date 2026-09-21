@@ -308,7 +308,7 @@ namespace BiomeRivalsRules {
           const seenStatuses: { [statusId: string]: boolean } = {};
           for (let statusIndex = 0; statusIndex < object.statuses.length; statusIndex += 1) {
             const status = object.statuses[statusIndex]!;
-            if (status.statusId !== 'SLOW' && status.statusId !== 'POISON' && status.statusId !== 'FIRE') violations.push('battlefield status is unsupported');
+            if (status.statusId !== 'SLOW' && status.statusId !== 'POISON' && status.statusId !== 'FIRE' && status.statusId !== 'WITHER') violations.push('battlefield status is unsupported');
             if (seenStatuses[status.statusId]) violations.push('battlefield statuses must be unique');
             seenStatuses[status.statusId] = true;
             if (status.remainingDuration < 1 || status.remainingDuration % 1 !== 0) violations.push('battlefield status duration is invalid');
@@ -332,6 +332,12 @@ namespace BiomeRivalsRules {
             if (status.statusId === 'FIRE' &&
                 (status.remainingDuration > 2 || status.attackModifier !== 0 || status.boundAttackModifier !== 0)) {
               violations.push('fire status state is invalid');
+            }
+            if (status.statusId === 'WITHER' &&
+                (object.cardType !== 'UNIT' || status.remainingDuration > 2 || status.attackModifier !== 0 ||
+                  status.boundAttackModifier !== 0 || status.sourceCardId !== 'nt_005' ||
+                  status.effectId !== 'effect.nt_005.01')) {
+              violations.push('wither status state is invalid');
             }
           }
         }

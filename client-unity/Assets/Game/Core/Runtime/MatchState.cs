@@ -177,7 +177,7 @@ namespace BiomeRivals.Core
                     var seenStatuses = new HashSet<string>(StringComparer.Ordinal);
                     foreach (var status in battlefieldObject.statuses ?? Array.Empty<BattlefieldStatusStateDto>())
                     {
-                        if (status == null || (status.statusId != "SLOW" && status.statusId != "POISON" && status.statusId != "FIRE") || status.remainingDuration < 1 ||
+                        if (status == null || (status.statusId != "SLOW" && status.statusId != "POISON" && status.statusId != "FIRE" && status.statusId != "WITHER") || status.remainingDuration < 1 ||
                             string.IsNullOrWhiteSpace(status.sourcePlayerId) || string.IsNullOrWhiteSpace(status.sourceCardId) ||
                             string.IsNullOrWhiteSpace(status.effectId) || status.attackModifier > 0 ||
                             status.boundAttackModifier > 0 || status.attackModifier < status.boundAttackModifier ||
@@ -185,7 +185,12 @@ namespace BiomeRivals.Core
                             (status.statusId == "POISON" && (status.remainingDuration > 3 ||
                                 status.attackModifier != 0 || status.boundAttackModifier != 0)) ||
                             (status.statusId == "FIRE" && (status.remainingDuration > 2 ||
-                                status.attackModifier != 0 || status.boundAttackModifier != 0)))
+                                status.attackModifier != 0 || status.boundAttackModifier != 0)) ||
+                            (status.statusId == "WITHER" && (battlefieldObject.cardType != "UNIT" || status.remainingDuration > 2 ||
+                                status.attackModifier != 0 || status.boundAttackModifier != 0 ||
+                                status.sourceCardId != "nt_005" || string.IsNullOrWhiteSpace(status.sourceInstanceId) ||
+                                status.effectId != "effect.nt_005.01" ||
+                                !snapshot.players.Any(candidate => candidate != null && candidate.playerId == status.sourcePlayerId))))
                             throw new InvalidOperationException("Snapshot contains an invalid battlefield status.");
                     }
                 }
@@ -548,7 +553,23 @@ namespace BiomeRivals.Core
                 case MatchEventTypes.ObjectStatsChanged:
                     var statsOwner = FindPlayer(payload.playerId);
                     var statsObject = FindObject(statsOwner, payload.instanceId);
-                    if (payload.effectId == "effect.nt_002.01")
+                    if (payload.effectId == "effect.nt_005.01")
+                    {
+                        var wither = (statsObject.statuses ?? Array.Empty<BattlefieldStatusStateDto>())
+                            .SingleOrDefault(value => value != null && value.statusId == "WITHER");
+                        if (wither == null || statsObject.cardType != "UNIT" || statsObject.health <= 0 ||
+                            payload.reason != "DAMAGE" || payload.damageType != "TRUE" ||
+                            payload.sourcePlayerId != wither.sourcePlayerId || payload.sourceCardId != wither.sourceCardId ||
+                            payload.sourceInstanceId != wither.sourceInstanceId || payload.effectId != wither.effectId ||
+                            payload.attack != statsObject.attack || payload.health != Math.Max(0, statsObject.health - 1) ||
+                            payload.maxHealth != statsObject.maxHealth ||
+                            payload.temporaryAttackModifier != statsObject.temporaryAttackModifier ||
+                            payload.temporaryAttackModifierExpiresOnTurn != statsObject.temporaryAttackModifierExpiresOnTurn ||
+                            payload.temporaryHealthModifier != statsObject.temporaryHealthModifier ||
+                            payload.temporaryHealthModifierExpiresOnTurn != statsObject.temporaryHealthModifierExpiresOnTurn)
+                            throw new InvalidOperationException("Wither damage does not match its authoritative status source and one true-damage tick.");
+                    }
+                    else if (payload.effectId == "effect.nt_002.01")
                     {
                         var piglinOwner = FindPlayer(payload.playerId);
                         if (!piglinOwner.heroLifeLostThisTurn || statsObject.cardId != "nt_002" ||
@@ -616,18 +637,32 @@ namespace BiomeRivals.Core
                 case MatchEventTypes.ObjectStatusApplied:
                     var statusObject = FindObject(FindPlayer(payload.playerId), payload.instanceId);
                     var statuses = new List<BattlefieldStatusStateDto>(statusObject.statuses ?? Array.Empty<BattlefieldStatusStateDto>());
-                    statuses.RemoveAll(value => value != null && value.statusId == payload.statusId);
-                    statuses.Add(new BattlefieldStatusStateDto
+                    var existingStatus = statuses.SingleOrDefault(value => value != null && value.statusId == payload.statusId);
+                    if (payload.statusId == "WITHER")
                     {
-                        statusId = payload.statusId,
-                        remainingDuration = payload.remainingDuration,
-                        sourcePlayerId = payload.sourcePlayerId,
-                        sourceCardId = payload.sourceCardId,
-                        sourceInstanceId = payload.sourceInstanceId,
-                        effectId = payload.effectId,
-                        attackModifier = payload.statusAttackModifier,
-                        boundAttackModifier = payload.boundAttackModifier
-                    });
+                        FindPlayer(payload.sourcePlayerId);
+                        var mustPreserveSource = existingStatus != null && existingStatus.remainingDuration >= 2;
+                        if (statusObject.cardType != "UNIT" || statusObject.health <= 0 || payload.remainingDuration != 2 ||
+                            payload.sourceCardId != "nt_005" || string.IsNullOrWhiteSpace(payload.sourceInstanceId) ||
+                            payload.effectId != "effect.nt_005.01" || payload.statusAttackModifier != 0 ||
+                            payload.boundAttackModifier != 0 || payload.attack != statusObject.attack || payload.health != statusObject.health ||
+                            mustPreserveSource && (payload.sourcePlayerId != existingStatus.sourcePlayerId ||
+                                payload.sourceCardId != existingStatus.sourceCardId || payload.sourceInstanceId != existingStatus.sourceInstanceId ||
+                                payload.effectId != existingStatus.effectId))
+                            throw new InvalidOperationException("Wither application does not match its non-stacking refresh contract.");
+                    }
+                    if (existingStatus == null)
+                    {
+                        existingStatus = new BattlefieldStatusStateDto { statusId = payload.statusId };
+                        statuses.Add(existingStatus);
+                    }
+                    existingStatus.remainingDuration = payload.remainingDuration;
+                    existingStatus.sourcePlayerId = payload.sourcePlayerId;
+                    existingStatus.sourceCardId = payload.sourceCardId;
+                    existingStatus.sourceInstanceId = payload.sourceInstanceId;
+                    existingStatus.effectId = payload.effectId;
+                    existingStatus.attackModifier = payload.statusAttackModifier;
+                    existingStatus.boundAttackModifier = payload.boundAttackModifier;
                     statusObject.statuses = statuses.ToArray();
                     statusObject.attack = payload.attack;
                     statusObject.health = payload.health;
@@ -638,6 +673,21 @@ namespace BiomeRivals.Core
                     var tickedStatus = tickedStatuses.SingleOrDefault(value => value != null && value.statusId == payload.statusId);
                     if (tickedStatus == null)
                         throw new InvalidOperationException("Status tick does not match exactly one projected status.");
+                    if (payload.statusId == "WITHER")
+                    {
+                        var damage = previousEvent?.payload;
+                        if (tickedObject.cardType != "UNIT" || tickedObject.health <= 0 || tickedStatus.remainingDuration != 2 ||
+                            payload.remainingDuration != 1 || payload.sourcePlayerId != tickedStatus.sourcePlayerId ||
+                            payload.sourceCardId != tickedStatus.sourceCardId || payload.sourceInstanceId != tickedStatus.sourceInstanceId ||
+                            payload.effectId != tickedStatus.effectId || payload.statusAttackModifier != 0 || payload.boundAttackModifier != 0 ||
+                            payload.attack != tickedObject.attack || payload.health != tickedObject.health ||
+                            previousEvent == null || previousEvent.type != MatchEventTypes.ObjectStatsChanged || damage == null ||
+                            damage.playerId != payload.playerId || damage.instanceId != payload.instanceId ||
+                            damage.reason != "DAMAGE" || damage.damageType != "TRUE" ||
+                            damage.sourcePlayerId != payload.sourcePlayerId || damage.sourceCardId != payload.sourceCardId ||
+                            damage.sourceInstanceId != payload.sourceInstanceId || damage.effectId != payload.effectId)
+                            throw new InvalidOperationException("Wither duration tick does not immediately follow its matching true damage.");
+                    }
                     tickedStatus.remainingDuration = payload.remainingDuration;
                     tickedStatus.sourcePlayerId = payload.sourcePlayerId;
                     tickedStatus.sourceCardId = payload.sourceCardId;
@@ -652,7 +702,22 @@ namespace BiomeRivals.Core
                     var clearedOwner = FindPlayer(payload.playerId);
                     var clearedObject = FindObject(clearedOwner, payload.instanceId);
                     var remainingStatuses = new List<BattlefieldStatusStateDto>(clearedObject.statuses ?? Array.Empty<BattlefieldStatusStateDto>());
-                    if (payload.effectId == "effect.nt_004.01")
+                    if (payload.statusId == "WITHER")
+                    {
+                        var wither = remainingStatuses.SingleOrDefault(value => value != null && value.statusId == "WITHER");
+                        var damage = previousEvent?.payload;
+                        if (wither == null || wither.remainingDuration != 1 || clearedObject.cardType != "UNIT" || clearedObject.health <= 0 ||
+                            payload.reason != "DURATION_EXPIRED" || payload.sourcePlayerId != wither.sourcePlayerId ||
+                            payload.sourceCardId != wither.sourceCardId || payload.sourceInstanceId != wither.sourceInstanceId ||
+                            payload.effectId != wither.effectId || payload.attack != clearedObject.attack || payload.health != clearedObject.health ||
+                            previousEvent == null || previousEvent.type != MatchEventTypes.ObjectStatsChanged || damage == null ||
+                            damage.playerId != payload.playerId || damage.instanceId != payload.instanceId ||
+                            damage.reason != "DAMAGE" || damage.damageType != "TRUE" ||
+                            damage.sourcePlayerId != payload.sourcePlayerId || damage.sourceCardId != payload.sourceCardId ||
+                            damage.sourceInstanceId != payload.sourceInstanceId || damage.effectId != payload.effectId)
+                            throw new InvalidOperationException("Wither removal does not immediately follow its final matching true damage.");
+                    }
+                    else if (payload.effectId == "effect.nt_004.01")
                     {
                         var source = FindObject(clearedOwner, payload.sourceInstanceId);
                         if (payload.reason != "EFFECT_REMOVED" || payload.statusId != "FIRE" ||

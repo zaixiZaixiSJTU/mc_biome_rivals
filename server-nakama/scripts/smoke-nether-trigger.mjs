@@ -13,8 +13,8 @@ const timeoutMs = Number(process.env.BIOME_RIVALS_SMOKE_TIMEOUT_MS || 45000);
 const maximumAttempts = Number(process.env.BIOME_RIVALS_NETHER_PROBE_ATTEMPTS || 12);
 const reportPath = resolve(process.env.BIOME_RIVALS_NETHER_PROBE_REPORT ||
   '../artifacts/nether-trigger-online-probe.json');
-const protocolVersion = 34;
-const rulesetVersion = 'prototype-0.58';
+const protocolVersion = 36;
+const rulesetVersion = 'prototype-0.59';
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);

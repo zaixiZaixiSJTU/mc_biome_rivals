@@ -16,7 +16,7 @@
 
 协议 opcode：`1` 命令、`2` 事件批次、`3` 命令拒绝、`4` 权威快照。协议结构以 `shared-schema/protocol` 为准。
 
-当前基础对局纵向切片使用 `protocolVersion: 35` 与 `rulesetVersion: prototype-0.58`。协议 35 为对象状态移除事件增加主动效果解除原因，支持炽足兽权威移除 FIRE；规则集 0.58 要求场上存在着火己方生物时必须在部署前选择一个，场上没有合法目标时允许空放，成功解除后按 `CARD_DEPLOYED → OBJECT_STATUS_REMOVED → OBJECT_STATS_CHANGED(HEAL)` 回放。协议 34 的基础/临时红石分池、临时优先支付、僵尸猪灵成长/岩浆和重生锚授能继续兼容；协议 33 的 `heroLifeLostThisTurn`、协议 32 的临时生命修正、协议 31 的 `FIRE` 及更早能力同样保留。标准 JSON Schema 校验事件与快照，Unity 只接受同版本权威结果；旧协议或规则集客户端不能静默兼容。
+当前基础对局纵向切片使用 `protocolVersion: 36` 与 `rulesetVersion: prototype-0.59`。协议 36 增加战场生物 `WITHER` 状态的快照与事件枚举，并规定其完整来源、两次控制者结束阶段真实伤害、非叠加刷新和致死结算；`nt_005` 仍为 `PENDING`，不会从卡牌创建凋零。协议 35 的炽足兽主动解除 FIRE、协议 34 的基础/临时红石分池以及更早能力继续兼容。标准 JSON Schema 校验事件与快照，Unity 只接受同版本权威结果；旧协议或规则集客户端不能静默兼容。
 
 运行：
 
