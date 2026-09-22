@@ -62,21 +62,25 @@ Unity `6000.0.28f1c1` EditMode 262/262 通过。直接调用 Unity Play Mode 输
 
 ## RULE-032F2 Docker 双端与重连
 
-状态：**下一唯一任务**。只验证三张牌的权威事件、双方投影、WITHER 恢复、要塞支付/召唤和中途重连；记录 Match ID、revision 与探针产物，不改视觉。
+状态：**已完成**。新增 `smoke:nether-status-summon` 与 `scripts/validate-nether-status-summon-online.ps1`，使用正常牌库、起手替换、逐回合红石增长和真实命令完成两个权威对局，不注入测试状态；随机起手不足时有界重匹配。
+
+炽足兽对局 `4df72230-5bec-4910-9234-3b4a1480777b.biome-rivals` 在 revision 22 由烈焰人对存活友方目标施加 FIRE，在 revision 24 按相邻事件完成炽足兽部署、移除和治疗。WITHER/要塞对局 `93fe5fc6-0773-4330-8cbd-ea0fc5c51243.biome-rivals` 在 revision 35 施加剩余 2 次且来源完整的 WITHER；revision 36 要塞原子支付并在最左格召唤 `object-4` / `tk_015`，双方替换 socket 后均恢复同一 revision、7/0/7 红石、三格要塞、`nextInstanceId = 5` 和完整 WITHER；revision 38 继续结算 1 点真实伤害并 Tick 至 1 次。双方对所有命令的公开事件顺序一致，关键事件完整 payload 相等。
+
+报告为 `artifacts/nether-status-summon-online-probe.json`，SHA-256 `FD2ADA0B7756F3BB24DDE052AD1486AE3C51B3AE0913F13B050B4AB9A540D005`。Docker Engine 29.8.0、Nakama 3.40.0 与 PostgreSQL 16.8 健康；服务端 218/218，全仓构建与 Compose 配置通过；直接调用 Unity `6000.0.28f1c1`，EditMode 262/262。未修改视觉、权威规则、协议 36、规则集 `prototype-0.61` 或内容版本。
 
 ## RULE-032F3 证据收口
 
-状态：**等待 F2**。只复核提交、版本、测试、Unity 截图和在线产物，更新日志、路线图与交接并关闭 RULE-032；不得新增玩法。
+状态：**下一唯一任务**。只复核提交、版本、测试、Unity 截图和在线产物，更新日志、路线图与交接并关闭 RULE-032；不得新增玩法。
 
 ## 最小交接
 
 ```text
-任务编号：RULE-032F2
-只完成三张下界牌的 Docker 双端与中途重连验证；不得修改视觉、权威规则或提前执行 F3。
+任务编号：RULE-032F3
+只完成 RULE-032 证据收口；不得新增玩法、视觉或协议变更。
 仓库：D:\gitt\mc_biome_rivals
-基线提交：`1d6d268 feat: add deterministic nether showcase`
-先读：docs/design/nether-status-summon-spec-v1.md、docs/development/task-packets/RULE-032.md 的 RULE-032F2，以及最近 RULE-032D—F1 change-log。
+基线：包含 RULE-032F2 专项探针、在线报告与提交。
+先读：docs/design/nether-status-summon-spec-v1.md、docs/development/task-packets/RULE-032.md 的 RULE-032A—F2，以及最近 RULE-032D—F2 change-log。
 开始前记录 git status；保留无关本机文件。
-启动既有 Docker/Nakama 双端环境，分别验证 `nt_004`、`nt_005`、`nt_008` 的权威事件与双方投影；在 WITHER 尚有剩余次数、要塞已完成支付/召唤的状态执行中途重连，核对恢复后的来源、持续时间、能量、格位、实例号和 revision。保存 Match ID、命令/事件探针与重连产物。
-结束时报告启动命令、容器状态、Match ID、双方 revision、关键事件序列、重连证据、剩余风险和提交号。
+复核 A—F2 提交祖先链、协议/规则集/内容版本、服务端和 Unity 测试、F1 Play Mode 截图哈希、F2 Match ID/revision/报告哈希；更新 change-log、路线图与交接并关闭 RULE-032。
+结束时报告证据矩阵、剩余风险和提交号。
 ```

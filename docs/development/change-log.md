@@ -2,6 +2,13 @@
 
 本文件按时间倒序记录影响视觉表现、资源管线或运行时架构的改动。
 
+## 2026-09-23 RULE-032F2 下界状态与召唤 Docker 双端验收
+
+- **专项双对局探针**：新增 `smoke:nether-status-summon` 与 `scripts/validate-nether-status-summon-online.ps1`。两个真实 Nakama WebSocket 客户端使用正常牌库、起手替换、逐回合红石增长、部署、战斗和结束阶段命令，不注入测试状态；随机起手不足时有界重匹配。炽足兽对局 `4df72230-5bec-4910-9234-3b4a1480777b.biome-rivals` 在 revision 22 完成烈焰人伤害后施加 FIRE，revision 24 严格按 `CARD_DEPLOYED → OBJECT_STATUS_REMOVED → OBJECT_STATS_CHANGED` 完成净火治疗。
+- **WITHER、要塞与双重连**：下界/海洋对局 `93fe5fc6-0773-4330-8cbd-ea0fc5c51243.biome-rivals` 在 revision 35 按 `ATTACK_RESOLVED → OBJECT_STATUS_APPLIED` 创建完整来源的两次 WITHER；revision 36 按相邻事件完成要塞 1 点自动支付和最左单位格 `object-4` 的 3/3 `tk_015` 召唤。双方依次替换 socket 后都恢复到同一 revision 36，公开投影逐字段一致，保留 7/0/7 红石、三格 `object-3` 要塞、`nextInstanceId = 5` 与剩余 2 次 WITHER；revision 38 继续按真实伤害与 Tick 将其降为 1 次。
+- **投影与产物**：探针对每条命令核对双方 revision、ack、公开 eventId/类型顺序，并对攻击、状态、支付、召唤与 Tick 的完整公开 payload 做双端相等校验。报告位于 `artifacts/nether-status-summon-online-probe.json`，SHA-256 `FD2ADA0B7756F3BB24DDE052AD1486AE3C51B3AE0913F13B050B4AB9A540D005`。
+- **环境修复与验证**：Docker Desktop 从 4.48.0 原位升级至 4.91.0，并把三个损坏的 Unix socket 运行时目录移到可恢复备份；未恢复出厂，原镜像与卷保留。Docker Engine 29.8.0、PostgreSQL 16.8 与 Nakama 3.40.0 健康。`scripts/validate.ps1 -WithUnity -WithDockerConfig` 通过，服务端 218/218；直接调用 Unity `6000.0.28f1c1`，EditMode 262/262。未改规则、协议、内容或视觉；下一唯一任务为 RULE-032F3 证据收口。
+
 ## 2026-09-22 RULE-032F1 下界状态与召唤 Unity 演示
 
 - **确定性完整链路**：新增 `-previewNetherStatusSummon` 本地 Play Mode 入口，使用真实离线规则依次部署下界要塞、放牧绵羊、凋灵骷髅与炽足兽，执行净火治疗、普通攻击施加 WITHER、要塞自动支付并在最左空格召唤 `tk_015`，再推进到凋零造成 1 点真实伤害后的稳定局面；不是静态摆放或绕过规则的截图状态。
