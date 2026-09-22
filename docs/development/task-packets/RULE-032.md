@@ -50,11 +50,13 @@ Unity 状态仓库核验炽足兽来源、同控制者、FIRE 移除与紧邻治
 
 ## RULE-032E 下界要塞纵向切片
 
-状态：**下一唯一任务**。只实现 `nt_008` 的结束阶段支付与 `tk_015` 召唤，复用临时红石优先支付；覆盖稳定多实例顺序、逐实例重检、末格竞争、满场、能量不足、令牌注册、重连和离线同构。不得在本切片制作视觉演示或运行 Docker 双端验收。
+状态：**已完成**（实现提交 `92c7fbc`）。`nt_008` 在猪灵岩浆之后、对象状态之前逐实例重检空格与能量，临时红石优先原子支付 1 点，并在最左空单位格召唤 3/3 `tk_015`。满场、能量不足和猪灵抢走最后能量均不扣费、不分配实例；令牌不继承 WITHER。Unity 因果回放、快照恢复、离线 Demo 和联机事件提示已同构。
+
+版本与验证：协议 36、规则集 `prototype-0.61`、效果实现注册表 47、卡牌定义/catalog 41；60 个已实现效果、9 个预留效果。`scripts/validate.ps1` 通过，服务端 218/218；直接调用 Unity `6000.0.28f1c1`，EditMode 261/261，结果为 `client-unity/Logs/rule032e-final-editmode-results.xml`。
 
 ## RULE-032F1 确定性演示与 Unity 视觉审查
 
-状态：**等待 E**。只构建三张牌的本地确定性 Play Mode 演示、原版模型/状态反馈与 UI 可读性；由 Unity 实际渲染截图，不运行 Docker。
+状态：**下一唯一任务**。只构建 `nt_004`、`nt_005`、`nt_008` 的本地确定性 Play Mode 演示，审查原版模型、体素战场、地表交互、状态/支付/召唤反馈与 UI 可读性；必须由 Unity 实际运行并输出 1920×1080 截图，不运行 Docker、不修改权威规则。
 
 ## RULE-032F2 Docker 双端与重连
 
@@ -67,12 +69,12 @@ Unity 状态仓库核验炽足兽来源、同控制者、FIRE 移除与紧邻治
 ## 最小交接
 
 ```text
-任务编号：RULE-032E
-只实现下界要塞结束阶段的原子支付与 TK-015 召唤；不得扩展其他卡牌或开始集成验收。
+任务编号：RULE-032F1
+只完成三张下界牌的确定性本地 Play Mode 演示与 Unity 视觉审查；不得运行 Docker 或修改权威规则。
 仓库：D:\gitt\mc_biome_rivals
-基线提交：`57fea39 feat: implement wither skeleton combat trigger`
-先读：docs/design/nether-status-summon-spec-v1.md 的第 4—6 节，以及 docs/development/task-packets/RULE-032.md 的 RULE-032E。
+基线提交：`92c7fbc feat: implement nether fortress end phase summon`
+先读：docs/design/nether-status-summon-spec-v1.md、docs/development/task-packets/RULE-032.md 的 RULE-032F1，以及最近 RULE-032B—E change-log。
 开始前记录 git status；保留无关本机文件。
-接通 NT-008 的稳定结束阶段顺序、临时红石优先自动支付、最左空单位格、TK-015 权威召唤、满场/费用不足不扣费、召唤原子性、Unity/离线同构和内容注册；审查时直接调用 Unity。
-结束时报告改动、版本、验证、风险和提交号。
+新增一个可重复的本地预览入口，在同一完整场景中明确展示炽足兽净火、凋灵骷髅施加/结算凋零、下界要塞支付并召唤 TK-015；复用原版模型、世界内反馈和统一像素 UI。直接调用 Unity 进入 Play Mode，输出并人工审查 1920×1080 截图。
+结束时报告预览参数、截图路径/哈希、Unity 测试、视觉缺陷、剩余风险和提交号。
 ```

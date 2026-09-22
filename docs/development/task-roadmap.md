@@ -17,8 +17,8 @@
 
 - 有效仓库：`D:\gitt\mc_biome_rivals`
 - 近期纵向切片：RULE-030E1 `c2ed046`、RULE-030E2 `36ce93c`；新任务启动基线以当时 `git HEAD` 为准。
-- 开发中版本：协议 36、规则集 `prototype-0.60`、效果实现注册表版本 46、卡牌定义/catalog 版本 41。两种内容版本的关系待 DATA-040 明确。
-- 卡牌效果状态：59 个 `IMPLEMENTED`，10 个 `PENDING`。
+- 开发中版本：协议 36、规则集 `prototype-0.61`、效果实现注册表版本 47、卡牌定义/catalog 版本 41。两种内容版本的关系待 DATA-040 明确。
+- 卡牌效果状态：60 个 `IMPLEMENTED`，9 个 `PENDING`。
 - 此前混合在工作区的体素场景、实体模型、资源管线和 FIRE 规则已在恢复基线 `6c9202e` 中固定。后续不得继续使用这种跨任务混提方式。
 - `docs/development/change-log.md`、本路线图和 BR-000 检查点均已纳入 Git。
 
@@ -178,7 +178,7 @@
 
 ### RULE-032 下界状态与召唤
 
-状态：**RULE-032A/B/C/D 已完成，RULE-032E 为下一唯一任务**。规则契约见 [`../design/nether-status-summon-spec-v1.md`](../design/nether-status-summon-spec-v1.md)，详细边界见 [`task-packets/RULE-032.md`](task-packets/RULE-032.md)。依赖：RULE-031。
+状态：**RULE-032A/B/C/D/E 已完成，RULE-032F1 为下一唯一任务**。规则契约见 [`../design/nether-status-summon-spec-v1.md`](../design/nether-status-summon-spec-v1.md)，详细边界见 [`task-packets/RULE-032.md`](task-packets/RULE-032.md)。依赖：RULE-031。
 
 目标：完成 `nt_004` 炽足兽、`nt_005` 凋灵骷髅、`nt_008` 下界要塞。
 
@@ -225,15 +225,15 @@
 ## 新会话最小交接模板
 
 ```text
-任务编号：RULE-032E
+任务编号：RULE-032F1
 只完成该任务，不顺带处理其他路线图项目。
 仓库：D:\gitt\mc_biome_rivals
-基线提交：`57fea39 feat: implement wither skeleton combat trigger`
-先读：docs/design/nether-status-summon-spec-v1.md 第 4—6 节、任务包 RULE-032E 和最近相关 change-log。
+基线提交：`92c7fbc feat: implement nether fortress end phase summon`
+先读：docs/design/nether-status-summon-spec-v1.md、任务包 RULE-032F1 和最近 RULE-032B—E change-log。
 开始前记录 git status；保留来源未明的本机文件。
 结束时报告：改动文件、协议/内容版本、验证命令与结果、截图或复现步骤、剩余风险、提交号。
 ```
 
 ## 当前唯一推荐下一步
 
-只执行 **RULE-032E：下界要塞纵向切片**。仅实现 `nt_008` 在结束阶段按稳定顺序重新检查能量与空单位格、原子支付 1 点红石并在最左空格召唤 `tk_015`；同步权威事件、Unity 回放、离线 Demo 与内容注册，不得开始 F1 视觉演示或 F2 Docker 验收，审查时直接调用 Unity。
+只执行 **RULE-032F1：确定性演示与 Unity 视觉审查**。为炽足兽、凋灵骷髅和下界要塞建立可重复的本地 Play Mode 场景，实际审查原版模型、体素地表交互、状态/支付/召唤反馈与统一 UI，并输出 1920×1080 截图；不得运行 Docker、修改权威规则或提前开始 F2。
