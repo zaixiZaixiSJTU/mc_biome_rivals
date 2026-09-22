@@ -1801,6 +1801,46 @@ namespace BiomeRivalsRules {
       return false;
     }
 
+    function resolveNetherFortressEndPhase(player: PlayerState): number {
+      function matchHasFinished(): boolean { return next.status === 'FINISHED'; }
+      if (matchHasFinished()) return 0;
+      const fortresses = player.battlefield.filter(function (object): boolean {
+        if (object.cardId !== 'nt_008' || object.cardType !== 'STRUCTURE' || object.health <= 0) return false;
+        const definition = getCardDefinition(object.cardId);
+        return definition !== null && definition.effectImplementationStatus === 'IMPLEMENTED' &&
+          definition.effectIds.indexOf('effect.nt_008.01') >= 0;
+      }).slice().sort(function (left, right): number {
+        if (left.slotIndex !== right.slotIndex) return left.slotIndex - right.slotIndex;
+        return left.instanceId < right.instanceId ? -1 : left.instanceId > right.instanceId ? 1 : 0;
+      });
+      let summonedCount = 0;
+      for (let fortressIndex = 0; fortressIndex < fortresses.length; fortressIndex += 1) {
+        const fortress = fortresses[fortressIndex]!;
+        if (matchHasFinished()) break;
+        if (player.battlefield.indexOf(fortress) < 0 || fortress.health <= 0) continue;
+        const slotIndex = player.unitSlots.indexOf(null);
+        if (slotIndex < 0 || getAvailableRedstone(player) < 1) continue;
+        if (!trySpendRedstone(player, 1)) throw new Error('validated Nether Fortress payment unexpectedly failed');
+        emit('REDSTONE_CHANGED', {
+          playerId: player.playerId,
+          turn: next.turn,
+          reason: 'AUTOMATIC_PAYMENT',
+          sourceCardId: fortress.cardId,
+          sourceInstanceId: fortress.instanceId,
+          effectId: 'effect.nt_008.01',
+          redstone: player.redstone,
+          temporaryRedstone: player.temporaryRedstone,
+          totalRedstone: getAvailableRedstone(player),
+          redstoneCapacity: player.redstoneCapacity
+        });
+        if (!summonUnit(player, 'tk_015', fortress.cardId, fortress.instanceId, 'effect.nt_008.01', slotIndex)) {
+          throw new Error('paid Nether Fortress summon could not occupy its validated unit slot');
+        }
+        summonedCount += 1;
+      }
+      return summonedCount;
+    }
+
     function resolveEndCrystalEndPhase(player: PlayerState, opponent: PlayerState): boolean {
       const crystals = player.battlefield.filter(function (object): boolean {
         if (object.cardId !== 'ed_007' || object.cardType !== 'BUILDING' || object.health <= 0) return false;
@@ -3298,6 +3338,7 @@ namespace BiomeRivalsRules {
         if (actorIndex !== state.activePlayerIndex) return reject(state, 'NOT_ACTIVE_PLAYER', 'only the active player may end the turn');
         resolveOceanMonumentEndPhase(next.players[actorIndex]!, next.players[actorIndex === 0 ? 1 : 0]!);
         if (resolvePiglinMagmaEndPhase(next.players[actorIndex]!, next.players[actorIndex === 0 ? 1 : 0]!)) break;
+        resolveNetherFortressEndPhase(next.players[actorIndex]!);
         if (resolveEndPhaseStatuses(next.players[actorIndex]!, next.players[actorIndex === 0 ? 1 : 0]!)) break;
         resolveEndPhasePlayerStatuses(next.players[actorIndex]!);
         if (resolveEndCrystalEndPhase(next.players[actorIndex]!, next.players[actorIndex === 0 ? 1 : 0]!)) break;

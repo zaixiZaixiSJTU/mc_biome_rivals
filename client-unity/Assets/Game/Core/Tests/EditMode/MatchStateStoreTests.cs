@@ -3100,6 +3100,91 @@ namespace BiomeRivals.Core.Tests
         }
 
         [Test]
+        public void Apply_ReplaysNetherFortressPaymentThenLeftmostSummonAndRejectsAnOrphanSummon()
+        {
+            MatchStateDto InitialState()
+            {
+                var fortress = new BattlefieldObjectStateDto
+                {
+                    instanceId = "object-20", cardId = "nt_008", cardType = "STRUCTURE",
+                    health = 10, maxHealth = 10, slotKind = "BUILDING", slotIndex = 0,
+                    occupiedSlots = 3, summonedTurn = 1
+                };
+                return new MatchStateDto
+                {
+                    matchId = "nether-fortress-replay", viewerPlayerId = "alice",
+                    protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                    status = "ACTIVE", phase = "MAIN", turn = 2, activePlayerIndex = 0, nextInstanceId = 21,
+                    players = new[]
+                    {
+                        new PlayerStateDto
+                        {
+                            playerId = "alice", life = 30, redstone = 1, temporaryRedstone = 1,
+                            totalRedstone = 2, redstoneCapacity = 1,
+                            unitSlots = new[] { null, "object-10", null, null },
+                            buildingSlots = new[] { "object-20", "object-20", "object-20" },
+                            battlefield = new[]
+                            {
+                                fortress,
+                                new BattlefieldObjectStateDto
+                                {
+                                    instanceId = "object-10", cardId = "pf_001", cardType = "UNIT",
+                                    attack = 1, health = 2, maxHealth = 2, slotKind = "UNIT", slotIndex = 1,
+                                    occupiedSlots = 1, summonedTurn = 1
+                                }
+                            }
+                        },
+                        new PlayerStateDto { playerId = "bob", life = 30, redstoneCapacity = 1 }
+                    }
+                };
+            }
+
+            var payment = new MatchEventDto
+            {
+                eventId = 1, type = MatchEventTypes.RedstoneChanged,
+                payload = new MatchEventPayloadDto
+                {
+                    playerId = "alice", turn = 2, reason = "AUTOMATIC_PAYMENT",
+                    sourceCardId = "nt_008", sourceInstanceId = "object-20", effectId = "effect.nt_008.01",
+                    redstone = 1, temporaryRedstone = 0, totalRedstone = 1, redstoneCapacity = 1
+                }
+            };
+            var summon = new MatchEventDto
+            {
+                eventId = 2, type = MatchEventTypes.ObjectSummoned,
+                payload = new MatchEventPayloadDto
+                {
+                    playerId = "alice", sourceCardId = "nt_008", sourceInstanceId = "object-20",
+                    effectId = "effect.nt_008.01", cardId = "tk_015", instanceId = "object-21",
+                    cardType = "UNIT", slotKind = "UNIT", slotIndex = 0, occupiedSlots = 1,
+                    attack = 3, health = 3, maxHealth = 3, summonedTurn = 2,
+                    keywords = Array.Empty<string>(), nextInstanceId = 22
+                }
+            };
+            var store = new MatchStateStore();
+            store.Replace(InitialState());
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[] { payment, summon }
+            });
+            Assert.That(store.Current.players[0].temporaryRedstone, Is.Zero);
+            Assert.That(store.Current.players[0].redstone, Is.EqualTo(1));
+            Assert.That(store.Current.players[0].unitSlots[0], Is.EqualTo("object-21"));
+            Assert.That(store.Current.players[0].battlefield.Single(value => value.instanceId == "object-21").cardId,
+                Is.EqualTo("tk_015"));
+
+            var orphanStore = new MatchStateStore();
+            orphanStore.Replace(InitialState());
+            summon.eventId = 1;
+            Assert.Throws<InvalidOperationException>(() => orphanStore.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[] { summon }
+            }));
+        }
+
+        [Test]
         public void Apply_RejectsPiglinMagmaDamageWithoutMatchingPayment()
         {
             var store = new MatchStateStore();

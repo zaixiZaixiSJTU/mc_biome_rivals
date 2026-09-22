@@ -1957,7 +1957,7 @@
                         "craftedAttackBonus":  0,
                         "craftedHealthBonus":  0,
                         "craftedDurabilityBonus":  0,
-                        "effectImplementationStatus":  "PENDING",
+                        "effectImplementationStatus":  "IMPLEMENTED",
                         "effectIds":  [
                                           "effect.nt_008.01"
                                       ]

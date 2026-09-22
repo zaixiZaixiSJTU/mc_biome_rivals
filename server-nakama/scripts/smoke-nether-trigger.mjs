@@ -14,7 +14,7 @@ const maximumAttempts = Number(process.env.BIOME_RIVALS_NETHER_PROBE_ATTEMPTS ||
 const reportPath = resolve(process.env.BIOME_RIVALS_NETHER_PROBE_REPORT ||
   '../artifacts/nether-trigger-online-probe.json');
 const protocolVersion = 36;
-const rulesetVersion = 'prototype-0.60';
+const rulesetVersion = 'prototype-0.61';
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);

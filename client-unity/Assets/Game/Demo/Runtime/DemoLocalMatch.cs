@@ -1225,6 +1225,7 @@ namespace BiomeRivals.Demo
                 AcceptCommand(command);
                 return DemoCommandResult.Accept($"僵尸猪灵岩浆触发 {magmaPulses} 次，敌方英雄生命归零，你获得胜利！", Revision);
             }
+            var fortressSummons = ResolveNetherFortressEndPhase(true);
             var poisonDeathMessages = new List<string>();
             var poisonDamage = ResolveEndPhaseStatuses(_playerBattlefield, poisonDeathMessages, out var fireDamage, out var witherDamage);
             ResolvePlayerStatuses(_playerStatuses);
@@ -1260,6 +1261,7 @@ namespace BiomeRivals.Demo
             if (mineTriggers > 0) monumentMessage += $" 废弃矿井生成了 {mineTriggers} 张圆石。";
             if (mansionSummons > 0) monumentMessage += $" 林地府邸召唤了 {mansionSummons} 个卫道士新兵。";
             if (magmaPulses > 0) monumentMessage += $" 僵尸猪灵消耗 {magmaPulses} 点红石并造成 {magmaPulses} 点岩浆伤害。";
+            if (fortressSummons > 0) monumentMessage += $" 下界要塞消耗 {fortressSummons} 点红石并召唤了 {fortressSummons} 个要塞凋灵骷髅。";
             if (crystalPulses > 0) monumentMessage += $" 末影水晶对敌方英雄造成了 {crystalPulses * 2} 点普通伤害。";
             return DemoCommandResult.Accept(string.IsNullOrEmpty(monumentMessage) ? "已结束回合。" : monumentMessage + " 已结束回合。", Revision);
         }
@@ -1275,6 +1277,7 @@ namespace BiomeRivals.Demo
                 ExpireTemporaryEnergy(false);
                 return RememberDraw(new DemoDrawResult(DemoDrawOutcome.MatchEnded, string.Empty, 0));
             }
+            ResolveNetherFortressEndPhase(false);
             ResolveEndPhaseStatuses(_opponentBattlefield, null, out _, out _);
             ResolvePlayerStatuses(_opponentStatuses);
             ResolveEndCrystalEndPhase(false);
@@ -1978,6 +1981,30 @@ namespace BiomeRivals.Demo
                 if (IsFinished) PendingChoice = null;
             }
             return triggered;
+        }
+
+        private int ResolveNetherFortressEndPhase(bool player)
+        {
+            var battlefield = player ? _playerBattlefield : _opponentBattlefield;
+            var slots = player ? UnitSlots : OpponentUnitSlots;
+            var fortresses = battlefield
+                .Where(value => value.CardId == "nt_008" && value.SlotKind == DemoSlotKind.Building && value.Health > 0)
+                .OrderBy(value => value.SlotIndex)
+                .ThenBy(value => value.InstanceId, StringComparer.Ordinal)
+                .ToArray();
+            var summonedCount = 0;
+            foreach (var fortress in fortresses)
+            {
+                if (IsFinished) break;
+                if (!battlefield.Contains(fortress) || fortress.Health <= 0 ||
+                    Array.FindIndex(slots, string.IsNullOrEmpty) < 0)
+                    continue;
+                if (!TrySpendEnergy(player, 1)) continue;
+                if (!TrySummonUnit("tk_015", player, -1, out _))
+                    throw new InvalidOperationException("Validated Nether Fortress summon unexpectedly failed.");
+                summonedCount++;
+            }
+            return summonedCount;
         }
 
         private int ResolveEndCrystalEndPhase(bool player)

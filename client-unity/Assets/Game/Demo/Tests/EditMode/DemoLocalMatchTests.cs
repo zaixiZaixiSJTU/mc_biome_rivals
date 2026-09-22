@@ -4035,6 +4035,47 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(second.Message, Does.Contain("凋零造成 1 点真实伤害"));
         }
 
+        [Test]
+        public void NetherFortressSummonsTheTokenIntoTheLeftmostOpenOpponentSlotLocally()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("nt_008", out var fortress), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_001", out var bee), Is.True);
+            Assert.That(fortress.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(new[] { "pf_001" }, new[] { "pf_002" });
+            match.ResetOpponent(new[] { fortress, bee }, new[] { 2 });
+
+            match.BeginNextPlayerTurn();
+
+            var summoned = match.GetObject(false, DemoSlotKind.Unit, 0);
+            Assert.That(summoned, Is.Not.Null);
+            Assert.That(summoned.CardId, Is.EqualTo("tk_015"));
+            Assert.That(summoned.Attack, Is.EqualTo(3));
+            Assert.That(summoned.Health, Is.EqualTo(3));
+            Assert.That(summoned.SummonedRound, Is.EqualTo(1));
+            Assert.That(match.GetObject(false, DemoSlotKind.Building, 0).CardId, Is.EqualTo("nt_008"));
+        }
+
+        [Test]
+        public void NetherFortressDoesNotSpendOrAllocateWhenTheLocalUnitRowIsFull()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("nt_008", out var fortress), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_001", out var bee), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_002", out var sheep), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_003", out var wolf), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_004", out var farmer), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(new[] { "pf_001" }, new[] { "pf_002" });
+            match.ResetOpponent(new[] { fortress, bee, sheep, wolf, farmer }, new[] { 0, 1, 2, 3 });
+
+            match.BeginNextPlayerTurn();
+
+            Assert.That(match.OpponentBattlefield.Count(value => value.CardId == "tk_015"), Is.Zero);
+            Assert.That(match.OpponentBattlefield.Count(value => value.SlotKind == DemoSlotKind.Unit), Is.EqualTo(4));
+        }
+
         private static float ProjectedWidth(Camera camera, Transform surface, Vector3[] vertices)
         {
             var min = vertices.Min(vertex => camera.WorldToViewportPoint(surface.TransformPoint(vertex)).x);

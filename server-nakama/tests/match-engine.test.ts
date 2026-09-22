@@ -5900,3 +5900,148 @@ TestHarness.test('Wither Skeleton refresh replaces a one-tick source but preserv
   assertEventBatchMatchesSchema(refreshed.batch);
   assertEventBatchMatchesSchema(preserved.batch);
 });
+
+TestHarness.test('Nether Fortress spends temporary redstone first and summons into the leftmost slot before statuses', function (): void {
+  const state = activeState('match-nether-fortress-basic', ['alice', 'bob'], ['nether', 'plains_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const actor = state.players[actorIndex]!;
+  state.turn = 2;
+  actor.redstone = 1;
+  actor.redstoneCapacity = 1;
+  actor.temporaryRedstone = 1;
+  placeBuilding(state, actorIndex, 'nt_008', 0, 'object-20');
+  placeUnit(state, actorIndex, 'pf_008', 2, 'object-10', 1);
+  actor.battlefield.filter(function (object): boolean { return object.instanceId === 'object-10'; })[0]!.statuses.push({
+    statusId: 'WITHER', remainingDuration: 2, sourcePlayerId: 'bob', sourceCardId: 'nt_005',
+    sourceInstanceId: 'object-99', effectId: 'effect.nt_005.01', attackModifier: 0, boundAttackModifier: 0
+  });
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    command('nether-fortress-basic', 0, 'END_TURN'));
+
+  TestHarness.ok(result.accepted, JSON.stringify(result));
+  if (!result.accepted) return;
+  const resolvedActor = result.state.players[actorIndex]!;
+  const fortressEvents = result.batch.events.filter(function (event): boolean {
+    return event.payload.effectId === 'effect.nt_008.01';
+  });
+  TestHarness.equal(fortressEvents.length, 2);
+  TestHarness.equal(fortressEvents[0]!.type, 'REDSTONE_CHANGED');
+  TestHarness.equal(fortressEvents[0]!.payload.reason, 'AUTOMATIC_PAYMENT');
+  TestHarness.equal(fortressEvents[0]!.payload.redstone, 1);
+  TestHarness.equal(fortressEvents[0]!.payload.temporaryRedstone, 0);
+  TestHarness.equal(fortressEvents[1]!.type, 'OBJECT_SUMMONED');
+  TestHarness.equal(fortressEvents[1]!.payload.cardId, 'tk_015');
+  TestHarness.equal(fortressEvents[1]!.payload.slotIndex, 0);
+  TestHarness.equal(fortressEvents[1]!.payload.attack, 3);
+  TestHarness.equal(fortressEvents[1]!.payload.health, 3);
+  const statusDamageIndex = result.batch.events.findIndex(function (event): boolean {
+    return event.type === 'OBJECT_STATS_CHANGED' && event.payload.effectId === 'effect.nt_005.01';
+  });
+  TestHarness.ok(statusDamageIndex > result.batch.events.indexOf(fortressEvents[1]!));
+  const summoned = resolvedActor.battlefield.filter(function (object): boolean { return object.cardId === 'tk_015'; })[0]!;
+  TestHarness.equal(summoned.slotIndex, 0);
+  TestHarness.equal(summoned.summonedTurn, 2);
+  TestHarness.equal(summoned.hasAttacked, false);
+  TestHarness.equal(BiomeRivalsRules.getCardDefinition('nt_008')!.effectImplementationStatus, 'IMPLEMENTED');
+  const recovered = BiomeRivalsRules.createClientSnapshot(result.state, actor.playerId);
+  TestHarness.equal(recovered.players[actorIndex]!.redstone, 1);
+  TestHarness.equal(recovered.players[actorIndex]!.temporaryRedstone, 0);
+  TestHarness.equal(recovered.players[actorIndex]!.battlefield.some(function (object): boolean {
+    return object.cardId === 'tk_015' && object.slotIndex === 0 && object.summonedTurn === 2;
+  }), true);
+  assertSnapshotMatchesSchema(recovered);
+  assertEventBatchMatchesSchema(result.batch);
+});
+
+TestHarness.test('Nether Fortress skips atomically when the row is full or energy is unavailable', function (): void {
+  const fullState = activeState('match-nether-fortress-full', ['alice', 'bob'], ['nether', 'plains_forest']);
+  const fullActorIndex = fullState.activePlayerIndex;
+  const fullActor = fullState.players[fullActorIndex]!;
+  fullActor.redstone = 2;
+  fullActor.redstoneCapacity = 2;
+  placeBuilding(fullState, fullActorIndex, 'nt_008', 0, 'object-20');
+  for (let slotIndex = 0; slotIndex < 4; slotIndex += 1) {
+    placeUnit(fullState, fullActorIndex, 'pf_001', slotIndex, 'object-' + String(30 + slotIndex), 1);
+  }
+  const fullNextInstanceId = fullState.nextInstanceId;
+  const full = BiomeRivalsRules.applyCommand(fullState, fullActor.playerId,
+    command('nether-fortress-full', 0, 'END_TURN'));
+  TestHarness.ok(full.accepted, JSON.stringify(full));
+  if (!full.accepted) return;
+  TestHarness.equal(full.state.players[fullActorIndex]!.redstone, 2);
+  TestHarness.equal(full.state.nextInstanceId, fullNextInstanceId);
+  TestHarness.equal(full.batch.events.some(function (event): boolean {
+    return event.payload.effectId === 'effect.nt_008.01';
+  }), false);
+
+  const emptyState = activeState('match-nether-fortress-no-energy', ['alice', 'bob'], ['nether', 'plains_forest']);
+  const emptyActorIndex = emptyState.activePlayerIndex;
+  const emptyActor = emptyState.players[emptyActorIndex]!;
+  emptyActor.redstone = 0;
+  emptyActor.redstoneCapacity = 0;
+  emptyActor.temporaryRedstone = 0;
+  placeBuilding(emptyState, emptyActorIndex, 'nt_008', 0, 'object-40');
+  const emptyNextInstanceId = emptyState.nextInstanceId;
+  const empty = BiomeRivalsRules.applyCommand(emptyState, emptyActor.playerId,
+    command('nether-fortress-no-energy', 0, 'END_TURN'));
+  TestHarness.ok(empty.accepted, JSON.stringify(empty));
+  if (!empty.accepted) return;
+  TestHarness.equal(empty.state.nextInstanceId, emptyNextInstanceId);
+  TestHarness.equal(empty.state.players[emptyActorIndex]!.battlefield.some(function (object): boolean {
+    return object.cardId === 'tk_015';
+  }), false);
+  TestHarness.equal(empty.batch.events.some(function (event): boolean {
+    return event.payload.effectId === 'effect.nt_008.01';
+  }), false);
+});
+
+TestHarness.test('Piglin magma consumes the final energy before Nether Fortress can summon', function (): void {
+  const state = activeState('match-piglin-before-nether-fortress', ['alice', 'bob'], ['nether', 'plains_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const defenderIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  actor.redstone = 1;
+  actor.redstoneCapacity = 1;
+  placeUnit(state, actorIndex, 'nt_002', 0, 'object-10', 1);
+  placeBuilding(state, actorIndex, 'nt_008', 0, 'object-20');
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    command('piglin-before-nether-fortress', 0, 'END_TURN'));
+
+  TestHarness.ok(result.accepted, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[defenderIndex]!.life, 29);
+  TestHarness.equal(result.state.players[actorIndex]!.battlefield.some(function (object): boolean {
+    return object.cardId === 'tk_015';
+  }), false);
+  TestHarness.equal(result.batch.events.filter(function (event): boolean {
+    return event.type === 'REDSTONE_CHANGED' && event.payload.reason === 'AUTOMATIC_PAYMENT';
+  })[0]!.payload.effectId, 'effect.nt_002.01');
+  TestHarness.equal(result.batch.events.some(function (event): boolean {
+    return event.payload.effectId === 'effect.nt_008.01';
+  }), false);
+  assertEventBatchMatchesSchema(result.batch);
+});
+
+TestHarness.test('Fortress Wither Skeleton token does not inherit the NT-005 WITHER trigger from its tags', function (): void {
+  const state = activeState('match-fortress-token-no-wither', ['alice', 'bob'], ['nether', 'plains_forest']);
+  const actorIndex = state.activePlayerIndex;
+  const defenderIndex = actorIndex === 0 ? 1 : 0;
+  const actor = state.players[actorIndex]!;
+  state.turn = 2;
+  state.phase = 'COMBAT';
+  placeUnit(state, actorIndex, 'tk_015', 0, 'object-10', 1);
+  placeUnit(state, defenderIndex, 'pf_008', 0, 'object-20', 1);
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    attackCommand('fortress-token-no-wither', 0, 'object-10', 'UNIT', 'object-20'));
+
+  TestHarness.ok(result.accepted, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[defenderIndex]!.battlefield[0]!.statuses.length, 0);
+  TestHarness.equal(result.batch.events.some(function (event): boolean {
+    return event.type === 'OBJECT_STATUS_APPLIED' && event.payload.statusId === 'WITHER';
+  }), false);
+  assertEventBatchMatchesSchema(result.batch);
+});

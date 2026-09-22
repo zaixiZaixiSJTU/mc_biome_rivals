@@ -651,12 +651,15 @@ namespace BiomeRivals.Demo
                     var summonTriggerName = matchEvent.payload?.effectId == "effect.nt_001.01" ? "亡语" :
                         matchEvent.payload?.effectId == "effect.pf_006.01" ? "繁殖" :
                         matchEvent.payload?.effectId == "effect.pf_007.01" ? "集结" :
-                        matchEvent.payload?.effectId == "effect.cd_008.01" ? "府邸增援" : "效果";
+                        matchEvent.payload?.effectId == "effect.cd_008.01" ? "府邸增援" :
+                        matchEvent.payload?.effectId == "effect.nt_008.01" ? "岩浆增援" : "效果";
                     ShowStatus(ownSummon
                         ? $"{summonSourceName}{summonTriggerName}：{summonedName}已在单位格 {matchEvent.payload.slotIndex + 1} 召唤。"
                         : $"敌方{summonSourceName}{summonTriggerName}：{summonedName}已在单位格 {matchEvent.payload.slotIndex + 1} 召唤。", false);
                     if (matchEvent.payload?.effectId == "effect.cd_008.01")
                         yield return ShowTurnBanner("府邸增援", ownSummon ? Leaf : Ember);
+                    else if (matchEvent.payload?.effectId == "effect.nt_008.01")
+                        yield return ShowTurnBanner("要塞增援", ownSummon ? Gold : Ember);
                     yield return PulseBattlefieldObject(matchEvent.payload?.instanceId);
                     break;
                 }
@@ -906,6 +909,16 @@ namespace BiomeRivals.Demo
                             yield return PulseBattlefieldObject(matchEvent.payload.sourceInstanceId);
                         yield return ShowTurnBanner("重生锚充能", Hex("#B95CFF"));
                         yield return grantedViewer ? PulsePlayerHud(Cyan) : PulseOpponentHud(Cyan);
+                    }
+                    else if (matchEvent.payload?.effectId == "effect.nt_008.01" &&
+                             matchEvent.payload.reason == "AUTOMATIC_PAYMENT")
+                    {
+                        var paidViewer = matchEvent.payload.playerId ==
+                            GameCompositionRoot.Instance?.MatchStateStore.Current?.viewerPlayerId;
+                        ShowStatus($"下界要塞：{(paidViewer ? "己方" : "敌方")}消耗 1 点红石，正在召集要塞凋灵骷髅。", false);
+                        if (!string.IsNullOrEmpty(matchEvent.payload.sourceInstanceId))
+                            yield return PulseBattlefieldObject(matchEvent.payload.sourceInstanceId);
+                        yield return paidViewer ? PulsePlayerHud(Gold) : PulseOpponentHud(Ember);
                     }
                     break;
                 case MatchEventTypes.ObjectStatsChanged:

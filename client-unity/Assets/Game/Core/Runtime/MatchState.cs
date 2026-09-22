@@ -299,7 +299,25 @@ namespace BiomeRivals.Core
                     craftingPlayer.discardPile = craftingDiscard.ToArray();
                     break;
                 case MatchEventTypes.ObjectSummoned:
-                    AddBattlefieldObject(FindPlayer(payload.playerId), payload, "Summon");
+                    var summonOwner = FindPlayer(payload.playerId);
+                    if (payload.effectId == "effect.nt_008.01")
+                    {
+                        var payment = previousEvent?.payload;
+                        var source = FindObject(summonOwner, payload.sourceInstanceId);
+                        var leftmostEmptySlot = Array.FindIndex(summonOwner.unitSlots ?? Array.Empty<string>(), string.IsNullOrEmpty);
+                        if (previousEvent == null || previousEvent.type != MatchEventTypes.RedstoneChanged ||
+                            payment == null || payment.playerId != summonOwner.playerId ||
+                            payment.reason != "AUTOMATIC_PAYMENT" || payment.sourceCardId != "nt_008" ||
+                            payment.sourceInstanceId != payload.sourceInstanceId || payment.effectId != "effect.nt_008.01" ||
+                            payload.sourceCardId != "nt_008" || source.cardId != "nt_008" ||
+                            source.cardType != "STRUCTURE" || source.health <= 0 ||
+                            Current.players[Current.activePlayerIndex] != summonOwner || payload.cardId != "tk_015" ||
+                            payload.cardType != "UNIT" || payload.slotKind != "UNIT" || payload.slotIndex != leftmostEmptySlot ||
+                            payload.occupiedSlots != 1 || payload.attack != 3 || payload.health != 3 || payload.maxHealth != 3 ||
+                            payload.summonedTurn != Current.turn || (payload.keywords ?? Array.Empty<string>()).Length != 0)
+                            throw new InvalidOperationException("Nether Fortress summon does not follow its one-energy payment into the leftmost unit slot.");
+                    }
+                    AddBattlefieldObject(summonOwner, payload, "Summon");
                     break;
                 case MatchEventTypes.CardPlayed:
                     var playingPlayer = FindPlayer(payload.playerId);
@@ -536,6 +554,16 @@ namespace BiomeRivals.Core
                             Current.players[Current.activePlayerIndex] != resourcePlayer ||
                             resourcePlayer.totalRedstone - payload.totalRedstone != 1)
                             throw new InvalidOperationException("Piglin magma payment is not a valid one-energy end-phase payment.");
+                    }
+                    else if (payload.effectId == "effect.nt_008.01")
+                    {
+                        var source = FindObject(resourcePlayer, payload.sourceInstanceId);
+                        if (payload.reason != "AUTOMATIC_PAYMENT" || payload.sourceCardId != "nt_008" ||
+                            source.cardId != "nt_008" || source.cardType != "STRUCTURE" || source.health <= 0 ||
+                            Current.players[Current.activePlayerIndex] != resourcePlayer ||
+                            !Array.Exists(resourcePlayer.unitSlots ?? Array.Empty<string>(), string.IsNullOrEmpty) ||
+                            resourcePlayer.totalRedstone - payload.totalRedstone != 1)
+                            throw new InvalidOperationException("Nether Fortress payment requires one energy and a free unit slot.");
                     }
                     else if (payload.effectId == "effect.nt_007.01")
                     {
