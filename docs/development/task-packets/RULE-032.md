@@ -44,11 +44,13 @@ Unity 状态仓库核验炽足兽来源、同控制者、FIRE 移除与紧邻治
 
 ## RULE-032D 凋灵骷髅纵向切片
 
-状态：**下一唯一任务**。只让 `nt_005` 在合法普通战斗伤害后创建 WITHER，覆盖主动攻击、反击、目标死亡、刷新/叠加、击杀归属和终局；同步 Unity 与内容注册。
+状态：**已完成**（实现提交 `57fea39`）。`nt_005` 的主动攻击与反击会在正数普通伤害后、统一死亡前对存活生物施加 WITHER；死亡来源仍完成已成立触发，死亡目标不创建状态。1→2 刷新替换来源，2→2 保留来源和数组位置。Unity 权威回放验证攻击因果，离线 Demo 同构执行，内容已转为 `IMPLEMENTED`。
+
+版本与验证：协议 36、规则集 `prototype-0.60`、效果实现注册表 46、卡牌定义/catalog 41；59 个已实现效果、10 个预留效果。`scripts/validate.ps1` 通过，服务端 214/214；直接调用 Unity `6000.0.28f1c1`，EditMode 258/258，结果为 `client-unity/Logs/rule032d-full-editmode-results.xml`。未实现 `nt_008`。
 
 ## RULE-032E 下界要塞纵向切片
 
-状态：**等待 D**。只实现 `nt_008` 的结束阶段支付与 `tk_015` 召唤，复用临时红石优先支付；覆盖多实例、末格竞争、满场、能量不足、令牌注册、重连和离线同构。
+状态：**下一唯一任务**。只实现 `nt_008` 的结束阶段支付与 `tk_015` 召唤，复用临时红石优先支付；覆盖稳定多实例顺序、逐实例重检、末格竞争、满场、能量不足、令牌注册、重连和离线同构。不得在本切片制作视觉演示或运行 Docker 双端验收。
 
 ## RULE-032F1 确定性演示与 Unity 视觉审查
 
@@ -65,12 +67,12 @@ Unity 状态仓库核验炽足兽来源、同控制者、FIRE 移除与紧邻治
 ## 最小交接
 
 ```text
-任务编号：RULE-032D
-只实现凋灵骷髅在合法普通战斗伤害后的 WITHER 触发；不得实现下界要塞。
+任务编号：RULE-032E
+只实现下界要塞结束阶段的原子支付与 TK-015 召唤；不得扩展其他卡牌或开始集成验收。
 仓库：D:\gitt\mc_biome_rivals
-基线提交：`b09d3aa feat: add wither status foundation`
-先读：docs/design/nether-status-summon-spec-v1.md 的第 3、6 节，以及 docs/development/task-packets/RULE-032.md 的 RULE-032D。
+基线提交：`57fea39 feat: implement wither skeleton combat trigger`
+先读：docs/design/nether-status-summon-spec-v1.md 的第 4—6 节，以及 docs/development/task-packets/RULE-032.md 的 RULE-032E。
 开始前记录 git status；保留无关本机文件。
-接通 NT-005 的主动攻击与反击触发、刷新/不叠加、目标死亡边界、事件顺序、Unity/离线同构和内容注册；审查时直接调用 Unity。
+接通 NT-008 的稳定结束阶段顺序、临时红石优先自动支付、最左空单位格、TK-015 权威召唤、满场/费用不足不扣费、召唤原子性、Unity/离线同构和内容注册；审查时直接调用 Unity。
 结束时报告改动、版本、验证、风险和提交号。
 ```
