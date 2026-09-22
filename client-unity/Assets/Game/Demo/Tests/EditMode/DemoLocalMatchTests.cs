@@ -3957,12 +3957,55 @@ namespace BiomeRivals.Demo.Tests
         }
 
         [Test]
-        public void SeededWitherTicksTwiceAtItsControllersEndPhaseWithoutImplementingNt005()
+        public void WitherSkeletonAppliesAfterActiveAndRetaliationDamageEvenWhenTheSourceDiesLocally()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("nt_005", out var witherSkeleton), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_008", out var ironGolem), Is.True);
+            Assert.That(witherSkeleton.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
+
+            var active = new DemoLocalMatch();
+            active.ResetDeckAndHand(new[] { witherSkeleton.id }, new[] { "nt_001" });
+            active.ResetOpponent(new[] { ironGolem });
+            Assert.That(active.ApplyDeploy(witherSkeleton,
+                active.CreateDeployCommand(witherSkeleton.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            active.EndPlayerTurn();
+            active.BeginNextPlayerTurn();
+            Assert.That(active.ApplyEnterCombat(active.CreateEnterCombatCommand()).Accepted, Is.True);
+            var activeSource = active.GetObject(true, DemoSlotKind.Unit, 0);
+            var activeTarget = active.GetObject(false, DemoSlotKind.Unit, 0);
+            var activeResult = active.ApplyAttack(active.CreateAttackCommand(activeSource.InstanceId, "UNIT", activeTarget.InstanceId));
+            Assert.That(activeResult.Accepted, Is.True, activeResult.Message);
+            Assert.That(active.GetObject(true, DemoSlotKind.Unit, 0), Is.Null);
+            Assert.That(activeTarget.Statuses.Single().statusId, Is.EqualTo("WITHER"));
+            Assert.That(activeTarget.Statuses.Single().sourceInstanceId, Is.EqualTo(activeSource.InstanceId));
+            Assert.That(activeResult.Message, Does.Contain("凋零"));
+
+            var retaliation = new DemoLocalMatch();
+            retaliation.ResetDeckAndHand(new[] { ironGolem.id }, new[] { "pf_001" });
+            retaliation.ResetOpponent(new[] { witherSkeleton });
+            Assert.That(retaliation.ApplyDeploy(ironGolem,
+                retaliation.CreateDeployCommand(ironGolem.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            retaliation.EndPlayerTurn();
+            retaliation.BeginNextPlayerTurn();
+            Assert.That(retaliation.ApplyEnterCombat(retaliation.CreateEnterCombatCommand()).Accepted, Is.True);
+            var retaliationAttacker = retaliation.GetObject(true, DemoSlotKind.Unit, 0);
+            var retaliationSource = retaliation.GetObject(false, DemoSlotKind.Unit, 0);
+            var retaliationResult = retaliation.ApplyAttack(
+                retaliation.CreateAttackCommand(retaliationAttacker.InstanceId, "UNIT", retaliationSource.InstanceId));
+            Assert.That(retaliationResult.Accepted, Is.True, retaliationResult.Message);
+            Assert.That(retaliation.GetObject(false, DemoSlotKind.Unit, 0), Is.Null);
+            Assert.That(retaliationAttacker.Statuses.Single().statusId, Is.EqualTo("WITHER"));
+            Assert.That(retaliationAttacker.Statuses.Single().sourceInstanceId, Is.EqualTo(retaliationSource.InstanceId));
+        }
+
+        [Test]
+        public void SeededWitherTicksTwiceAtItsControllersEndPhaseWithoutDeploymentTriggeringIt()
         {
             var registry = CardContentLoader.Load();
             Assert.That(registry.TryGetDefinition("pf_004", out var targetDefinition), Is.True);
             Assert.That(registry.TryGetDefinition("nt_005", out var witherSkeleton), Is.True);
-            Assert.That(witherSkeleton.effectImplementationStatus, Is.EqualTo("PENDING"));
+            Assert.That(witherSkeleton.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
             var match = new DemoLocalMatch();
             match.ResetDeckAndHand(new[] { targetDefinition.id }, new[] { "pf_001" });
             Assert.That(match.ApplyDeploy(targetDefinition,

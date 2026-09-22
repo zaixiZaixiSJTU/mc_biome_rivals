@@ -226,11 +226,13 @@ namespace BiomeRivals.Core
                 nextEventId++;
             }
             MatchEventDto previousEvent = null;
+            MatchEventDto eventBeforePrevious = null;
             int[] lifeBeforePreviousEvent = null;
             foreach (var matchEvent in batch.events ?? Array.Empty<MatchEventDto>())
             {
                 var lifeBeforeEvent = Current.players.Select(player => player.life).ToArray();
-                Apply(matchEvent, previousEvent, lifeBeforePreviousEvent);
+                Apply(matchEvent, previousEvent, eventBeforePrevious, lifeBeforePreviousEvent);
+                eventBeforePrevious = previousEvent;
                 previousEvent = matchEvent;
                 lifeBeforePreviousEvent = lifeBeforeEvent;
             }
@@ -239,7 +241,11 @@ namespace BiomeRivals.Core
             Changed?.Invoke(Current);
         }
 
-        private void Apply(MatchEventDto matchEvent, MatchEventDto previousEvent, int[] lifeBeforePreviousEvent)
+        private void Apply(
+            MatchEventDto matchEvent,
+            MatchEventDto previousEvent,
+            MatchEventDto eventBeforePrevious,
+            int[] lifeBeforePreviousEvent)
         {
             if (matchEvent == null || matchEvent.payload == null) throw new InvalidOperationException("Event payload is missing.");
             var payload = matchEvent.payload;
@@ -642,10 +648,31 @@ namespace BiomeRivals.Core
                     {
                         FindPlayer(payload.sourcePlayerId);
                         var mustPreserveSource = existingStatus != null && existingStatus.remainingDuration >= 2;
+                        var attackEvent = previousEvent != null && previousEvent.type == MatchEventTypes.AttackResolved
+                            ? previousEvent
+                            : eventBeforePrevious != null && eventBeforePrevious.type == MatchEventTypes.AttackResolved
+                                ? eventBeforePrevious
+                                : null;
+                        var attack = attackEvent?.payload;
+                        var activeHit = attack != null && attack.targetType == "UNIT" && attack.targetPlayerId == payload.playerId &&
+                            attack.targetInstanceId == payload.instanceId && attack.attackerInstanceId != MatchAttackerIds.Hero &&
+                            attack.damageToTarget > 0 && attack.targetHealth > 0 && attack.targetHealth == statusObject.health;
+                        var retaliationHit = attack != null && attack.targetType == "UNIT" && attack.attackerPlayerId == payload.playerId &&
+                            attack.attackerInstanceId == payload.instanceId && attack.damageToAttacker > 0 &&
+                            attack.attackerHealth > 0 && attack.attackerHealth == statusObject.health;
+                        var applyingPlayerId = activeHit ? attack.attackerPlayerId : retaliationHit ? attack.targetPlayerId : string.Empty;
+                        var applyingInstanceId = activeHit ? attack.attackerInstanceId : retaliationHit ? attack.targetInstanceId : string.Empty;
+                        var applyingSource = string.IsNullOrEmpty(applyingPlayerId) || string.IsNullOrEmpty(applyingInstanceId)
+                            ? null
+                            : FindObject(FindPlayer(applyingPlayerId), applyingInstanceId);
+                        var applicationSourceMatches = mustPreserveSource ||
+                            payload.sourcePlayerId == applyingPlayerId && payload.sourceInstanceId == applyingInstanceId;
                         if (statusObject.cardType != "UNIT" || statusObject.health <= 0 || payload.remainingDuration != 2 ||
                             payload.sourceCardId != "nt_005" || string.IsNullOrWhiteSpace(payload.sourceInstanceId) ||
                             payload.effectId != "effect.nt_005.01" || payload.statusAttackModifier != 0 ||
                             payload.boundAttackModifier != 0 || payload.attack != statusObject.attack || payload.health != statusObject.health ||
+                            attackEvent == null || applyingSource == null || applyingSource.cardId != "nt_005" ||
+                            applyingSource.cardType != "UNIT" || !applicationSourceMatches ||
                             mustPreserveSource && (payload.sourcePlayerId != existingStatus.sourcePlayerId ||
                                 payload.sourceCardId != existingStatus.sourceCardId || payload.sourceInstanceId != existingStatus.sourceInstanceId ||
                                 payload.effectId != existingStatus.effectId))

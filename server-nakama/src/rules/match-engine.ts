@@ -1342,6 +1342,35 @@ namespace BiomeRivalsRules {
       });
     }
 
+    function applyWither(
+      targetPlayer: PlayerState,
+      target: BattlefieldObjectState,
+      sourcePlayer: PlayerState,
+      sourceInstanceId: string
+    ): void {
+      const status = applyWitherStatus(
+        target,
+        sourcePlayer.playerId,
+        'nt_005',
+        sourceInstanceId,
+        'effect.nt_005.01'
+      );
+      emit('OBJECT_STATUS_APPLIED', {
+        playerId: targetPlayer.playerId,
+        instanceId: target.instanceId,
+        statusId: status.statusId,
+        remainingDuration: status.remainingDuration,
+        sourcePlayerId: status.sourcePlayerId,
+        sourceCardId: status.sourceCardId,
+        sourceInstanceId: status.sourceInstanceId,
+        effectId: status.effectId,
+        statusAttackModifier: status.attackModifier,
+        boundAttackModifier: status.boundAttackModifier,
+        attack: target.attack,
+        health: target.health
+      });
+    }
+
     function resolveEndPhaseStatuses(player: PlayerState, opponent: PlayerState): boolean {
       const objects = player.battlefield.slice().sort(function (left, right): number {
         if (left.slotIndex !== right.slotIndex) return left.slotIndex - right.slotIndex;
@@ -3163,6 +3192,14 @@ namespace BiomeRivalsRules {
         if (!heroAttack && retaliation > 0 && attacker!.health > 0 && target.cardType === 'UNIT' &&
             target.cardId === 'nt_003') {
           applyFire(attackerPlayer, attacker!, defenderPlayer, target.cardId, target.instanceId, 'effect.nt_003.01');
+        }
+        if (!heroAttack && attackValue > 0 && target.cardType === 'UNIT' && target.health > 0 &&
+            attacker!.cardId === 'nt_005') {
+          applyWither(defenderPlayer, target, attackerPlayer, attacker!.instanceId);
+        }
+        if (!heroAttack && retaliation > 0 && attacker!.health > 0 && target.cardType === 'UNIT' &&
+            target.cardId === 'nt_005') {
+          applyWither(attackerPlayer, attacker!, defenderPlayer, target.instanceId);
         }
         settleDeaths(attackerPlayer, defenderPlayer, combatKillCredits);
         if (heroAttack && attackingEquipment !== null) {

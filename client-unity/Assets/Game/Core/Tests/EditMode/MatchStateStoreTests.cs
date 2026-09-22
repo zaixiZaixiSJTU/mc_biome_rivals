@@ -3344,11 +3344,15 @@ namespace BiomeRivals.Core.Tests
             };
             var store = new MatchStateStore();
             store.Replace(CreateWitherSnapshot(target));
-            var refresh = WitherStatusPayload(2, 4);
+            var refresh = WitherStatusPayload(2, 3);
             store.Apply(new MatchEventBatchDto
             {
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
-                events = new[] { new MatchEventDto { eventId = 1, type = MatchEventTypes.ObjectStatusApplied, payload = refresh } }
+                events = new[]
+                {
+                    WitherAttackEvent(1, "object-100", 3),
+                    new MatchEventDto { eventId = 2, type = MatchEventTypes.ObjectStatusApplied, payload = refresh }
+                }
             });
 
             Assert.That(target.statuses.Select(value => value.statusId), Is.EqualTo(new[] { "FIRE", "WITHER", "POISON" }));
@@ -3357,28 +3361,35 @@ namespace BiomeRivals.Core.Tests
             var invalidStore = new MatchStateStore();
             var invalidTarget = CreateWitheredUnit(2, 4);
             invalidStore.Replace(CreateWitherSnapshot(invalidTarget));
-            var contradictory = WitherStatusPayload(2, 4);
+            var contradictory = WitherStatusPayload(2, 3);
             contradictory.sourcePlayerId = "bob";
             contradictory.sourceInstanceId = "object-100";
             Assert.Throws<InvalidOperationException>(() => invalidStore.Apply(new MatchEventBatchDto
             {
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
-                events = new[] { new MatchEventDto { eventId = 1, type = MatchEventTypes.ObjectStatusApplied, payload = contradictory } }
+                events = new[]
+                {
+                    WitherAttackEvent(1, "object-100", 3),
+                    new MatchEventDto { eventId = 2, type = MatchEventTypes.ObjectStatusApplied, payload = contradictory }
+                }
             }));
 
             var shortenedTarget = CreateWitheredUnit(1, 4);
             var sourceReplacementStore = new MatchStateStore();
             sourceReplacementStore.Replace(CreateWitherSnapshot(shortenedTarget));
-            var replacement = WitherStatusPayload(2, 4);
-            replacement.sourcePlayerId = "bob";
+            var replacement = WitherStatusPayload(2, 3);
             replacement.sourceInstanceId = "object-100";
             sourceReplacementStore.Apply(new MatchEventBatchDto
             {
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
-                events = new[] { new MatchEventDto { eventId = 1, type = MatchEventTypes.ObjectStatusApplied, payload = replacement } }
+                events = new[]
+                {
+                    WitherAttackEvent(1, "object-100", 3),
+                    new MatchEventDto { eventId = 2, type = MatchEventTypes.ObjectStatusApplied, payload = replacement }
+                }
             });
             Assert.That(shortenedTarget.statuses.Single().remainingDuration, Is.EqualTo(2));
-            Assert.That(shortenedTarget.statuses.Single().sourcePlayerId, Is.EqualTo("bob"));
+            Assert.That(shortenedTarget.statuses.Single().sourcePlayerId, Is.EqualTo("alice"));
             Assert.That(shortenedTarget.statuses.Single().sourceInstanceId, Is.EqualTo("object-100"));
         }
 
@@ -3442,6 +3453,69 @@ namespace BiomeRivals.Core.Tests
             Assert.That(target.temporaryHealthModifierExpiresOnTurn, Is.EqualTo(3));
         }
 
+        [Test]
+        public void Apply_ReplaysActiveThenRetaliationWitherFromOneAttackAndRejectsAnOrphanApplication()
+        {
+            var attacker = CreateWitherSource("object-99", 0);
+            attacker.health = 5;
+            attacker.maxHealth = 5;
+            var defender = CreateWitherSource("object-7", 0);
+            defender.health = 5;
+            defender.maxHealth = 5;
+            var snapshot = new MatchStateDto
+            {
+                matchId = "wither-double-combat", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                status = "ACTIVE", phase = "COMBAT", turn = 2, activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice", unitSlots = new[] { "object-99", null, null, null },
+                        buildingSlots = new string[3], battlefield = new[] { attacker } },
+                    new PlayerStateDto { playerId = "bob", unitSlots = new[] { "object-7", null, null, null },
+                        buildingSlots = new string[3], battlefield = new[] { defender } }
+                }
+            };
+            var store = new MatchStateStore();
+            store.Replace(snapshot);
+            var activeApplication = WitherStatusPayload(2, 1);
+            activeApplication.attack = 4;
+            var retaliationApplication = new MatchEventPayloadDto
+            {
+                playerId = "alice", instanceId = "object-99", statusId = "WITHER", remainingDuration = 2,
+                sourcePlayerId = "bob", sourceCardId = "nt_005", sourceInstanceId = "object-7",
+                effectId = "effect.nt_005.01", attack = 4, health = 1
+            };
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto { eventId = 1, type = MatchEventTypes.AttackResolved,
+                        payload = new MatchEventPayloadDto
+                        {
+                            attackerPlayerId = "alice", attackerInstanceId = "object-99",
+                            targetPlayerId = "bob", targetType = "UNIT", targetInstanceId = "object-7",
+                            damageToTarget = 4, damageToAttacker = 4, attackerHealth = 1, targetHealth = 1
+                        } },
+                    new MatchEventDto { eventId = 2, type = MatchEventTypes.ObjectStatusApplied, payload = activeApplication },
+                    new MatchEventDto { eventId = 3, type = MatchEventTypes.ObjectStatusApplied, payload = retaliationApplication }
+                }
+            });
+            Assert.That(defender.statuses.Single().sourceInstanceId, Is.EqualTo("object-99"));
+            Assert.That(attacker.statuses.Single().sourceInstanceId, Is.EqualTo("object-7"));
+
+            var orphanTarget = CreateWitheredUnit(1, 4);
+            orphanTarget.statuses = Array.Empty<BattlefieldStatusStateDto>();
+            var orphanStore = new MatchStateStore();
+            orphanStore.Replace(CreateWitherSnapshot(orphanTarget));
+            Assert.Throws<InvalidOperationException>(() => orphanStore.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[] { new MatchEventDto { eventId = 1, type = MatchEventTypes.ObjectStatusApplied,
+                    payload = WitherStatusPayload(2, 4) } }
+            }));
+        }
+
         private static BattlefieldObjectStateDto CreateWitheredUnit(int duration, int health)
         {
             return new BattlefieldObjectStateDto
@@ -3464,12 +3538,44 @@ namespace BiomeRivals.Core.Tests
             return new MatchStateDto
             {
                 matchId = "wither-replay", viewerPlayerId = "alice", protocolVersion = GameVersions.Protocol,
-                rulesetVersion = GameVersions.Ruleset, status = "ACTIVE", turn = 2, activePlayerIndex = 1,
+                rulesetVersion = GameVersions.Ruleset, status = "ACTIVE", turn = 2, activePlayerIndex = 0,
                 players = new[]
                 {
-                    new PlayerStateDto { playerId = "alice" },
+                    new PlayerStateDto
+                    {
+                        playerId = "alice", unitSlots = new[] { "object-99", "object-100", null, null },
+                        buildingSlots = new string[3], battlefield = new[]
+                        {
+                            CreateWitherSource("object-99", 0), CreateWitherSource("object-100", 1)
+                        }
+                    },
                     new PlayerStateDto { playerId = "bob", unitSlots = new[] { "object-7", null, null, null },
                         buildingSlots = new string[3], battlefield = new[] { target } }
+                }
+            };
+        }
+
+        private static BattlefieldObjectStateDto CreateWitherSource(string instanceId, int slotIndex)
+        {
+            return new BattlefieldObjectStateDto
+            {
+                instanceId = instanceId, cardId = "nt_005", cardType = "UNIT", attack = 4,
+                health = 4, maxHealth = 4, slotKind = "UNIT", slotIndex = slotIndex,
+                occupiedSlots = 1, summonedTurn = 1
+            };
+        }
+
+        private static MatchEventDto WitherAttackEvent(int eventId, string attackerInstanceId, int targetHealth)
+        {
+            return new MatchEventDto
+            {
+                eventId = eventId, type = MatchEventTypes.AttackResolved,
+                payload = new MatchEventPayloadDto
+                {
+                    attackerPlayerId = "alice", attackerInstanceId = attackerInstanceId,
+                    targetPlayerId = "bob", targetType = "UNIT", targetInstanceId = "object-7",
+                    damageToTarget = 1, damageToAttacker = 0, attackerHealth = 4,
+                    targetHealth = targetHealth
                 }
             };
         }

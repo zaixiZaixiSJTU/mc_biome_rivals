@@ -1163,6 +1163,19 @@ namespace BiomeRivals.Demo
                 ApplyFire(attacker, target.Player, target.CardId, target.InstanceId, "effect.nt_003.01");
                 fireApplications++;
             }
+            var witherApplications = 0;
+            if (!heroAttack && attackValue > 0 && target.SlotKind == DemoSlotKind.Unit && target.Health > 0 &&
+                attacker.CardId == "nt_005")
+            {
+                ApplyWither(target, attacker.Player, attacker.InstanceId);
+                witherApplications++;
+            }
+            if (!heroAttack && retaliation > 0 && attacker.Health > 0 && target.SlotKind == DemoSlotKind.Unit &&
+                target.CardId == "nt_005")
+            {
+                ApplyWither(attacker, target.Player, target.InstanceId);
+                witherApplications++;
+            }
             var deathrattleMessages = SettleDeaths(combatKillCredits);
             if (heroAttack)
             {
@@ -1181,6 +1194,7 @@ namespace BiomeRivals.Demo
                 $"造成 {attackValue} 点伤害，受到 {retaliation} 点反击" + (targetDied ? "；目标死亡。" : "。") +
                 (poisonApplications > 0 ? $" 洞穴蜘蛛施加了 {poisonApplications} 次中毒。" : string.Empty) +
                 (fireApplications > 0 ? $" 烈焰人施加了 {fireApplications} 次着火。" : string.Empty) +
+                (witherApplications > 0 ? $" 凋灵骷髅施加了 {witherApplications} 次凋零。" : string.Empty) +
                 (deathrattleMessages.Count > 0 ? " " + string.Join(" ", deathrattleMessages) : string.Empty),
                 Revision);
         }
@@ -2214,6 +2228,38 @@ namespace BiomeRivals.Demo
                 status.sourceCardId = sourceCardId;
                 status.sourceInstanceId = sourceInstanceId;
                 status.effectId = effectId;
+            }
+            target.Statuses = statuses.ToArray();
+        }
+
+        private static void ApplyWither(DemoBattlefieldObject target, bool sourcePlayer, string sourceInstanceId)
+        {
+            if (target == null || target.SlotKind != DemoSlotKind.Unit || target.Health <= 0)
+                throw new ArgumentException("Wither requires a living battlefield unit.", nameof(target));
+            var statuses = new List<BattlefieldStatusStateDto>(target.Statuses ?? Array.Empty<BattlefieldStatusStateDto>());
+            var status = statuses.Find(value => value != null && value.statusId == "WITHER");
+            if (status == null)
+            {
+                status = new BattlefieldStatusStateDto
+                {
+                    statusId = "WITHER",
+                    remainingDuration = 2,
+                    sourcePlayerId = sourcePlayer ? "local-player" : "opponent",
+                    sourceCardId = "nt_005",
+                    sourceInstanceId = sourceInstanceId,
+                    effectId = "effect.nt_005.01",
+                    attackModifier = 0,
+                    boundAttackModifier = 0
+                };
+                statuses.Add(status);
+            }
+            else if (status.remainingDuration < 2)
+            {
+                status.remainingDuration = 2;
+                status.sourcePlayerId = sourcePlayer ? "local-player" : "opponent";
+                status.sourceCardId = "nt_005";
+                status.sourceInstanceId = sourceInstanceId;
+                status.effectId = "effect.nt_005.01";
             }
             target.Statuses = statuses.ToArray();
         }
