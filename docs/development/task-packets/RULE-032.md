@@ -56,11 +56,13 @@ Unity 状态仓库核验炽足兽来源、同控制者、FIRE 移除与紧邻治
 
 ## RULE-032F1 确定性演示与 Unity 视觉审查
 
-状态：**下一唯一任务**。只构建 `nt_004`、`nt_005`、`nt_008` 的本地确定性 Play Mode 演示，审查原版模型、体素战场、地表交互、状态/支付/召唤反馈与 UI 可读性；必须由 Unity 实际运行并输出 1920×1080 截图，不运行 Docker、不修改权威规则。
+状态：**已完成**（实现提交 `1d6d268`）。`-previewNetherStatusSummon` 通过真实离线规则在同一 Play Mode 场景复现炽足兽净火治疗、凋灵骷髅施加并结算 WITHER、下界要塞支付 1 点并在最左空格召唤 `tk_015`。WITHER 具有紫色贴地高亮和模型附着体素反馈；三格要塞使用原版下界砖、磨制黑石砖与岩浆纹理构成独立世界模型；New Input System 原生后端已启用。
+
+Unity `6000.0.28f1c1` EditMode 262/262 通过。直接调用 Unity Play Mode 输出 1920×1080 截图 [`../../design/assets/demo-nether-status-summon-preview-v1.png`](../../design/assets/demo-nether-status-summon-preview-v1.png)，SHA-256 `A6DEF84189D046603B31B40F201D677A6E59BC8FD15FFBF3EDB33523FDCA1861`；视觉审查确认透视贴地、原版实体模型、要塞三格占位、状态色和统一像素 UI。未运行 Docker，协议 36、规则集 `prototype-0.61`、效果注册表 47、卡牌定义/catalog 41 均不变。
 
 ## RULE-032F2 Docker 双端与重连
 
-状态：**等待 F1**。只验证三张牌的权威事件、双方投影、WITHER 恢复、要塞支付/召唤和中途重连；记录 Match ID、revision 与探针产物，不改视觉。
+状态：**下一唯一任务**。只验证三张牌的权威事件、双方投影、WITHER 恢复、要塞支付/召唤和中途重连；记录 Match ID、revision 与探针产物，不改视觉。
 
 ## RULE-032F3 证据收口
 
@@ -69,12 +71,12 @@ Unity 状态仓库核验炽足兽来源、同控制者、FIRE 移除与紧邻治
 ## 最小交接
 
 ```text
-任务编号：RULE-032F1
-只完成三张下界牌的确定性本地 Play Mode 演示与 Unity 视觉审查；不得运行 Docker 或修改权威规则。
+任务编号：RULE-032F2
+只完成三张下界牌的 Docker 双端与中途重连验证；不得修改视觉、权威规则或提前执行 F3。
 仓库：D:\gitt\mc_biome_rivals
-基线提交：`92c7fbc feat: implement nether fortress end phase summon`
-先读：docs/design/nether-status-summon-spec-v1.md、docs/development/task-packets/RULE-032.md 的 RULE-032F1，以及最近 RULE-032B—E change-log。
+基线提交：`1d6d268 feat: add deterministic nether showcase`
+先读：docs/design/nether-status-summon-spec-v1.md、docs/development/task-packets/RULE-032.md 的 RULE-032F2，以及最近 RULE-032D—F1 change-log。
 开始前记录 git status；保留无关本机文件。
-新增一个可重复的本地预览入口，在同一完整场景中明确展示炽足兽净火、凋灵骷髅施加/结算凋零、下界要塞支付并召唤 TK-015；复用原版模型、世界内反馈和统一像素 UI。直接调用 Unity 进入 Play Mode，输出并人工审查 1920×1080 截图。
-结束时报告预览参数、截图路径/哈希、Unity 测试、视觉缺陷、剩余风险和提交号。
+启动既有 Docker/Nakama 双端环境，分别验证 `nt_004`、`nt_005`、`nt_008` 的权威事件与双方投影；在 WITHER 尚有剩余次数、要塞已完成支付/召唤的状态执行中途重连，核对恢复后的来源、持续时间、能量、格位、实例号和 revision。保存 Match ID、命令/事件探针与重连产物。
+结束时报告启动命令、容器状态、Match ID、双方 revision、关键事件序列、重连证据、剩余风险和提交号。
 ```

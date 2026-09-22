@@ -2,6 +2,13 @@
 
 本文件按时间倒序记录影响视觉表现、资源管线或运行时架构的改动。
 
+## 2026-09-22 RULE-032F1 下界状态与召唤 Unity 演示
+
+- **确定性完整链路**：新增 `-previewNetherStatusSummon` 本地 Play Mode 入口，使用真实离线规则依次部署下界要塞、放牧绵羊、凋灵骷髅与炽足兽，执行净火治疗、普通攻击施加 WITHER、要塞自动支付并在最左空格召唤 `tk_015`，再推进到凋零造成 1 点真实伤害后的稳定局面；不是静态摆放或绕过规则的截图状态。
+- **世界内反馈与原版素材**：WITHER 新增紫色贴地材质高亮和附着模型的体素凋零粒块；下界要塞在有能量与空单位格时使用岩浆色同步脉冲。三格要塞不再复用通用结构，改用原版 `nether_bricks`、`polished_blackstone_bricks` 与 `magma` 纹理构成桥面、门楼、城垛与双塔；炽足兽、凋灵骷髅、要塞令牌、绵羊和海龟继续复用原版 Minecraft 实体贴图模型。
+- **Unity 实际审查**：直接调用 Unity `6000.0.28f1c1` 进入 Play Mode，最终 1920×1080 截图为 [`../design/assets/demo-nether-status-summon-preview-v1.png`](../design/assets/demo-nether-status-summon-preview-v1.png)，SHA-256 `A6DEF84189D046603B31B40F201D677A6E59BC8FD15FFBF3EDB33523FDCA1861`。审查确认 3D 地表高亮随透视投影、模型与双半场地形接触、像素 UI 材质统一且底部结果文案可读；静态截图只能证明最终状态，触发动画时序仍由运行时测试与 Play Mode 日志共同覆盖。
+- **验证与范围**：实现提交 `1d6d268`；Unity EditMode 262/262 通过，结果为 `client-unity/Logs/rule032f1-editmode-results.xml`，Play Mode 日志为 `client-unity/Logs/rule032f1-playmode-capture.log`，没有编译或运行时异常。启用 Unity New Input System 原生后端以保证编辑器/运行时交互；未运行 Docker、未改协议、规则集、效果注册表或卡牌内容版本。下一唯一任务为 RULE-032F2，只做 Docker 双端与重连验证。
+
 ## 2026-09-22 RULE-032E 下界要塞纵向切片
 
 - **结束阶段事务**：`nt_008` 在海底神殿与僵尸猪灵岩浆之后、对象状态之前建立稳定来源快照，并按起始建筑格/实例 ID 逐座重检来源、当前能量和当前单位格。只有同时存在至少 1 点可用红石与空单位格时，才临时红石优先支付 1 点，紧接着在最左空单位格发布 `OBJECT_SUMMONED` 并创建 3/3 `tk_015`；满场或能量不足不扣费、不分配实例号、不发空事件。

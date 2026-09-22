@@ -178,7 +178,7 @@
 
 ### RULE-032 下界状态与召唤
 
-状态：**RULE-032A/B/C/D/E 已完成，RULE-032F1 为下一唯一任务**。规则契约见 [`../design/nether-status-summon-spec-v1.md`](../design/nether-status-summon-spec-v1.md)，详细边界见 [`task-packets/RULE-032.md`](task-packets/RULE-032.md)。依赖：RULE-031。
+状态：**RULE-032A/B/C/D/E/F1 已完成，RULE-032F2 为下一唯一任务**。规则契约见 [`../design/nether-status-summon-spec-v1.md`](../design/nether-status-summon-spec-v1.md)，详细边界见 [`task-packets/RULE-032.md`](task-packets/RULE-032.md)。依赖：RULE-031。
 
 目标：完成 `nt_004` 炽足兽、`nt_005` 凋灵骷髅、`nt_008` 下界要塞。
 
@@ -225,15 +225,15 @@
 ## 新会话最小交接模板
 
 ```text
-任务编号：RULE-032F1
+任务编号：RULE-032F2
 只完成该任务，不顺带处理其他路线图项目。
 仓库：D:\gitt\mc_biome_rivals
-基线提交：`92c7fbc feat: implement nether fortress end phase summon`
-先读：docs/design/nether-status-summon-spec-v1.md、任务包 RULE-032F1 和最近 RULE-032B—E change-log。
+基线提交：`1d6d268 feat: add deterministic nether showcase`
+先读：docs/design/nether-status-summon-spec-v1.md、任务包 RULE-032F2 和最近 RULE-032D—F1 change-log。
 开始前记录 git status；保留来源未明的本机文件。
-结束时报告：改动文件、协议/内容版本、验证命令与结果、截图或复现步骤、剩余风险、提交号。
+结束时报告：Docker 启动与容器状态、Match ID、双方 revision、关键事件序列、重连探针产物、剩余风险、提交号。
 ```
 
 ## 当前唯一推荐下一步
 
-只执行 **RULE-032F1：确定性演示与 Unity 视觉审查**。为炽足兽、凋灵骷髅和下界要塞建立可重复的本地 Play Mode 场景，实际审查原版模型、体素地表交互、状态/支付/召唤反馈与统一 UI，并输出 1920×1080 截图；不得运行 Docker、修改权威规则或提前开始 F2。
+只执行 **RULE-032F2：Docker 双端与中途重连**。验证炽足兽、凋灵骷髅和下界要塞的权威事件、双方投影、WITHER 恢复与要塞支付/召唤恢复，保存 Match ID、双方 revision 和探针产物；不得修改视觉、权威规则或提前执行 F3。
