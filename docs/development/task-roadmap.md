@@ -178,13 +178,17 @@
 
 ### RULE-032 下界状态与召唤
 
-状态：**RULE-032A/B/C/D/E/F1 已完成，RULE-032F2 为下一唯一任务**。规则契约见 [`../design/nether-status-summon-spec-v1.md`](../design/nether-status-summon-spec-v1.md)，详细边界见 [`task-packets/RULE-032.md`](task-packets/RULE-032.md)。依赖：RULE-031。
+状态：**RULE-032A/B/C/D/E/F1/F2/F3 全部完成**。规则契约见 [`../design/nether-status-summon-spec-v1.md`](../design/nether-status-summon-spec-v1.md)，最终证据与提交链见 [`task-packets/RULE-032.md`](task-packets/RULE-032.md)。依赖：RULE-031。
 
 目标：完成 `nt_004` 炽足兽、`nt_005` 凋灵骷髅、`nt_008` 下界要塞。
 
 顺序：A 冻结契约；B 实现炽足兽；C 只建 WITHER 状态基础设施；D 实现凋灵骷髅；E 实现下界要塞；F1/F2/F3 分别做本地 Unity、Docker 重连和证据收口。重点是移除 FIRE、WITHER 结算边界、岩浆支付原子性和满场不扣费。
 
+完成证据：协议 36、规则集 `prototype-0.61`、效果实现注册表 47、卡牌定义/catalog 41；服务端 218/218，Unity `6000.0.28f1c1` EditMode 262/262。F1 Play Mode 截图和 F2 双端重连报告的哈希、Match ID 与 revision 均已归档，三张目标卡均为 `IMPLEMENTED`，本任务无剩余工作。
+
 ### RULE-033 悬置/回手基础设施
+
+状态：**RULE-033A 为下一唯一任务**。A 只冻结悬置/回手规则契约并把实现、Unity、联机和证据验收拆成可独立提交的后续子任务；不修改运行时代码、协议或注册状态。
 
 目标：完成 `ed_002` 紫颂果、`ed_003` 末影人、`ed_005` 末影珍珠、`ed_006` 虚空凝视、`tk_017` 末影龙化身。
 
@@ -225,15 +229,15 @@
 ## 新会话最小交接模板
 
 ```text
-任务编号：RULE-032F2
-只完成该任务，不顺带处理其他路线图项目。
+任务编号：RULE-033A
+只冻结悬置/回手规则契约并拆分后续任务；不得实现运行时代码、改协议或注册卡牌。
 仓库：D:\gitt\mc_biome_rivals
-基线提交：`1d6d268 feat: add deterministic nether showcase`
-先读：docs/design/nether-status-summon-spec-v1.md、任务包 RULE-032F2 和最近 RULE-032D—F1 change-log。
+基线提交：包含 RULE-032F3 证据收口提交。
+先读：Minecraft_Biome_Rivals_GDD_v0.5.md、docs/design/Minecraft_Biome_Rivals_Prototype_Cards_v0.1.md、RULE-032 任务包的拆分方式，以及最近 RULE-032F2—F3 change-log。
 开始前记录 git status；保留来源未明的本机文件。
-结束时报告：Docker 启动与容器状态、Match ID、双方 revision、关键事件序列、重连探针产物、剩余风险、提交号。
+结束时报告：冻结裁决、未决风险、后续子任务边界、版本不变证明和提交号。
 ```
 
 ## 当前唯一推荐下一步
 
-只执行 **RULE-032F2：Docker 双端与中途重连**。验证炽足兽、凋灵骷髅和下界要塞的权威事件、双方投影、WITHER 恢复与要塞支付/召唤恢复，保存 Match ID、双方 revision 和探针产物；不得修改视觉、权威规则或提前执行 F3。
+只执行 **RULE-033A：悬置/回手规则契约与任务拆分**。冻结除外区公开模型、所有权、进入/离开时机、本回合费用修正、不可回手/不可悬置边界、快照恢复与事件顺序；为实现、Unity 交互、Docker 重连和证据收口分别建立小任务，不得在 A 中改运行时或提前注册卡牌。

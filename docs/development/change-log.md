@@ -2,6 +2,13 @@
 
 本文件按时间倒序记录影响视觉表现、资源管线或运行时架构的改动。
 
+## 2026-09-23 RULE-032F3 下界状态与召唤证据收口
+
+- **任务闭合**：复核契约 `634a6d6`、炽足兽 `1bfb63a`、WITHER 基础设施 `b09d3aa`、凋灵骷髅 `57fea39`、下界要塞 `92c7fbc`、Unity 演示 `1d6d268` 与 Docker 双端重连 `819eb60`，全部为当前 HEAD 的祖先。`nt_004`、`nt_005`、`nt_008` 均为 `IMPLEMENTED`，RULE-032A—F3 已完整关闭。
+- **最终版本与测试**：协议 36、规则集 `prototype-0.61`、效果实现注册表 47、卡牌定义/catalog 41；74 张卡中 60 个效果已实现、9 个待实现、5 张无效果。服务端 218/218；直接调用 Unity `6000.0.28f1c1`，EditMode 262/262。Docker Engine 29.8.0、Nakama 3.40.0、PostgreSQL 16.8 健康。
+- **可复核证据**：F1 Play Mode 截图 [`../design/assets/demo-nether-status-summon-preview-v1.png`](../design/assets/demo-nether-status-summon-preview-v1.png) 的 SHA-256 为 `A6DEF84189D046603B31B40F201D677A6E59BC8FD15FFBF3EDB33523FDCA1861`。F2 在线报告 SHA-256 为 `FD2ADA0B7756F3BB24DDE052AD1486AE3C51B3AE0913F13B050B4AB9A540D005`；两个 Match ID、关键 revision 与双方重连恢复证据已写入任务包。
+- **范围与后续**：本项只修改证据文档，没有改运行时、视觉、协议或内容。下一唯一任务为 RULE-033A，只冻结悬置/回手契约并拆分后续实现、Unity、联机和证据任务。
+
 ## 2026-09-23 RULE-032F2 下界状态与召唤 Docker 双端验收
 
 - **专项双对局探针**：新增 `smoke:nether-status-summon` 与 `scripts/validate-nether-status-summon-online.ps1`。两个真实 Nakama WebSocket 客户端使用正常牌库、起手替换、逐回合红石增长、部署、战斗和结束阶段命令，不注入测试状态；随机起手不足时有界重匹配。炽足兽对局 `4df72230-5bec-4910-9234-3b4a1480777b.biome-rivals` 在 revision 22 完成烈焰人伤害后施加 FIRE，revision 24 严格按 `CARD_DEPLOYED → OBJECT_STATUS_REMOVED → OBJECT_STATS_CHANGED` 完成净火治疗。

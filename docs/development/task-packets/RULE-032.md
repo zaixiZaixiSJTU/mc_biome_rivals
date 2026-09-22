@@ -70,17 +70,25 @@ Unity `6000.0.28f1c1` EditMode 262/262 通过。直接调用 Unity Play Mode 输
 
 ## RULE-032F3 证据收口
 
-状态：**下一唯一任务**。只复核提交、版本、测试、Unity 截图和在线产物，更新日志、路线图与交接并关闭 RULE-032；不得新增玩法。
+状态：**已完成**。已复核 A—F2 的祖先提交链：契约 `634a6d6`、炽足兽 `1bfb63a`、WITHER 基础设施 `b09d3aa`、凋灵骷髅 `57fea39`、下界要塞 `92c7fbc`、Unity 演示 `1d6d268`、Docker 双端重连 `819eb60`；全部均为当前 HEAD 的祖先。F3 只更新证据、路线图和交接，没有新增玩法、视觉、协议或内容改动。
+
+最终证据矩阵：
+
+- **版本与内容**：协议 36、规则集 `prototype-0.61`、效果实现注册表 47、卡牌定义与服务端 catalog 41；74 张卡中 60 个效果为 `IMPLEMENTED`、9 个为 `PENDING`、5 张为 `NONE`。`nt_004`、`nt_005`、`nt_008` 均已实现。
+- **规则与 Unity**：服务端 218/218；直接调用 Unity `6000.0.28f1c1`，EditMode 262/262。F1 的 1920×1080 Play Mode 截图为 [`../../design/assets/demo-nether-status-summon-preview-v1.png`](../../design/assets/demo-nether-status-summon-preview-v1.png)，SHA-256 `A6DEF84189D046603B31B40F201D677A6E59BC8FD15FFBF3EDB33523FDCA1861`。
+- **在线与恢复**：Docker Engine 29.8.0、Nakama 3.40.0、PostgreSQL 16.8 健康。炽足兽对局 `4df72230-5bec-4910-9234-3b4a1480777b.biome-rivals` 的关键 revision 为 22/24；WITHER/要塞对局 `93fe5fc6-0773-4330-8cbd-ea0fc5c51243.biome-rivals` 的关键 revision 为 35/36/38，双方重连均恢复 revision 36。在线报告 SHA-256 为 `FD2ADA0B7756F3BB24DDE052AD1486AE3C51B3AE0913F13B050B4AB9A540D005`。
+
+结论：RULE-032 已关闭，没有遗留实现或验收项。下一项为 RULE-033A，只冻结悬置/回手契约并拆分后续任务。
 
 ## 最小交接
 
 ```text
-任务编号：RULE-032F3
-只完成 RULE-032 证据收口；不得新增玩法、视觉或协议变更。
+任务编号：RULE-033A
+只冻结悬置/回手规则契约并拆分后续任务；不得实现运行时代码、改协议或注册卡牌。
 仓库：D:\gitt\mc_biome_rivals
-基线：包含 RULE-032F2 专项探针、在线报告与提交。
-先读：docs/design/nether-status-summon-spec-v1.md、docs/development/task-packets/RULE-032.md 的 RULE-032A—F2，以及最近 RULE-032D—F2 change-log。
+基线：包含 RULE-032F3 证据收口提交；RULE-032 已关闭。
+先读：Minecraft_Biome_Rivals_GDD_v0.5.md、docs/design/Minecraft_Biome_Rivals_Prototype_Cards_v0.1.md、RULE-032 任务包的拆分方式，以及最近 RULE-032F2—F3 change-log。
 开始前记录 git status；保留无关本机文件。
-复核 A—F2 提交祖先链、协议/规则集/内容版本、服务端和 Unity 测试、F1 Play Mode 截图哈希、F2 Match ID/revision/报告哈希；更新 change-log、路线图与交接并关闭 RULE-032。
-结束时报告证据矩阵、剩余风险和提交号。
+冻结除外区公开模型、所有权、进入/离开时机、本回合费用修正、不可回手/不可悬置边界、事件顺序与快照恢复；把实现、Unity、Docker 和证据收口拆成独立任务。
+结束时报告冻结裁决、未决风险、后续子任务边界、版本不变证明和提交号。
 ```
