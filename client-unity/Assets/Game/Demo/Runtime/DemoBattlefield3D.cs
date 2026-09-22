@@ -21,6 +21,7 @@ namespace BiomeRivals.Demo
         IceSpire,
         SnowHut,
         EndCrystal,
+        NetherFortress,
         Blaze
     }
 
@@ -220,6 +221,14 @@ namespace BiomeRivals.Demo
             UpdateSlotMarker(marker, Time.unscaledTime, 0f);
         }
 
+        public void SetSlotWithered(bool player, DemoSlotKind kind, int index, bool withered)
+        {
+            BuildNow();
+            if (!_slotMarkers.TryGetValue(SlotKey(player, kind, index), out var marker)) return;
+            marker.Withered = withered;
+            UpdateSlotMarker(marker, Time.unscaledTime, 0f);
+        }
+
         public void SetSlotHovered(bool player, DemoSlotKind kind, int index, bool hovered)
         {
             BuildNow();
@@ -340,6 +349,8 @@ namespace BiomeRivals.Demo
                         ? Color.Lerp(Hex("#477A8C"), Hex("#E5FAFF"), pulse)
                     : marker.EngineReadyKind == DemoEngineReadyKind.EndCrystal
                         ? Color.Lerp(Hex("#5A2B78"), Hex("#F2A4FF"), pulse)
+                    : marker.EngineReadyKind == DemoEngineReadyKind.NetherFortress
+                        ? Color.Lerp(Hex("#72200F"), Hex("#FFB347"), pulse)
                     : marker.EngineReadyKind == DemoEngineReadyKind.Blaze
                         ? Color.Lerp(Hex("#9A3B0A"), Hex("#FFD35C"), pulse)
                         : Color.Lerp(Hex("#8E3F72"), Hex("#F08FB4"), pulse);
@@ -355,6 +366,8 @@ namespace BiomeRivals.Demo
                         ? Color.Lerp(Hex("#8A2E24"), Hex("#FF8865"), pulse)
                      : marker.Burning
                          ? Color.Lerp(Hex("#B92D08"), Hex("#FFB52E"), pulse)
+                     : marker.Withered
+                         ? Color.Lerp(Hex("#3B1B59"), Hex("#C27CFF"), pulse)
                      : marker.Poisoned
                          ? Color.Lerp(Hex("#00883D"), Hex("#00FF70"), pulse)
                      : marker.AuraLayers > 0
@@ -376,6 +389,8 @@ namespace BiomeRivals.Demo
                             ? 0.22f + pulse * 0.10f
                          : marker.Burning
                              ? 0.68f + pulse * 0.22f
+                         : marker.Withered
+                             ? 0.64f + pulse * 0.20f
                          : marker.Poisoned
                              ? 0.62f + pulse * 0.20f
                          : marker.AuraLayers > 0
@@ -975,6 +990,7 @@ namespace BiomeRivals.Demo
                 instance.transform.localPosition = position;
                 instance.transform.localRotation = Quaternion.Euler(0, player ? 0 : 180, 0);
                 if (battlefieldObject.HasStatus("FIRE")) BuildFireStatusEffect(instance.transform, battlefieldObject.InstanceId);
+                if (battlefieldObject.HasStatus("WITHER")) BuildWitherStatusEffect(instance.transform, battlefieldObject.InstanceId);
                 return;
             }
 
@@ -1003,6 +1019,7 @@ namespace BiomeRivals.Demo
                 else if (cardId == "cd_008") BuildWoodlandMansion(root, footprintWidth);
                 else if (cardId == "ed_007") BuildEndCrystal(root, footprintWidth, battlefieldObject.InstanceId);
                 else if (cardId == "nt_007") BuildRespawnAnchor(root, footprintWidth);
+                else if (cardId == "nt_008") BuildNetherFortress(root, footprintWidth);
                 else if (cardId == "si_007") BuildSnowHut(root, footprintWidth);
                 else if (cardId == "si_008") BuildIceSpire(root, footprintWidth);
                 else if (cardId == "or_007") BuildCoralReef(root, material, footprintWidth);
@@ -1011,6 +1028,7 @@ namespace BiomeRivals.Demo
             }
             else BuildBlockCreature(root, material, theme.Accent, cardId, player, battlefieldObject.SlotIndex);
             if (battlefieldObject.HasStatus("FIRE")) BuildFireStatusEffect(root, battlefieldObject.InstanceId);
+            if (battlefieldObject.HasStatus("WITHER")) BuildWitherStatusEffect(root, battlefieldObject.InstanceId);
         }
 
         private void BuildFireStatusEffect(Transform parent, string instanceId)
@@ -1024,6 +1042,18 @@ namespace BiomeRivals.Demo
             CreateBlock(root, "FlameBack", new Vector3(-0.24f, 0.62f, 0.52f), new Vector3(0.22f, 0.84f, 0.22f), ember);
             CreateBlock(root, "FlameHigh", new Vector3(-0.10f, 1.26f, 0.04f), new Vector3(0.18f, 0.74f, 0.18f), ember);
             _floaters.Add(new Floater(root, root.localPosition.y, StablePulsePhase(instanceId)));
+        }
+
+        private void BuildWitherStatusEffect(Transform parent, string instanceId)
+        {
+            var root = NewChildRoot(parent, "WitherStatusFx", Vector3.zero);
+            var shadow = GetAccentMaterial("status_wither_shadow", Hex("#321943"));
+            var pulse = GetAccentMaterial("status_wither_pulse", Hex("#B968E8"));
+            CreateBlock(root, "WitherLeft", new Vector3(-0.58f, 0.72f, -0.28f), new Vector3(0.18f, 0.62f, 0.18f), shadow);
+            CreateBlock(root, "WitherRight", new Vector3(0.56f, 0.92f, 0.20f), new Vector3(0.20f, 0.76f, 0.20f), pulse);
+            CreateBlock(root, "WitherFront", new Vector3(0.12f, 0.48f, -0.56f), new Vector3(0.22f, 0.44f, 0.22f), pulse);
+            CreateBlock(root, "WitherHigh", new Vector3(-0.18f, 1.36f, 0.08f), new Vector3(0.16f, 0.52f, 0.16f), shadow);
+            _floaters.Add(new Floater(root, root.localPosition.y, StablePulsePhase(instanceId) + 1.7f));
         }
 
         private void BuildBlockCreature(Transform root, Material material, Color accent, string cardId, bool player, int index)
@@ -1084,6 +1114,43 @@ namespace BiomeRivals.Demo
                 new Vector3(width * 0.96f, 0.10f, 0.80f), top);
             CreateBlock(root, "RespawnAnchorCore", new Vector3(0f, 0.51f, -0.40f),
                 new Vector3(width * 0.38f, 0.30f, 0.08f), glow);
+        }
+
+        private void BuildNetherFortress(Transform root, float footprintWidth)
+        {
+            var width = Mathf.Max(9.6f, footprintWidth - 0.30f);
+            var brick = GetWorldMaterial("fortress_nether_brick", "nether_bricks", Hex("#3B171A"));
+            var blackstone = GetWorldMaterial("fortress_blackstone", "polished_blackstone_bricks", Hex("#201B24"));
+            var magma = GetWorldMaterial("fortress_magma", "magma", Hex("#D75819"));
+            var towerOffset = width * 0.40f;
+
+            CreateBlock(root, "FortressBlackstoneFoot", new Vector3(0f, 0.12f, 0f),
+                new Vector3(width, 0.20f, 1.02f), blackstone);
+            CreateBlock(root, "FortressBridge", new Vector3(0f, 0.42f, 0f),
+                new Vector3(width * 0.94f, 0.42f, 0.88f), brick);
+            CreateBlock(root, "FortressParapetBack", new Vector3(0f, 0.78f, 0.36f),
+                new Vector3(width * 0.92f, 0.34f, 0.20f), brick);
+            CreateBlock(root, "FortressGateLeft", new Vector3(-0.72f, 1.04f, -0.04f),
+                new Vector3(0.44f, 1.28f, 0.58f), blackstone);
+            CreateBlock(root, "FortressGateRight", new Vector3(0.72f, 1.04f, -0.04f),
+                new Vector3(0.44f, 1.28f, 0.58f), blackstone);
+            CreateBlock(root, "FortressGateLintel", new Vector3(0f, 1.58f, -0.04f),
+                new Vector3(1.82f, 0.30f, 0.62f), brick);
+            CreateBlock(root, "FortressLeftTower", new Vector3(-towerOffset, 1.05f, 0f),
+                new Vector3(1.12f, 1.72f, 0.98f), brick);
+            CreateBlock(root, "FortressRightTower", new Vector3(towerOffset, 1.05f, 0f),
+                new Vector3(1.12f, 1.72f, 0.98f), brick);
+            CreateBlock(root, "FortressLeftMagma", new Vector3(-towerOffset, 1.97f, 0f),
+                new Vector3(0.64f, 0.24f, 0.64f), magma);
+            CreateBlock(root, "FortressRightMagma", new Vector3(towerOffset, 1.97f, 0f),
+                new Vector3(0.64f, 0.24f, 0.64f), magma);
+            for (var index = 0; index < 7; index++)
+            {
+                var x = Mathf.Lerp(-width * 0.43f, width * 0.43f, index / 6f);
+                if (Mathf.Abs(x) < 1.05f || Mathf.Abs(Mathf.Abs(x) - towerOffset) < 0.75f) continue;
+                CreateBlock(root, "FortressMerlon_" + index, new Vector3(x, 1.08f, 0.36f),
+                    new Vector3(0.42f, 0.48f, 0.24f), brick);
+            }
         }
 
         private void BuildSculkSensor(Transform root, float footprintWidth)
@@ -1531,6 +1598,7 @@ namespace BiomeRivals.Demo
             public DemoEngineReadyKind EngineReadyKind;
             public bool EndPhaseThreat;
             public bool Burning;
+            public bool Withered;
             public bool Poisoned;
             public bool Hovered;
             public bool Pressed;

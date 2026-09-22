@@ -199,6 +199,7 @@ namespace BiomeRivals.Demo
             else if (HasCommandLineFlag("-previewGoat")) SetupGoatPreview();
             else if (HasCommandLineFlag("-previewSnowHut")) SetupSnowHutPreview();
             else if (HasCommandLineFlag("-previewEndCrystal")) SetupEndCrystalPreview();
+            else if (HasCommandLineFlag("-previewNetherStatusSummon")) SetupNetherStatusSummonPreview();
             else if (HasCommandLineFlag("-previewNetherTriggerLifecycle")) SetupNetherTriggerLifecyclePreview();
             else if (HasCommandLineFlag("-previewRespawnAnchor")) SetupRespawnAnchorPreview();
             else if (HasCommandLineFlag("-previewPiglinMagma")) SetupPiglinMagmaPreview();
@@ -1733,6 +1734,85 @@ namespace BiomeRivals.Demo
             if (firstAnchor != null) StartCoroutine(PulseBattlefieldObject(firstAnchor.InstanceId));
         }
 
+        private void SetupNetherStatusSummonPreview()
+        {
+            SelectFaction("nether");
+            SelectOpponentFaction("plains_forest");
+            if (!_registry.TryGetDefinition("nt_004", out var striderDefinition) ||
+                !_registry.TryGetDefinition("nt_005", out var witherSkeletonDefinition) ||
+                !_registry.TryGetDefinition("nt_008", out var fortressDefinition) ||
+                !_registry.TryGetDefinition("pf_002", out var sheepDefinition) ||
+                !_registry.TryGetDefinition("or_005", out var turtleDefinition)) return;
+
+            _match.ResetDeckAndHand(Array.Empty<string>(), new[] { "nt_001", "nt_001", "nt_001", "nt_001" });
+            _match.ResetOpponent(new[] { turtleDefinition }, new[] { 2 });
+            _match.EndPlayerTurn();
+            _match.BeginNextPlayerTurn();
+
+            _match.ResetHand(new[] { fortressDefinition.id });
+            var fortressResult = _match.ApplyDeploy(fortressDefinition,
+                _match.CreateDeployCommand(fortressDefinition.id, DemoSlotKind.Building, 0));
+            _match.EndPlayerTurn();
+            _match.BeginNextPlayerTurn();
+
+            _match.ResetHand(new[] { sheepDefinition.id, witherSkeletonDefinition.id, striderDefinition.id });
+            var sheepResult = _match.ApplyDeploy(sheepDefinition,
+                _match.CreateDeployCommand(sheepDefinition.id, DemoSlotKind.Unit, 3));
+            var sheep = _match.GetObject(true, DemoSlotKind.Unit, 3);
+            if (sheep != null)
+            {
+                sheep.Health = Mathf.Max(1, sheep.Health - 1);
+                sheep.Statuses = new[]
+                {
+                    new BattlefieldStatusStateDto
+                    {
+                        statusId = "FIRE", remainingDuration = 2, sourcePlayerId = "opponent",
+                        sourceCardId = "nt_003", sourceInstanceId = "preview-fire-source", effectId = "effect.nt_003.01"
+                    }
+                };
+            }
+            var skeletonResult = _match.ApplyDeploy(witherSkeletonDefinition,
+                _match.CreateDeployCommand(witherSkeletonDefinition.id, DemoSlotKind.Unit, 1));
+            var striderResult = sheep == null
+                ? DemoCommandResult.Reject(DemoCommandRejectionCode.InvalidTarget,
+                    "净火目标初始化失败。", _match.Revision)
+                : _match.ApplyDeploy(striderDefinition, _match.CreateDeployCommand(
+                    striderDefinition.id, DemoSlotKind.Unit, 0, MatchPaymentMethods.Redstone, "UNIT", sheep.InstanceId));
+
+            _match.EndPlayerTurn();
+            _match.BeginNextPlayerTurn();
+            var enteredCombat = _match.ApplyEnterCombat(_match.CreateEnterCombatCommand());
+            var skeleton = _match.GetObject(true, DemoSlotKind.Unit, 1);
+            var turtle = _match.GetObject(false, DemoSlotKind.Unit, 2);
+            var attackResult = skeleton == null || turtle == null
+                ? DemoCommandResult.Reject(DemoCommandRejectionCode.InvalidTarget,
+                    "凋零目标初始化失败。", _match.Revision)
+                : _match.ApplyAttack(_match.CreateAttackCommand(skeleton.InstanceId, "UNIT", turtle.InstanceId));
+            var endResult = attackResult.Accepted
+                ? _match.ApplyEndTurn(_match.CreateEndTurnCommand())
+                : DemoCommandResult.Reject(DemoCommandRejectionCode.InvalidCommand, attackResult.Message, _match.Revision);
+            if (endResult.Accepted) _match.BeginNextPlayerTurn();
+
+            _match.ResetHand(new[] { striderDefinition.id, witherSkeletonDefinition.id, fortressDefinition.id });
+            _selectedCardId = fortressDefinition.id;
+            RefreshAll();
+
+            var fortress = _match.GetObject(true, DemoSlotKind.Building, 0);
+            var summoned = _match.GetObject(true, DemoSlotKind.Unit, 2);
+            turtle = _match.GetObject(false, DemoSlotKind.Unit, 2);
+            var wither = turtle?.Statuses?.FirstOrDefault(value => value != null && value.statusId == "WITHER");
+            var resolved = fortressResult.Accepted && sheepResult.Accepted && skeletonResult.Accepted && striderResult.Accepted &&
+                enteredCombat.Accepted && attackResult.Accepted && endResult.Accepted && fortress?.CardId == fortressDefinition.id &&
+                sheep != null && sheep.Health == sheep.MaxHealth && !sheep.HasStatus("FIRE") &&
+                summoned?.CardId == "tk_015" && wither?.remainingDuration == 1 && turtle.Health == 1;
+            ShowStatus(resolved
+                ? "演示完成：炽足兽净火并治疗 +1；凋灵骷髅施加并触发凋零；下界要塞支付 1 点，在最左空格召唤 3/3 令牌。"
+                : "下界状态与召唤预览初始化失败。", !resolved);
+            if (fortress != null) StartCoroutine(PulseBattlefieldObject(fortress.InstanceId));
+            if (summoned != null) StartCoroutine(PulseBattlefieldObject(summoned.InstanceId));
+            if (turtle != null) StartCoroutine(PulseBattlefieldObject(turtle.InstanceId));
+        }
+
         private void SetupSnowGolemPreview()
         {
             SelectFaction("snow_ice");
@@ -2950,6 +3030,9 @@ namespace BiomeRivals.Demo
             else if (view.Kind == DemoSlotKind.Building && battlefieldObject?.CardId == "ed_007" &&
                 match.IsPlayerTurn == player)
                 engineReadyKind = DemoEngineReadyKind.EndCrystal;
+            else if (view.Kind == DemoSlotKind.Building && battlefieldObject?.CardId == "nt_008" && player &&
+                match.IsPlayerTurn && match.Energy > 0 && HasEmptyUnitSlot(true))
+                engineReadyKind = DemoEngineReadyKind.NetherFortress;
             else if (view.Kind == DemoSlotKind.Unit && battlefieldObject?.CardId == "nt_003" &&
                 match.IsPlayerTurn == player && match.Phase == DemoTurnPhase.Combat && !battlefieldObject.HasAttacked &&
                 !battlefieldObject.HasStatus("SLOW"))
@@ -2966,6 +3049,8 @@ namespace BiomeRivals.Demo
                 battlefieldObject?.HasStatus("POISON") == true);
             _battlefield.SetSlotBurning(player, view.Kind, view.Index,
                 battlefieldObject?.HasStatus("FIRE") == true);
+            _battlefield.SetSlotWithered(player, view.Kind, view.Index,
+                battlefieldObject?.HasStatus("WITHER") == true);
             _battlefield.SetSlotState(player, view.Kind, view.Index, valid, !empty, priorityTarget);
 
             if (!empty)
@@ -4247,6 +4332,7 @@ namespace BiomeRivals.Demo
             yield return null;
             if (HasCommandLineFlag("-previewEffect")) yield return new WaitForSecondsRealtime(0.1f);
             if (HasCommandLineFlag("-previewGroundHover")) yield return new WaitForSecondsRealtime(0.2f);
+            if (HasCommandLineFlag("-previewNetherStatusSummon")) yield return new WaitForSecondsRealtime(0.25f);
             var canvas = GetComponentInChildren<Canvas>();
             var camera = _battlefield.BoardCamera;
             if (camera == null) throw new InvalidOperationException("2.5D battlefield camera is not available.");

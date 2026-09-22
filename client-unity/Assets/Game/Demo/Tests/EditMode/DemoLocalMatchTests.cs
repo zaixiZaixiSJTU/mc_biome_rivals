@@ -1384,6 +1384,9 @@ namespace BiomeRivals.Demo.Tests
                 battlefield.SetSlotEngineReady(true, DemoSlotKind.Building, 0, DemoEngineReadyKind.EndCrystal);
                 var endCrystalHighlight = buildingMarker.GetComponent<MeshRenderer>().sharedMaterial.GetColor("_HighlightColor");
                 Assert.That(endCrystalHighlight, Is.Not.EqualTo(snowHutHighlight));
+                battlefield.SetSlotEngineReady(true, DemoSlotKind.Building, 0, DemoEngineReadyKind.NetherFortress);
+                var fortressHighlight = buildingMarker.GetComponent<MeshRenderer>().sharedMaterial.GetColor("_HighlightColor");
+                Assert.That(fortressHighlight, Is.Not.EqualTo(endCrystalHighlight));
                 var synchronizedMarker = root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Building_1/InteractiveGround");
                 battlefield.SetSlotEngineReady(true, DemoSlotKind.Building, 0, DemoEngineReadyKind.Temple, "object-temple");
                 battlefield.SetSlotEngineReady(true, DemoSlotKind.Building, 1, DemoEngineReadyKind.Temple, "object-temple");
@@ -1409,9 +1412,32 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(fireHighlight.r, Is.GreaterThan(fireHighlight.b));
                 battlefield.SetSlotBurning(false, DemoSlotKind.Unit, 0, false);
                 Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.Zero);
+                battlefield.SetSlotWithered(false, DemoSlotKind.Unit, 0, true);
+                Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.GreaterThan(0f));
+                var witherHighlight = opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetColor("_HighlightColor");
+                Assert.That(witherHighlight.b, Is.GreaterThan(witherHighlight.g));
+                battlefield.SetSlotWithered(false, DemoSlotKind.Unit, 0, false);
+                Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.Zero);
                 battlefield.SetSlotState(false, DemoSlotKind.Unit, 0, true, false, true);
                 Assert.That(opponentUnitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.GreaterThanOrEqualTo(0.32f));
                 battlefield.SetSlotState(false, DemoSlotKind.Unit, 0, false, false);
+                battlefield.SyncPieces(System.Array.Empty<DemoBattlefieldObject>(), new[]
+                {
+                    new DemoBattlefieldObject
+                    {
+                        InstanceId = "object-withered", CardId = "or_005", Player = false,
+                        SlotKind = DemoSlotKind.Unit, SlotIndex = 0, OccupiedSlots = 1, Health = 2, MaxHealth = 6,
+                        Statuses = new[]
+                        {
+                            new BattlefieldStatusStateDto
+                            {
+                                statusId = "WITHER", remainingDuration = 1, sourcePlayerId = "player",
+                                sourceCardId = "nt_005", sourceInstanceId = "object-source", effectId = "effect.nt_005.01"
+                            }
+                        }
+                    }
+                }, registry);
+                Assert.That(root.transform.Find("BattlefieldPieces/Piece_object-withered_or_005/WitherStatusFx"), Is.Not.Null);
                 battlefield.SyncPieces(new[]
                 {
                     new DemoBattlefieldObject
@@ -1442,6 +1468,20 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(root.transform.Find("BattlefieldPieces/Piece_object-monument_or_008/MonumentCore"), Is.Not.Null);
                 Assert.That(root.transform.Find("BattlefieldPieces/Piece_object-monument_or_008/MonumentLeftTower"), Is.Not.Null);
                 Assert.That(root.transform.Find("BattlefieldPieces/Piece_object-monument_or_008/MonumentRightTower"), Is.Not.Null);
+                battlefield.SyncPieces(new[]
+                {
+                    new DemoBattlefieldObject
+                    {
+                        InstanceId = "object-fortress", CardId = "nt_008", Player = true,
+                        SlotKind = DemoSlotKind.Building, SlotIndex = 0, OccupiedSlots = 3, Health = 10, MaxHealth = 10
+                    }
+                }, System.Array.Empty<DemoBattlefieldObject>(), registry);
+                var fortressPiece = root.transform.Find("BattlefieldPieces/Piece_object-fortress_nt_008");
+                Assert.That(fortressPiece.Find("FortressBridge"), Is.Not.Null);
+                Assert.That(fortressPiece.Find("FortressLeftTower"), Is.Not.Null);
+                Assert.That(fortressPiece.Find("FortressRightTower"), Is.Not.Null);
+                Assert.That(fortressPiece.Find("FortressLeftMagma").GetComponent<MeshRenderer>().sharedMaterial.mainTexture.name,
+                    Is.EqualTo("magma"));
                 Physics.SyncTransforms();
                 var unitScreenPosition = battlefield.BoardCamera.WorldToScreenPoint(unitMarker.TransformPoint(unitMarker.GetComponent<MeshFilter>().sharedMesh.bounds.center));
                 Assert.That(battlefield.TryRaycastSlot(unitScreenPosition, out var raycastTarget), Is.True);
@@ -3924,6 +3964,48 @@ namespace BiomeRivals.Demo.Tests
                 var unitMarker = root.transform.Find("BattlefieldGeometry/SlotMarker_Player_Unit_1/InteractiveGround");
                 Assert.That(unitMarker.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_HighlightStrength"), Is.Zero,
                     "deployment highlights stay disabled during the opponent turn");
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void NetherStatusSummonPreviewReplaysTheCompleteDeterministicChain()
+        {
+            var root = new GameObject("NetherStatusSummonPreviewTest");
+            try
+            {
+                var battlefield = root.AddComponent<DemoBattlefield3D>();
+                battlefield.Configure(
+                    Shader.Find("Standard") ?? Shader.Find("Universal Render Pipeline/Lit"),
+                    Shader.Find("BiomeRivals/Demo/GroundSurface"));
+                var controller = root.AddComponent<DemoSceneController>();
+                controller.BuildNow();
+                typeof(DemoSceneController).GetMethod("SetupNetherStatusSummonPreview",
+                    BindingFlags.Instance | BindingFlags.NonPublic).Invoke(controller, null);
+                var matchField = typeof(DemoSceneController).GetField("_match",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.That(matchField, Is.Not.Null);
+                var match = (DemoLocalMatch)matchField.GetValue(controller);
+
+                Assert.That(match.Round, Is.EqualTo(5));
+                Assert.That(match.IsPlayerTurn, Is.True);
+                Assert.That(match.Phase, Is.EqualTo(DemoTurnPhase.Main));
+                Assert.That(match.Hand, Is.EqualTo(new[] { "nt_004", "nt_005", "nt_008" }));
+                Assert.That(match.GetObject(true, DemoSlotKind.Building, 0).CardId, Is.EqualTo("nt_008"));
+                Assert.That(match.GetObject(true, DemoSlotKind.Unit, 0).CardId, Is.EqualTo("nt_004"));
+                Assert.That(match.GetObject(true, DemoSlotKind.Unit, 1).CardId, Is.EqualTo("nt_005"));
+                Assert.That(match.GetObject(true, DemoSlotKind.Unit, 2).CardId, Is.EqualTo("tk_015"));
+                var sheep = match.GetObject(true, DemoSlotKind.Unit, 3);
+                Assert.That(sheep.CardId, Is.EqualTo("pf_002"));
+                Assert.That(sheep.Health, Is.EqualTo(sheep.MaxHealth));
+                Assert.That(sheep.HasStatus("FIRE"), Is.False);
+                var turtle = match.GetObject(false, DemoSlotKind.Unit, 2);
+                Assert.That(turtle.Health, Is.EqualTo(1));
+                Assert.That(turtle.Statuses.Single(value => value.statusId == "WITHER").remainingDuration, Is.EqualTo(1));
+                Assert.That(root.transform.Find("BattlefieldPieces/Piece_" + turtle.InstanceId + "_or_005/WitherStatusFx"), Is.Not.Null);
             }
             finally
             {
