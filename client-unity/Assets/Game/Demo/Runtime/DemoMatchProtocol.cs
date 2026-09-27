@@ -85,6 +85,7 @@ namespace BiomeRivals.Demo
         bool PlayerMulliganCompleted { get; }
         bool OpponentMulliganCompleted { get; }
         IReadOnlyList<string> Hand { get; }
+        IReadOnlyList<HandCardStateDto> HandCards { get; }
         string[] UnitSlots { get; }
         string[] BuildingSlots { get; }
         string[] OpponentUnitSlots { get; }
@@ -119,6 +120,7 @@ namespace BiomeRivals.Demo
         bool HasTargetedEnemyObjectThisTurn(bool player);
         int CardsPlayedThisTurn(bool player);
         int GetEffectiveCost(CardDefinitionEntry definition);
+        int GetEffectiveCost(CardDefinitionEntry definition, string handCardInstanceId);
         DemoBattlefieldObject GetObject(bool player, DemoSlotKind kind, int slotIndex);
         bool CanAttackWith(DemoBattlefieldObject attacker, out string message);
         bool CanAttackWithHero(out string message);

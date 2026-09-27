@@ -21,6 +21,9 @@ namespace BiomeRivalsRules {
     if (state.turn < 1) violations.push('turn must start at one');
     if (state.phase !== 'MAIN' && state.phase !== 'COMBAT') violations.push('turn phase is invalid');
     if (state.nextInstanceId < 1) violations.push('nextInstanceId must be positive');
+    if (!Number.isInteger(state.nextHandCardInstanceId) || state.nextHandCardInstanceId < 1) {
+      violations.push('nextHandCardInstanceId must be positive');
+    }
     if (state.status === 'FINISHED' && state.winnerPlayerId === null) {
       violations.push('finished match requires a winner');
     }
@@ -148,6 +151,7 @@ namespace BiomeRivalsRules {
     if (state.status === 'ACTIVE' && completedMulligans !== state.players.length) {
       violations.push('active match requires every opening hand to be confirmed');
     }
+    const seenHandCardIds: { [instanceId: string]: boolean } = {};
     for (let playerIndex = 0; playerIndex < state.players.length; playerIndex += 1) {
       const player = state.players[playerIndex]!;
       if (typeof player.excavatedThisTurn !== 'boolean') violations.push('player excavation turn marker is invalid');
@@ -216,6 +220,9 @@ namespace BiomeRivalsRules {
       if (player.unitSlots.length !== 4) violations.push('each player requires four unit slots');
       if (player.buildingSlots.length !== 3) violations.push('each player requires three building slots');
       if (player.hand.length > 7) violations.push('hand cannot exceed seven cards');
+      if (!Array.isArray(player.handCards) || player.handCards.length !== player.hand.length) {
+        violations.push('hand instance records must align with hand slots');
+      }
       if (player.fatigueCount < 0) violations.push('fatigue count cannot be negative');
       if (player.equipment !== null) {
         const equipmentDefinition = getCardDefinition(player.equipment.cardId);
@@ -226,6 +233,27 @@ namespace BiomeRivalsRules {
       }
       for (let handIndex = 0; handIndex < player.hand.length; handIndex += 1) {
         if (getCardDefinition(player.hand[handIndex]!) === null) violations.push('hand contains an unknown card');
+        const handCard = player.handCards[handIndex];
+        if (!handCard) continue;
+        if (handCard.cardId !== player.hand[handIndex]) violations.push('hand instance card id differs from its slot');
+        if (!/^hand-[0-9]+$/.test(handCard.handCardInstanceId) || seenHandCardIds[handCard.handCardInstanceId]) {
+          violations.push('hand instance id is invalid or duplicated');
+        }
+        seenHandCardIds[handCard.handCardInstanceId] = true;
+        const handSequence = Number(handCard.handCardInstanceId.slice(5));
+        if (!Number.isInteger(handCard.costModifier) || handCard.costModifier > 0 || handCard.costModifier < -10) {
+          violations.push('hand card cost modifier is invalid');
+        }
+        if ((handCard.costModifier === 0) !== (handCard.expiresAtEndOfTurnPlayerId === null)) {
+          violations.push('hand card cost modifier expiry does not match its modifier');
+        }
+        if (handCard.expiresAtEndOfTurnPlayerId !== null &&
+            !state.players.some(function (candidate): boolean { return candidate.playerId === handCard.expiresAtEndOfTurnPlayerId; })) {
+          violations.push('hand card cost modifier expiry player is not in the match');
+        }
+        if (Number.isFinite(handSequence) && handSequence >= state.nextHandCardInstanceId) {
+          violations.push('nextHandCardInstanceId must exceed every allocated instance');
+        }
       }
       for (let deckIndex = 0; deckIndex < player.deck.length; deckIndex += 1) {
         if (getCardDefinition(player.deck[deckIndex]!) === null) violations.push('deck contains an unknown card');

@@ -2,6 +2,38 @@
 
 本文件按时间倒序记录影响视觉表现、资源管线或运行时架构的改动。
 
+## 2026-09-27 Unity Hub 命令行环境修复与授权复测
+
+- **Hub 更新**：原 Unity Hub 3.3.6 及其 Licensing Client 均未通过 Windows Authenticode 验签。通过 Unity 官方 CDN 下载并验证签名后，以静默方式并行安装 Hub 3.21.3 到用户级标准目录；未覆盖旧 Hub、Unity Editor 或项目文件。新版 Hub 与 Licensing Client 1.18.3 签名有效，Hub CLI 可识别已安装的 Unity 6.0.28f1c1，GUI 主进程也可正常启动。
+- **授权与 Editor 实测**：Unity CLI 状态显示 Unity Personal 已激活；通过 `unity open client-unity` 正常启动 Unity 6.0.28f1c1，项目加载完成，日志未见 C# 编译错误。裸 Editor `-batchmode` 预检仍报告 `com.unity.editor.headless` entitlement 不可用；将验证入口改为 Unity CLI `test` 后，EditMode 可在 CLI 管理的 Editor 会话中执行（详见下条）。旧 `C:\ProgramData\Unity\Unity_lic.ulf` 被新版 Hub 报告为过期，且机器绑定与当前环境不符，未删除。`Temp/Unity_v6000.0.28f1c1.alf` 为本机申请文件；Personal 授权使用 Unity CLI/Hub 登录会话，不需要手动激活文件。
+- **RULE-033B 实例费用与卡面反馈**：场景控制器此前在已选 `handCardInstanceId` 失效时，会按 `cardId` 自动回退到另一张同名手牌；离线拒绝原因分类及联机探针也曾按卡名取首张副本。现在显式选中的实例失效后不替换副本，费用分类和联机命令都绑定具体实例。卡牌费用角标不再写死为 `-1`，而按基础费与实际费差显示累计减费。新增有效/失效选择、费用拒绝分类与 `-1/-2/-3` 卡面角标回归；Unity CLI EditMode **269/269** 通过。结果：`Temp/RULE-033B-card-cost-ui-editmode.xml`。随后经 CLI 重新打开项目，Unity 6000.0.28f1c1 加载完成且日志无 C# 编译错误。
+- **终局回合费用到期**：服务端在结束阶段触发致胜伤害时会立即发出 `MATCH_ENDED` 并中断剩余回合流程，旧路径因此跳过手牌费用修正到期。现在 `END_TURN` 结算进入终局时，先按实例清除到期修正并发出私有化投影事件，再发最终 `MATCH_ENDED`；Unity 事件 DTO 补齐对应费用字段，客户端投影回归验证终局状态和对手手牌隐私。Nakama 规则测试 **220/220**、TypeScript 类型检查、Unity CLI EditMode **270/270** 通过。Unity 结果：`Temp/RULE-033B-terminal-expiry-editmode.xml`。
+- **费用修正叠加边界**：新增服务端与离线 Demo 组合回归，验证 `db_005` 出土减费与所选手牌副本的临时修正按同一公式叠加，负值截断到 0 后允许零红石部署。Nakama **221/221**、TypeScript 类型检查、Unity CLI EditMode **271/271** 通过。Unity 结果：`Temp/RULE-033B-cost-stack-editmode.xml`。
+- **同名手牌的 UI 身份绑定**：手牌与详情卡 UI 现在保留 `handCardInstanceId`，对象名也包含该 ID，避免同名牌在 Unity Hierarchy/自动化检查中无法区分。新增场景集成回归，实际点击两张同名牌并检查各自费用、选中抬升和详情面板副本切换。Unity CLI EditMode **272/272** 通过；结果：`Temp/RULE-033B-duplicate-card-ui-editmode.xml`。
+- **合成预览绑定所选副本**：复核发现详情面板的材料可用性和支付方式切换仍有两处按 `cardId` 取首张同名牌。两处 UI 查询现传入当前 `handCardInstanceId`，失效选择会提示重新选择；部署仍由同一个实例 ID 校验及消耗。新增重复成品实测：第二张 `db_007` 可作为被选产物合成，第一张原样留在手牌；过期实例不能回退至第一张。Unity CLI EditMode **273/273** 通过。结果：`Temp/RULE-033B-crafting-instance-ui-editmode.xml`。因主项目已在 Unity 中打开，测试在同源码临时项目副本运行，未关闭或干扰现有 Editor。
+- **手牌进入路径 ID 验收**：服务端与 Unity 离线 Demo 新增针对性断言，覆盖初始发牌全局唯一 ID、起手替换保留未换牌实例并为补牌分配新 ID、普通抽牌、私有生成、出土与掉落创建新实例。服务端规则回归 **221/221**、TypeScript 类型检查通过；Unity CLI EditMode **273/273** 通过。Unity 报告：`Temp/RULE-033B-hand-entry-paths-editmode.xml`。
+- **服务端合成副本错选修复**：入口审计发现后端虽然按实例校验合成成品，却在扣材料后按首个匹配 `cardId` 消耗成品。现在材料结算后仍以锁定的 `handCardInstanceId` 定位成品；新增双 `db_007` 回归，验证提交第二张后第一张实例留在手牌。Nakama 规则 **222/222** 与生产 TypeScript 类型检查通过。
+- **联机卡牌命令实例 ID 序列化修复**：审查发现 Unity 命令 DTO 虽持有 `handCardInstanceId`，但 Nakama 网关的 JSON wire payload 未声明该字段，导致 DEPLOY/PLAY 发往服务端时丢失实例身份。现为部署、普通/指定目标/多目标出牌 wire payload 补齐字段，序列化前校验 `hand-<数字>` 格式；命令工厂也拒绝缺失实例 ID。新增 wire JSON、目标数组和缺失/错误 ID 回归。Unity CLI EditMode **277/277** 通过，报告：`Temp/RULE-033B-online-instance-wire-editmode-r2.xml`。
+- **在线命令 API 编译期约束实例身份**：继续审查发现在线会话与命令工厂仍将手牌实例 ID 暴露为可省略参数，调用方只有在运行时才会因空值失败。现把部署/出牌的实例 ID 调整为必填参数，目标和支付选项仍保留可选；所有场景调用显式传递选中副本。Unity CLI EditMode **277/277** 通过，报告：`Temp/RULE-033B-required-online-hand-id-editmode.xml`。
+- **在线出牌会话实例链回归**：新增 EditMode 集成用例，从 `DemoOnlineMatchSession.PlayCardAsync` 发出指定手牌与目标实例，核对命令载荷，并应用权威确认后的私有手牌投影，验证选中副本从手牌移除且 pending 状态结束。Unity CLI EditMode **278/278** 通过，报告：`Temp/RULE-033B-online-session-instance-chain-editmode.xml`。
+- **恢复快照保留手牌实例**：新增 Unity MatchStateStore 恢复测试，验证重连快照保留同名手牌各自的实例 ID、折扣及到期玩家，同时对手两张隐藏手牌仍为不可见空占位。Unity CLI EditMode **279/279** 通过，报告：`Temp/RULE-033B-hand-instance-recovery-editmode.xml`。
+- **规则核心禁止缺失实例回退**：审查发现 Nakama 网络入口虽拒绝缺失 ID，底层规则引擎仍为部署/出牌保留 `hand.indexOf(cardId)` legacy fallback，且会在命令前悄悄修补不一致的手牌数组。现引擎入口直接要求 `hand-<数字>` 并按实例查询，移除按卡名回退和隐式状态修补；新增原子拒绝回归。测试夹具显式构造实例身份。Nakama **223/223**、生产 TypeScript 类型检查通过。
+- **本地命令工厂禁止同名副本歧义**：离线 Demo 的部署/出牌命令工厂和部署/合成预览缺少实例 ID 时，仅在唯一匹配时推导；重复卡必须使用 UI 当前选中的 `handCardInstanceId`，不能再默认为第一张。确定性场景夹具已显式传入副本 ID。新增折扣副本与原价副本并存测试，确认两者预览费用不同且缺少具体实例时拒绝。Unity CLI EditMode **280/280** 通过，结果：`Temp/RULE-033B-strict-local-command-ids-editmode.xml`。
+- **失效手牌选择在详情面板锁定**：联机快照移除已选副本后，即使手牌里还剩同名牌，详情面板也不再误显可释放/部署操作，而是提示重新选择；多目标和普通出牌、部署操作统一要求当前选中实例仍在手牌中。为疲劳/临时红石演示在重置手牌后重新绑定新实例，避免旧选择悬空。新增完整场景交互回归，Unity CLI EditMode **281/281** 通过，报告：`Temp/UI-stale-selected-card-instance-full-editmode.xml`。
+- **手牌卡规则文字可读性**：紧凑卡面文字最低字号由 8px 提高到 9px、上限设为 12px，并扩大规则区域宽度和高度；Unity EditMode 同时断言规则文字与立绘表面、卡牌类型标签不重叠。属性区、群系边框和详情卡布局保持不变。Unity CLI 全量 EditMode **281/281** 通过；报告：`Temp/UI-card-rules-readability-editmode.xml`。
+- **合成场景预览重新绑定手牌实例**：实际运行 Windows Player 并检查 1920×1080 截图时，发现合成预览重置手牌后只更新 `cardId`、未更新所选 `handCardInstanceId`，造成仍在手中的卡显示“选择已失效”。现在预览通过统一选择入口绑定新实例；新增场景回归检查详情、警告和合成支付按钮。Unity CLI EditMode **282/282** 通过；临时副本 Player 构建并运行成功，截图：`Temp/ui-card-readability-after.png`，运行日志：`Temp/ui-card-readability-player.log`。
+- **Unity 权威手牌上限校验**：RULE-033B 审查发现服务端与共享 Schema 规定手牌最多 7 张，但 Unity 恢复快照和增量私有投影仍按 10 张校验。客户端现统一拒绝超过 7 张的任一方快照/投影，并新增两端超限回归。Unity Test Framework NUnit 报告 **284/284** 通过：`Temp/RULE-033B-hand-limit-editmode.xml`；Editor 日志记载测试完成并请求退出码 0，但 Unity CLI 在子进程关闭阶段未收尾，包装器最终报告运行未完成，因此本次不记为 CLI 命令干净退出。
+- **Unity 手牌实例协议校验收口**：继续对齐服务端不变量，恢复快照与私有投影现在都要求 `hand-<数字>` 实例 ID，并拒绝到期玩家不属于本局的费用修正；新增恢复和增量投影回归。Unity CLI 完整 EditMode **286/286** 通过且进程干净退出（exit code 0），报告：`Temp/RULE-033B-hand-instance-boundaries-editmode.xml`。
+- **恢复 Minecraft 卡面图标并做 Player 实机复核**：发现本地忽略目录缺少图标，导致所有卡面中央显示占位菱形。按注册清单从本机 Minecraft Java 1.21.10 安装 JAR 提取 74 张原版图标到 `Assets/Generated/MinecraftCardIcons`；来源受控资产仍遵守不提交策略。Unity CLI 使用项目 Development Player 入口构建临时副本并运行预览，详情卡和手牌已渲染实际方块/物品图标。1920×1080 截图：`Temp/ui-card-art-development-build.png`；SHA-256：`90505D24B34000FAFDC57808A3F6A7DB1ECD93463CB984ADDB6EDCF10FAC9614`。普通非 Development Player 不启用此本地读取路径，需用 `scripts/build-demo.ps1 -WithMinecraftAssets -WithWindowsPlayer` 复现完整本机资源构建。
+- **手牌上限跨层 Schema 一致性**：Schema 审查发现 Unity 已限制双方最多 7 张，但 MatchSnapshot 未限制手牌数组长度，EventBatch 仍允许本人/对手有 10 张。现快照双方 `hand`/`handCards` 与增量投影双方手牌数量全部统一为 7，并新增 AJV 回归覆盖自己、对手及私有投影超限。Nakama **224/224**、生产 TypeScript 类型检查通过；报告输出见 `server-nakama` 的 `npm test`。
+- **RULE-033B 验收矩阵复核**：内容校验、Nakama 224/224、TypeScript、Unity CLI EditMode 286/286 与 Compose 配置均通过；五张目标牌仍为 `PENDING`，协议中未增加回手/悬置状态或事件。实现与验证完成，但当前工作区还有 38 个 tracked 修改和 3 个来源未明 untracked 项；按子任务独立提交要求，B 保持“待工作区分组/提交”，RULE-033C 暂不启动。
+
+## 2026-09-23 RULE-033B 稳定手牌实例（进行中）
+
+- **玩法与协议**：权威手牌升级为 `handCardInstanceId` 实例，逐张费用修正及回合到期事件已接入；同名牌部署/出牌精确选择实例。协议更新至 37、规则集 `prototype-0.62`。Nakama 私有事件投影只返回本人完整手牌实例，对手仅收到手牌数量；网络命令入口拒绝缺失/格式错误的实例 ID。尚未实现 RULE-033C/D 的即时回手或悬置。
+- **Unity**：快照 DTO、事件后手牌投影同步、费用显示、详情与部署合法性检查、部署/出牌命令均已接入精确实例；成功出牌后 UI 重新绑定剩余手牌实例。离线 Demo 现以同一列表维护稳定手牌实例，抽牌/生成/掉落/移除/合成同步增删，费用修正按实例读取并在所有回合结束分支到期；合成校验也按所选成品实例排除材料。新增重复卡费用隔离、事件投影及离线实例稳定/到期 EditMode 用例；本机 Unity Roslyn 对 Core、Demo、Networking 与相关 EditMode 测试程序集静态编译成功。
+- **验证与未完成项**：服务端 220/220、TypeScript 类型检查/构建、卡牌内容与 smoke 脚本语法检查通过；隔离 Nakama 3.40.0 双端测试验证协议 37、精确实例部署命令与对手实例隐私。Strider 对局 `3c0b5c59-27f9-4e1e-90a1-fd469a5c89ed.brprobe` 在 revision 22/24 验证 FIRE/净火时序；WITHER/Fortress 对局 `34cacfcc-bb59-4395-9aec-8dbe603e4b3c.brprobe` 在 revision 38/40 验证重连与后续状态结算。探针报告在本机目录 `Temp/RULE-033B-online-probe.json`，SHA-256 `826FF022B63494E5F9E2898AAC322811DB4F885FDBAA69EBA3072D57FFE38D62`。Unity 编辑器直接验证仍失败于中国版许可证缺少 `com.unity.editor.headless` entitlement；`validate-unity.ps1` 已加无项目授权预检，失败时在内容同步前退出，当前负向验证确认没有改写 tracked 文件。独立 Roslyn 编译不能替代 EditMode 执行。RULE-033B 仍进行中，不启动 RULE-033C。
+
 ## 2026-09-23 RULE-033A 悬置与回手契约冻结
 
 - **实例身份先行**：审计确认当前权威手牌是 `string[]`，部署/出牌依赖 `indexOf(cardId)`；同名卡无法可靠区分被回手的折扣副本。新契约强制先引入稳定 `handCardInstanceId`，命令、支付、合成、Unity 选择和重连都精确绑定实例，禁止用按卡名共享折扣的临时实现。

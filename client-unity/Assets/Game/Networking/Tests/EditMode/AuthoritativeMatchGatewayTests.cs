@@ -16,7 +16,7 @@ namespace BiomeRivals.Networking.Tests
                 MatchStateDto received = null;
                 gateway.SnapshotReceived += snapshot => received = snapshot;
                 transport.Emit(MatchOpcodes.Snapshot,
-                    "{\"matchId\":\"match-1\",\"viewerPlayerId\":\"alice\",\"protocolVersion\":36,\"rulesetVersion\":\"prototype-0.61\",\"revision\":0," +
+                    "{\"matchId\":\"match-1\",\"viewerPlayerId\":\"alice\",\"protocolVersion\":37,\"rulesetVersion\":\"prototype-0.62\",\"revision\":0," +
                     "\"lastEventId\":0,\"status\":\"ACTIVE\",\"turn\":1,\"phase\":\"MAIN\",\"activePlayerIndex\":0,\"nextInstanceId\":1," +
                     "\"players\":[{\"playerId\":\"alice\",\"factionId\":\"ocean_river\",\"mulliganCompleted\":true,\"life\":30,\"armor\":0,\"redstone\":6," +
                     "\"temporaryRedstone\":0,\"totalRedstone\":6,\"redstoneCapacity\":6,\"hand\":[\"pf_001\"],\"deckCount\":26,\"buriedCount\":0,\"excavatedThisTurn\":false,\"discardPile\":[],\"fatigueCount\":0,\"unitSlots\":[null,null,null,null]," +
@@ -50,7 +50,7 @@ namespace BiomeRivals.Networking.Tests
                 MatchEventBatchDto received = null;
                 gateway.EventBatchReceived += batch => received = batch;
                 transport.Emit(MatchOpcodes.EventBatch,
-                    "{\"protocolVersion\":36,\"rulesetVersion\":\"prototype-0.61\",\"revision\":1," +
+                    "{\"protocolVersion\":37,\"rulesetVersion\":\"prototype-0.62\",\"revision\":1," +
                     "\"acknowledgedCommandId\":\"turn-1\",\"events\":[{\"eventId\":1,\"type\":\"CARD_DRAWN\"," +
                     "\"payload\":{\"playerId\":\"bob\",\"cardId\":null,\"handCount\":5,\"deckCount\":25}}]}");
 
@@ -115,7 +115,7 @@ namespace BiomeRivals.Networking.Tests
             using (var gateway = new AuthoritativeMatchGateway(transport))
             {
                 var command = MatchCommandFactory.DeployCard(
-                    "cmd-1", 3, "si_003", "UNIT", 2, "REDSTONE", "UNIT", "object-7");
+                    "cmd-1", 3, "si_003", "UNIT", 2, "hand-7", "REDSTONE", "UNIT", "object-7");
                 await gateway.SendCommandAsync(command);
 
                 Assert.That(transport.LastOpcode, Is.EqualTo(MatchOpcodes.Command));
@@ -123,10 +123,23 @@ namespace BiomeRivals.Networking.Tests
                 Assert.That(transport.LastJson, Does.Contain("\"paymentMethod\":\"REDSTONE\""));
                 Assert.That(transport.LastJson, Does.Contain("\"payload\":{"));
                 Assert.That(transport.LastJson, Does.Contain("\"slotKind\":\"UNIT\""));
+                Assert.That(transport.LastJson, Does.Contain("\"handCardInstanceId\":\"hand-7\""));
                 Assert.That(transport.LastJson, Does.Contain("\"targetType\":\"UNIT\""));
                 Assert.That(transport.LastJson, Does.Contain("\"targetInstanceId\":\"object-7\""));
                 Assert.That(transport.LastJson, Does.Not.Contain("attackerInstanceId"));
             }
+        }
+
+        [Test]
+        public void UntargetedDeployWireCarriesTheSelectedHandInstance()
+        {
+            var json = AuthoritativeMatchGateway.SerializeCommand(
+                MatchCommandFactory.DeployCard(
+                    "deploy-untargeted", 4, "pf_001", "UNIT", 0, "hand-44"));
+
+            Assert.That(json, Does.Contain("\"cardId\":\"pf_001\""));
+            Assert.That(json, Does.Contain("\"handCardInstanceId\":\"hand-44\""));
+            Assert.That(json, Does.Not.Contain("targetType"));
         }
 
         [Test]
@@ -158,18 +171,38 @@ namespace BiomeRivals.Networking.Tests
         }
 
         [Test]
-        public async Task PlayCardCommandWirePayloadContainsOnlyCardId()
+        public async Task PlayCardCommandWirePayloadContainsCardAndStableHandInstanceId()
         {
             var transport = new FakeTransport();
             using (var gateway = new AuthoritativeMatchGateway(transport))
             {
-                await gateway.SendCommandAsync(MatchCommandFactory.PlayCard("play-1", 2, "tk_016"));
+                await gateway.SendCommandAsync(MatchCommandFactory.PlayCard("play-1", 2, "tk_016", "hand-16"));
 
                 Assert.That(transport.LastJson, Does.Contain("\"type\":\"PLAY_CARD\""));
                 Assert.That(transport.LastJson, Does.Contain("\"cardId\":\"tk_016\""));
+                Assert.That(transport.LastJson, Does.Contain("\"handCardInstanceId\":\"hand-16\""));
                 Assert.That(transport.LastJson, Does.Not.Contain("slotKind"));
                 Assert.That(transport.LastJson, Does.Not.Contain("targetType"));
             }
+        }
+
+        [TestCase("hand-invalid")]
+        [TestCase("local-hand-3")]
+        public void CardCommandSerializationRejectsMissingOrNonAuthoritativeHandIds(string handCardInstanceId)
+        {
+            var command = MatchCommandFactory.PlayCard(
+                "play-invalid-hand-id", 2, "tk_016", handCardInstanceId);
+
+            Assert.Throws<InvalidOperationException>(() => AuthoritativeMatchGateway.SerializeCommand(command));
+        }
+
+        [Test]
+        public void CardCommandFactoryRejectsMissingHandInstances()
+        {
+            Assert.Throws<ArgumentException>(() =>
+                MatchCommandFactory.DeployCard("deploy-missing-hand", 0, "pf_001", "UNIT", 0, ""));
+            Assert.Throws<ArgumentException>(() =>
+                MatchCommandFactory.PlayCard("play-missing-hand", 0, "tk_016", ""));
         }
 
         [Test]
@@ -188,9 +221,10 @@ namespace BiomeRivals.Networking.Tests
         public void TargetedPlayCardWireContainsStableTargetInstance()
         {
             var json = AuthoritativeMatchGateway.SerializeCommand(
-                MatchCommandFactory.PlayCard("play-targeted", 2, "si_001", "UNIT", "object-7"));
+                MatchCommandFactory.PlayCard("play-targeted", 2, "si_001", "hand-21", "UNIT", "object-7"));
 
             Assert.That(json, Does.Contain("\"cardId\":\"si_001\""));
+            Assert.That(json, Does.Contain("\"handCardInstanceId\":\"hand-21\""));
             Assert.That(json, Does.Contain("\"targetType\":\"UNIT\""));
             Assert.That(json, Does.Contain("\"targetInstanceId\":\"object-7\""));
             Assert.That(json, Does.Not.Contain("slotKind"));
@@ -200,9 +234,10 @@ namespace BiomeRivals.Networking.Tests
         public void MultiTargetedPlayCardWireContainsOnlyTheStableTargetArray()
         {
             var json = AuthoritativeMatchGateway.SerializeCommand(
-                MatchCommandFactory.PlayCard("play-multi-targeted", 3, "pf_006", "UNIT", "", new[] { "object-2", "object-7" }));
+                MatchCommandFactory.PlayCard("play-multi-targeted", 3, "pf_006", "hand-22", "UNIT", "", new[] { "object-2", "object-7" }));
 
             Assert.That(json, Does.Contain("\"cardId\":\"pf_006\""));
+            Assert.That(json, Does.Contain("\"handCardInstanceId\":\"hand-22\""));
             Assert.That(json, Does.Contain("\"targetType\":\"UNIT\""));
             Assert.That(json, Does.Contain("\"targetInstanceIds\":[\"object-2\",\"object-7\"]"));
             Assert.That(json, Does.Not.Contain("\"targetInstanceId\":"));
@@ -266,7 +301,7 @@ namespace BiomeRivals.Networking.Tests
                     TimeSpan.FromSeconds(1));
                 Assert.That(dispatcher.PendingCount, Is.EqualTo(1));
                 transport.Emit(MatchOpcodes.EventBatch,
-                    "{\"protocolVersion\":36,\"rulesetVersion\":\"prototype-0.61\",\"revision\":5," +
+                    "{\"protocolVersion\":37,\"rulesetVersion\":\"prototype-0.62\",\"revision\":5," +
                     "\"acknowledgedCommandId\":\"ack-1\",\"events\":[]}");
 
                 var result = await pending;

@@ -27,7 +27,8 @@ namespace BiomeRivals.Demo
             CardDefinitionEntry definition,
             DemoSlotKind slotKind,
             int slotIndex,
-            string paymentMethod = MatchPaymentMethods.Redstone)
+            string paymentMethod = MatchPaymentMethods.Redstone,
+            string handCardInstanceId = "")
         {
             if (match == null) throw new ArgumentNullException(nameof(match));
             if (definition == null) return Reject(1, "卡牌定义不存在。");
@@ -43,7 +44,10 @@ namespace BiomeRivals.Demo
             if (!definition.manualPlayAllowed) return Reject(occupiedSlots, "该卡牌只能由规则自动结算。");
             if (!match.IsPlayerTurn) return Reject(occupiedSlots, "当前是对手回合。");
             if (match.Phase != DemoTurnPhase.Main) return Reject(occupiedSlots, "进入战斗阶段后不能继续部署卡牌。");
-            if (!match.Hand.Contains(definition.id)) return Reject(occupiedSlots, "该牌不在手牌中。");
+            var selectedHandCardIndex = FindHandCardIndex(match, definition.id, handCardInstanceId);
+            if (selectedHandCardIndex < 0 || selectedHandCardIndex >= match.Hand.Count ||
+                match.Hand[selectedHandCardIndex] != definition.id)
+                return Reject(occupiedSlots, "选择的手牌实例已不存在。");
 
             if (deploysToUnits && slotKind != DemoSlotKind.Unit)
                 return Reject(occupiedSlots, "生物只能部署到单位格。");
@@ -64,11 +68,13 @@ namespace BiomeRivals.Demo
 
             if (paymentMethod == MatchPaymentMethods.Redstone)
             {
-                if (match.GetEffectiveCost(definition) > match.Energy) return Reject(occupiedSlots, "红石能量不足。");
+                var effectiveCost = match.GetEffectiveCost(definition,
+                    match.HandCards[selectedHandCardIndex].handCardInstanceId);
+                if (effectiveCost > match.Energy) return Reject(occupiedSlots, "红石能量不足。");
             }
             else if (paymentMethod == MatchPaymentMethods.Crafting)
             {
-                if (!CanPayWithCrafting(match, definition, out var missingMaterials))
+                if (!CanPayWithCrafting(match, definition, out var missingMaterials, handCardInstanceId))
                     return Reject(occupiedSlots, missingMaterials);
             }
             else return Reject(occupiedSlots, "部署支付方式无效。");
@@ -84,7 +90,8 @@ namespace BiomeRivals.Demo
         public static bool CanPayWithCrafting(
             IDemoMatchView match,
             CardDefinitionEntry definition,
-            out string message)
+            out string message,
+            string handCardInstanceId = "")
         {
             if (match == null) throw new ArgumentNullException(nameof(match));
             if (definition == null || !definition.hasCraftingRecipe ||
@@ -95,7 +102,9 @@ namespace BiomeRivals.Demo
             }
 
             var available = new List<string>(match.Hand ?? Array.Empty<string>());
-            var productIndex = available.IndexOf(definition.id);
+            var productIndex = FindHandCardIndex(match, definition.id, handCardInstanceId);
+            if (productIndex >= available.Count ||
+                (productIndex >= 0 && available[productIndex] != definition.id)) productIndex = -1;
             if (productIndex < 0)
             {
                 message = "成品卡不在手牌中。";
@@ -122,6 +131,24 @@ namespace BiomeRivals.Demo
 
             message = missing.Count == 0 ? string.Empty : "缺少材料：" + string.Join(" + ", missing);
             return missing.Count == 0;
+        }
+
+        private static int FindHandCardIndex(IDemoMatchView match, string cardId, string handCardInstanceId)
+        {
+            var handCards = match.HandCards;
+            if (handCards == null) return -1;
+            if (!string.IsNullOrEmpty(handCardInstanceId))
+                return handCards.ToList().FindIndex(card => card != null &&
+                    card.handCardInstanceId == handCardInstanceId && card.cardId == cardId);
+
+            var matchIndex = -1;
+            for (var index = 0; index < handCards.Count; index++)
+            {
+                if (handCards[index] == null || handCards[index].cardId != cardId) continue;
+                if (matchIndex >= 0) return -1;
+                matchIndex = index;
+            }
+            return matchIndex;
         }
     }
 }

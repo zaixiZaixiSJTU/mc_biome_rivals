@@ -21,7 +21,7 @@
 
 ## RULE-033B 稳定手牌实例与费用修正基础
 
-状态：**下一唯一任务**。不得接通回手/悬置卡牌。
+状态：**实现与验证完成；独立提交待工作区整理**。协议 37 / `prototype-0.62`、服务端/Unity 手牌实例、费用修正和投影已闭环；服务端规则回归 **224/224**、生产 TypeScript 类型检查通过，覆盖终局费用到期/隐私、DB-005 实时折扣叠加截零、所有进入手牌路径分配实例、同名合成选中副本、规则引擎缺失实例 ID 原子拒绝，以及 MatchSnapshot/EventBatch 双方 7 张手牌上限。Docker/Nakama 3.40.0 隔离双端 smoke 已通过：普通对局 revision 0→2→3；Strider FIRE/净火对局 revision 22/24；WITHER/Fortress 重连后状态结算 revision 38/40，验证报告哈希记录于 change-log。Unity CLI EditMode **286/286 通过并干净退出**，覆盖 Nakama DEPLOY/PLAY JSON wire payload、在线会话透传选定手牌/目标实例、实例必填 API、同名牌恢复快照的身份/隐私、离线命令/预览歧义拒绝、失效选中副本锁定、合成预览重绑定，以及实例 ID 格式、折扣到期玩家归属和双方最多 7 张的快照/私有投影边界；报告：`Temp/RULE-033B-hand-instance-boundaries-editmode.xml`。内容校验确认 74 张定义/文本/美术注册一致，`ed_002`、`ed_003`、`ed_005`、`ed_006`、`tk_017` 均仍为 `PENDING`；未新增回手/悬置事件或运行时。测试在同源码临时项目副本运行，未覆盖或替换主项目内容。当前工作区尚有 40 个 tracked 修改及 3 个来源未明的 untracked 项；除 B/RULE-032 混合差异外，新增包含手牌 hover 层级 UI 与 Development Player CLI 输出路径改动，必须排除在 B 提交之外。卡牌定义/名称注册仅格式变化，卡牌文本注册含 RULE-032 `nt_008` 差异；另有 RULE-032 smoke 与通用 CLI 验证改动。完成 B 专项变更分组并单独提交前，不启动 RULE-033C。
 
 目标：把权威手牌由裸卡牌 ID 升级为稳定实例，使相同 `cardId` 的不同副本可具有不同有效费用，并让所有命令、快照和 Unity 交互精确选择副本。
 
@@ -37,7 +37,7 @@
 
 ## RULE-033C 即时回手纵向切片
 
-状态：等待 RULE-033B。
+状态：等待 RULE-033B 变更分组与独立提交。
 
 只实现对象 `ownerPlayerId`、通用即时回手事务、`ed_002`、`ed_005` 与 `tk_017`：支付前目标/TK-017 校验，回手清理、满手进所有者弃牌堆、精确 `-1/-2`、权威事件、Unity 因果回放、离线同构和内容注册。不得建立悬置区。
 
@@ -70,12 +70,12 @@
 ## 最小交接
 
 ```text
-任务编号：RULE-033B
-只建立稳定手牌实例与精确费用修正基础；不得实现回手、悬置或注册目标卡牌。
+任务编号：RULE-033B 提交收口
+只审查、分组并独立提交已验证的 RULE-033B 修改；不得改动三个来源未明的 untracked 项，不得提前实现回手或悬置。
 仓库：D:\gitt\mc_biome_rivals
-基线：包含 RULE-033A 契约与任务包提交。
-先读：docs/design/end-suspend-return-spec-v1.md §2/7/9、RULE-033 任务包 B，以及当前手牌/命令/投影/Unity DTO 与离线 Demo。
+基线：HEAD 为 `ba6e747`；B 的实现与测试已通过，但尚未提交。
+先读：`git status --short`、`git diff --stat`、RULE-033B 的 40 个 tracked 修改，以及对应测试与 change-log。卡牌定义/名称 JSON 与 HEAD 语义相同但被重格式化；卡牌文本含 RULE-032 `nt_008` 差异；另有独立 UI hover 与 CLI build-output 改动；逐文件确认，勿把这些自动纳入 B 提交。
 开始前记录 git status；保留来源未明的本机文件。
-服务端、Schema、Nakama 投影、Unity DTO/仓库/命令/离线模型必须同构；同名副本不得串用折扣或命令目标。
-结束时报告：协议/规则集版本、手牌模型迁移范围、同名牌与隐私测试、服务端/Unity 测试、剩余风险和提交号。
+不要自动暂存整个工作区。先区分 B 相关变更、RULE-032 smoke/Unity CLI 通用验证修改、独立 UI hover/CLI build-output 改动和用户文件；仅在提交范围无歧义时形成 B 独立提交，否则向用户报告精确待确认文件清单。之后才启动 RULE-033C。
+结束时报告：分组文件、排除的既有变更、测试证据、剩余风险和提交号。
 ```

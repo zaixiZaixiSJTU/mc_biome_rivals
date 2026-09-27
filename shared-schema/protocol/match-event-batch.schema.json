@@ -4,9 +4,9 @@
   "title": "MatchEventBatch",
   "type": "object",
   "additionalProperties": false,
-  "required": ["protocolVersion", "rulesetVersion", "revision", "acknowledgedCommandId", "events"],
+  "required": ["protocolVersion", "rulesetVersion", "revision", "acknowledgedCommandId", "events", "handProjection"],
   "properties": {
-    "protocolVersion": { "const": 36 },
+    "protocolVersion": { "const": 37 },
     "rulesetVersion": { "type": "string" },
     "revision": { "type": "integer", "minimum": 0 },
     "acknowledgedCommandId": { "type": "string" },
@@ -18,10 +18,40 @@
         "required": ["eventId", "type", "payload"],
         "properties": {
           "eventId": { "type": "integer", "minimum": 1 },
-          "type": { "enum": ["MULLIGAN_COMPLETED", "MATCH_STARTED", "MATERIALS_CONSUMED", "CARD_DEPLOYED", "OBJECT_SUMMONED", "CARD_PLAYED", "CARD_EQUIPPED", "EQUIPMENT_DURABILITY_CHANGED", "EQUIPMENT_DESTROYED", "CARD_BURIED", "CHOICE_OFFERED", "CHOICE_RESOLVED", "CARD_EXCAVATED", "CARD_DRAWN", "CARD_BURNED", "CARD_GENERATED", "FATIGUE_DAMAGE", "HERO_DAMAGED", "HERO_LIFE_LOSS_MARKED", "HERO_HEALED", "ARMOR_GAINED", "REDSTONE_CHANGED", "OBJECT_STATS_CHANGED", "OBJECT_STATUS_APPLIED", "OBJECT_STATUS_TICKED", "OBJECT_STATUS_REMOVED", "PLAYER_STATUS_APPLIED", "PLAYER_STATUS_TICKED", "PLAYER_STATUS_REMOVED", "OBJECT_MOVED", "PHASE_CHANGED", "ATTACK_RESOLVED", "OBJECT_DIED", "TURN_ENDED", "TURN_STARTED", "PLAYER_CONCEDED", "MATCH_ENDED"] },
+          "type": { "enum": ["MULLIGAN_COMPLETED", "MATCH_STARTED", "MATERIALS_CONSUMED", "CARD_DEPLOYED", "OBJECT_SUMMONED", "CARD_PLAYED", "CARD_EQUIPPED", "EQUIPMENT_DURABILITY_CHANGED", "EQUIPMENT_DESTROYED", "CARD_BURIED", "CHOICE_OFFERED", "CHOICE_RESOLVED", "CARD_EXCAVATED", "CARD_DRAWN", "CARD_BURNED", "CARD_GENERATED", "HAND_CARD_COST_MODIFIER_EXPIRED", "FATIGUE_DAMAGE", "HERO_DAMAGED", "HERO_LIFE_LOSS_MARKED", "HERO_HEALED", "ARMOR_GAINED", "REDSTONE_CHANGED", "OBJECT_STATS_CHANGED", "OBJECT_STATUS_APPLIED", "OBJECT_STATUS_TICKED", "OBJECT_STATUS_REMOVED", "PLAYER_STATUS_APPLIED", "PLAYER_STATUS_TICKED", "PLAYER_STATUS_REMOVED", "OBJECT_MOVED", "PHASE_CHANGED", "ATTACK_RESOLVED", "OBJECT_DIED", "TURN_ENDED", "TURN_STARTED", "PLAYER_CONCEDED", "MATCH_ENDED"] },
           "payload": { "type": "object" }
         },
         "allOf": [
+          {
+            "if": { "properties": { "type": { "const": "HAND_CARD_COST_MODIFIER_EXPIRED" } } },
+            "then": { "properties": { "payload": {
+              "type": "object", "additionalProperties": false,
+              "required": ["playerId", "handCardInstanceId", "cardId", "expiredCostModifier", "costModifier", "effectiveCost"],
+              "properties": {
+                "playerId": { "type": "string", "minLength": 1 },
+                "handCardInstanceId": {}, "cardId": {}, "expiredCostModifier": {},
+                "costModifier": {}, "effectiveCost": {}
+              },
+              "oneOf": [
+                { "properties": {
+                  "playerId": { "type": "string", "minLength": 1 },
+                  "handCardInstanceId": { "type": "string", "pattern": "^hand-[0-9]+$" },
+                  "cardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+                  "expiredCostModifier": { "type": "integer", "minimum": -10, "maximum": -1 },
+                  "costModifier": { "const": 0 },
+                  "effectiveCost": { "type": "integer", "minimum": 0 }
+                } },
+                { "properties": {
+                  "playerId": { "type": "string", "minLength": 1 },
+                  "handCardInstanceId": { "type": "null" },
+                  "cardId": { "type": "null" },
+                  "expiredCostModifier": { "type": "null" },
+                  "costModifier": { "type": "null" },
+                  "effectiveCost": { "type": "null" }
+                } }
+              ]
+            } } }
+          },
           {
             "if": { "properties": { "type": { "const": "MULLIGAN_COMPLETED" } } },
             "then": {
@@ -755,6 +785,32 @@
             }
           }
         ]
+      }
+    },
+    "handProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ownPlayerId", "ownHand", "ownHandCards", "opponentPlayerId", "opponentHandCount"],
+      "properties": {
+        "ownPlayerId": { "type": "string", "minLength": 1 },
+        "ownHand": { "type": "array", "items": { "type": "string", "pattern": "^[a-z0-9_]+$" }, "maxItems": 7 },
+        "ownHandCards": { "type": "array", "maxItems": 7, "items": {
+          "type": "object", "additionalProperties": false,
+          "required": ["handCardInstanceId", "cardId", "costModifier", "expiresAtEndOfTurnPlayerId"],
+          "properties": {
+            "handCardInstanceId": { "type": "string", "pattern": "^hand-[0-9]+$" },
+            "cardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+            "costModifier": { "type": "integer", "minimum": -10, "maximum": 0 },
+            "expiresAtEndOfTurnPlayerId": { "type": ["string", "null"] }
+          },
+          "allOf": [{
+            "if": { "properties": { "costModifier": { "const": 0 } } },
+            "then": { "properties": { "expiresAtEndOfTurnPlayerId": { "type": "null" } } },
+            "else": { "properties": { "expiresAtEndOfTurnPlayerId": { "type": "string", "minLength": 1 } } }
+          }]
+        } },
+        "opponentPlayerId": { "type": "string", "minLength": 1 },
+        "opponentHandCount": { "type": "integer", "minimum": 0, "maximum": 7 }
       }
     }
   }

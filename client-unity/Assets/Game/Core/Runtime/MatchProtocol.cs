@@ -24,6 +24,7 @@ namespace BiomeRivals.Core
 
     public static class MatchEventTypes
     {
+        public const string HandCardCostModifierExpired = "HAND_CARD_COST_MODIFIER_EXPIRED";
         public const string MulliganCompleted = "MULLIGAN_COMPLETED";
         public const string MatchStarted = "MATCH_STARTED";
         public const string MaterialsConsumed = "MATERIALS_CONSUMED";
@@ -79,6 +80,7 @@ namespace BiomeRivals.Core
     {
         public int[] cardIndices = Array.Empty<int>();
         public string cardId = string.Empty;
+        public string handCardInstanceId = string.Empty;
         public string slotKind = string.Empty;
         public int slotIndex;
         public string paymentMethod = string.Empty;
@@ -120,10 +122,13 @@ namespace BiomeRivals.Core
             string cardId,
             string slotKind,
             int slotIndex,
+            string handCardInstanceId,
             string paymentMethod = MatchPaymentMethods.Redstone,
             string targetType = "",
-            string targetInstanceId = "") =>
-            new MatchCommandDto
+            string targetInstanceId = "")
+        {
+            var requiredHandCardInstanceId = RequireHandCardInstanceId(handCardInstanceId);
+            return new MatchCommandDto
             {
                 protocolVersion = GameVersions.Protocol,
                 rulesetVersion = GameVersions.Ruleset,
@@ -133,6 +138,7 @@ namespace BiomeRivals.Core
                 payload = new MatchCommandPayloadDto
                 {
                     cardId = cardId,
+                    handCardInstanceId = requiredHandCardInstanceId,
                     slotKind = slotKind,
                     slotIndex = slotIndex,
                     paymentMethod = paymentMethod,
@@ -140,6 +146,7 @@ namespace BiomeRivals.Core
                     targetInstanceId = targetInstanceId
                 }
             };
+        }
 
         public static MatchCommandDto EndTurn(string commandId, int revision) =>
             new MatchCommandDto
@@ -167,10 +174,13 @@ namespace BiomeRivals.Core
             string commandId,
             int revision,
             string cardId,
+            string handCardInstanceId,
             string targetType = "",
             string targetInstanceId = "",
-            string[] targetInstanceIds = null) =>
-            new MatchCommandDto
+            string[] targetInstanceIds = null)
+        {
+            var requiredHandCardInstanceId = RequireHandCardInstanceId(handCardInstanceId);
+            return new MatchCommandDto
             {
                 protocolVersion = GameVersions.Protocol,
                 rulesetVersion = GameVersions.Ruleset,
@@ -180,11 +190,20 @@ namespace BiomeRivals.Core
                 payload = new MatchCommandPayloadDto
                 {
                     cardId = cardId,
+                    handCardInstanceId = requiredHandCardInstanceId,
                     targetType = targetType,
                     targetInstanceId = targetInstanceId,
                     targetInstanceIds = targetInstanceIds ?? Array.Empty<string>()
                 }
             };
+        }
+
+        private static string RequireHandCardInstanceId(string handCardInstanceId)
+        {
+            if (string.IsNullOrWhiteSpace(handCardInstanceId))
+                throw new ArgumentException("Card commands require a handCardInstanceId.", nameof(handCardInstanceId));
+            return handCardInstanceId;
+        }
 
         public static MatchCommandDto ResolveChoice(string commandId, int revision, string choiceId, int selectedOptionIndex) =>
             new MatchCommandDto
@@ -272,6 +291,10 @@ namespace BiomeRivals.Core
         public string winnerPlayerId = string.Empty;
         public string reason = string.Empty;
         public string cardId = string.Empty;
+        public string handCardInstanceId = string.Empty;
+        public int expiredCostModifier;
+        public int costModifier;
+        public int effectiveCost;
         public string[] hand = Array.Empty<string>();
         public string[] keywords = Array.Empty<string>();
         public string slotKind = string.Empty;
@@ -363,6 +386,17 @@ namespace BiomeRivals.Core
         public int revision;
         public string acknowledgedCommandId = string.Empty;
         public MatchEventDto[] events = Array.Empty<MatchEventDto>();
+        public HandProjectionDto handProjection;
+    }
+
+    [Serializable]
+    public sealed class HandProjectionDto
+    {
+        public string ownPlayerId = string.Empty;
+        public string[] ownHand = Array.Empty<string>();
+        public HandCardStateDto[] ownHandCards = Array.Empty<HandCardStateDto>();
+        public string opponentPlayerId = string.Empty;
+        public int opponentHandCount;
     }
 
     [Serializable]

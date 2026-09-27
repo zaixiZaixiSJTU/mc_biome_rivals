@@ -24,6 +24,7 @@ namespace BiomeRivals.Demo
         public bool OpponentMulliganCompleted => Opponent?.mulliganCompleted == true;
         public int ViewerIndex => FindViewerIndex();
         public IReadOnlyList<string> Hand => Player?.hand ?? EmptySlots;
+        public IReadOnlyList<HandCardStateDto> HandCards => Player?.handCards ?? Array.Empty<HandCardStateDto>();
         public string[] UnitSlots => MapSlots(Player, DemoSlotKind.Unit);
         public string[] BuildingSlots => MapSlots(Player, DemoSlotKind.Building);
         public string[] OpponentUnitSlots => MapSlots(Opponent, DemoSlotKind.Unit);
@@ -81,6 +82,16 @@ namespace BiomeRivals.Demo
             return definition.id == "db_005" && ExcavatedThisTurn
                 ? Math.Max(0, definition.cost - 1)
                 : definition.cost;
+        }
+
+        public int GetEffectiveCost(CardDefinitionEntry definition, string handCardInstanceId)
+        {
+            if (definition == null) return 0;
+            var handCard = HandCards.FirstOrDefault(value => value != null &&
+                value.handCardInstanceId == handCardInstanceId && value.cardId == definition.id);
+            var modifier = handCard?.costModifier ?? 0;
+            var excavatedDiscount = definition.id == "db_005" && ExcavatedThisTurn ? 1 : 0;
+            return Math.Max(0, definition.cost + modifier - excavatedDiscount);
         }
 
         private MatchStateDto Current => _store.Current;

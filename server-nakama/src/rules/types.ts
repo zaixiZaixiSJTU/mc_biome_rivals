@@ -1,10 +1,10 @@
 namespace BiomeRivalsRules {
-  export const PROTOCOL_VERSION = 36;
-  export const RULESET_VERSION = 'prototype-0.61';
+  export const PROTOCOL_VERSION = 37;
+  export const RULESET_VERSION = 'prototype-0.62';
 
   export type MatchStatus = 'WAITING' | 'MULLIGAN' | 'ACTIVE' | 'FINISHED';
   export type CommandType = 'MULLIGAN' | 'DEPLOY_CARD' | 'PLAY_CARD' | 'RESOLVE_CHOICE' | 'ENTER_COMBAT' | 'ATTACK' | 'END_TURN' | 'CONCEDE';
-  export type EventType = 'MULLIGAN_COMPLETED' | 'MATCH_STARTED' | 'MATERIALS_CONSUMED' | 'CARD_DEPLOYED' | 'OBJECT_SUMMONED' | 'CARD_PLAYED' | 'CARD_EQUIPPED' | 'EQUIPMENT_DURABILITY_CHANGED' | 'EQUIPMENT_DESTROYED' | 'CARD_BURIED' | 'CHOICE_OFFERED' | 'CHOICE_RESOLVED' | 'CARD_EXCAVATED' | 'CARD_DRAWN' | 'CARD_BURNED' | 'CARD_GENERATED' | 'FATIGUE_DAMAGE' | 'HERO_DAMAGED' | 'HERO_LIFE_LOSS_MARKED' | 'HERO_HEALED' | 'ARMOR_GAINED' | 'REDSTONE_CHANGED' | 'OBJECT_STATS_CHANGED' | 'OBJECT_STATUS_APPLIED' | 'OBJECT_STATUS_TICKED' | 'OBJECT_STATUS_REMOVED' | 'PLAYER_STATUS_APPLIED' | 'PLAYER_STATUS_TICKED' | 'PLAYER_STATUS_REMOVED' | 'OBJECT_MOVED' | 'PHASE_CHANGED' | 'ATTACK_RESOLVED' | 'OBJECT_DIED' | 'TURN_ENDED' | 'TURN_STARTED' | 'PLAYER_CONCEDED' | 'MATCH_ENDED';
+  export type EventType = 'MULLIGAN_COMPLETED' | 'MATCH_STARTED' | 'MATERIALS_CONSUMED' | 'CARD_DEPLOYED' | 'OBJECT_SUMMONED' | 'CARD_PLAYED' | 'CARD_EQUIPPED' | 'EQUIPMENT_DURABILITY_CHANGED' | 'EQUIPMENT_DESTROYED' | 'CARD_BURIED' | 'CHOICE_OFFERED' | 'CHOICE_RESOLVED' | 'CARD_EXCAVATED' | 'CARD_DRAWN' | 'CARD_BURNED' | 'CARD_GENERATED' | 'HAND_CARD_COST_MODIFIER_EXPIRED' | 'FATIGUE_DAMAGE' | 'HERO_DAMAGED' | 'HERO_LIFE_LOSS_MARKED' | 'HERO_HEALED' | 'ARMOR_GAINED' | 'REDSTONE_CHANGED' | 'OBJECT_STATS_CHANGED' | 'OBJECT_STATUS_APPLIED' | 'OBJECT_STATUS_TICKED' | 'OBJECT_STATUS_REMOVED' | 'PLAYER_STATUS_APPLIED' | 'PLAYER_STATUS_TICKED' | 'PLAYER_STATUS_REMOVED' | 'OBJECT_MOVED' | 'PHASE_CHANGED' | 'ATTACK_RESOLVED' | 'OBJECT_DIED' | 'TURN_ENDED' | 'TURN_STARTED' | 'PLAYER_CONCEDED' | 'MATCH_ENDED';
   export type DeploySlotKind = 'UNIT' | 'BUILDING';
   export type PaymentMethod = 'REDSTONE' | 'CRAFTING';
   export type TurnPhase = 'MAIN' | 'COMBAT';
@@ -139,6 +139,7 @@ namespace BiomeRivalsRules {
     temporaryRedstone: number;
     redstoneCapacity: number;
     hand: string[];
+    handCards: HandCardState[];
     deck: string[];
     buriedCardIds: string[];
     excavatedThisTurn: boolean;
@@ -154,6 +155,13 @@ namespace BiomeRivalsRules {
     unitSlots: Array<string | null>;
     buildingSlots: Array<string | null>;
     battlefield: BattlefieldObjectState[];
+  }
+
+  export interface HandCardState {
+    handCardInstanceId: string;
+    cardId: string;
+    costModifier: number;
+    expiresAtEndOfTurnPlayerId: string | null;
   }
 
   export interface EquipmentState {
@@ -179,6 +187,7 @@ namespace BiomeRivalsRules {
     phase: TurnPhase;
     activePlayerIndex: number;
     nextInstanceId: number;
+    nextHandCardInstanceId: number;
     players: PlayerState[];
     pendingChoice: PendingChoiceState | null;
     winnerPlayerId: string | null;
@@ -196,6 +205,7 @@ namespace BiomeRivalsRules {
     totalRedstone: number;
     redstoneCapacity: number;
     hand: Array<string | null>;
+    handCards: Array<HandCardState | null>;
     deckCount: number;
     buriedCount: number;
     excavatedThisTurn: boolean;
@@ -251,6 +261,16 @@ namespace BiomeRivalsRules {
     revision: number;
     acknowledgedCommandId: string;
     events: MatchEvent[];
+    handProjection?: HandProjection;
+    privateHandProjections?: HandProjection[];
+  }
+
+  export interface HandProjection {
+    ownPlayerId: string;
+    ownHand: string[];
+    ownHandCards: HandCardState[];
+    opponentPlayerId: string;
+    opponentHandCount: number;
   }
 
   export type RejectionCode =

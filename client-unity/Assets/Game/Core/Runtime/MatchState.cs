@@ -62,6 +62,15 @@ namespace BiomeRivals.Core
     }
 
     [Serializable]
+    public sealed class HandCardStateDto
+    {
+        public string handCardInstanceId = string.Empty;
+        public string cardId = string.Empty;
+        public int costModifier;
+        public string expiresAtEndOfTurnPlayerId = string.Empty;
+    }
+
+    [Serializable]
     public sealed class PlayerStateDto
     {
         public string playerId = string.Empty;
@@ -74,6 +83,7 @@ namespace BiomeRivals.Core
         public int totalRedstone;
         public int redstoneCapacity;
         public string[] hand = Array.Empty<string>();
+        public HandCardStateDto[] handCards = Array.Empty<HandCardStateDto>();
         public int deckCount;
         public int buriedCount;
         public bool excavatedThisTurn;
@@ -112,6 +122,8 @@ namespace BiomeRivals.Core
 
     public sealed class MatchStateStore
     {
+        private const int MaxHandSize = 7;
+
         public MatchStateDto Current { get; private set; }
         public event Action<MatchStateDto> Changed;
 
@@ -152,6 +164,15 @@ namespace BiomeRivals.Core
                         throw new InvalidOperationException("Snapshot contains an invalid player status.");
                 }
                 if (player.triggeredEffectKeysThisTurn == null) player.triggeredEffectKeysThisTurn = Array.Empty<string>();
+                if (player.hand == null) player.hand = Array.Empty<string>();
+                if (player.handCards == null) player.handCards = Array.Empty<HandCardStateDto>();
+                var isViewer = player.playerId == snapshot.viewerPlayerId;
+                if (player.hand.Length > MaxHandSize || player.handCards.Length != player.hand.Length ||
+                    (isViewer && (player.handCards.Any(card => card == null) ||
+                        player.handCards.Select(card => card.handCardInstanceId).Distinct(StringComparer.Ordinal).Count() != player.handCards.Length ||
+                        player.handCards.Where((card, index) => !IsValidHandCard(card, player.hand[index], snapshot.players)).Any())) ||
+                    (!isViewer && player.handCards.Any(card => card != null)))
+                    throw new InvalidOperationException("Snapshot contains invalid hand card instances.");
                 if (player.triggeredEffectKeysThisTurn.Any(value => string.IsNullOrWhiteSpace(value) ||
                     !System.Text.RegularExpressions.Regex.IsMatch(value, "^object-[0-9]+:effect\\.(db_004|pf_005|si_007|or_(002|004|007))\\.01$")) ||
                     player.triggeredEffectKeysThisTurn.Distinct(StringComparer.Ordinal).Count() != player.triggeredEffectKeysThisTurn.Length)
@@ -237,8 +258,40 @@ namespace BiomeRivals.Core
                 lifeBeforePreviousEvent = lifeBeforeEvent;
             }
             if (batch.events != null && batch.events.Length > 0) Current.lastEventId = batch.events[batch.events.Length - 1].eventId;
+            ApplyHandProjection(batch.handProjection);
             Current.revision = batch.revision;
             Changed?.Invoke(Current);
+        }
+
+        private void ApplyHandProjection(HandProjectionDto projection)
+        {
+            if (projection == null) return;
+            var own = FindPlayer(projection.ownPlayerId);
+            var opponent = FindPlayer(projection.opponentPlayerId);
+            if (own == opponent || own.playerId == opponent.playerId || own.playerId != Current.viewerPlayerId ||
+                projection.ownHand == null || projection.ownHandCards == null || projection.opponentHandCount < 0 ||
+                projection.opponentHandCount > MaxHandSize || projection.ownHand.Length > MaxHandSize ||
+                projection.ownHand.Length != projection.ownHandCards.Length ||
+                projection.ownHandCards.Any(card => card == null) ||
+                projection.ownHandCards.Select(card => card.handCardInstanceId).Distinct(StringComparer.Ordinal).Count() != projection.ownHandCards.Length ||
+                projection.ownHandCards.Where((card, index) => !IsValidHandCard(card, projection.ownHand[index], Current.players)).Any())
+                throw new InvalidOperationException("Hand projection is malformed.");
+            own.hand = (string[])projection.ownHand.Clone();
+            own.handCards = projection.ownHandCards;
+            opponent.hand = Enumerable.Repeat<string>(null, projection.opponentHandCount).ToArray();
+            opponent.handCards = Enumerable.Repeat<HandCardStateDto>(null, projection.opponentHandCount).ToArray();
+        }
+
+        private static bool IsValidHandCard(HandCardStateDto card, string expectedCardId, PlayerStateDto[] matchPlayers)
+        {
+            if (card == null || card.cardId != expectedCardId ||
+                !System.Text.RegularExpressions.Regex.IsMatch(card.handCardInstanceId ?? string.Empty, "^hand-[0-9]+$") ||
+                card.costModifier > 0 || card.costModifier < -10 ||
+                (card.costModifier == 0) != string.IsNullOrEmpty(card.expiresAtEndOfTurnPlayerId))
+                return false;
+
+            return card.costModifier == 0 || (matchPlayers != null && matchPlayers.Any(player =>
+                player != null && player.playerId == card.expiresAtEndOfTurnPlayerId));
         }
 
         private void Apply(

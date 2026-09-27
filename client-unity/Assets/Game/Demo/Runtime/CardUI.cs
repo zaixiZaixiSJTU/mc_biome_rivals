@@ -13,11 +13,13 @@ namespace BiomeRivals.Demo
 
         public string CardId { get; private set; }
         public bool IsCompact { get; private set; }
+        public string HandCardInstanceId { get; private set; } = string.Empty;
         public int BaseCost { get; private set; }
         public int DisplayedCost { get; private set; }
         public RectTransform RectTransform => (RectTransform)transform;
 
-        public void Bind(CardContentRegistry registry, string cardId, Vector2 size, bool compact, Font font, Action onClick, int? costOverride = null)
+        public void Bind(CardContentRegistry registry, string cardId, Vector2 size, bool compact, Font font, Action onClick,
+            int? costOverride = null, string handCardInstanceId = "")
         {
             if (!registry.TryGetDefinition(cardId, out var definition) || !registry.TryGetText(cardId, out var text))
                 throw new InvalidOperationException("Card content is not registered: " + cardId);
@@ -25,9 +27,11 @@ namespace BiomeRivals.Demo
             ClearChildren();
             CardId = cardId;
             IsCompact = compact;
+            HandCardInstanceId = handCardInstanceId ?? string.Empty;
             BaseCost = definition.cost;
             DisplayedCost = costOverride ?? BaseCost;
-            gameObject.name = "Card_" + cardId;
+            gameObject.name = "Card_" + cardId +
+                (string.IsNullOrEmpty(HandCardInstanceId) ? string.Empty : "_" + HandCardInstanceId);
             RectTransform.anchorMin = RectTransform.anchorMax = RectTransform.pivot = new Vector2(0.5f, 0.5f);
             RectTransform.sizeDelta = size;
             RectTransform.anchoredPosition = Vector2.zero;
@@ -59,8 +63,8 @@ namespace BiomeRivals.Demo
             var w = size.x;
             var titleHeight = compact ? 31f : 39f;
             var titleY = h * 0.5f - titleHeight * 0.72f;
-            var artHeight = compact ? h * 0.36f : h * 0.39f;
-            var artY = compact ? h * 0.105f : h * 0.11f;
+            var artHeight = compact ? h * 0.34f : h * 0.39f;
+            var artY = compact ? h * 0.11f : h * 0.11f;
 
             if (!usesStudyFrame)
             {
@@ -96,21 +100,25 @@ namespace BiomeRivals.Demo
             {
                 var modifierPosition = costPosition + new Vector2(costVisualSize * 0.35f, -costVisualSize * 0.34f);
                 var modifierSize = new Vector2(compact ? 26f : 34f, compact ? 17f : 21f);
+                var reduction = BaseCost - DisplayedCost;
+                var modifierLabel = "-" + reduction;
                 var badge = CreateImage("CostModifierBadge", modifierPosition, modifierSize, Hex("#173821"));
                 badge.sprite = DemoCardSurfaceProvider.LoadArtSurface();
                 badge.type = Image.Type.Tiled;
                 badge.pixelsPerUnitMultiplier = 1f;
-                CreateText("CostModifier", modifierPosition, modifierSize, "-1", compact ? 10 : 12, Hex("#D9FFB5"), TextAnchor.MiddleCenter, FontStyle.Bold, font);
+                CreateText("CostModifier", modifierPosition, modifierSize, modifierLabel, compact ? 10 : 12, Hex("#D9FFB5"), TextAnchor.MiddleCenter, FontStyle.Bold, font);
             }
 
-            var rulesHeight = compact ? h * 0.31f : h * 0.29f;
-            var rulesY = usesStudyFrame ? -h * 0.21f : -h * 0.235f;
+            var rulesHeight = compact ? h * 0.34f : h * 0.29f;
+            var rulesY = usesStudyFrame ? -h * (compact ? 0.224f : 0.21f) : -h * 0.235f;
             if (!usesStudyFrame) CreateImage("RulesSurface", new Vector2(0, rulesY), new Vector2(w - 18, rulesHeight), theme.RulesSurface);
-            var rules = CreateText("Rules", new Vector2(0, rulesY), new Vector2(w - (usesStudyFrame ? 38 : 30), rulesHeight - (usesStudyFrame ? 15 : 8)), text.rulesText, compact ? 11 : 14, theme.BodyText, TextAnchor.MiddleCenter, FontStyle.Normal, font);
+            var rulesWidth = usesStudyFrame ? w - (compact ? 28 : 38) : w - 30;
+            var rulesHeightInset = usesStudyFrame ? (compact ? 14 : 15) : 8;
+            var rules = CreateText("Rules", new Vector2(0, rulesY), new Vector2(rulesWidth, rulesHeight - rulesHeightInset), text.rulesText, compact ? 12 : 14, theme.BodyText, TextAnchor.MiddleCenter, FontStyle.Normal, font);
             rules.alignByGeometry = usesStudyFrame;
             rules.resizeTextForBestFit = true;
-            rules.resizeTextMinSize = compact ? 8 : 10;
-            rules.resizeTextMaxSize = compact ? 11 : 14;
+            rules.resizeTextMinSize = compact ? 9 : 10;
+            rules.resizeTextMaxSize = compact ? 12 : 14;
 
             var typeY = -h * 0.5f + (compact ? 20f : 24f);
             CreateText("Type", new Vector2(0, typeY), new Vector2(w - 54, compact ? 20 : 24), text.typeLabel, compact ? 10 : 12, theme.TitleText, TextAnchor.MiddleCenter, FontStyle.Bold, font);

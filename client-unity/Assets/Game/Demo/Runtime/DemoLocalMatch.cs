@@ -15,6 +15,7 @@ namespace BiomeRivals.Demo
     public sealed class DemoLocalMatch : IDemoMatchView
     {
         private readonly List<string> _hand = new List<string>();
+        private readonly List<HandCardStateDto> _handCards = new List<HandCardStateDto>();
         private readonly List<string> _deck = new List<string>();
         private readonly List<string> _buriedCardIds = new List<string>();
         private readonly List<string> _discardPile = new List<string>();
@@ -27,6 +28,7 @@ namespace BiomeRivals.Demo
         private int _nextLocalCommandId = 1;
         private int _nextLocalChoiceId = 1;
         private int _nextBattlefieldInstanceId = 1;
+        private int _nextHandCardInstanceId = 1;
         private int _opponentHandCount = 5;
         private int _playerCardsPlayedThisTurn;
         private int _opponentCardsPlayedThisTurn;
@@ -39,6 +41,7 @@ namespace BiomeRivals.Demo
         private int _opponentTemporaryEnergy;
 
         public IReadOnlyList<string> Hand => _hand;
+        public IReadOnlyList<HandCardStateDto> HandCards => _handCards.Select(CloneHandCard).ToArray();
         public IReadOnlyList<string> Deck => _deck;
         public IReadOnlyList<string> DiscardPile => _discardPile;
         public string[] UnitSlots { get; } = new string[4];
@@ -156,7 +159,8 @@ namespace BiomeRivals.Demo
         {
             if (cardIds == null) throw new ArgumentNullException(nameof(cardIds));
             _hand.Clear();
-            _hand.AddRange(cardIds);
+            _handCards.Clear();
+            foreach (var cardId in cardIds) AddHandCard(cardId);
         }
 
         public void ResetDeckAndHand(IEnumerable<string> handCardIds, IEnumerable<string> deckCardIds)
@@ -173,7 +177,8 @@ namespace BiomeRivals.Demo
             if (deckCardIds == null) throw new ArgumentNullException(nameof(deckCardIds));
             if (buriedCardIds == null) throw new ArgumentNullException(nameof(buriedCardIds));
             _hand.Clear();
-            _hand.AddRange(handCardIds);
+            _handCards.Clear();
+            foreach (var cardId in handCardIds) AddHandCard(cardId);
             if (_hand.Count > 7) throw new ArgumentException("Hand cannot exceed seven cards.", nameof(handCardIds));
             _deck.Clear();
             _deck.AddRange(deckCardIds);
@@ -201,10 +206,11 @@ namespace BiomeRivals.Demo
             out string message,
             string paymentMethod = MatchPaymentMethods.Redstone,
             string targetType = "",
-            string targetInstanceId = "")
+            string targetInstanceId = "",
+            string handCardInstanceId = "")
         {
             var cardId = definition == null ? string.Empty : definition.id;
-            var command = CreateDeployCommand(cardId, slotKind, slotIndex, paymentMethod, targetType, targetInstanceId);
+            var command = CreateDeployCommand(cardId, slotKind, slotIndex, paymentMethod, targetType, targetInstanceId, handCardInstanceId);
             var result = ApplyDeploy(definition, command);
             message = result.Message;
             return result.Accepted;
@@ -216,10 +222,11 @@ namespace BiomeRivals.Demo
             int slotIndex,
             string paymentMethod = MatchPaymentMethods.Redstone,
             string targetType = "",
-            string targetInstanceId = "") =>
+            string targetInstanceId = "",
+            string handCardInstanceId = "") =>
             MatchCommandFactory.DeployCard(
                 NextCommandId(), Revision, cardId, slotKind == DemoSlotKind.Unit ? "UNIT" : "BUILDING", slotIndex,
-                paymentMethod, targetType, targetInstanceId);
+                ResolveHandCardInstanceId(cardId, handCardInstanceId), paymentMethod, targetType, targetInstanceId);
 
         public DemoCommandResult ApplyDeploy(CardDefinitionEntry definition, MatchCommandDto command)
         {
@@ -229,9 +236,13 @@ namespace BiomeRivals.Demo
                 return Reject(DemoCommandRejectionCode.CardNotPlayable, "该卡牌只能由规则自动结算，不能主动部署。");
             if (command.payload == null || !string.Equals(command.payload.cardId, definition.id, StringComparison.Ordinal))
                 return Reject(DemoCommandRejectionCode.UnknownCard, "命令中的卡牌与注册定义不一致。");
+            var selectedHandCardIndex = FindHandCardIndex(definition.id, command.payload.handCardInstanceId);
+            if (selectedHandCardIndex < 0)
+                return Reject(DemoCommandRejectionCode.CardNotInHand, "命令指定的手牌实例不存在。");
             if (Phase != DemoTurnPhase.Main)
                 return Reject(DemoCommandRejectionCode.WrongPhase, "进入战斗阶段后不能继续部署卡牌。");
-            if (!CanDeploy(definition, command.payload.paymentMethod, out var message)) return RejectFromMessage(message, definition);
+            if (!CanDeploy(definition, command.payload.paymentMethod, command.payload.handCardInstanceId, out var message))
+                return RejectFromMessage(message, definition, command.payload.handCardInstanceId);
             if (definition.cardType == "UNIT")
             {
                 if (!string.Equals(command.payload.slotKind, "UNIT", StringComparison.Ordinal) || command.payload.slotIndex < 0 || command.payload.slotIndex >= UnitSlots.Length)
@@ -299,7 +310,7 @@ namespace BiomeRivals.Demo
             if (battlecryTarget != null && !battlecryTarget.Player)
                 _playerHasTargetedEnemyObjectThisTurn = true;
 
-            ConsumeDeployment(definition, command.payload.paymentMethod);
+            ConsumeDeployment(definition, command.payload.paymentMethod, command.payload.handCardInstanceId);
             var crafted = command.payload.paymentMethod == MatchPaymentMethods.Crafting;
             var deploymentSlots = command.payload.slotKind == "UNIT" ? UnitSlots : BuildingSlots;
             var occupiedSlots = definition.cardType == "UNIT" ? 1 : Math.Max(1, definition.buildingSlots);
@@ -355,7 +366,7 @@ namespace BiomeRivals.Demo
             {
                 if (_hand.Count < 7)
                 {
-                    _hand.Add("tk_002");
+                    AddHandCard("tk_002");
                     deployMessage += "；农夫战吼将小麦置入手牌。";
                 }
                 else
@@ -675,9 +686,10 @@ namespace BiomeRivals.Demo
             return DemoCommandResult.Accept(message, Revision);
         }
 
-        public bool TryCast(CardDefinitionEntry definition, out string message)
+        public bool TryCast(CardDefinitionEntry definition, out string message, string handCardInstanceId = "")
         {
-            var result = ApplyPlayCard(definition, CreatePlayCardCommand(definition == null ? string.Empty : definition.id));
+            var result = ApplyPlayCard(definition, CreatePlayCardCommand(
+                definition == null ? string.Empty : definition.id, handCardInstanceId: handCardInstanceId));
             message = result.Message;
             return result.Accepted;
         }
@@ -686,15 +698,23 @@ namespace BiomeRivals.Demo
             string cardId,
             string targetType = "",
             string targetInstanceId = "",
-            string[] targetInstanceIds = null) =>
-            MatchCommandFactory.PlayCard(NextCommandId(), Revision, cardId, targetType, targetInstanceId, targetInstanceIds);
+            string[] targetInstanceIds = null,
+            string handCardInstanceId = "") =>
+            MatchCommandFactory.PlayCard(NextCommandId(), Revision, cardId,
+                ResolveHandCardInstanceId(cardId, handCardInstanceId), targetType, targetInstanceId, targetInstanceIds);
 
         public DemoCommandResult ApplyPlayCard(CardDefinitionEntry definition, MatchCommandDto command)
         {
             if (!ValidateCommand(command, MatchCommandTypes.PlayCard, out var rejection)) return rejection;
             if (definition != null && !definition.manualPlayAllowed)
                 return Reject(DemoCommandRejectionCode.CardNotPlayable, "该卡牌只能在出土时自动结算，不能从手牌主动释放。");
-            if (!CanPlay(definition, out var message)) return RejectFromMessage(message, definition);
+            if (definition == null) return Reject(DemoCommandRejectionCode.UnknownCard, "卡牌定义不存在。");
+            if (command.payload == null || command.payload.cardId != definition.id)
+                return Reject(DemoCommandRejectionCode.UnknownCard, "命令中的卡牌与注册定义不一致。");
+            if (FindHandCardIndex(definition.id, command.payload.handCardInstanceId) < 0)
+                return Reject(DemoCommandRejectionCode.CardNotInHand, "命令指定的手牌实例不存在。");
+            if (!CanPlay(definition, command.payload.handCardInstanceId, out var message))
+                return RejectFromMessage(message, definition, command.payload.handCardInstanceId);
             if (definition.cardType == "UNIT" || definition.cardType == "BUILDING" || definition.cardType == "STRUCTURE")
                 return Reject(DemoCommandRejectionCode.InvalidTarget, "该卡牌需要对应的部署或装备目标。");
             if (definition.effectImplementationStatus != "IMPLEMENTED" || definition.effectIds == null || definition.effectIds.Length != 1)
@@ -740,7 +760,7 @@ namespace BiomeRivals.Demo
             }
             if (targetedObject != null && !targetedObject.Player)
                 _playerHasTargetedEnemyObjectThisTurn = true;
-            Consume(definition);
+            Consume(definition, command.payload.handCardInstanceId);
             if (definition.cardType == "EQUIPMENT")
             {
                 if (PlayerEquipment != null) _discardPile.Add(PlayerEquipment.CardId);
@@ -1215,6 +1235,7 @@ namespace BiomeRivals.Demo
             if (IsFinished)
             {
                 ExpireTemporaryEnergy(true);
+                ExpireHandCardCostModifiers("local-player");
                 AcceptCommand(command);
                 return DemoCommandResult.Accept("海底神殿结算导致对局结束。", Revision);
             }
@@ -1222,6 +1243,7 @@ namespace BiomeRivals.Demo
             if (IsFinished)
             {
                 ExpireTemporaryEnergy(true);
+                ExpireHandCardCostModifiers("local-player");
                 AcceptCommand(command);
                 return DemoCommandResult.Accept($"僵尸猪灵岩浆触发 {magmaPulses} 次，敌方英雄生命归零，你获得胜利！", Revision);
             }
@@ -1233,12 +1255,14 @@ namespace BiomeRivals.Demo
             if (IsFinished)
             {
                 ExpireTemporaryEnergy(true);
+                ExpireHandCardCostModifiers("local-player");
                 AcceptCommand(command);
                 return DemoCommandResult.Accept($"末影水晶脉冲 {crystalPulses} 次，敌方英雄生命归零，你获得胜利！", Revision);
             }
             ResolveCaveStructureEndPhase(true, out var mineTriggers, out var mansionSummons);
             RestoreExpiredTemporaryModifiers(_playerBattlefield);
             RestoreExpiredTemporaryModifiers(_opponentBattlefield);
+            ExpireHandCardCostModifiers("local-player");
             ExpireTemporaryEnergy(true);
             _triggeredEffectKeysThisTurn.Clear();
             ExcavatedThisTurn = false;
@@ -1339,7 +1363,7 @@ namespace BiomeRivals.Demo
                     return RememberDraw(new DemoDrawResult(DemoDrawOutcome.Burned, cardId, 0, excavated.ToArray()));
                 }
 
-                _hand.Add(cardId);
+                AddHandCard(cardId);
                 return RememberDraw(new DemoDrawResult(DemoDrawOutcome.Drawn, cardId, 0, excavated.ToArray()));
             }
         }
@@ -1350,7 +1374,7 @@ namespace BiomeRivals.Demo
             if (cardId != "tk_006" && cardId != "tk_007" && cardId != "tk_008")
                 throw new InvalidOperationException($"Buried effect handler is not registered: {cardId}");
             if (_hand.Count >= 7) _discardPile.Add(cardId);
-            else _hand.Add(cardId);
+            else AddHandCard(cardId);
             ExcavatedThisTurn = true;
             if (cardId == "tk_006") PlayerArmor += 1;
             else if (cardId == "tk_007") GenerateCard("tk_018");
@@ -1377,7 +1401,7 @@ namespace BiomeRivals.Demo
                 _discardPile.Add(cardId);
                 return false;
             }
-            _hand.Add(cardId);
+            AddHandCard(cardId);
             return true;
         }
 
@@ -1395,9 +1419,77 @@ namespace BiomeRivals.Demo
         public int GetEffectiveCost(CardDefinitionEntry definition)
         {
             if (definition == null) return 0;
-            return definition.id == "db_005" && ExcavatedThisTurn
-                ? Math.Max(0, definition.cost - 1)
-                : definition.cost;
+            var instance = _handCards.FirstOrDefault(value => value.cardId == definition.id);
+            return GetEffectiveCost(definition, instance?.handCardInstanceId);
+        }
+
+        public int GetEffectiveCost(CardDefinitionEntry definition, string handCardInstanceId)
+        {
+            if (definition == null) return 0;
+            var instance = _handCards.FirstOrDefault(value => value.handCardInstanceId == handCardInstanceId && value.cardId == definition.id);
+            var modifier = instance?.costModifier ?? 0;
+            var excavationDiscount = definition.id == "db_005" && ExcavatedThisTurn ? 1 : 0;
+            return Math.Max(0, definition.cost + modifier - excavationDiscount);
+        }
+
+        public bool TrySetHandCardCostModifier(string handCardInstanceId, int costModifier, string expiresAtEndOfTurnPlayerId)
+        {
+            if (costModifier > 0 || costModifier < -10 ||
+                (costModifier == 0) != string.IsNullOrEmpty(expiresAtEndOfTurnPlayerId)) return false;
+            var instance = _handCards.FirstOrDefault(value => value.handCardInstanceId == handCardInstanceId);
+            if (instance == null) return false;
+            instance.costModifier = costModifier;
+            instance.expiresAtEndOfTurnPlayerId = expiresAtEndOfTurnPlayerId ?? string.Empty;
+            return true;
+        }
+
+        private void AddHandCard(string cardId)
+        {
+            if (string.IsNullOrWhiteSpace(cardId)) throw new ArgumentException("Hand card id cannot be empty.", nameof(cardId));
+            _hand.Add(cardId);
+            _handCards.Add(new HandCardStateDto
+            {
+                handCardInstanceId = $"local-hand-{_nextHandCardInstanceId++}",
+                cardId = cardId,
+                costModifier = 0,
+                expiresAtEndOfTurnPlayerId = string.Empty
+            });
+        }
+
+        private static HandCardStateDto CloneHandCard(HandCardStateDto card) => new HandCardStateDto
+        {
+            handCardInstanceId = card.handCardInstanceId,
+            cardId = card.cardId,
+            costModifier = card.costModifier,
+            expiresAtEndOfTurnPlayerId = card.expiresAtEndOfTurnPlayerId
+        };
+
+        private string ResolveHandCardInstanceId(string cardId, string requestedInstanceId)
+        {
+            if (!string.IsNullOrEmpty(requestedInstanceId)) return requestedInstanceId;
+            var matchingCards = _handCards.Where(value => value.cardId == cardId).Take(2).ToArray();
+            return matchingCards.Length == 1 ? matchingCards[0].handCardInstanceId : string.Empty;
+        }
+
+        private int FindHandCardIndex(string cardId, string handCardInstanceId) =>
+            _handCards.FindIndex(value => value.cardId == cardId && value.handCardInstanceId == handCardInstanceId);
+
+        private void RemoveHandCardAt(int index)
+        {
+            if (index < 0 || index >= _handCards.Count || index >= _hand.Count)
+                throw new ArgumentOutOfRangeException(nameof(index));
+            _hand.RemoveAt(index);
+            _handCards.RemoveAt(index);
+        }
+
+        private void ExpireHandCardCostModifiers(string ownerPlayerId)
+        {
+            foreach (var card in _handCards)
+            {
+                if (card.costModifier == 0 || card.expiresAtEndOfTurnPlayerId != ownerPlayerId) continue;
+                card.costModifier = 0;
+                card.expiresAtEndOfTurnPlayerId = string.Empty;
+            }
         }
 
         private void OfferArchaeologyChoice(DemoBattlefieldObject source)
@@ -1522,54 +1614,57 @@ namespace BiomeRivals.Demo
             return healed;
         }
 
-        private bool CanPlay(CardDefinitionEntry definition, out string message)
+        private bool CanPlay(CardDefinitionEntry definition, string handCardInstanceId, out string message)
         {
             if (definition == null) return Fail("卡牌定义不存在。", out message);
             if (IsFinished) return Fail("对局已经结束。", out message);
             if (PendingChoice != null) return Fail("请先完成当前牌库或战场选择。", out message);
             if (!IsPlayerTurn) return Fail("当前是对手回合。", out message);
             if (Phase != DemoTurnPhase.Main) return Fail("进入战斗阶段后不能继续打出卡牌。", out message);
-            if (!_hand.Contains(definition.id)) return Fail("该牌不在手牌中。", out message);
-            if (GetEffectiveCost(definition) > Energy) return Fail("红石能量不足。", out message);
+            if (FindHandCardIndex(definition.id, handCardInstanceId) < 0) return Fail("命令指定的手牌实例不在手牌中。", out message);
+            if (GetEffectiveCost(definition, handCardInstanceId) > Energy) return Fail("红石能量不足。", out message);
             message = string.Empty;
             return true;
         }
 
-        private bool CanDeploy(CardDefinitionEntry definition, string paymentMethod, out string message)
+        private bool CanDeploy(CardDefinitionEntry definition, string paymentMethod, string handCardInstanceId, out string message)
         {
             if (definition == null) return Fail("卡牌定义不存在。", out message);
             if (IsFinished) return Fail("对局已经结束。", out message);
             if (PendingChoice != null) return Fail("请先完成当前牌库或战场选择。", out message);
             if (!IsPlayerTurn) return Fail("当前是对手回合。", out message);
             if (Phase != DemoTurnPhase.Main) return Fail("进入战斗阶段后不能继续部署卡牌。", out message);
-            if (!_hand.Contains(definition.id)) return Fail("该牌不在手牌中。", out message);
+            if (FindHandCardIndex(definition.id, handCardInstanceId) < 0) return Fail("命令指定的手牌实例不在手牌中。", out message);
             if (paymentMethod == MatchPaymentMethods.Redstone)
             {
-                if (GetEffectiveCost(definition) > Energy) return Fail("红石能量不足。", out message);
+                if (GetEffectiveCost(definition, handCardInstanceId) > Energy) return Fail("红石能量不足。", out message);
                 message = string.Empty;
                 return true;
             }
             if (paymentMethod == MatchPaymentMethods.Crafting)
-                return DemoDeploymentRules.CanPayWithCrafting(this, definition, out message);
+                return DemoDeploymentRules.CanPayWithCrafting(this, definition, out message, handCardInstanceId);
             return Fail("部署支付方式无效。", out message);
         }
 
-        private void Consume(CardDefinitionEntry definition)
+        private void Consume(CardDefinitionEntry definition, string handCardInstanceId)
         {
-            if (!TrySpendEnergy(true, GetEffectiveCost(definition)))
+            if (!TrySpendEnergy(true, GetEffectiveCost(definition, handCardInstanceId)))
                 throw new InvalidOperationException("Validated local redstone payment unexpectedly failed.");
-            _hand.Remove(definition.id);
+            var index = FindHandCardIndex(definition.id, handCardInstanceId);
+            if (index < 0) throw new InvalidOperationException("Selected local hand card disappeared before consumption.");
+            RemoveHandCardAt(index);
         }
 
-        private void ConsumeDeployment(CardDefinitionEntry definition, string paymentMethod)
+        private void ConsumeDeployment(CardDefinitionEntry definition, string paymentMethod, string handCardInstanceId)
         {
             if (paymentMethod == MatchPaymentMethods.Redstone)
             {
-                Consume(definition);
+                Consume(definition, handCardInstanceId);
                 return;
             }
 
-            var productIndex = _hand.IndexOf(definition.id);
+            var productIndex = FindHandCardIndex(definition.id, handCardInstanceId);
+            if (productIndex < 0) throw new InvalidOperationException("Selected crafted local card disappeared before consumption.");
             var materialIndices = new List<int>();
             var consumedMaterials = new List<string>();
             foreach (var ingredient in definition.craftingRecipe ?? Array.Empty<CraftingIngredientEntry>())
@@ -1591,9 +1686,11 @@ namespace BiomeRivals.Demo
                 }
             }
             materialIndices.Sort((left, right) => right.CompareTo(left));
-            foreach (var index in materialIndices) _hand.RemoveAt(index);
+            foreach (var index in materialIndices) RemoveHandCardAt(index);
             _discardPile.AddRange(consumedMaterials);
-            if (!_hand.Remove(definition.id)) throw new InvalidOperationException("Crafted product changed after validation.");
+            productIndex = FindHandCardIndex(definition.id, handCardInstanceId);
+            if (productIndex < 0) throw new InvalidOperationException("Crafted product changed after validation.");
+            RemoveHandCardAt(productIndex);
         }
 
         private bool ValidateCommand(MatchCommandDto command, string expectedType, out DemoCommandResult rejection)
@@ -1624,14 +1721,15 @@ namespace BiomeRivals.Demo
             return true;
         }
 
-        private DemoCommandResult RejectFromMessage(string message, CardDefinitionEntry definition)
+        private DemoCommandResult RejectFromMessage(string message, CardDefinitionEntry definition, string handCardInstanceId)
         {
             if (definition == null) return Reject(DemoCommandRejectionCode.UnknownCard, message);
             if (!IsPlayerTurn) return Reject(DemoCommandRejectionCode.NotActivePlayer, message);
             if (!_hand.Contains(definition.id)) return Reject(DemoCommandRejectionCode.CardNotInHand, message);
             if (message.StartsWith("缺少材料", StringComparison.Ordinal)) return Reject(DemoCommandRejectionCode.MissingMaterials, message);
             if (message.Contains("支付方式") || message.Contains("合成配方")) return Reject(DemoCommandRejectionCode.InvalidPaymentMethod, message);
-            if (GetEffectiveCost(definition) > Energy) return Reject(DemoCommandRejectionCode.InsufficientRedstone, message);
+            if (GetEffectiveCost(definition, handCardInstanceId) > Energy)
+                return Reject(DemoCommandRejectionCode.InsufficientRedstone, message);
             return Reject(DemoCommandRejectionCode.InvalidCommand, message);
         }
 
@@ -2423,7 +2521,7 @@ namespace BiomeRivals.Demo
             {
                 if (_hand.Count < 7)
                 {
-                    _hand.Add(dropCardId);
+                    AddHandCard(dropCardId);
                     return $"{sourceName}掉落：{dropName}已置入你的手牌。";
                 }
                 _discardPile.Add(dropCardId);
@@ -2486,7 +2584,7 @@ namespace BiomeRivals.Demo
                 {
                     if (_hand.Count < 7)
                     {
-                        _hand.Add("tk_016");
+                        AddHandCard("tk_016");
                         return "潜影贝亡语：潜影壳已置入你的手牌。";
                     }
                     _discardPile.Add("tk_016");

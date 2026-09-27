@@ -1,6 +1,6 @@
 # Biome Rivals 分阶段任务路线图
 
-更新时间：2026-09-22
+更新时间：2026-09-23
 
 本文用于把跨 Unity、权威规则、联机、内容与资源管线的大目标拆成可独立进入新会话、独立验证和独立提交的任务。`change-log.md` 记录已经发生的改动；本文只记录尚待推进的工作与依赖关系。
 
@@ -17,7 +17,7 @@
 
 - 有效仓库：`D:\gitt\mc_biome_rivals`
 - 近期纵向切片：RULE-030E1 `c2ed046`、RULE-030E2 `36ce93c`；新任务启动基线以当时 `git HEAD` 为准。
-- 开发中版本：协议 36、规则集 `prototype-0.61`、效果实现注册表版本 47、卡牌定义/catalog 版本 41。两种内容版本的关系待 DATA-040 明确。
+- 开发中版本：协议 37、规则集 `prototype-0.62`、效果实现注册表版本 47、卡牌定义/catalog 版本 41。两种内容版本的关系待 DATA-040 明确。
 - 卡牌效果状态：60 个 `IMPLEMENTED`，9 个 `PENDING`。
 - 此前混合在工作区的体素场景、实体模型、资源管线和 FIRE 规则已在恢复基线 `6c9202e` 中固定。后续不得继续使用这种跨任务混提方式。
 - `docs/development/change-log.md`、本路线图和 BR-000 检查点均已纳入 Git。
@@ -188,7 +188,7 @@
 
 ### RULE-033 悬置/回手基础设施
 
-状态：**RULE-033A 已完成，RULE-033B 为下一唯一任务**。冻结契约见 [`../design/end-suspend-return-spec-v1.md`](../design/end-suspend-return-spec-v1.md)，详细拆分见 [`task-packets/RULE-033.md`](task-packets/RULE-033.md)。A 未修改运行时代码、协议或注册状态。
+状态：**RULE-033A 已完成；RULE-033B 实现与验证完成、独立提交待工作区整理；RULE-033C 等待 B 提交**。冻结契约见 [`../design/end-suspend-return-spec-v1.md`](../design/end-suspend-return-spec-v1.md)，详细拆分见 [`task-packets/RULE-033.md`](task-packets/RULE-033.md)。B 的代码证据：服务端 **224/224**、Unity CLI EditMode **286/286** 干净退出、内容注册校验与 TypeScript 类型检查通过，Docker/Nakama 双端/重连验证已归档；五张目标牌仍为 `PENDING`，没有提前加入回手/悬置运行时。但工作区当前包含 40 个 tracked 修改和 3 个来源未明的 untracked 项；卡牌定义/名称 JSON 与 HEAD 语义相同但被重格式化，卡牌文本中还有 RULE-032 `nt_008` 差异，另有 smoke、通用 CLI 验证、独立 UI hover 与 Player 输出路径改动。完成变更分组并提交 B 前不启动 C。
 
 目标：完成 `ed_002` 紫颂果、`ed_003` 末影人、`ed_005` 末影珍珠、`ed_006` 虚空凝视、`tk_017` 末影龙化身。
 
@@ -229,15 +229,16 @@
 ## 新会话最小交接模板
 
 ```text
-任务编号：RULE-033B
-只建立稳定手牌实例与精确费用修正基础；不得实现回手、悬置或注册目标卡牌。
+任务编号：RULE-033B 提交收口
+只审查、分组并独立提交已验证的 RULE-033B 修改；不得改动来源未明文件或提前实现回手/悬置。
 仓库：D:\gitt\mc_biome_rivals
-基线提交：包含 RULE-033A 契约与任务包提交。
-先读：docs/design/end-suspend-return-spec-v1.md §2/7/9、docs/development/task-packets/RULE-033.md 的 RULE-033B，以及当前手牌/命令/投影/Unity DTO 与离线 Demo。
+基线：HEAD `ba6e747`；RULE-033B 实现与测试已通过但未提交。
+先读：`git status --short`、`git diff --stat` 和 RULE-033B 对应代码/测试；避免全量暂存。
 开始前记录 git status；保留来源未明的本机文件。
-结束时报告：协议/规则集版本、手牌模型迁移范围、同名牌与隐私测试、服务端/Unity 测试、剩余风险和提交号。
+先区分 B 修改、RULE-032 smoke/Unity CLI 通用验证改动与用户文件；提交范围无歧义后才能创建 B 独立提交。完成后才启动 RULE-033C。
+结束时报告：分组文件、排除项、测试证据、剩余风险和提交号。
 ```
 
 ## 当前唯一推荐下一步
 
-只执行 **RULE-033B：稳定手牌实例与费用修正基础**。把抽牌、生成、起手替换、出土和掉落形成的手牌副本赋予稳定实例 ID，让部署、出牌、合成、Unity 选择和费用显示精确指向同一副本；完成私有投影、快照、到期与同名牌隔离测试。不得提前实现回手、悬置或注册五张目标牌。
+下一步先收口 RULE-033B 的独立提交：逐项确认 40 个 tracked 修改中哪些属于 B、哪些是 RULE-032 smoke/Unity CLI 通用验证及独立 UI/Player 构建支持；保留 3 个原有来源未明的 untracked 项和新建 `DemoHoverScaleTests.cs`，不做全量暂存。B 提交完成后，再单独启动 RULE-033C 即时回手切片。

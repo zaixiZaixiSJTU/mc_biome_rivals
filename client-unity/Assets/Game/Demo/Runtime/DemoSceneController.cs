@@ -97,6 +97,7 @@ namespace BiomeRivals.Demo
         private Image _opponentTint;
         private Image _playerTint;
         private string _selectedCardId;
+        private string _selectedHandCardInstanceId;
         private string _selectedPaymentMethod = MatchPaymentMethods.Redstone;
         private string _selectedAttackerInstanceId;
         private string _pendingTargetCardId;
@@ -550,7 +551,9 @@ namespace BiomeRivals.Demo
             if (IsOnlineBoard)
             {
                 ApplyAuthoritativeFactionVisuals();
-                if (!MatchView.Hand.Contains(_selectedCardId)) _selectedCardId = MatchView.Hand.FirstOrDefault();
+                var selectedHandCard = MatchView.HandCards.FirstOrDefault(value => value != null &&
+                    value.handCardInstanceId == _selectedHandCardInstanceId && value.cardId == _selectedCardId);
+                if (selectedHandCard == null) SelectFirstHandCard();
                 if (_selectedAttackerInstanceId != MatchAttackerIds.Hero && FindSelectedAttacker() == null) _selectedAttackerInstanceId = null;
             }
             RefreshAll();
@@ -1298,7 +1301,7 @@ namespace BiomeRivals.Demo
                 : handNumbers.Select(index => $"{spec.Prefix}_{index:000}").ToArray();
             var deck = Enumerable.Range(0, 25).Select(index => $"{spec.Prefix}_{(index % 8) + 1:000}").ToArray();
             _match.ResetDeckAndHand(ids, deck);
-            _selectedCardId = _match.Hand.FirstOrDefault();
+            SelectFirstHandCard();
             _selectedPaymentMethod = MatchPaymentMethods.Redstone;
             _battlefield.SetBattlefieldThemes(_activeFaction, _opponentFaction);
             RefreshAll();
@@ -1698,15 +1701,18 @@ namespace BiomeRivals.Demo
             _match.BeginNextPlayerTurn();
             _match.EndPlayerTurn();
             _match.BeginNextPlayerTurn();
-            _match.ResetDeckAndHand(
-                new[] { piglinDefinition.id, anchorDefinition.id, anchorDefinition.id },
-                Array.Empty<string>());
-            var piglinResult = _match.ApplyDeploy(piglinDefinition,
-                _match.CreateDeployCommand(piglinDefinition.id, DemoSlotKind.Unit, 0));
-            var leftAnchorResult = _match.ApplyDeploy(anchorDefinition,
-                _match.CreateDeployCommand(anchorDefinition.id, DemoSlotKind.Building, 0));
-            var rightAnchorResult = _match.ApplyDeploy(anchorDefinition,
-                _match.CreateDeployCommand(anchorDefinition.id, DemoSlotKind.Building, 2));
+              _match.ResetDeckAndHand(
+                  new[] { piglinDefinition.id, anchorDefinition.id, anchorDefinition.id },
+                  Array.Empty<string>());
+              var anchorInstanceIds = _match.HandCards.Skip(1).Select(card => card.handCardInstanceId).ToArray();
+              var piglinResult = _match.ApplyDeploy(piglinDefinition,
+                  _match.CreateDeployCommand(piglinDefinition.id, DemoSlotKind.Unit, 0));
+              var leftAnchorResult = _match.ApplyDeploy(anchorDefinition,
+                  _match.CreateDeployCommand(anchorDefinition.id, DemoSlotKind.Building, 0,
+                      handCardInstanceId: anchorInstanceIds[0]));
+              var rightAnchorResult = _match.ApplyDeploy(anchorDefinition,
+                  _match.CreateDeployCommand(anchorDefinition.id, DemoSlotKind.Building, 2,
+                      handCardInstanceId: anchorInstanceIds[1]));
             var setupReady = piglinResult.Accepted && leftAnchorResult.Accepted && rightAnchorResult.Accepted;
             if (setupReady)
             {
@@ -1722,8 +1728,7 @@ namespace BiomeRivals.Demo
                     "下界触发生命周期预览初始化失败。", _match.Revision);
 
             _match.ResetHand(new[] { piglinDefinition.id });
-            _selectedCardId = piglinDefinition.id;
-            RefreshAll();
+            SelectCard(piglinDefinition.id);
             var resolved = ended.Accepted && piglin != null && piglin.Attack == 3 && piglin.Health == 3 &&
                 _match.OpponentLife == 29 && _match.TemporaryEnergy == 0 && _match.Energy == 9 && _match.MaxEnergy == 9;
             ShowStatus(resolved
@@ -2247,7 +2252,7 @@ namespace BiomeRivals.Demo
             _selectedCardId = batDefinition.id;
             var deployed = _match.ApplyDeploy(batDefinition,
                 _match.CreateDeployCommand(batDefinition.id, DemoSlotKind.Unit, 0));
-            _selectedCardId = _match.Hand.FirstOrDefault();
+            SelectFirstHandCard();
             RefreshAll();
             if (deployed.Accepted && _match.PendingChoice != null) SelectChoiceOption(0);
             ShowStatus(deployed.Accepted
@@ -2463,7 +2468,7 @@ namespace BiomeRivals.Demo
             _match.ResetHand(includeAllMaterials
                 ? new[] { templeDefinition.id, "db_002", "tk_006" }
                 : new[] { templeDefinition.id, "tk_006" });
-            _selectedCardId = templeDefinition.id;
+            SelectCard(templeDefinition.id);
             _selectedPaymentMethod = MatchPaymentMethods.Crafting;
             RefreshAll();
             var preview = DemoDeploymentRules.Evaluate(
@@ -2487,7 +2492,7 @@ namespace BiomeRivals.Demo
             var result = _match.ApplyDeploy(
                 archaeologistDefinition,
                 _match.CreateDeployCommand(archaeologistDefinition.id, DemoSlotKind.Unit, 0));
-            _selectedCardId = _match.Hand.FirstOrDefault();
+            SelectFirstHandCard();
             RefreshAll();
             SelectChoiceOption(1);
             ShowStatus(result.Accepted ? "考古学家正在查看牌库顶三张牌；只有金色标记的掩埋牌可以出土。" : result.Message, !result.Accepted);
@@ -2848,7 +2853,9 @@ namespace BiomeRivals.Demo
                 if (selected && materialFill != null) materialFill.color = Color.Lerp(materialFill.color, Cyan, 0.34f);
                 var frameSlice = slot.Find("FrameSlice")?.GetComponent<Image>();
                 if (selected && frameSlice != null) frameSlice.color = Color.Lerp(frameSlice.color, Cyan, 0.28f);
-                var card = DemoCardUiFactory.Create(slot, _registry, openingHand[index], new Vector2(184, 262), true, UiFont, () => ToggleMulliganCard(selectedIndex));
+            var openingHandCard = index < match.HandCards.Count ? match.HandCards[index] : null;
+            var card = DemoCardUiFactory.Create(slot, _registry, openingHand[index], new Vector2(184, 262), true, UiFont,
+                () => ToggleMulliganCard(selectedIndex), handCardInstanceId: openingHandCard?.handCardInstanceId ?? string.Empty);
                 card.RectTransform.anchoredPosition = new Vector2(0, 16);
                 card.gameObject.AddComponent<DemoHoverScale>().Configure(1.045f, 16f);
                 CreateText(slot, "Choice", new Vector2(0, -142), new Vector2(178, 30), selected ? "将替换" : "保留", 15, selected ? Cyan : Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
@@ -2910,10 +2917,16 @@ namespace BiomeRivals.Demo
             {
                 var cardId = match.Hand[i];
                 if (!_registry.TryGetDefinition(cardId, out var definition)) continue;
-                var selected = cardId == _selectedCardId;
+                var handCard = i < match.HandCards.Count ? match.HandCards[i] : null;
+                var handCardInstanceId = handCard?.handCardInstanceId ?? string.Empty;
+                var selected = handCard != null
+                    ? handCardInstanceId == _selectedHandCardInstanceId
+                    : cardId == _selectedCardId;
                 var x = (i - (count - 1) * 0.5f) * 176f;
                 var y = selected ? 20f : -Mathf.Abs(i - (count - 1) * 0.5f) * 4f;
-                var card = DemoCardUiFactory.Create(_handRoot, _registry, cardId, new Vector2(158, 216), true, UiFont, () => SelectCard(cardId), match.GetEffectiveCost(definition));
+                var card = DemoCardUiFactory.Create(_handRoot, _registry, cardId, new Vector2(158, 216), true, UiFont,
+                    () => SelectHandCard(cardId, handCardInstanceId), match.GetEffectiveCost(definition, handCardInstanceId),
+                    handCardInstanceId);
                 card.RectTransform.anchoredPosition = new Vector2(x, y);
                 card.RectTransform.localRotation = Quaternion.Euler(0, 0, (i - (count - 1) * 0.5f) * -1.8f);
                 card.gameObject.AddComponent<DemoHoverScale>().Configure(1.08f, 16f);
@@ -3178,10 +3191,22 @@ namespace BiomeRivals.Demo
                 return;
             }
 
-            var effectiveCost = match.GetEffectiveCost(definition);
+            var selectedHandCardInstanceId = GetSelectedHandCardInstanceId();
+            var hasSelectedHandCard = match.HandCards.Any(value => value != null &&
+                value.handCardInstanceId == selectedHandCardInstanceId && value.cardId == definition.id);
+            var effectiveCost = hasSelectedHandCard
+                ? match.GetEffectiveCost(definition, selectedHandCardInstanceId)
+                : definition.cost;
             var isDiscounted = effectiveCost < definition.cost;
-            _cardDetailsView.ShowCard(_selectedCardId, new Vector2(238, 350), new Vector2(0, 100), effectiveCost);
+            _cardDetailsView.ShowCard(_selectedCardId, new Vector2(238, 350), new Vector2(0, 100), effectiveCost,
+                selectedHandCardInstanceId);
             var deployType = definition.cardType == "UNIT" || definition.cardType == "BUILDING" || definition.cardType == "STRUCTURE";
+            if (!hasSelectedHandCard)
+            {
+                CreateText(_inspectorRoot, "StaleHandSelection", new Vector2(0, -120), new Vector2(246, 72),
+                    "所选手牌副本已不在手牌中\n请重新选择一张卡", 15, Gold, TextAnchor.MiddleCenter, FontStyle.Bold);
+                return;
+            }
             if (!match.IsPlayerTurn)
             {
                 CreateText(_inspectorRoot, "TurnLockedHint", new Vector2(0, -126), new Vector2(246, 82),
@@ -3214,7 +3239,7 @@ namespace BiomeRivals.Demo
                             : hasLegalBattlecryTarget ? battlecryTargetRule.ActionLabel : battlecryTargetRule.Optional ? "没有可移动友军（可直接部署）" : "没有合法目标";
                     var targetButton = CreateSecondaryButton(_inspectorRoot, "BattlecryTarget", new Vector2(0, -118), new Vector2(235, 54), actionLabel, 15);
                     targetButton.interactable = targeting || selectedBattlecryTarget != null ||
-                        (hasLegalBattlecryTarget && match.IsPlayerTurn && match.Hand.Contains(definition.id) &&
+                        (hasLegalBattlecryTarget && match.IsPlayerTurn && hasSelectedHandCard &&
                          (!IsOnlineBoard || _onlineSession.CanIssueCommand));
                     targetButton.onClick.AddListener(targeting
                         ? (UnityEngine.Events.UnityAction)CancelTargetSelection
@@ -3250,7 +3275,7 @@ namespace BiomeRivals.Demo
                 }
                 else if (definition.hasCraftingRecipe)
                 {
-                    var canInteract = match.IsPlayerTurn && match.Phase == DemoTurnPhase.Main && match.Hand.Contains(definition.id) &&
+                    var canInteract = hasSelectedHandCard && match.IsPlayerTurn && match.Phase == DemoTurnPhase.Main &&
                                       (!IsOnlineBoard || _onlineSession.CanIssueCommand);
                     var redstoneSelected = _selectedPaymentMethod == MatchPaymentMethods.Redstone;
                     var craftingSelected = _selectedPaymentMethod == MatchPaymentMethods.Crafting;
@@ -3261,7 +3286,8 @@ namespace BiomeRivals.Demo
                     ConfigureButtonColors(redstoneButton, redstoneSelected ? Color.Lerp(Panel, Ember, 0.45f) : Panel, Ember);
 
                     var recipeLabel = string.Join(" + ", definition.craftingRecipe.Select(value => $"{GetCardName(value.cardId)}×{value.count}"));
-                    var hasMaterials = DemoDeploymentRules.CanPayWithCrafting(match, definition, out var materialMessage);
+                    var hasMaterials = DemoDeploymentRules.CanPayWithCrafting(
+                        match, definition, out var materialMessage, selectedHandCardInstanceId);
                     var craftingLabel = $"{(craftingSelected ? "◆ " : string.Empty)}合成\n{recipeLabel}";
                     var craftingButton = CreateSecondaryButton(_inspectorRoot, "PayCrafting", new Vector2(61, -112), new Vector2(116, 52), craftingLabel, 11);
                     craftingButton.interactable = canInteract;
@@ -3293,7 +3319,7 @@ namespace BiomeRivals.Demo
                 var targeting = _pendingTargetCardId == definition.id;
                 var requiresTarget = DemoCardTargeting.TryGetRule(definition, out var targetRule);
                 var hasLegalTarget = !requiresTarget || DemoCardTargeting.HasLegalTarget(match, targetRule);
-                var canPlay = match.IsPlayerTurn && match.Phase == DemoTurnPhase.Main && match.Hand.Contains(definition.id) && effectiveCost <= match.Energy;
+                var canPlay = hasSelectedHandCard && match.IsPlayerTurn && match.Phase == DemoTurnPhase.Main && effectiveCost <= match.Energy;
                 var multiTargeting = targeting && requiresTarget && targetRule.RequiredTargetCount > 1;
                 if (multiTargeting)
                 {
@@ -3344,7 +3370,8 @@ namespace BiomeRivals.Demo
         {
             if (string.IsNullOrEmpty(_selectedCardId) || !_registry.TryGetDefinition(_selectedCardId, out var definition))
                 return new DemoDeploymentPreview(false, 1, "请先选择一张战场部署牌。");
-            var preview = DemoDeploymentRules.Evaluate(MatchView, definition, kind, index, _selectedPaymentMethod);
+            var preview = DemoDeploymentRules.Evaluate(MatchView, definition, kind, index, _selectedPaymentMethod,
+                GetSelectedHandCardInstanceId());
             if (!preview.IsLegal || !IsGoat(definition)) return preview;
             var selectedTarget = FindSelectedDeploymentTarget();
             if (selectedTarget == null) return preview;
@@ -3433,9 +3460,54 @@ namespace BiomeRivals.Demo
             _selectedCardTargetInstanceIds.Clear();
             _selectedDeploymentTargetInstanceId = null;
             _selectedCardId = cardId;
+            _selectedHandCardInstanceId = MatchView.HandCards.FirstOrDefault(value => value != null && value.cardId == cardId)?.handCardInstanceId;
             _selectedPaymentMethod = MatchPaymentMethods.Redstone;
             RefreshAll();
             if (_registry.TryGetText(cardId, out var text)) ShowStatus($"已选择：{text.name}", false);
+        }
+
+        private void SelectHandCard(string cardId, string handCardInstanceId)
+        {
+            if (MatchView.IsFinished || MatchView.PendingChoice != null) return;
+            _pendingTargetCardId = null;
+            _selectedCardTargetInstanceIds.Clear();
+            _selectedDeploymentTargetInstanceId = null;
+            _selectedCardId = cardId;
+            _selectedHandCardInstanceId = handCardInstanceId;
+            _selectedPaymentMethod = MatchPaymentMethods.Redstone;
+            RefreshAll();
+            if (_registry.TryGetText(cardId, out var text)) ShowStatus($"已选择：{text.name}", false);
+        }
+
+        private void SelectFirstHandCard()
+        {
+            var first = MatchView?.HandCards?.FirstOrDefault(value => value != null);
+            _selectedCardId = first?.cardId;
+            _selectedHandCardInstanceId = first?.handCardInstanceId;
+        }
+
+        private string GetSelectedHandCardInstanceId()
+        {
+            return ResolveHandCardInstanceId(MatchView.HandCards, _selectedCardId, _selectedHandCardInstanceId);
+        }
+
+        private static string ResolveHandCardInstanceId(
+            IReadOnlyList<HandCardStateDto> handCards,
+            string cardId,
+            string selectedHandCardInstanceId)
+        {
+            if (handCards == null || string.IsNullOrEmpty(cardId)) return string.Empty;
+
+            if (!string.IsNullOrEmpty(selectedHandCardInstanceId))
+            {
+                var selectedHandCard = handCards.FirstOrDefault(value => value != null &&
+                    value.handCardInstanceId == selectedHandCardInstanceId && value.cardId == cardId);
+                return selectedHandCard?.handCardInstanceId ?? string.Empty;
+            }
+
+            // Scenario helpers sometimes select by card definition only. Resolve that
+            // legacy selection once; never substitute a different copy for a stale ID.
+            return handCards.FirstOrDefault(value => value != null && value.cardId == cardId)?.handCardInstanceId ?? string.Empty;
         }
 
         private async void OnSlotClicked(bool player, DemoSlotKind kind, int index)
@@ -3493,7 +3565,8 @@ namespace BiomeRivals.Demo
                 CastSelectedCard();
                 return;
             }
-            var deploymentPreview = DemoDeploymentRules.Evaluate(MatchView, definition, kind, index, _selectedPaymentMethod);
+            var deploymentPreview = DemoDeploymentRules.Evaluate(MatchView, definition, kind, index, _selectedPaymentMethod,
+                GetSelectedHandCardInstanceId());
             if (!deploymentPreview.IsLegal)
             {
                 ShowStatus(deploymentPreview.Message, true);
@@ -3505,10 +3578,11 @@ namespace BiomeRivals.Demo
                 var onlineResult = await SendOnline(() => _onlineSession.DeployAsync(
                     _selectedCardId, kind, index, _selectedPaymentMethod,
                     deploymentTargetRule?.TargetType ?? string.Empty,
-                    _selectedDeploymentTargetInstanceId ?? string.Empty));
+                    _selectedDeploymentTargetInstanceId ?? string.Empty,
+                    GetSelectedHandCardInstanceId()));
                 if (onlineResult?.Outcome == MatchCommandOutcome.Accepted)
                 {
-                    _selectedCardId = MatchView.Hand.FirstOrDefault();
+                    SelectFirstHandCard();
                     _selectedPaymentMethod = MatchPaymentMethods.Redstone;
                     _selectedDeploymentTargetInstanceId = null;
                 }
@@ -3520,11 +3594,12 @@ namespace BiomeRivals.Demo
             var command = _match.CreateDeployCommand(
                 _selectedCardId, kind, index, _selectedPaymentMethod,
                 deploymentTargetRule?.TargetType ?? string.Empty,
-                _selectedDeploymentTargetInstanceId ?? string.Empty);
+                _selectedDeploymentTargetInstanceId ?? string.Empty,
+                GetSelectedHandCardInstanceId());
             var result = _match.ApplyDeploy(definition, command);
             if (result.Accepted)
             {
-                _selectedCardId = MatchView.Hand.FirstOrDefault();
+                SelectFirstHandCard();
                 _selectedPaymentMethod = MatchPaymentMethods.Redstone;
                 _selectedDeploymentTargetInstanceId = null;
                 if (crafted) StartCoroutine(ShowTurnBanner("合成完成", Cyan));
@@ -3697,10 +3772,18 @@ namespace BiomeRivals.Demo
         private void SelectPaymentMethod(string paymentMethod)
         {
             if (MatchView.IsFinished || MatchView.PendingChoice != null) return;
+            var handCardInstanceId = GetSelectedHandCardInstanceId();
+            if (string.IsNullOrEmpty(handCardInstanceId))
+            {
+                ShowStatus("所选手牌实例已不存在，请重新选择卡牌。", true);
+                RefreshAll();
+                return;
+            }
             _selectedPaymentMethod = paymentMethod;
             if (_registry.TryGetDefinition(_selectedCardId, out var definition) && paymentMethod == MatchPaymentMethods.Crafting)
             {
-                var ready = DemoDeploymentRules.CanPayWithCrafting(MatchView, definition, out var message);
+                var ready = DemoDeploymentRules.CanPayWithCrafting(
+                    MatchView, definition, out var message, handCardInstanceId);
                 ShowStatus(ready ? "合成支付已选择：材料充足。" : ReplaceCardIdsWithNames(message, definition), !ready);
             }
             else ShowStatus("红石支付已选择。", false);
@@ -3726,17 +3809,18 @@ namespace BiomeRivals.Demo
             }
             if (IsOnlineBoard)
             {
-                var onlineResult = await SendOnline(() => _onlineSession.PlayCardAsync(definition.id));
-                if (onlineResult?.Outcome == MatchCommandOutcome.Accepted) _selectedCardId = MatchView.Hand.FirstOrDefault();
+                var onlineResult = await SendOnline(() => _onlineSession.PlayCardAsync(definition.id,
+                    GetSelectedHandCardInstanceId()));
+                if (onlineResult?.Outcome == MatchCommandOutcome.Accepted) SelectFirstHandCard();
                 RefreshAll();
                 return;
             }
             var lifeBefore = MatchView.PlayerLife;
             var armorBefore = MatchView.PlayerArmor;
-            var success = _match.TryCast(definition, out var message);
+            var success = _match.TryCast(definition, out var message, GetSelectedHandCardInstanceId());
             if (success && _match.LastDrawResult != null && !string.IsNullOrEmpty(_match.LastDrawResult.CardId))
                 message = message.Replace(_match.LastDrawResult.CardId, GetCardName(_match.LastDrawResult.CardId));
-            if (success) _selectedCardId = _match.Hand.FirstOrDefault();
+            if (success) SelectFirstHandCard();
             ShowStatus(message, !success);
             RefreshAll();
             if (success)
@@ -3783,21 +3867,23 @@ namespace BiomeRivals.Demo
             }
             if (IsOnlineBoard)
             {
-                var onlineResult = await SendOnline(() => _onlineSession.PlayCardAsync(definition.id, targetRule.TargetType, target.InstanceId));
+                var onlineResult = await SendOnline(() => _onlineSession.PlayCardAsync(definition.id,
+                    GetSelectedHandCardInstanceId(), targetRule.TargetType, target.InstanceId));
                 if (onlineResult?.Outcome == MatchCommandOutcome.Accepted)
                 {
                     _pendingTargetCardId = null;
-                    _selectedCardId = MatchView.Hand.FirstOrDefault();
+                    SelectFirstHandCard();
                 }
                 RefreshAll();
                 return;
             }
-            var command = _match.CreatePlayCardCommand(definition.id, targetRule.TargetType, target.InstanceId);
+            var command = _match.CreatePlayCardCommand(definition.id, targetRule.TargetType, target.InstanceId,
+                handCardInstanceId: GetSelectedHandCardInstanceId());
             var result = _match.ApplyPlayCard(definition, command);
             if (result.Accepted)
             {
                 _pendingTargetCardId = null;
-                _selectedCardId = _match.Hand.FirstOrDefault();
+                SelectFirstHandCard();
             }
             var message = result.Message.Replace(target.CardId, GetCardName(target.CardId));
             ShowStatus(result.Accepted ? $"{message} · 状态 r{result.Revision}" : message, !result.Accepted);
@@ -3835,23 +3921,24 @@ namespace BiomeRivals.Demo
             if (IsOnlineBoard)
             {
                 var onlineResult = await SendOnline(() =>
-                    _onlineSession.PlayCardAsync(definition.id, targetRule.TargetType, "", targetInstanceIds));
+                    _onlineSession.PlayCardAsync(definition.id, GetSelectedHandCardInstanceId(), targetRule.TargetType, "", targetInstanceIds));
                 if (onlineResult?.Outcome == MatchCommandOutcome.Accepted)
                 {
                     _pendingTargetCardId = null;
                     _selectedCardTargetInstanceIds.Clear();
-                    _selectedCardId = MatchView.Hand.FirstOrDefault();
+                    SelectFirstHandCard();
                 }
                 RefreshAll();
                 return;
             }
-            var command = _match.CreatePlayCardCommand(definition.id, targetRule.TargetType, "", targetInstanceIds);
+            var command = _match.CreatePlayCardCommand(definition.id, targetRule.TargetType, "", targetInstanceIds,
+                GetSelectedHandCardInstanceId());
             var result = _match.ApplyPlayCard(definition, command);
             if (result.Accepted)
             {
                 _pendingTargetCardId = null;
                 _selectedCardTargetInstanceIds.Clear();
-                _selectedCardId = _match.Hand.FirstOrDefault();
+                SelectFirstHandCard();
             }
             var displayMessage = result.Message;
             foreach (var target in targets)
@@ -4091,12 +4178,13 @@ namespace BiomeRivals.Demo
 
                 if (MatchView.Phase == DemoTurnPhase.Main)
                 {
-                    var deployCardId = FindOnlineProbeUnit();
+                    var deployCard = FindOnlineProbeHandCard();
                     var emptySlot = Array.FindIndex(MatchView.UnitSlots, string.IsNullOrEmpty);
-                    if (!string.IsNullOrEmpty(deployCardId) && emptySlot >= 0)
+                    if (deployCard != null && emptySlot >= 0)
                     {
                         RequireAccepted(
-                            await SendOnline(() => _onlineSession.DeployAsync(deployCardId, DemoSlotKind.Unit, emptySlot)),
+                            await SendOnline(() => _onlineSession.DeployAsync(deployCard.cardId, DemoSlotKind.Unit, emptySlot,
+                                deployCard.handCardInstanceId)),
                             "DEPLOY_CARD");
                         actions.PerformedDeploy = true;
                         continue;
@@ -4128,19 +4216,21 @@ namespace BiomeRivals.Demo
             return actions;
         }
 
-        private string FindOnlineProbeUnit()
+        private HandCardStateDto FindOnlineProbeHandCard()
         {
             var safeUnits = _activeFaction == FactionIds.DesertBadlands
                 ? new[] { "db_001", "db_005" }
                 : new[] { "pf_001", "pf_002", "pf_003", "pf_004", "pf_008" };
-            foreach (var cardId in MatchView.Hand)
+            foreach (var handCard in MatchView.HandCards)
             {
-                if (Array.IndexOf(safeUnits, cardId) < 0 || !_registry.TryGetDefinition(cardId, out var definition)) continue;
+                if (handCard == null || Array.IndexOf(safeUnits, handCard.cardId) < 0 ||
+                    !_registry.TryGetDefinition(handCard.cardId, out var definition)) continue;
                 if (definition.cardType == "UNIT" && definition.manualPlayAllowed &&
-                    definition.effectImplementationStatus == "IMPLEMENTED" && MatchView.GetEffectiveCost(definition) <= MatchView.Energy)
-                    return cardId;
+                    definition.effectImplementationStatus == "IMPLEMENTED" &&
+                    MatchView.GetEffectiveCost(definition, handCard.handCardInstanceId) <= MatchView.Energy)
+                    return handCard;
             }
-            return string.Empty;
+            return null;
         }
 
         private static void RequireAccepted(MatchCommandDispatchResult? result, string commandType)

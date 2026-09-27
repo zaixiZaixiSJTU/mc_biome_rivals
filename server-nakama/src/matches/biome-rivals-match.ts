@@ -145,6 +145,23 @@ function biomeRivalsMatchLoop(
     if (message.opCode !== BIOME_RIVALS_COMMAND_OPCODE) continue;
     try {
       const command = JSON.parse(nk.binaryToString(message.data)) as BiomeRivalsRules.MatchCommand;
+      if ((command.type === 'DEPLOY_CARD' || command.type === 'PLAY_CARD') &&
+          (!command.payload || typeof command.payload.handCardInstanceId !== 'string' ||
+           !/^hand-[0-9]+$/.test(command.payload.handCardInstanceId))) {
+        dispatcher.broadcastMessage(
+          BIOME_RIVALS_REJECTION_OPCODE,
+          encodeMatchMessage({
+            commandId: command.commandId,
+            code: 'INVALID_COMMAND',
+            message: 'DEPLOY_CARD and PLAY_CARD require a valid handCardInstanceId',
+            revision: state.game.revision
+          }),
+          [message.sender],
+          null,
+          true
+        );
+        continue;
+      }
       const result = BiomeRivalsRules.applyCommand(state.game, message.sender.userId, command);
       if (result.accepted) {
         state.game = result.state;
@@ -157,7 +174,7 @@ function biomeRivalsMatchLoop(
           if (!isPlayer) continue;
           dispatcher.broadcastMessage(
             BIOME_RIVALS_EVENT_BATCH_OPCODE,
-            encodeMatchMessage(BiomeRivalsRules.createClientEventBatch(result.batch, recipient.userId)),
+            encodeMatchMessage(BiomeRivalsRules.createClientEventBatch(result.batch, recipient.userId, state.game)),
             [recipient],
             message.sender,
             true

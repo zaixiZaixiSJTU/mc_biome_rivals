@@ -15,9 +15,46 @@ const snapshotSchema = JSON.parse(nodeFileSystem.readFileSync(
   'utf8'
 )) as unknown;
 const validateSnapshotSchema = new Ajv2020({ strict: false }).compile(snapshotSchema);
+const applyCommandStrict = BiomeRivalsRules.applyCommand;
+
+// The older rule fixtures omit instance IDs for cases unrelated to duplicate selection.
+// Resolve those fixtures here so the rules engine itself only receives instance-specific commands.
+BiomeRivalsRules.applyCommand = function (
+  state: BiomeRivalsRules.MatchState,
+  actorPlayerId: string,
+  matchCommand: BiomeRivalsRules.MatchCommand
+): BiomeRivalsRules.CommandResult {
+  state.players.forEach(function (player): void {
+    if (player.handCards.length === player.hand.length && player.handCards.every(function (card, index): boolean {
+      return card.cardId === player.hand[index];
+    })) return;
+    player.handCards = player.hand.map(function (cardId, index): BiomeRivalsRules.HandCardState {
+      const existing = player.handCards[index];
+      return existing && existing.cardId === cardId ? existing : {
+        handCardInstanceId: 'hand-' + String(state.nextHandCardInstanceId++),
+        cardId: cardId,
+        costModifier: 0,
+        expiresAtEndOfTurnPlayerId: null
+      };
+    });
+  });
+  if ((matchCommand.type === 'DEPLOY_CARD' || matchCommand.type === 'PLAY_CARD') &&
+      matchCommand.payload && typeof matchCommand.payload.handCardInstanceId !== 'string' &&
+      typeof matchCommand.payload.cardId === 'string') {
+    const actor = state.players.filter(function (player): boolean { return player.playerId === actorPlayerId; })[0];
+    const selected = actor && actor.handCards.filter(function (card): boolean {
+      return card.cardId === matchCommand.payload.cardId;
+    })[0];
+    matchCommand.payload.handCardInstanceId = selected ? selected.handCardInstanceId : 'hand-0';
+  }
+  return applyCommandStrict(state, actorPlayerId, matchCommand);
+};
 
 function assertEventBatchMatchesSchema(batch: BiomeRivalsRules.MatchEventBatch): void {
-  const valid = validateEventBatchSchema(batch);
+  const wireBatch = batch.handProjection || !batch.privateHandProjections || batch.privateHandProjections.length === 0
+    ? batch
+    : BiomeRivalsRules.createClientEventBatch(batch, batch.privateHandProjections[0]!.ownPlayerId);
+  const valid = validateEventBatchSchema(wireBatch);
   TestHarness.ok(valid, 'event batch schema errors: ' + JSON.stringify(validateEventBatchSchema.errors));
 }
 
@@ -111,9 +148,199 @@ function activeState(
   state.players[0]!.mulliganCompleted = true;
   state.players[1]!.mulliganCompleted = true;
   state.status = 'ACTIVE';
-  state.players[state.activePlayerIndex]!.hand.push(state.players[state.activePlayerIndex]!.deck.pop()!);
+  const openingPlayer = state.players[state.activePlayerIndex]!;
+  const cardId = openingPlayer.deck.pop()!;
+  openingPlayer.hand.push(cardId);
+  openingPlayer.handCards.push({
+    handCardInstanceId: 'hand-' + String(state.nextHandCardInstanceId++),
+    cardId: cardId,
+    costModifier: 0,
+    expiresAtEndOfTurnPlayerId: null
+  });
   return state;
 }
+
+TestHarness.test('rule engine rejects DEPLOY and PLAY commands without a valid hand instance id', function (): void {
+  const state = activeState('match-required-hand-instance', ['alice', 'bob']);
+  const actor = state.players[state.activePlayerIndex]!;
+  const cardId = actor.hand[0]!;
+  const revision = state.revision;
+  const hand = actor.hand.slice();
+  const handCards = actor.handCards.slice();
+  const missingDeploy = command('missing-instance-deploy', revision, 'DEPLOY_CARD');
+  missingDeploy.payload = {
+    cardId: cardId, slotKind: 'UNIT', slotIndex: 0, paymentMethod: 'REDSTONE'
+  };
+  const missingPlay = command('missing-instance-play', revision, 'PLAY_CARD');
+  missingPlay.payload = { cardId: cardId };
+
+  const deploy = applyCommandStrict(state, actor.playerId, missingDeploy);
+  const play = applyCommandStrict(state, actor.playerId, missingPlay);
+
+  TestHarness.equal(deploy.accepted, false);
+  if (!deploy.accepted) TestHarness.equal(deploy.code, 'INVALID_COMMAND');
+  TestHarness.equal(play.accepted, false);
+  if (!play.accepted) TestHarness.equal(play.code, 'INVALID_COMMAND');
+  TestHarness.equal(state.revision, revision);
+  TestHarness.equal(actor.hand.join(','), hand.join(','));
+  TestHarness.equal(actor.handCards.map(function (card): string { return card.handCardInstanceId; }).join(','),
+    handCards.map(function (card): string { return card.handCardInstanceId; }).join(','));
+});
+
+TestHarness.test('hand card cost modifiers and commands target one stable duplicate instance', function (): void {
+  const state = activeState('match-hand-instance-fee', ['alice', 'bob']);
+  const player = state.players[state.activePlayerIndex]!;
+  const definition = BiomeRivalsRules.getCardDefinition('pf_001')!;
+  player.hand = ['pf_001', 'pf_001'];
+  player.handCards = [
+    { handCardInstanceId: 'hand-100', cardId: 'pf_001', costModifier: -1, expiresAtEndOfTurnPlayerId: player.playerId },
+    { handCardInstanceId: 'hand-101', cardId: 'pf_001', costModifier: 0, expiresAtEndOfTurnPlayerId: null }
+  ];
+  state.nextHandCardInstanceId = 102;
+  player.redstone = player.redstoneCapacity;
+
+  TestHarness.equal(BiomeRivalsRules.getEffectiveCardCost(player, definition, 'hand-100'), Math.max(0, definition.cost - 1));
+  TestHarness.equal(BiomeRivalsRules.getEffectiveCardCost(player, definition, 'hand-101'), definition.cost);
+  const unknownInstance = BiomeRivalsRules.applyCommand(state, player.playerId, {
+    protocolVersion: BiomeRivalsRules.PROTOCOL_VERSION,
+    rulesetVersion: BiomeRivalsRules.RULESET_VERSION,
+    commandId: 'deploy-unknown-hand-copy',
+    expectedRevision: state.revision,
+    type: 'DEPLOY_CARD',
+    payload: { cardId: 'pf_001', handCardInstanceId: 'hand-999', slotKind: 'UNIT', slotIndex: 0, paymentMethod: 'REDSTONE' }
+  });
+  TestHarness.equal(unknownInstance.accepted, false);
+  TestHarness.equal(state.players[state.activePlayerIndex]!.handCards.length, 2);
+  TestHarness.equal(player.redstone, player.redstoneCapacity);
+  const result = BiomeRivalsRules.applyCommand(state, player.playerId, {
+    protocolVersion: BiomeRivalsRules.PROTOCOL_VERSION,
+    rulesetVersion: BiomeRivalsRules.RULESET_VERSION,
+    commandId: 'deploy-discounted-copy',
+    expectedRevision: state.revision,
+    type: 'DEPLOY_CARD',
+    payload: { cardId: 'pf_001', handCardInstanceId: 'hand-100', slotKind: 'UNIT', slotIndex: 0, paymentMethod: 'REDSTONE' }
+  });
+
+  TestHarness.equal(result.accepted, true);
+  if (!result.accepted) throw new Error('discounted duplicate deployment was rejected: ' + result.message);
+  const nextPlayer = result.state.players[state.activePlayerIndex]!;
+  TestHarness.equal(nextPlayer.hand.length, 1);
+  TestHarness.equal(nextPlayer.handCards[0]!.handCardInstanceId, 'hand-101');
+  TestHarness.equal(nextPlayer.handCards[0]!.costModifier, 0);
+  TestHarness.equal(BiomeRivalsRules.validateState(result.state).length, 0);
+  const snapshot = BiomeRivalsRules.createClientSnapshot(result.state, player.playerId);
+  assertSnapshotMatchesSchema(snapshot);
+  TestHarness.ok(snapshot.players[state.activePlayerIndex === 0 ? 1 : 0]!.handCards.every(card => card === null));
+  const batch = BiomeRivalsRules.createClientEventBatch(result.batch, player.playerId, result.state);
+  assertEventBatchMatchesSchema(batch);
+  TestHarness.equal(batch.handProjection!.ownHandCards[0]!.handCardInstanceId, 'hand-101');
+  TestHarness.equal(batch.handProjection!.opponentHandCount, result.state.players[state.activePlayerIndex === 0 ? 1 : 0]!.hand.length);
+});
+
+TestHarness.test('snapshot and event schemas cap visible and private hand projections at seven cards', function (): void {
+  const state = activeState('match-hand-schema-cap', ['alice', 'bob']);
+  const snapshot = BiomeRivalsRules.createClientSnapshot(state, 'alice');
+  snapshot.players[0]!.hand = Array.from({ length: 8 }, function (): string { return 'pf_001'; });
+  snapshot.players[0]!.handCards = Array.from({ length: 8 }, function (_, index): BiomeRivalsRules.HandCardState {
+    return { handCardInstanceId: 'hand-' + String(index + 1), cardId: 'pf_001',
+      costModifier: 0, expiresAtEndOfTurnPlayerId: null };
+  });
+  TestHarness.equal(validateSnapshotSchema(snapshot), false, 'snapshot accepts more than seven own hand cards');
+
+  const opponentOverflow = BiomeRivalsRules.createClientSnapshot(state, 'alice');
+  opponentOverflow.players[1]!.hand = Array.from({ length: 8 }, function (): null { return null; });
+  opponentOverflow.players[1]!.handCards = Array.from({ length: 8 }, function (): null { return null; });
+  TestHarness.equal(validateSnapshotSchema(opponentOverflow), false, 'snapshot accepts more than seven opponent cards');
+
+  const oversizedProjection = {
+    protocolVersion: BiomeRivalsRules.PROTOCOL_VERSION,
+    rulesetVersion: BiomeRivalsRules.RULESET_VERSION,
+    revision: 0,
+    acknowledgedCommandId: 'hand-schema-cap',
+    events: [],
+    handProjection: {
+      ownPlayerId: 'alice',
+      ownHand: Array.from({ length: 8 }, function (): string { return 'pf_001'; }),
+      ownHandCards: Array.from({ length: 8 }, function (_, index): BiomeRivalsRules.HandCardState {
+        return { handCardInstanceId: 'hand-' + String(index + 1), cardId: 'pf_001',
+          costModifier: 0, expiresAtEndOfTurnPlayerId: null };
+      }),
+      opponentPlayerId: 'bob',
+      opponentHandCount: 8
+    }
+  };
+  TestHarness.equal(validateEventBatchSchema(oversizedProjection), false,
+    'event schema accepts oversized private and opponent hand projections');
+});
+
+TestHarness.test('Badlands Raider stacks its excavation discount with its selected hand modifier and clamps at zero', function (): void {
+  const state = activeState('match-stacked-hand-cost', ['alice', 'bob'], ['desert_badlands', 'nether']);
+  const actor = state.players[state.activePlayerIndex]!;
+  const handCard = actor.handCards[0]!;
+  actor.hand[0] = 'db_005';
+  handCard.cardId = 'db_005';
+  handCard.costModifier = -3;
+  handCard.expiresAtEndOfTurnPlayerId = actor.playerId;
+  actor.excavatedThisTurn = true;
+  actor.redstone = 0;
+  actor.temporaryRedstone = 0;
+  actor.redstoneCapacity = 0;
+
+  const definition = BiomeRivalsRules.getCardDefinition('db_005')!;
+  TestHarness.equal(BiomeRivalsRules.getEffectiveCardCost(actor, definition, handCard.handCardInstanceId), 0);
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId, {
+    protocolVersion: BiomeRivalsRules.PROTOCOL_VERSION,
+    rulesetVersion: BiomeRivalsRules.RULESET_VERSION,
+    commandId: 'deploy-stacked-discount-at-zero',
+    expectedRevision: state.revision,
+    type: 'DEPLOY_CARD',
+    payload: {
+      cardId: 'db_005', handCardInstanceId: handCard.handCardInstanceId,
+      slotKind: 'UNIT', slotIndex: 0, paymentMethod: 'REDSTONE'
+    }
+  });
+
+  TestHarness.ok(result.accepted, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[state.activePlayerIndex]!.redstone, 0);
+  TestHarness.equal(result.state.players[state.activePlayerIndex]!.handCards.some(function (card): boolean {
+    return card.handCardInstanceId === handCard.handCardInstanceId;
+  }), false);
+  TestHarness.equal(result.state.players[state.activePlayerIndex]!.battlefield[0]!.cardId, 'db_005');
+});
+
+TestHarness.test('hand card cost modifier expires at owner end turn and is privately projected', function (): void {
+  const state = activeState('match-hand-instance-expiry', ['alice', 'bob']);
+  const actor = state.players[state.activePlayerIndex]!;
+  const card = actor.handCards[0]!;
+  card.costModifier = -1;
+  card.expiresAtEndOfTurnPlayerId = actor.playerId;
+  const before = BiomeRivalsRules.getEffectiveCardCost(actor,
+    BiomeRivalsRules.getCardDefinition(card.cardId)!, card.handCardInstanceId);
+  TestHarness.equal(before, Math.max(0, BiomeRivalsRules.getCardDefinition(card.cardId)!.cost - 1));
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId, {
+    protocolVersion: BiomeRivalsRules.PROTOCOL_VERSION,
+    rulesetVersion: BiomeRivalsRules.RULESET_VERSION,
+    commandId: 'expire-hand-fee', expectedRevision: state.revision, type: 'END_TURN', payload: {}
+  });
+  if (!result.accepted) throw new Error('end turn failed: ' + result.message);
+  const expiredEvent = result.batch.events.find(event => event.type === 'HAND_CARD_COST_MODIFIER_EXPIRED');
+  TestHarness.ok(expiredEvent);
+  TestHarness.equal(result.state.players[state.activePlayerIndex]!.handCards[0]!.costModifier, 0);
+  TestHarness.equal(result.state.players[state.activePlayerIndex]!.handCards[0]!.expiresAtEndOfTurnPlayerId, null);
+  const ownerBatch = BiomeRivalsRules.createClientEventBatch(result.batch, actor.playerId);
+  const opponent = result.state.players[state.activePlayerIndex === 0 ? 1 : 0]!;
+  const opponentBatch = BiomeRivalsRules.createClientEventBatch(result.batch, opponent.playerId);
+  const ownerExpiry = ownerBatch.events.find(event => event.type === 'HAND_CARD_COST_MODIFIER_EXPIRED')!;
+  const opponentExpiry = opponentBatch.events.find(event => event.type === 'HAND_CARD_COST_MODIFIER_EXPIRED')!;
+  TestHarness.equal(ownerExpiry.payload.handCardInstanceId, card.handCardInstanceId);
+  TestHarness.equal(opponentExpiry.payload.handCardInstanceId, null);
+  TestHarness.equal(opponentExpiry.payload.cardId, null);
+  assertEventBatchMatchesSchema(ownerBatch);
+  assertEventBatchMatchesSchema(opponentBatch);
+  assertSnapshotMatchesSchema(BiomeRivalsRules.createClientSnapshot(result.state, actor.playerId));
+});
 
 function placeUnit(
   state: BiomeRivalsRules.MatchState,
@@ -316,7 +543,17 @@ TestHarness.test('resource-change shape is schema replayable and rejects malform
   const batch: BiomeRivalsRules.MatchEventBatch = {
     protocolVersion: BiomeRivalsRules.PROTOCOL_VERSION,
     rulesetVersion: BiomeRivalsRules.RULESET_VERSION,
-    revision: 1, acknowledgedCommandId: 'resource-shape', events: [event]
+    revision: 1, acknowledgedCommandId: 'resource-shape', events: [event],
+    handProjection: {
+      ownPlayerId: actor.playerId,
+      ownHand: actor.hand.slice(),
+      ownHandCards: actor.handCards.map(function (card): BiomeRivalsRules.HandCardState {
+        return { handCardInstanceId: card.handCardInstanceId, cardId: card.cardId,
+          costModifier: card.costModifier, expiresAtEndOfTurnPlayerId: card.expiresAtEndOfTurnPlayerId };
+      }),
+      opponentPlayerId: state.players[actor === state.players[0] ? 1 : 0]!.playerId,
+      opponentHandCount: state.players[actor === state.players[0] ? 1 : 0]!.hand.length
+    }
   };
   assertEventBatchMatchesSchema(batch);
   event.payload.temporaryRedstone = -1;
@@ -835,6 +1072,9 @@ TestHarness.test('lethal piglin magma stops later piglins statuses and turn hand
   const actor = state.players[actorIndex]!;
   actor.redstone = 2;
   actor.redstoneCapacity = 2;
+  const expiringHandCard = actor.handCards[0]!;
+  expiringHandCard.costModifier = -1;
+  expiringHandCard.expiresAtEndOfTurnPlayerId = actor.playerId;
   state.players[opponentIndex]!.life = 1;
   placeUnit(state, actorIndex, 'nt_002', 0, 'object-1', 1);
   placeUnit(state, actorIndex, 'nt_002', 1, 'object-2', 1);
@@ -845,11 +1085,30 @@ TestHarness.test('lethal piglin magma stops later piglins statuses and turn hand
   TestHarness.equal(result.state.status, 'FINISHED');
   TestHarness.equal(result.state.players[opponentIndex]!.life, 0);
   TestHarness.equal(result.state.players[actorIndex]!.redstone, 1);
+  TestHarness.equal(result.state.players[actorIndex]!.handCards[0]!.costModifier, 0);
+  TestHarness.equal(result.state.players[actorIndex]!.handCards[0]!.expiresAtEndOfTurnPlayerId, null);
   TestHarness.equal(result.batch.events.filter(function (event): boolean {
     return event.type === 'REDSTONE_CHANGED' && event.payload.effectId === 'effect.nt_002.01';
   }).length, 1);
+  const expiredIndex = result.batch.events.findIndex(function (event): boolean {
+    return event.type === 'HAND_CARD_COST_MODIFIER_EXPIRED';
+  });
+  const matchEndedIndex = result.batch.events.findIndex(function (event): boolean { return event.type === 'MATCH_ENDED'; });
+  TestHarness.ok(expiredIndex >= 0 && expiredIndex < matchEndedIndex,
+    'turn-ending hand discount must expire before the terminal event');
   TestHarness.equal(result.batch.events.some(function (event): boolean { return event.type === 'TURN_ENDED'; }), false);
   TestHarness.equal(result.batch.events[result.batch.events.length - 1]!.type, 'MATCH_ENDED');
+  const ownerBatch = BiomeRivalsRules.createClientEventBatch(result.batch, actor.playerId);
+  const opponentBatch = BiomeRivalsRules.createClientEventBatch(result.batch,
+    result.state.players[opponentIndex]!.playerId);
+  TestHarness.equal(ownerBatch.events.find(function (event): boolean {
+    return event.type === 'HAND_CARD_COST_MODIFIER_EXPIRED';
+  })!.payload.handCardInstanceId, expiringHandCard.handCardInstanceId);
+  TestHarness.equal(opponentBatch.events.find(function (event): boolean {
+    return event.type === 'HAND_CARD_COST_MODIFIER_EXPIRED';
+  })!.payload.handCardInstanceId, null);
+  assertEventBatchMatchesSchema(ownerBatch);
+  assertEventBatchMatchesSchema(opponentBatch);
   assertEventBatchMatchesSchema(result.batch);
 });
 
@@ -994,6 +1253,11 @@ TestHarness.test('creates a valid two-player initial state', function (): void {
   TestHarness.equal(state.players[1]!.mulliganCompleted, false);
   TestHarness.equal(state.players[0]!.unitSlots.length, 4);
   TestHarness.equal(state.players[0]!.buildingSlots.length, 3);
+  const initialHandCards = state.players[0]!.handCards.concat(state.players[1]!.handCards);
+  TestHarness.equal(initialHandCards.length, 7);
+  TestHarness.equal(new Set(initialHandCards.map(function (card): string { return card.handCardInstanceId; })).size, 7,
+    'initial hands receive globally unique stable instance ids');
+  TestHarness.ok(initialHandCards.every(function (card): boolean { return card.costModifier === 0 && card.expiresAtEndOfTurnPlayerId === null; }));
   TestHarness.equal(BiomeRivalsRules.validateState(state).length, 0);
 });
 
@@ -1036,6 +1300,7 @@ TestHarness.test('creates faction-specific decks and exposes both public faction
 TestHarness.test('replaces selected opening cards before returning them to the shuffled deck', function (): void {
   const state = BiomeRivalsRules.createInitialState('match-mulligan', ['alice', 'bob'], undefined, 'fixed-secret-mulligan');
   const originalHand = state.players[0]!.hand.slice();
+  const originalHandCards = state.players[0]!.handCards.slice();
   const result = BiomeRivalsRules.applyCommand(state, 'alice', mulliganCommand('mulligan-a', 0, [0, 2]));
   TestHarness.equal(result.accepted, true);
   if (!result.accepted) return;
@@ -1044,6 +1309,12 @@ TestHarness.test('replaces selected opening cards before returning them to the s
   TestHarness.equal(result.state.players[0]!.hand.length, 3);
   TestHarness.equal(result.state.players[0]!.hand[0], originalHand[1]);
   TestHarness.equal(result.state.players[0]!.deck.length, 27);
+  TestHarness.equal(result.state.players[0]!.handCards[0]!.handCardInstanceId,
+    originalHandCards[1]!.handCardInstanceId, 'kept opening card retains its hand instance');
+  TestHarness.ok(result.state.players[0]!.handCards.slice(1).every(function (card): boolean {
+    return originalHandCards.every(function (original): boolean { return original.handCardInstanceId !== card.handCardInstanceId; });
+  }), 'replacement draws allocate new hand instances instead of reviving returned identities');
+  TestHarness.equal(new Set(result.state.players[0]!.handCards.map(function (card): string { return card.handCardInstanceId; })).size, 3);
   TestHarness.ok(result.state.players[0]!.deck.indexOf(originalHand[0]!) >= 0);
   TestHarness.ok(result.state.players[0]!.deck.indexOf(originalHand[2]!) >= 0);
   TestHarness.equal(result.batch.events[0]!.type, 'MULLIGAN_COMPLETED');
@@ -1054,6 +1325,9 @@ TestHarness.test('replaces selected opening cards before returning them to the s
 
 TestHarness.test('starts the first turn and draws only after both players confirm', function (): void {
   const state = BiomeRivalsRules.createInitialState('match-start', ['alice', 'bob'], undefined, 'fixed-secret-start');
+  const originalHandIds = state.players.map(function (player): string[] {
+    return player.handCards.map(function (card): string { return card.handCardInstanceId; });
+  });
   TestHarness.equal(state.activePlayerIndex, 0);
   TestHarness.equal(state.players[0]!.playerId, 'bob', 'recorded match seed assigns one input player to the canonical first-player slot');
   TestHarness.equal(state.players[0]!.hand.length, 3);
@@ -1071,6 +1345,15 @@ TestHarness.test('starts the first turn and draws only after both players confir
   TestHarness.equal(second.batch.events[0]!.type, 'MULLIGAN_COMPLETED');
   TestHarness.equal(second.batch.events[1]!.type, 'MATCH_STARTED');
   TestHarness.equal(second.batch.events[2]!.type, 'CARD_DRAWN');
+  const openingPlayer = second.state.players[second.state.activePlayerIndex]!;
+  const drawnCard = openingPlayer.handCards[openingPlayer.handCards.length - 1]!;
+  TestHarness.equal(drawnCard.cardId, second.batch.events[2]!.payload.cardId);
+  TestHarness.ok(originalHandIds.every(function (handIds): boolean {
+    return handIds.indexOf(drawnCard.handCardInstanceId) < 0;
+  }), 'normal turn draw allocates an instance distinct from all starting copies');
+  TestHarness.equal(new Set(second.state.players.flatMap(function (player): string[] {
+    return player.handCards.map(function (card): string { return card.handCardInstanceId; });
+  })).size, second.state.players[0]!.handCards.length + second.state.players[1]!.handCards.length);
   const nextTurn = BiomeRivalsRules.applyCommand(second.state, 'bob', command('first-player-end', 2, 'END_TURN'));
   TestHarness.equal(nextTurn.accepted, true);
   if (!nextTurn.accepted) return;
@@ -1180,6 +1463,9 @@ TestHarness.test('Villager Farmer generates private Wheat after deployment', fun
   const actorIndex = state.players[0]!.playerId === 'alice' ? 0 : 1;
   const opponentIndex = actorIndex === 0 ? 1 : 0;
   const actor = state.players[actorIndex]!;
+  const preexistingHandIds = state.players.flatMap(function (player): string[] {
+    return player.handCards.map(function (card): string { return card.handCardInstanceId; });
+  });
   state.activePlayerIndex = actorIndex;
   actor.hand = ['pf_004'];
   actor.redstone = 3;
@@ -1198,6 +1484,10 @@ TestHarness.test('Villager Farmer generates private Wheat after deployment', fun
   TestHarness.equal(result.batch.events[1]!.payload.effectId, 'effect.pf_004.01');
   TestHarness.equal(result.batch.events[1]!.payload.cardId, 'tk_002');
   TestHarness.equal(result.batch.events[1]!.payload.destination, 'HAND');
+  TestHarness.equal(result.state.players[actorIndex]!.handCards.length, 1);
+  TestHarness.equal(result.state.players[actorIndex]!.handCards[0]!.cardId, 'tk_002');
+  TestHarness.ok(preexistingHandIds.indexOf(result.state.players[actorIndex]!.handCards[0]!.handCardInstanceId) < 0,
+    'generated private hand card receives a new instance id');
   const ownerEvents = BiomeRivalsRules.createClientEventBatch(result.batch, actor.playerId);
   const opponentEvents = BiomeRivalsRules.createClientEventBatch(
     result.batch, result.state.players[opponentIndex]!.playerId);
@@ -1392,6 +1682,7 @@ TestHarness.test('blocks other actions until the archaeology choice resolves', f
 
 TestHarness.test('resolves an archaeology choice into excavation and a normal draw', function (): void {
   const state = activeState('match-1', ['alice', 'bob'], ['desert_badlands', 'nether']);
+  const originalBobHandIds = state.players[1]!.handCards.map(function (card): string { return card.handCardInstanceId; });
   state.players[0]!.hand = ['db_003'];
   state.players[0]!.deck = ['db_001', 'db_002', 'tk_006', 'db_004'];
   state.players[0]!.buriedCardIds = ['tk_006'];
@@ -1416,6 +1707,13 @@ TestHarness.test('resolves an archaeology choice into excavation and a normal dr
   TestHarness.equal(result.state.players[0]!.buriedCardIds.length, 0);
   TestHarness.equal(result.state.players[0]!.excavatedThisTurn, true);
   TestHarness.equal(result.state.players[0]!.armor, 1);
+  const excavatedAndDrawn = result.state.players[0]!.handCards.slice(-2);
+  TestHarness.equal(excavatedAndDrawn[0]!.cardId, 'tk_006');
+  TestHarness.equal(excavatedAndDrawn[1]!.cardId, 'db_004');
+  TestHarness.ok(excavatedAndDrawn.every(function (card): boolean {
+    return originalBobHandIds.indexOf(card.handCardInstanceId) < 0;
+  }), 'excavation and its following draw each allocate new instance ids');
+  TestHarness.ok(excavatedAndDrawn[0]!.handCardInstanceId !== excavatedAndDrawn[1]!.handCardInstanceId);
   TestHarness.equal(result.batch.events.length, 4);
   TestHarness.equal(result.batch.events[0]!.type, 'CHOICE_RESOLVED');
   TestHarness.equal(result.batch.events[1]!.type, 'CARD_EXCAVATED');
@@ -1575,6 +1873,35 @@ TestHarness.test('crafts a structure from deterministic hand materials without s
   TestHarness.equal((opponentBatch.events[0]!.payload.materials as Array<{ cardId: string }>)[0]!.cardId, 'db_002');
   TestHarness.equal((opponentBatch.events[0]!.payload.materials as Array<{ cardId: string }>)[1]!.cardId, 'tk_006');
   TestHarness.equal(JSON.stringify(state.players[0]!.hand), JSON.stringify(['db_002', 'db_007', 'tk_006', 'db_002']), 'accepted commands must not mutate input');
+});
+
+TestHarness.test('crafting consumes the selected duplicate product instance', function (): void {
+  const state = activeState('match-craft-hand-instance', ['alice', 'bob']);
+  const player = state.players.filter(function (candidate): boolean { return candidate.playerId === 'alice'; })[0]!;
+  state.activePlayerIndex = state.players.findIndex(function (candidate): boolean { return candidate.playerId === 'alice'; });
+  player.hand = ['db_007', 'db_002', 'tk_006', 'db_007'];
+  player.handCards = player.hand.map(function (cardId, index): BiomeRivalsRules.HandCardState {
+    return {
+      handCardInstanceId: 'hand-' + String(500 + index), cardId: cardId,
+      costModifier: 0, expiresAtEndOfTurnPlayerId: null
+    };
+  });
+  state.nextHandCardInstanceId = 504;
+  const firstProductId = player.handCards[0]!.handCardInstanceId;
+  const selectedProductId = player.handCards[3]!.handCardInstanceId;
+  const craft = deployCommand('craft-selected-duplicate', 0, 'db_007', 'BUILDING', 0, 'CRAFTING');
+  craft.payload.handCardInstanceId = selectedProductId;
+
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', craft);
+
+  TestHarness.equal(result.accepted, true, JSON.stringify(result));
+  if (!result.accepted) return;
+  const resolvedPlayer = result.state.players.filter(function (candidate): boolean { return candidate.playerId === 'alice'; })[0]!;
+  TestHarness.equal(resolvedPlayer.handCards.map(function (card): string { return card.handCardInstanceId; }).join(','), firstProductId,
+    'the nonselected matching product must remain while the selected one becomes the battlefield object');
+  TestHarness.equal(resolvedPlayer.battlefield[0]!.cardId, 'db_007');
+  TestHarness.equal(resolvedPlayer.hand[0], 'db_007');
+  TestHarness.equal(resolvedPlayer.discardPile.join(','), 'db_002,tk_006');
 });
 
 TestHarness.test('rejects incomplete or illegal crafting atomically', function (): void {
@@ -2448,6 +2775,9 @@ TestHarness.test('credits a retaliation kill to the Husk defenders opponent', fu
 
 TestHarness.test('Sandstorm drops only the enemy Husk loot to its caster', function (): void {
   const state = activeState('match-1', ['alice', 'bob']);
+  const priorInstanceIds = state.players.flatMap(function (player): string[] {
+    return player.handCards.map(function (card): string { return card.handCardInstanceId; });
+  });
   state.players[0]!.hand = ['db_006'];
   state.players[0]!.redstone = 3;
   state.players[0]!.redstoneCapacity = 3;
@@ -2460,6 +2790,9 @@ TestHarness.test('Sandstorm drops only the enemy Husk loot to its caster', funct
   if (!result.accepted) return;
   TestHarness.equal(result.state.players[0]!.hand.length, 1);
   TestHarness.equal(result.state.players[0]!.hand[0], 'tk_005');
+  TestHarness.equal(result.state.players[0]!.handCards[0]!.cardId, 'tk_005');
+  TestHarness.ok(priorInstanceIds.indexOf(result.state.players[0]!.handCards[0]!.handCardInstanceId) < 0,
+    'Husk loot receives a new hand instance for its killer');
   TestHarness.equal(result.state.players[0]!.discardPile[0], 'db_006');
   TestHarness.equal(result.state.players[0]!.discardPile[1], 'db_001');
   TestHarness.equal(result.state.players[1]!.discardPile[0], 'db_001');

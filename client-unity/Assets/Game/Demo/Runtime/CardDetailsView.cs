@@ -16,10 +16,16 @@ namespace BiomeRivals.Demo
             _font = font;
         }
 
-        public CardUI ShowCard(string cardId, Vector2 size, Vector2 position, int? costOverride = null)
+        public CardUI ShowCard(
+            string cardId,
+            Vector2 size,
+            Vector2 position,
+            int? costOverride = null,
+            string handCardInstanceId = "")
         {
             if (_registry == null) throw new System.InvalidOperationException("CardDetailsView is not configured.");
-            CurrentCard = DemoCardUiFactory.Create(transform, _registry, cardId, size, false, _font, null, costOverride);
+            CurrentCard = DemoCardUiFactory.Create(transform, _registry, cardId, size, false, _font, null,
+                costOverride, handCardInstanceId);
             CurrentCard.RectTransform.anchoredPosition = position;
             return CurrentCard;
         }

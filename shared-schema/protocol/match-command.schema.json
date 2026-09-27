@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["protocolVersion", "rulesetVersion", "commandId", "expectedRevision", "type", "payload"],
   "properties": {
-    "protocolVersion": { "const": 36 },
+    "protocolVersion": { "const": 37 },
     "rulesetVersion": { "type": "string", "minLength": 1 },
     "commandId": { "type": "string", "minLength": 1, "maxLength": 80 },
     "expectedRevision": { "type": "integer", "minimum": 0 },
@@ -39,9 +39,10 @@
           "payload": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["cardId", "slotKind", "slotIndex", "paymentMethod"],
+            "required": ["cardId", "handCardInstanceId", "slotKind", "slotIndex", "paymentMethod"],
             "properties": {
               "cardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+              "handCardInstanceId": { "type": "string", "pattern": "^hand-[0-9]+$" },
               "slotKind": { "enum": ["UNIT", "BUILDING"] },
               "slotIndex": { "type": "integer", "minimum": 0 },
               "paymentMethod": { "enum": ["REDSTONE", "CRAFTING"] },
@@ -58,9 +59,10 @@
         "properties": {
           "payload": {
             "type": "object", "additionalProperties": false,
-            "required": ["cardId"],
+            "required": ["cardId", "handCardInstanceId"],
             "properties": {
               "cardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+              "handCardInstanceId": { "type": "string", "pattern": "^hand-[0-9]+$" },
               "targetType": { "enum": ["HERO", "UNIT", "BUILDING"] },
               "targetInstanceId": { "type": "string", "pattern": "^object-[0-9]+$" },
               "targetInstanceIds": {

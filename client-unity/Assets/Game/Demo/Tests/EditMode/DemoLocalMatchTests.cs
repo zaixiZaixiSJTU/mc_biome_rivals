@@ -12,6 +12,105 @@ namespace BiomeRivals.Demo.Tests
     public sealed class DemoLocalMatchTests
     {
         [Test]
+        public void SelectedHandCardDoesNotFallBackToAnotherCopyWhenItsInstanceDisappears()
+        {
+            var resolve = typeof(DemoSceneController).GetMethod(
+                "ResolveHandCardInstanceId", BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.That(resolve, Is.Not.Null);
+            var hand = new[]
+            {
+                new HandCardStateDto { cardId = "tk_016", handCardInstanceId = "hand-first" },
+                new HandCardStateDto { cardId = "tk_016", handCardInstanceId = "hand-discounted" }
+            };
+
+            Assert.That(resolve.Invoke(null, new object[] { hand, "tk_016", "hand-discounted" }), Is.EqualTo("hand-discounted"));
+            Assert.That(resolve.Invoke(null, new object[] { hand, "tk_016", "hand-no-longer-in-hand" }), Is.EqualTo(string.Empty));
+            Assert.That(resolve.Invoke(null, new object[] { hand, "tk_016", string.Empty }), Is.EqualTo("hand-first"));
+        }
+
+        [Test]
+        public void LocalHandCardInstancesKeepTheirIdentityAndExactTemporaryCostThroughRemoval()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("tk_016", out var shell), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { "tk_016", "tk_016" });
+            var originalInstances = match.HandCards.ToArray();
+            var firstInstanceId = originalInstances[0].handCardInstanceId;
+            var discountedInstanceId = originalInstances[1].handCardInstanceId;
+
+            Assert.That(firstInstanceId, Is.Not.EqualTo(discountedInstanceId));
+            Assert.That(match.TrySetHandCardCostModifier(discountedInstanceId, -1, "local-player"), Is.True);
+            Assert.That(match.GetEffectiveCost(shell, firstInstanceId), Is.EqualTo(shell.cost));
+            Assert.That(match.GetEffectiveCost(shell, discountedInstanceId), Is.EqualTo(System.Math.Max(0, shell.cost - 1)));
+            var energyBeforeInvalidPlay = match.Energy;
+            var invalidInstance = match.ApplyPlayCard(shell,
+                match.CreatePlayCardCommand("tk_016", handCardInstanceId: "local-hand-not-in-hand"));
+            Assert.That(invalidInstance.Code, Is.EqualTo(DemoCommandRejectionCode.CardNotInHand));
+            Assert.That(match.Energy, Is.EqualTo(energyBeforeInvalidPlay));
+
+            Assert.That(match.TryCast(shell, out _, firstInstanceId), Is.True);
+            Assert.That(match.HandCards, Has.Length.EqualTo(1));
+            Assert.That(match.HandCards[0].handCardInstanceId, Is.EqualTo(discountedInstanceId));
+            Assert.That(match.GetEffectiveCost(shell, discountedInstanceId), Is.EqualTo(System.Math.Max(0, shell.cost - 1)));
+
+            match.EndPlayerTurn();
+            Assert.That(match.HandCards[0].costModifier, Is.Zero);
+            Assert.That(match.HandCards[0].expiresAtEndOfTurnPlayerId, Is.Empty);
+            Assert.That(match.GetEffectiveCost(shell, discountedInstanceId), Is.EqualTo(shell.cost));
+        }
+
+        [Test]
+        public void LocalDeploymentRejectionClassifiesCostUsingTheSelectedDuplicate()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("pf_001", out var spider), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_008", out var golem), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { spider.id, golem.id, golem.id });
+            var firstGolem = match.HandCards[1];
+            var secondGolem = match.HandCards[2];
+            Assert.That(match.TrySetHandCardCostModifier(firstGolem.handCardInstanceId, -1, "local-player"), Is.True);
+            Assert.That(match.ApplyDeploy(spider, match.CreateDeployCommand(spider.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+            Assert.That(match.Energy, Is.EqualTo(5));
+
+            var result = match.ApplyDeploy(golem,
+                match.CreateDeployCommand(golem.id, DemoSlotKind.Unit, 1, handCardInstanceId: secondGolem.handCardInstanceId));
+
+            Assert.That(match.GetEffectiveCost(golem, firstGolem.handCardInstanceId), Is.EqualTo(5));
+            Assert.That(match.GetEffectiveCost(golem, secondGolem.handCardInstanceId), Is.EqualTo(6));
+            Assert.That(result.Code, Is.EqualTo(DemoCommandRejectionCode.InsufficientRedstone));
+            Assert.That(match.Energy, Is.EqualTo(5));
+            Assert.That(match.HandCards.Select(value => value.handCardInstanceId),
+                Does.Contain(secondGolem.handCardInstanceId));
+        }
+
+        [Test]
+        public void LocalDeploymentPreviewRejectsAmbiguousDuplicateWithoutSelectedInstance()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("pf_001", out var spider), Is.True);
+            Assert.That(registry.TryGetDefinition("pf_008", out var golem), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { spider.id, golem.id, golem.id });
+            var discountedGolem = match.HandCards[1];
+            var fullCostGolem = match.HandCards[2];
+            Assert.That(match.TrySetHandCardCostModifier(discountedGolem.handCardInstanceId, -1, "local-player"), Is.True);
+            Assert.That(match.TryDeploy(spider, DemoSlotKind.Unit, 0, out _), Is.True);
+
+            var ambiguous = DemoDeploymentRules.Evaluate(match, golem, DemoSlotKind.Unit, 1);
+            var discounted = DemoDeploymentRules.Evaluate(match, golem, DemoSlotKind.Unit, 1,
+                handCardInstanceId: discountedGolem.handCardInstanceId);
+            var fullCost = DemoDeploymentRules.Evaluate(match, golem, DemoSlotKind.Unit, 1,
+                handCardInstanceId: fullCostGolem.handCardInstanceId);
+            Assert.That(ambiguous.IsLegal, Is.False, "duplicate copies require an exact selection");
+            Assert.That(discounted.IsLegal, Is.True, "the selected discounted copy is payable at five");
+            Assert.That(fullCost.IsLegal, Is.False, "the undiscounted copy costs six after one energy was spent");
+            Assert.That(() => match.CreateDeployCommand(golem.id, DemoSlotKind.Unit, 1),
+                Throws.ArgumentException, "ambiguous command creation must require an exact hand instance");
+        }
+
+        [Test]
         public void LocalDemoSupportsDeployCastAndTurnLoop()
         {
             var registry = CardContentLoader.Load();
@@ -48,11 +147,14 @@ namespace BiomeRivals.Demo.Tests
         {
             var drawing = new DemoLocalMatch();
             drawing.ResetDeckAndHand(new[] { "pf_001" }, new[] { "pf_002", "pf_003" });
+            var originalHandInstanceId = drawing.HandCards.Single().handCardInstanceId;
             drawing.EndPlayerTurn();
             var draw = drawing.BeginNextPlayerTurn();
             Assert.That(draw.Outcome, Is.EqualTo(DemoDrawOutcome.Drawn));
             Assert.That(draw.CardId, Is.EqualTo("pf_003"));
             Assert.That(drawing.Hand, Does.Contain("pf_003"));
+            Assert.That(drawing.HandCards.Last().cardId, Is.EqualTo("pf_003"));
+            Assert.That(drawing.HandCards.Last().handCardInstanceId, Is.Not.EqualTo(originalHandInstanceId));
             Assert.That(drawing.Deck, Has.Count.EqualTo(1));
 
             var burning = new DemoLocalMatch();
@@ -133,6 +235,8 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(excavated, Is.EqualTo(new[] { "tk_006" }));
             Assert.That(match.BuriedCount, Is.Zero);
             Assert.That(match.Hand, Does.Contain("tk_006"));
+            Assert.That(match.HandCards.Single(value => value.cardId == "tk_006").handCardInstanceId,
+                Does.StartWith("local-hand-"));
             Assert.That(match.PlayerArmor, Is.EqualTo(2));
             Assert.That(match.ExcavatedThisTurn, Is.True);
         }
@@ -162,6 +266,29 @@ namespace BiomeRivals.Demo.Tests
             match.EndPlayerTurn();
             Assert.That(match.ExcavatedThisTurn, Is.False);
             Assert.That(match.GetEffectiveCost(raider), Is.EqualTo(3));
+        }
+
+        [Test]
+        public void LocalBadlandsRaiderStacksExcavationAndHandInstanceDiscountBeforeClampingAtZero()
+        {
+            var registry = CardContentLoader.Load();
+            Assert.That(registry.TryGetDefinition("db_005", out var raider), Is.True);
+            var match = new DemoLocalMatch();
+            match.ResetDeckAndHand(new[] { raider.id }, new[] { "db_001", "tk_006" }, new[] { "tk_006" });
+            match.EndPlayerTurn();
+            var draw = match.BeginNextPlayerTurn();
+            Assert.That(draw.ExcavatedCardIds, Is.EqualTo(new[] { "tk_006" }));
+            Assert.That(match.ExcavatedThisTurn, Is.True);
+
+            var raiderHandCard = match.HandCards.Single(value => value.cardId == raider.id);
+            Assert.That(match.TrySetHandCardCostModifier(raiderHandCard.handCardInstanceId, -3, "local-player"), Is.True);
+            Assert.That(match.GetEffectiveCost(raider, raiderHandCard.handCardInstanceId), Is.Zero);
+            SetPrivateProperty(match, "Energy", 0);
+
+            Assert.That(match.TryDeploy(raider, DemoSlotKind.Unit, 0, out _, handCardInstanceId: raiderHandCard.handCardInstanceId), Is.True);
+            Assert.That(match.Energy, Is.Zero);
+            Assert.That(match.HandCards.Any(value => value.handCardInstanceId == raiderHandCard.handCardInstanceId), Is.False);
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 0)?.CardId, Is.EqualTo(raider.id));
         }
 
         [Test]
@@ -707,6 +834,34 @@ namespace BiomeRivals.Demo.Tests
         }
 
         [Test]
+        public void CraftingDeploymentConsumesTheSelectedProductInstanceNotAnotherCopy()
+        {
+            var registry = CardContentLoader.Load();
+            var match = new DemoLocalMatch();
+            match.ResetHand(new[] { "db_007", "db_002", "tk_006", "db_007" });
+            Assert.That(registry.TryGetDefinition("db_007", out var temple), Is.True);
+            var firstProduct = match.HandCards[0].handCardInstanceId;
+            var selectedProduct = match.HandCards[3].handCardInstanceId;
+
+            Assert.That(DemoDeploymentRules.CanPayWithCrafting(
+                match, temple, out _, selectedProduct), Is.True);
+            Assert.That(DemoDeploymentRules.CanPayWithCrafting(
+                match, temple, out _, "local-hand-no-longer-present"), Is.False,
+                "a stale selected ID must not silently resolve to the other copy");
+
+            var command = match.CreateDeployCommand(
+                temple.id, DemoSlotKind.Building, 0, MatchPaymentMethods.Crafting,
+                handCardInstanceId: selectedProduct);
+            var result = match.ApplyDeploy(temple, command);
+
+            Assert.That(result.Accepted, Is.True);
+            Assert.That(match.HandCards.Select(value => value.handCardInstanceId),
+                Is.EqualTo(new[] { firstProduct }));
+            Assert.That(match.Hand, Is.EqualTo(new[] { "db_007" }));
+            Assert.That(match.DiscardPile, Is.EqualTo(new[] { "db_002", "tk_006" }));
+        }
+
+        [Test]
         public void TreasureMapGeneratesEmeraldThenRepairsItsDesertTempleBeforeTheNormalDraw()
         {
             var registry = CardContentLoader.Load();
@@ -973,6 +1128,8 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(result.Accepted, Is.True);
             Assert.That(result.Message, Does.Contain("尸壳掉落"));
             Assert.That(match.Hand, Is.EqualTo(new[] { "tk_005" }));
+            Assert.That(match.HandCards.Single().cardId, Is.EqualTo("tk_005"));
+            Assert.That(match.HandCards.Single().handCardInstanceId, Does.StartWith("local-hand-"));
             Assert.That(match.GetObject(false, DemoSlotKind.Unit, 0), Is.Null);
         }
 
@@ -1310,6 +1467,135 @@ namespace BiomeRivals.Demo.Tests
         }
 
         [Test]
+        public void SceneHandAndDetailsKeepDuplicateCardCostsBoundToTheClickedInstance()
+        {
+            var root = new GameObject("DuplicateHandUiTest");
+            try
+            {
+                var battlefield = root.AddComponent<DemoBattlefield3D>();
+                battlefield.Configure(
+                    Shader.Find("Standard") ?? Shader.Find("Universal Render Pipeline/Lit"),
+                    Shader.Find("BiomeRivals/Demo/GroundSurface"));
+                var controller = root.AddComponent<DemoSceneController>();
+                controller.BuildNow();
+
+                var matchField = typeof(DemoSceneController).GetField("_match", BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.That(matchField, Is.Not.Null);
+                var match = (DemoLocalMatch)matchField.GetValue(controller);
+                match.ResetHand(new[] { "db_005", "db_005" });
+                var originalHand = match.HandCards;
+                var firstInstanceId = originalHand[0].handCardInstanceId;
+                var discountedInstanceId = originalHand[1].handCardInstanceId;
+                Assert.That(match.TrySetHandCardCostModifier(discountedInstanceId, -2, "local-player"), Is.True);
+
+                var selectHandCard = typeof(DemoSceneController).GetMethod("SelectHandCard", BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.That(selectHandCard, Is.Not.Null);
+                selectHandCard.Invoke(controller, new object[] { "db_005", discountedInstanceId });
+
+                var handRoot = root.transform.Find("DemoCanvas/HandPlate/HandCards");
+                var firstCard = handRoot.GetComponentsInChildren<CardUI>(true)
+                    .Single(card => card.HandCardInstanceId == firstInstanceId);
+                var discountedCard = handRoot.GetComponentsInChildren<CardUI>(true)
+                    .Single(card => card.HandCardInstanceId == discountedInstanceId);
+                var detailsRoot = root.transform.Find("DemoCanvas/CardDetailsPanel/InspectorContent");
+                var details = detailsRoot.GetComponent<CardDetailsView>().CurrentCard;
+
+                Assert.That(firstCard.CardId, Is.EqualTo("db_005"));
+                Assert.That(firstCard.DisplayedCost, Is.EqualTo(firstCard.BaseCost));
+                Assert.That(discountedCard.CardId, Is.EqualTo("db_005"));
+                Assert.That(discountedCard.DisplayedCost, Is.EqualTo(1));
+                Assert.That(firstCard.gameObject.name, Is.Not.EqualTo(discountedCard.gameObject.name));
+                Assert.That(discountedCard.RectTransform.anchoredPosition.y, Is.GreaterThan(firstCard.RectTransform.anchoredPosition.y));
+                Assert.That(details.HandCardInstanceId, Is.EqualTo(discountedInstanceId));
+                Assert.That(details.DisplayedCost, Is.EqualTo(1));
+
+                firstCard.GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
+                details = detailsRoot.GetComponent<CardDetailsView>().CurrentCard;
+                Assert.That(details.HandCardInstanceId, Is.EqualTo(firstInstanceId));
+                Assert.That(details.DisplayedCost, Is.EqualTo(details.BaseCost));
+                Assert.That(handRoot.GetComponentsInChildren<CardUI>(true)
+                    .Single(card => card.HandCardInstanceId == discountedInstanceId).DisplayedCost, Is.EqualTo(1));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void CraftingScenePreviewBindsTheResetHandCardInstance()
+        {
+            var root = new GameObject("CraftingPreviewHandBindingTest");
+            try
+            {
+                var battlefield = root.AddComponent<DemoBattlefield3D>();
+                battlefield.Configure(
+                    Shader.Find("Standard") ?? Shader.Find("Universal Render Pipeline/Lit"),
+                    Shader.Find("BiomeRivals/Demo/GroundSurface"));
+                var controller = root.AddComponent<DemoSceneController>();
+                controller.BuildNow();
+                typeof(DemoSceneController).GetMethod("SetupCraftingPreview", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .Invoke(controller, new object[] { true });
+
+                var match = (DemoLocalMatch)typeof(DemoSceneController)
+                    .GetField("_match", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(controller);
+                var selectedInstanceId = typeof(DemoSceneController)
+                    .GetMethod("GetSelectedHandCardInstanceId", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .Invoke(controller, null) as string;
+                var inspector = root.transform.Find("DemoCanvas/CardDetailsPanel/InspectorContent");
+                var details = inspector.GetComponent<CardDetailsView>().CurrentCard;
+
+                Assert.That(match.HandCards.Any(card => card != null && card.handCardInstanceId == selectedInstanceId &&
+                    card.cardId == "db_007"), Is.True);
+                Assert.That(details.HandCardInstanceId, Is.EqualTo(selectedInstanceId));
+                Assert.That(inspector.Find("StaleHandSelection"), Is.Null);
+                Assert.That(inspector.Find("PayCrafting").GetComponent<UnityEngine.UI.Button>().interactable, Is.True);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void StaleSelectedCardInstanceDisablesInspectorActionsDespiteAnotherSameCard()
+        {
+            var root = new GameObject("StaleDuplicateHandUiTest");
+            try
+            {
+                var battlefield = root.AddComponent<DemoBattlefield3D>();
+                battlefield.Configure(
+                    Shader.Find("Standard") ?? Shader.Find("Universal Render Pipeline/Lit"),
+                    Shader.Find("BiomeRivals/Demo/GroundSurface"));
+                var controller = root.AddComponent<DemoSceneController>();
+                controller.BuildNow();
+
+                var matchField = typeof(DemoSceneController).GetField("_match", BindingFlags.Instance | BindingFlags.NonPublic);
+                var match = (DemoLocalMatch)matchField.GetValue(controller);
+                match.ResetHand(new[] { "db_005", "db_005" });
+                var staleInstanceId = match.HandCards[1].handCardInstanceId;
+                Assert.That(match.TrySetHandCardCostModifier(staleInstanceId, -2, "local-player"), Is.True);
+                typeof(DemoSceneController).GetMethod("SelectHandCard", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .Invoke(controller, new object[] { "db_005", staleInstanceId });
+
+                match.ResetHand(new[] { "db_005" });
+                typeof(DemoSceneController).GetMethod("RefreshAll", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .Invoke(controller, null);
+
+                var inspector = root.transform.Find("DemoCanvas/CardDetailsPanel/InspectorContent");
+                Assert.That(inspector.Find("StaleHandSelection"), Is.Not.Null);
+                Assert.That(inspector.Find("Cast"), Is.Null,
+                    "a remaining same-card copy must not make the stale selection actionable");
+                Assert.That(inspector.GetComponent<CardDetailsView>().CurrentCard.HandCardInstanceId,
+                    Is.Empty, "the details card must not masquerade as the remaining duplicate");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
         public void GeneratedSceneAndRuntimeHierarchyExist()
         {
             Assert.That(AssetDatabase.LoadAssetAtPath<SceneAsset>(DemoSceneBuilder.ScenePath), Is.Not.Null);
@@ -1571,10 +1857,13 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(root.transform.Find("DemoCanvas/FactionRail/Faction_plains_forest/SelectionAccent").gameObject.activeSelf, Is.True);
                 Assert.That(root.transform.Find("DemoCanvas/FactionRail/Faction_desert_badlands/SelectionAccent").gameObject.activeSelf, Is.False);
                 Assert.That(root.transform.Find("DemoCanvas/CardDetailsPanel/InspectorContent").GetComponent<RectTransform>().sizeDelta, Is.EqualTo(new Vector2(286f, 701f)));
-                var themedCard = GameObject.Find("Card_pf_001");
+                var themedCard = root.GetComponentsInChildren<CardUI>(true)
+                    .First(card => card.CardId == "pf_001").gameObject;
                 Assert.That(themedCard, Is.Not.Null);
-                var handCard = root.transform.Find("DemoCanvas/HandPlate/HandCards/Card_pf_001").GetComponent<CardUI>();
-                var detailCard = root.transform.Find("DemoCanvas/CardDetailsPanel/InspectorContent/Card_pf_001").GetComponent<CardUI>();
+                var handCard = root.transform.Find("DemoCanvas/HandPlate/HandCards").GetComponentsInChildren<CardUI>(true)
+                    .First(card => card.CardId == "pf_001");
+                var detailCard = root.transform.Find("DemoCanvas/CardDetailsPanel/InspectorContent").GetComponentsInChildren<CardUI>(true)
+                    .First(card => card.CardId == "pf_001");
                 var detailsView = root.transform.Find("DemoCanvas/CardDetailsPanel/InspectorContent").GetComponent<CardDetailsView>();
                 Assert.That(handCard, Is.Not.Null);
                 Assert.That(detailCard, Is.Not.Null);
@@ -1596,9 +1885,21 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(themedRules.alignment, Is.EqualTo(UnityEngine.TextAnchor.MiddleCenter));
                 Assert.That(themedRules.alignByGeometry, Is.True);
                 Assert.That(themedRules.resizeTextForBestFit, Is.True);
-                Assert.That(themedRules.resizeTextMinSize, Is.EqualTo(8));
+                Assert.That(themedRules.resizeTextMinSize, Is.EqualTo(9));
+                Assert.That(themedRules.resizeTextMaxSize, Is.EqualTo(12));
+                Assert.That(themedRules.rectTransform.sizeDelta.x,
+                    Is.EqualTo(themedCard.GetComponent<RectTransform>().sizeDelta.x - 28f).Within(0.01f));
                 Assert.That(themedRules.rectTransform.anchoredPosition.x, Is.Zero.Within(0.001f));
-                Assert.That(themedRules.rectTransform.anchoredPosition.y, Is.EqualTo(-themedCard.GetComponent<RectTransform>().sizeDelta.y * 0.21f).Within(0.01f));
+                Assert.That(themedRules.rectTransform.anchoredPosition.y,
+                    Is.EqualTo(-themedCard.GetComponent<RectTransform>().sizeDelta.y * 0.224f).Within(0.01f));
+                var themedArtRect = themedCard.transform.Find("ArtSurface").GetComponent<RectTransform>();
+                var themedTypeRect = themedCard.transform.Find("Type").GetComponent<RectTransform>();
+                Assert.That(themedRules.rectTransform.anchoredPosition.y + themedRules.rectTransform.sizeDelta.y * 0.5f,
+                    Is.LessThan(themedArtRect.anchoredPosition.y - themedArtRect.sizeDelta.y * 0.5f),
+                    "rules text must stay below the art surface");
+                Assert.That(themedRules.rectTransform.anchoredPosition.y - themedRules.rectTransform.sizeDelta.y * 0.5f,
+                    Is.LessThan(themedTypeRect.anchoredPosition.y + themedTypeRect.sizeDelta.y * 0.5f),
+                    "rules text must not collide with the type label");
                 var detailRules = detailCard.transform.Find("Rules").GetComponent<UnityEngine.UI.Text>();
                 Assert.That(detailRules.alignment, Is.EqualTo(UnityEngine.TextAnchor.MiddleCenter));
                 Assert.That(detailRules.resizeTextForBestFit, Is.True);
@@ -1666,7 +1967,8 @@ namespace BiomeRivals.Demo.Tests
                     Assert.That(decorRoot.Find(decorLandmarks[mapping, 1]), Is.Not.Null,
                         $"{themeId} decorations rebuild with the selected factions");
                     var mappedCardId = prefix + "_001";
-                    var card = GameObject.Find("Card_" + mappedCardId);
+                    var card = root.GetComponentsInChildren<CardUI>(true)
+                        .FirstOrDefault(view => view.CardId == mappedCardId)?.gameObject;
                     Assert.That(card, Is.Not.Null, themeId);
                     Assert.That(card.GetComponent<UnityEngine.UI.Image>().sprite.name, Is.EqualTo("CardFrame_" + themeId));
                     Assert.That(card.transform.Find("CostSocketFrame").GetComponent<UnityEngine.UI.Image>().sprite.name, Is.EqualTo("CardCostSocket_" + themeId));
@@ -1692,14 +1994,14 @@ namespace BiomeRivals.Demo.Tests
 
                 GameObject.Find("Faction_nether").GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
                 Assert.That(root.transform.Find("DemoCanvas/PlayerHUD/Name").GetComponent<UnityEngine.UI.Text>().text, Is.EqualTo("熔岩统御者"));
-                root.transform.Find("DemoCanvas/HandPlate/HandCards/Card_nt_006").GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
+                FindHandCard(root, "nt_006").GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
                 var implementedCast = root.transform.Find("DemoCanvas/CardDetailsPanel/InspectorContent/Cast").GetComponent<UnityEngine.UI.Button>();
                 Assert.That(implementedCast.interactable, Is.True);
                 Assert.That(implementedCast.GetComponentInChildren<UnityEngine.UI.Text>().text, Is.EqualTo("释放卡牌"));
                 Assert.That(root.transform.Find("DemoCanvas/CardDetailsPanel/InspectorContent/Implementation").GetComponent<UnityEngine.UI.Text>().text, Does.Contain("已接入"));
 
                 GameObject.Find("Faction_snow_ice").GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
-                root.transform.Find("DemoCanvas/HandPlate/HandCards/Card_si_001").GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
+                FindHandCard(root, "si_001").GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
                 var targetCast = root.transform.Find("DemoCanvas/CardDetailsPanel/InspectorContent/Cast").GetComponent<UnityEngine.UI.Button>();
                 Assert.That(targetCast.GetComponentInChildren<UnityEngine.UI.Text>().text, Is.EqualTo("选择敌方目标"));
                 targetCast.onClick.Invoke();
@@ -1996,20 +2298,22 @@ namespace BiomeRivals.Demo.Tests
             }
         }
 
-        [Test]
-        public void CardUiShowsARegisteredDiscountWithoutChangingBaseCost()
+        [TestCase(2, "-1")]
+        [TestCase(1, "-2")]
+        [TestCase(0, "-3")]
+        public void CardUiShowsTheFullEffectiveDiscountWithoutChangingBaseCost(int effectiveCost, string expectedDiscount)
         {
             var root = new GameObject("DiscountedCardTest", typeof(RectTransform), typeof(UnityEngine.UI.Image), typeof(CardUI));
             try
             {
                 var card = root.GetComponent<CardUI>();
-                card.Bind(CardContentLoader.Load(), "db_005", new Vector2(158, 216), true, null, null, 2);
+                card.Bind(CardContentLoader.Load(), "db_005", new Vector2(158, 216), true, null, null, effectiveCost);
 
                 Assert.That(card.BaseCost, Is.EqualTo(3));
-                Assert.That(card.DisplayedCost, Is.EqualTo(2));
-                Assert.That(root.transform.Find("Cost").GetComponent<UnityEngine.UI.Text>().text, Is.EqualTo("2"));
+                Assert.That(card.DisplayedCost, Is.EqualTo(effectiveCost));
+                Assert.That(root.transform.Find("Cost").GetComponent<UnityEngine.UI.Text>().text, Is.EqualTo(effectiveCost.ToString()));
                 Assert.That(root.transform.Find("CostModifierBadge").GetComponent<UnityEngine.UI.Image>().type, Is.EqualTo(UnityEngine.UI.Image.Type.Tiled));
-                Assert.That(root.transform.Find("CostModifier").GetComponent<UnityEngine.UI.Text>().text, Is.EqualTo("-1"));
+                Assert.That(root.transform.Find("CostModifier").GetComponent<UnityEngine.UI.Text>().text, Is.EqualTo(expectedDiscount));
             }
             finally
             {
@@ -2154,12 +2458,14 @@ namespace BiomeRivals.Demo.Tests
             var registry = CardContentLoader.Load();
             var match = new DemoLocalMatch();
             match.ResetHand(new[] { "or_002", "or_001", "or_001" });
+            var salmonInstanceId = match.HandCards[1].handCardInstanceId;
             Assert.That(registry.TryGetDefinition("or_002", out var guide), Is.True);
             Assert.That(registry.TryGetDefinition("or_001", out var salmon), Is.True);
             Assert.That(guide.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
 
             Assert.That(match.ApplyDeploy(guide, match.CreateDeployCommand("or_002", DemoSlotKind.Unit, 0)).Accepted, Is.True);
-            Assert.That(match.ApplyDeploy(salmon, match.CreateDeployCommand("or_001", DemoSlotKind.Unit, 2)).Accepted, Is.True);
+            Assert.That(match.ApplyDeploy(salmon, match.CreateDeployCommand("or_001", DemoSlotKind.Unit, 2,
+                handCardInstanceId: salmonInstanceId)).Accepted, Is.True);
             var firstMove = match.ApplyResolveChoice(match.CreateResolveChoiceCommand(match.PendingChoice.choiceId, 1));
             Assert.That(firstMove.Accepted, Is.True);
             Assert.That(firstMove.Message, Does.Contain("海豚向导"));
@@ -2229,9 +2535,11 @@ namespace BiomeRivals.Demo.Tests
 
             var movement = new DemoLocalMatch();
             movement.ResetHand(new[] { "or_001", "or_001", "or_001" });
+            var salmonInstanceIds = movement.HandCards.Select(card => card.handCardInstanceId).ToArray();
             movement.ResetOpponent(new[] { guardian });
             Assert.That(movement.ApplyDeploy(salmon,
-                movement.CreateDeployCommand("or_001", DemoSlotKind.Unit, 0)).Accepted, Is.True);
+                movement.CreateDeployCommand("or_001", DemoSlotKind.Unit, 0,
+                    handCardInstanceId: salmonInstanceIds[0])).Accepted, Is.True);
             var stayed = movement.ApplyResolveChoice(
                 movement.CreateResolveChoiceCommand(movement.PendingChoice.choiceId, -1));
             Assert.That(stayed.Accepted, Is.True);
@@ -2239,7 +2547,8 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(movement.HasTriggeredEffect(false, guardianObject.InstanceId, "effect.or_004.01"), Is.False);
 
             Assert.That(movement.ApplyDeploy(salmon,
-                movement.CreateDeployCommand("or_001", DemoSlotKind.Unit, 2)).Accepted, Is.True);
+                movement.CreateDeployCommand("or_001", DemoSlotKind.Unit, 2,
+                    handCardInstanceId: salmonInstanceIds[1])).Accepted, Is.True);
             var firstMove = movement.ApplyResolveChoice(
                 movement.CreateResolveChoiceCommand(movement.PendingChoice.choiceId, 1));
             Assert.That(firstMove.Accepted, Is.True);
@@ -2248,7 +2557,8 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(movement.HasTriggeredEffect(false, guardianObject.InstanceId, "effect.or_004.01"), Is.True);
 
             Assert.That(movement.ApplyDeploy(salmon,
-                movement.CreateDeployCommand("or_001", DemoSlotKind.Unit, 2)).Accepted, Is.True);
+                movement.CreateDeployCommand("or_001", DemoSlotKind.Unit, 2,
+                    handCardInstanceId: salmonInstanceIds[2])).Accepted, Is.True);
             var secondMove = movement.ApplyResolveChoice(
                 movement.CreateResolveChoiceCommand(movement.PendingChoice.choiceId, 0));
             Assert.That(secondMove.Accepted, Is.True);
@@ -2644,10 +2954,12 @@ namespace BiomeRivals.Demo.Tests
 
             var match = new DemoLocalMatch();
             match.ResetHand(new[] { reef.id, salmon.id, salmon.id });
+            var firstSalmonInstanceId = match.HandCards[1].handCardInstanceId;
             Assert.That(match.ApplyDeploy(reef,
                 match.CreateDeployCommand(reef.id, DemoSlotKind.Building, 0)).Accepted, Is.True);
             var first = match.ApplyDeploy(salmon,
-                match.CreateDeployCommand(salmon.id, DemoSlotKind.Unit, 0));
+                match.CreateDeployCommand(salmon.id, DemoSlotKind.Unit, 0,
+                    handCardInstanceId: firstSalmonInstanceId));
             Assert.That(first.Accepted, Is.True);
             Assert.That(first.Message, Does.Contain("珊瑚滋养触发 1 次"));
             Assert.That(match.GetObject(true, DemoSlotKind.Unit, 0).MaxHealth, Is.EqualTo(3));
@@ -2767,6 +3079,8 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(deployed.Accepted, Is.True);
             Assert.That(deployed.Message, Does.Contain("小麦置入手牌"));
             Assert.That(match.Hand, Is.EqualTo(new[] { "tk_002" }));
+            Assert.That(match.HandCards.Single().cardId, Is.EqualTo("tk_002"));
+            Assert.That(match.HandCards.Single().handCardInstanceId, Does.StartWith("local-hand-"));
             Assert.That(match.GetObject(true, DemoSlotKind.Unit, 1).CardId, Is.EqualTo(farmer.id));
         }
 
@@ -2853,11 +3167,14 @@ namespace BiomeRivals.Demo.Tests
                 match.CreateDeployCommand(sheep.id, DemoSlotKind.Unit, 1)).Accepted, Is.True);
             var target = match.GetObject(true, DemoSlotKind.Unit, 1);
             match.ResetDeckAndHand(new[] { wool.id, wool.id }, System.Array.Empty<string>());
+            var woolInstanceIds = match.HandCards.Select(card => card.handCardInstanceId).ToArray();
 
             var first = match.ApplyPlayCard(wool,
-                match.CreatePlayCardCommand(wool.id, "UNIT", target.InstanceId));
+                match.CreatePlayCardCommand(wool.id, "UNIT", target.InstanceId,
+                    handCardInstanceId: woolInstanceIds[0]));
             var second = match.ApplyPlayCard(wool,
-                match.CreatePlayCardCommand(wool.id, "UNIT", target.InstanceId));
+                match.CreatePlayCardCommand(wool.id, "UNIT", target.InstanceId,
+                    handCardInstanceId: woolInstanceIds[1]));
 
             Assert.That(first.Accepted, Is.True, first.Message);
             Assert.That(second.Accepted, Is.True, second.Message);
@@ -3036,8 +3353,10 @@ namespace BiomeRivals.Demo.Tests
                 match.CreateDeployCommand(bearDefinition.id, DemoSlotKind.Unit, 1)).Accepted, Is.True);
             var bear = match.GetObject(true, DemoSlotKind.Unit, 1);
             match.ResetDeckAndHand(new[] { woolDefinition.id, woolDefinition.id }, System.Array.Empty<string>());
+            var woolInstanceId = match.HandCards[0].handCardInstanceId;
             Assert.That(match.ApplyPlayCard(woolDefinition,
-                match.CreatePlayCardCommand(woolDefinition.id, "UNIT", bear.InstanceId)).Accepted, Is.True);
+                match.CreatePlayCardCommand(woolDefinition.id, "UNIT", bear.InstanceId,
+                    handCardInstanceId: woolInstanceId)).Accepted, Is.True);
 
             Assert.That(bear.Attack, Is.EqualTo(4));
             Assert.That(bear.TemporaryAttackModifier, Is.Zero);
@@ -3262,17 +3581,21 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(registry.TryGetDefinition("pf_003", out var wolf), Is.True);
             var match = new DemoLocalMatch();
             match.ResetDeckAndHand(new[] { sand.id, sand.id }, System.Array.Empty<string>());
+            var sandInstanceIds = match.HandCards.Select(card => card.handCardInstanceId).ToArray();
             match.ResetOpponent(new[] { bee, sheep, wolf, sensor }, new[] { 0, 1, 3 });
 
-            Assert.That(match.ApplyPlayCard(sand, match.CreatePlayCardCommand(sand.id)).Accepted, Is.True);
+            Assert.That(match.ApplyPlayCard(sand, match.CreatePlayCardCommand(sand.id,
+                handCardInstanceId: sandInstanceIds[0])).Accepted, Is.True);
             Assert.That(match.CardsPlayedThisTurn(true), Is.EqualTo(1));
             Assert.That(match.HasPlayerStatus(true, "DARK"), Is.False);
-            var second = match.ApplyPlayCard(sand, match.CreatePlayCardCommand(sand.id));
+            var second = match.ApplyPlayCard(sand,
+                match.CreatePlayCardCommand(sand.id, handCardInstanceId: sandInstanceIds[1]));
             Assert.That(second.Accepted, Is.True, second.Message);
             Assert.That(match.CardsPlayedThisTurn(true), Is.EqualTo(2));
             Assert.That(match.HasPlayerStatus(true, "DARK"), Is.True);
 
             match.ResetHand(new[] { snowball.id, snowball.id });
+            var snowballInstanceId = match.HandCards[0].handCardInstanceId;
             var left = match.GetObject(false, DemoSlotKind.Unit, 0);
             var middle = match.GetObject(false, DemoSlotKind.Unit, 1);
             var right = match.GetObject(false, DemoSlotKind.Unit, 3);
@@ -3282,11 +3605,13 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(DemoCardTargeting.IsLegalTarget(match, rule, false, DemoSlotKind.Unit, right), Is.True);
 
             var rejected = match.ApplyPlayCard(snowball,
-                match.CreatePlayCardCommand(snowball.id, "UNIT", middle.InstanceId));
+                match.CreatePlayCardCommand(snowball.id, "UNIT", middle.InstanceId,
+                    handCardInstanceId: snowballInstanceId));
             Assert.That(rejected.Accepted, Is.False);
             Assert.That(match.HasTargetedEnemyObjectThisTurn(true), Is.False);
             var accepted = match.ApplyPlayCard(snowball,
-                match.CreatePlayCardCommand(snowball.id, "UNIT", left.InstanceId));
+                match.CreatePlayCardCommand(snowball.id, "UNIT", left.InstanceId,
+                    handCardInstanceId: snowballInstanceId));
             Assert.That(accepted.Accepted, Is.True, accepted.Message);
             Assert.That(match.HasTargetedEnemyObjectThisTurn(true), Is.True);
             Assert.That(DemoCardTargeting.IsLegalTarget(match, rule, false, DemoSlotKind.Unit, middle), Is.True);
@@ -3597,10 +3922,12 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(hut.effectImplementationStatus, Is.EqualTo("IMPLEMENTED"));
             var match = new DemoLocalMatch();
             match.ResetDeckAndHand(new[] { hut.id, bee.id, bee.id }, new[] { "pf_001" });
+            var firstBeeInstanceId = match.HandCards[1].handCardInstanceId;
             Assert.That(match.ApplyDeploy(hut,
                 match.CreateDeployCommand(hut.id, DemoSlotKind.Building, 0)).Accepted, Is.True);
             Assert.That(match.ApplyDeploy(bee,
-                match.CreateDeployCommand(bee.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+                match.CreateDeployCommand(bee.id, DemoSlotKind.Unit, 0,
+                    handCardInstanceId: firstBeeInstanceId)).Accepted, Is.True);
             Assert.That(match.ApplyDeploy(bee,
                 match.CreateDeployCommand(bee.id, DemoSlotKind.Unit, 2)).Accepted, Is.True);
             match.GetObject(true, DemoSlotKind.Unit, 0).Health = 1;
@@ -3633,14 +3960,19 @@ namespace BiomeRivals.Demo.Tests
             match.BeginNextPlayerTurn();
             Assert.That(match.MaxEnergy, Is.EqualTo(8));
             match.ResetHand(new[] { hut.id, hut.id, bee.id, bee.id });
+            var handInstanceIds = match.HandCards.Select(card => card.handCardInstanceId).ToArray();
             Assert.That(match.ApplyDeploy(hut,
-                match.CreateDeployCommand(hut.id, DemoSlotKind.Building, 0)).Accepted, Is.True);
+                match.CreateDeployCommand(hut.id, DemoSlotKind.Building, 0,
+                    handCardInstanceId: handInstanceIds[0])).Accepted, Is.True);
             Assert.That(match.ApplyDeploy(hut,
-                match.CreateDeployCommand(hut.id, DemoSlotKind.Building, 1)).Accepted, Is.True);
+                match.CreateDeployCommand(hut.id, DemoSlotKind.Building, 1,
+                    handCardInstanceId: handInstanceIds[1])).Accepted, Is.True);
             Assert.That(match.ApplyDeploy(bee,
-                match.CreateDeployCommand(bee.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+                match.CreateDeployCommand(bee.id, DemoSlotKind.Unit, 0,
+                    handCardInstanceId: handInstanceIds[2])).Accepted, Is.True);
             Assert.That(match.ApplyDeploy(bee,
-                match.CreateDeployCommand(bee.id, DemoSlotKind.Unit, 1)).Accepted, Is.True);
+                match.CreateDeployCommand(bee.id, DemoSlotKind.Unit, 1,
+                    handCardInstanceId: handInstanceIds[3])).Accepted, Is.True);
             match.GetObject(true, DemoSlotKind.Unit, 0).Health = 1;
             match.GetObject(true, DemoSlotKind.Unit, 1).Health = 1;
 
@@ -3758,6 +4090,7 @@ namespace BiomeRivals.Demo.Tests
             var match = new DemoLocalMatch();
             match.ResetDeckAndHand(new[] { "nt_006", "nt_006", "nt_002" },
                 new[] { "nt_001", "nt_001", "nt_001", "nt_001" });
+            var sacrificeInstanceIds = match.HandCards.Take(2).Select(card => card.handCardInstanceId).ToArray();
             Assert.That(match.ApplyDeploy(piglinDefinition,
                 match.CreateDeployCommand("nt_002", DemoSlotKind.Unit, 0)).Accepted, Is.True);
             var piglin = match.GetObject(true, DemoSlotKind.Unit, 0);
@@ -3766,12 +4099,12 @@ namespace BiomeRivals.Demo.Tests
             piglin.TemporaryAttackModifier = 2;
             piglin.TemporaryAttackModifierExpiresOnRound = 1;
 
-            Assert.That(match.TryCast(sacrifice, out _), Is.True);
+            Assert.That(match.TryCast(sacrifice, out _, sacrificeInstanceIds[0]), Is.True);
             Assert.That(piglin.Attack, Is.EqualTo(5));
             Assert.That(piglin.Health, Is.EqualTo(2));
             Assert.That(piglin.MaxHealth, Is.EqualTo(3));
             Assert.That(piglin.TemporaryAttackModifier, Is.EqualTo(2));
-            Assert.That(match.TryCast(sacrifice, out _), Is.True);
+            Assert.That(match.TryCast(sacrifice, out _, sacrificeInstanceIds[1]), Is.True);
             Assert.That(piglin.Attack, Is.EqualTo(5));
 
             match.EndPlayerTurn();
@@ -3823,10 +4156,13 @@ namespace BiomeRivals.Demo.Tests
 
             var lethal = new DemoLocalMatch();
             lethal.ResetHand(new[] { piglinDefinition.id, piglinDefinition.id });
+            var piglinInstanceIds = lethal.HandCards.Select(card => card.handCardInstanceId).ToArray();
             Assert.That(lethal.ApplyDeploy(piglinDefinition,
-                lethal.CreateDeployCommand(piglinDefinition.id, DemoSlotKind.Unit, 3)).Accepted, Is.True);
+                lethal.CreateDeployCommand(piglinDefinition.id, DemoSlotKind.Unit, 3,
+                    handCardInstanceId: piglinInstanceIds[0])).Accepted, Is.True);
             Assert.That(lethal.ApplyDeploy(piglinDefinition,
-                lethal.CreateDeployCommand(piglinDefinition.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
+                lethal.CreateDeployCommand(piglinDefinition.id, DemoSlotKind.Unit, 0,
+                    handCardInstanceId: piglinInstanceIds[1])).Accepted, Is.True);
             SetPrivateProperty(lethal, nameof(DemoLocalMatch.Energy), 2);
             SetPrivateProperty(lethal, nameof(DemoLocalMatch.OpponentLife), 1);
             var lethalResult = lethal.ApplyEndTurn(lethal.CreateEndTurnCommand());
@@ -3847,16 +4183,19 @@ namespace BiomeRivals.Demo.Tests
             var match = new DemoLocalMatch();
             match.ResetDeckAndHand(new[] { anchor.id, anchor.id, sacrifice.id, sacrifice.id },
                 new[] { "nt_001" });
+            var handInstanceIds = match.HandCards.Select(card => card.handCardInstanceId).ToArray();
             Assert.That(match.ApplyDeploy(anchor,
-                match.CreateDeployCommand(anchor.id, DemoSlotKind.Building, 2)).Accepted, Is.True);
+                match.CreateDeployCommand(anchor.id, DemoSlotKind.Building, 2,
+                    handCardInstanceId: handInstanceIds[0])).Accepted, Is.True);
             Assert.That(match.ApplyDeploy(anchor,
-                match.CreateDeployCommand(anchor.id, DemoSlotKind.Building, 0)).Accepted, Is.True);
+                match.CreateDeployCommand(anchor.id, DemoSlotKind.Building, 0,
+                    handCardInstanceId: handInstanceIds[1])).Accepted, Is.True);
             SetPrivateProperty(match, nameof(DemoLocalMatch.Energy), 2);
 
-            Assert.That(match.TryCast(sacrifice, out _), Is.True);
+            Assert.That(match.TryCast(sacrifice, out _, handInstanceIds[2]), Is.True);
             Assert.That(match.TemporaryEnergy, Is.EqualTo(2));
             Assert.That(match.Energy, Is.EqualTo(3));
-            Assert.That(match.TryCast(sacrifice, out _), Is.True);
+            Assert.That(match.TryCast(sacrifice, out _, handInstanceIds[3]), Is.True);
             Assert.That(match.TemporaryEnergy, Is.EqualTo(1));
             Assert.That(match.Energy, Is.EqualTo(2));
 
@@ -3915,12 +4254,15 @@ namespace BiomeRivals.Demo.Tests
 
             match.ResetDeckAndHand(
                 new[] { piglinDefinition.id, anchorDefinition.id, anchorDefinition.id }, new string[0]);
+            var anchorInstanceIds = match.HandCards.Skip(1).Select(card => card.handCardInstanceId).ToArray();
             Assert.That(match.ApplyDeploy(piglinDefinition,
                 match.CreateDeployCommand(piglinDefinition.id, DemoSlotKind.Unit, 0)).Accepted, Is.True);
             Assert.That(match.ApplyDeploy(anchorDefinition,
-                match.CreateDeployCommand(anchorDefinition.id, DemoSlotKind.Building, 0)).Accepted, Is.True);
+                match.CreateDeployCommand(anchorDefinition.id, DemoSlotKind.Building, 0,
+                    handCardInstanceId: anchorInstanceIds[0])).Accepted, Is.True);
             Assert.That(match.ApplyDeploy(anchorDefinition,
-                match.CreateDeployCommand(anchorDefinition.id, DemoSlotKind.Building, 2)).Accepted, Is.True);
+                match.CreateDeployCommand(anchorDefinition.id, DemoSlotKind.Building, 2,
+                    handCardInstanceId: anchorInstanceIds[1])).Accepted, Is.True);
             Assert.That(match.Energy, Is.Zero);
 
             match.EndPlayerTurn();
@@ -4157,6 +4499,10 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(match.OpponentBattlefield.Count(value => value.CardId == "tk_015"), Is.Zero);
             Assert.That(match.OpponentBattlefield.Count(value => value.SlotKind == DemoSlotKind.Unit), Is.EqualTo(4));
         }
+
+        private static CardUI FindHandCard(GameObject root, string cardId) =>
+            root.transform.Find("DemoCanvas/HandPlate/HandCards").GetComponentsInChildren<CardUI>(true)
+                .First(card => card.CardId == cardId && !string.IsNullOrEmpty(card.HandCardInstanceId));
 
         private static float ProjectedWidth(Camera camera, Transform surface, Vector3[] vertices)
         {

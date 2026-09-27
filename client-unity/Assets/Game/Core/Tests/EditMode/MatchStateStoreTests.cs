@@ -18,11 +18,245 @@ namespace BiomeRivals.Core.Tests
                 revision = 3, players = new[] { new PlayerStateDto(), new PlayerStateDto() }
             };
 
-            store.Replace(snapshot);
+            ReplaceSnapshot(store, snapshot);
 
             Assert.That(store.Current, Is.SameAs(snapshot));
             Assert.That(store.Current.revision, Is.EqualTo(3));
             Assert.That(changed, Is.SameAs(snapshot));
+        }
+
+        [Test]
+        public void Replace_RecoverySnapshotPreservesOwnDuplicateHandInstancesAndHidesOpponent()
+        {
+            var store = new MatchStateStore();
+            var recovered = new MatchStateDto
+            {
+                matchId = "hand-instance-recovery", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                revision = 12, status = "ACTIVE", phase = "MAIN", turn = 3, activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto
+                    {
+                        playerId = "alice", hand = new[] { "pf_001", "pf_001" },
+                        handCards = new[]
+                        {
+                            new HandCardStateDto
+                            {
+                                handCardInstanceId = "hand-41", cardId = "pf_001", costModifier = -2,
+                                expiresAtEndOfTurnPlayerId = "alice"
+                            },
+                            new HandCardStateDto
+                            {
+                                handCardInstanceId = "hand-42", cardId = "pf_001", costModifier = 0,
+                                expiresAtEndOfTurnPlayerId = string.Empty
+                            }
+                        }
+                    },
+                    new PlayerStateDto
+                    {
+                        playerId = "bob", hand = new string[] { null, null },
+                        handCards = new HandCardStateDto[] { null, null }
+                    }
+                }
+            };
+
+            ReplaceSnapshot(store, recovered);
+
+            Assert.That(store.Current.players[0].handCards[0].handCardInstanceId, Is.EqualTo("hand-41"));
+            Assert.That(store.Current.players[0].handCards[0].costModifier, Is.EqualTo(-2));
+            Assert.That(store.Current.players[0].handCards[0].expiresAtEndOfTurnPlayerId, Is.EqualTo("alice"));
+            Assert.That(store.Current.players[0].handCards[1].handCardInstanceId, Is.EqualTo("hand-42"));
+            Assert.That(store.Current.players[0].handCards[1].costModifier, Is.Zero);
+            Assert.That(store.Current.players[1].hand, Is.EqualTo(new string[] { null, null }));
+            Assert.That(store.Current.players[1].handCards, Is.EqualTo(new HandCardStateDto[] { null, null }));
+        }
+
+        [Test]
+        public void Replace_RejectsSnapshotsWithMoreThanSevenCardsForEitherPlayer()
+        {
+            var eightCards = Enumerable.Repeat("pf_001", 8).ToArray();
+            var eightInstances = Enumerable.Range(1, 8).Select(index => new HandCardStateDto
+            {
+                handCardInstanceId = "hand-" + index, cardId = "pf_001"
+            }).ToArray();
+            var snapshot = new MatchStateDto
+            {
+                matchId = "oversized-hand-snapshot", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice", hand = eightCards, handCards = eightInstances },
+                    new PlayerStateDto
+                    {
+                        playerId = "bob", hand = Enumerable.Repeat<string>(null, 8).ToArray(),
+                        handCards = Enumerable.Repeat<HandCardStateDto>(null, 8).ToArray()
+                    }
+                }
+            };
+
+            Assert.Throws<InvalidOperationException>(() => new MatchStateStore().Replace(snapshot));
+
+            snapshot.players[0] = new PlayerStateDto { playerId = "alice" };
+            Assert.Throws<InvalidOperationException>(() => new MatchStateStore().Replace(snapshot));
+        }
+
+        [Test]
+        public void Apply_RejectsHandProjectionsWithMoreThanSevenCardsForEitherPlayer()
+        {
+            var oversizedHand = Enumerable.Repeat("pf_001", 8).ToArray();
+            var oversizedInstances = Enumerable.Range(1, 8).Select(index => new HandCardStateDto
+            {
+                handCardInstanceId = "hand-" + index, cardId = "pf_001"
+            }).ToArray();
+            var store = new MatchStateStore();
+
+            ReplaceSnapshot(store, CreateHandProjectionBaseSnapshot());
+            Assert.Throws<InvalidOperationException>(() => store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = Array.Empty<MatchEventDto>(),
+                handProjection = new HandProjectionDto
+                {
+                    ownPlayerId = "alice", ownHand = oversizedHand, ownHandCards = oversizedInstances,
+                    opponentPlayerId = "bob", opponentHandCount = 0
+                }
+            }));
+
+            ReplaceSnapshot(store, CreateHandProjectionBaseSnapshot());
+            Assert.Throws<InvalidOperationException>(() => store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = Array.Empty<MatchEventDto>(),
+                handProjection = new HandProjectionDto
+                {
+                    ownPlayerId = "alice", ownHand = Array.Empty<string>(),
+                    ownHandCards = Array.Empty<HandCardStateDto>(), opponentPlayerId = "bob", opponentHandCount = 8
+                }
+            }));
+        }
+
+        [Test]
+        public void Replace_RejectsMalformedHandInstanceIdsAndUnknownExpiryOwners()
+        {
+            foreach (var invalidCard in new[]
+            {
+                new HandCardStateDto { handCardInstanceId = "hand-nope", cardId = "pf_001" },
+                new HandCardStateDto
+                {
+                    handCardInstanceId = "hand-1", cardId = "pf_001", costModifier = -1,
+                    expiresAtEndOfTurnPlayerId = "mallory"
+                }
+            })
+            {
+                var snapshot = CreateHandProjectionBaseSnapshot();
+                snapshot.players[0].hand = new[] { "pf_001" };
+                snapshot.players[0].handCards = new[] { invalidCard };
+
+                Assert.Throws<InvalidOperationException>(() => new MatchStateStore().Replace(snapshot));
+            }
+        }
+
+        [Test]
+        public void Apply_RejectsMalformedHandInstanceIdsAndUnknownExpiryOwners()
+        {
+            foreach (var invalidCard in new[]
+            {
+                new HandCardStateDto { handCardInstanceId = "hand-nope", cardId = "pf_001" },
+                new HandCardStateDto
+                {
+                    handCardInstanceId = "hand-1", cardId = "pf_001", costModifier = -1,
+                    expiresAtEndOfTurnPlayerId = "mallory"
+                }
+            })
+            {
+                var store = new MatchStateStore();
+                ReplaceSnapshot(store, CreateHandProjectionBaseSnapshot());
+                Assert.Throws<InvalidOperationException>(() => ApplyHandProjection(store, new HandProjectionDto
+                {
+                    ownPlayerId = "alice", ownHand = new[] { "pf_001" }, ownHandCards = new[] { invalidCard },
+                    opponentPlayerId = "bob", opponentHandCount = 0
+                }));
+            }
+        }
+
+        private static MatchStateDto CreateHandProjectionBaseSnapshot() => new MatchStateDto
+        {
+            matchId = "oversized-hand-projection", viewerPlayerId = "alice",
+            protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+            players = new[] { new PlayerStateDto { playerId = "alice" }, new PlayerStateDto { playerId = "bob" } }
+        };
+
+        private static void ApplyHandProjection(MatchStateStore store, HandProjectionDto projection) => store.Apply(new MatchEventBatchDto
+        {
+            protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+            revision = store.Current.revision + 1, events = Array.Empty<MatchEventDto>(), handProjection = projection
+        });
+
+        [Test]
+        public void Apply_TerminalEndTurnProjectionClearsExpiredHandDiscountAndKeepsOpponentHandPrivate()
+        {
+            var store = new MatchStateStore();
+            ReplaceSnapshot(store, new MatchStateDto
+            {
+                matchId = "terminal-hand-cost-expiry", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                revision = 0, lastEventId = 0, status = "ACTIVE", turn = 1, activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto
+                    {
+                        playerId = "alice", hand = new[] { "pf_001" },
+                        handCards = new[] { new HandCardStateDto
+                        {
+                            handCardInstanceId = "hand-1", cardId = "pf_001", costModifier = -1,
+                            expiresAtEndOfTurnPlayerId = "alice"
+                        } }
+                    },
+                    new PlayerStateDto { playerId = "bob", hand = new string[] { null } }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 1, type = MatchEventTypes.HandCardCostModifierExpired,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", handCardInstanceId = "hand-1", cardId = "pf_001",
+                            expiredCostModifier = -1, costModifier = 0, effectiveCost = 1
+                        }
+                    },
+                    new MatchEventDto
+                    {
+                        eventId = 2, type = MatchEventTypes.MatchEnded,
+                        payload = new MatchEventPayloadDto { winnerPlayerId = "bob", reason = "HERO_DEFEATED" }
+                    }
+                },
+                handProjection = new HandProjectionDto
+                {
+                    ownPlayerId = "alice", ownHand = new[] { "pf_001" },
+                    ownHandCards = new[] { new HandCardStateDto
+                    {
+                        handCardInstanceId = "hand-1", cardId = "pf_001", costModifier = 0,
+                        expiresAtEndOfTurnPlayerId = string.Empty
+                    } },
+                    opponentPlayerId = "bob", opponentHandCount = 1
+                }
+            });
+
+            Assert.That(store.Current.status, Is.EqualTo("FINISHED"));
+            Assert.That(store.Current.winnerPlayerId, Is.EqualTo("bob"));
+            Assert.That(store.Current.players[0].handCards[0].costModifier, Is.Zero);
+            Assert.That(store.Current.players[0].handCards[0].expiresAtEndOfTurnPlayerId, Is.Empty);
+            Assert.That(store.Current.players[1].hand, Is.EqualTo(new string[] { null }));
+            Assert.That(store.Current.players[1].handCards, Has.Length.EqualTo(1));
+            Assert.That(store.Current.players[1].handCards[0], Is.Null);
         }
 
         [Test]
@@ -43,7 +277,7 @@ namespace BiomeRivals.Core.Tests
                 }
             };
 
-            store.Replace(snapshot);
+            ReplaceSnapshot(store, snapshot);
             Assert.That(store.Current.players[0].totalRedstone, Is.EqualTo(12));
             snapshot.players[0].totalRedstone = 11;
             Assert.Throws<InvalidOperationException>(() => new MatchStateStore().Replace(snapshot));
@@ -57,7 +291,7 @@ namespace BiomeRivals.Core.Tests
         public void Apply_ReplaysResourceGrantAndExpiryAndRejectsAnInconsistentTotal()
         {
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "energy-replay", viewerPlayerId = "alice",
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
@@ -130,7 +364,7 @@ namespace BiomeRivals.Core.Tests
         public void Apply_ReplaysPaidCardThenAutomaticPaymentFromTemporaryPool()
         {
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "priority-replay", viewerPlayerId = "alice",
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
@@ -187,7 +421,7 @@ namespace BiomeRivals.Core.Tests
         public void Apply_RejectsCardPaymentThatSpendsBaseBeforeTemporaryWithoutRemovingHand()
         {
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "priority-malformed", viewerPlayerId = "alice",
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
@@ -225,7 +459,7 @@ namespace BiomeRivals.Core.Tests
         public void Apply_ReplaysCrossPoolEquipmentPaymentAndRejectsBaseFirstAutomaticPayment()
         {
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "priority-equipment-replay", viewerPlayerId = "alice",
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
@@ -258,7 +492,7 @@ namespace BiomeRivals.Core.Tests
             Assert.That(store.Current.players[0].temporaryRedstone, Is.Zero);
             Assert.That(store.Current.players[0].equipment.cardId, Is.EqualTo("or_006"));
 
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "priority-auto-malformed", viewerPlayerId = "alice",
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
@@ -294,7 +528,7 @@ namespace BiomeRivals.Core.Tests
         public void Apply_ReplaysUnitDeploymentPaidEntirelyFromTemporaryEnergy()
         {
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "priority-unit-replay", viewerPlayerId = "alice",
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
@@ -347,7 +581,7 @@ namespace BiomeRivals.Core.Tests
                 }
             };
 
-            Assert.Throws<InvalidOperationException>(() => store.Replace(snapshot));
+            Assert.Throws<InvalidOperationException>(() => ReplaceSnapshot(store, snapshot));
             Assert.That(store.Current, Is.Null);
         }
 
@@ -355,7 +589,7 @@ namespace BiomeRivals.Core.Tests
         public void Clear_NotifiesSubscribersThatAuthoritativeStateEnded()
         {
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "match-1", protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
                 players = new[] { new PlayerStateDto(), new PlayerStateDto() }
@@ -374,7 +608,7 @@ namespace BiomeRivals.Core.Tests
         public void Apply_ReplaysPrivateMulliganThenStartsFirstTurn()
         {
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "opening-1",
                 viewerPlayerId = "alice",
@@ -457,7 +691,7 @@ namespace BiomeRivals.Core.Tests
         public void Apply_ReplaysDeploymentAndTurnState()
         {
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "match-1",
                 protocolVersion = GameVersions.Protocol,
@@ -544,7 +778,7 @@ namespace BiomeRivals.Core.Tests
                 health = 2, maxHealth = 2, slotKind = "UNIT", slotIndex = 0, occupiedSlots = 1, summonedTurn = 1
             };
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "match-structure", viewerPlayerId = "alice",
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
@@ -615,7 +849,7 @@ namespace BiomeRivals.Core.Tests
         public void Apply_RemovesOneHiddenOpponentHandSlotOnDeployment()
         {
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "match-1", viewerPlayerId = "alice",
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
@@ -656,7 +890,7 @@ namespace BiomeRivals.Core.Tests
         public void Apply_ReplaysMaterialConsumptionBeforeCraftedDeployment()
         {
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "match-crafting", viewerPlayerId = "alice",
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
@@ -721,7 +955,7 @@ namespace BiomeRivals.Core.Tests
         public void Apply_ReplaysPublicCraftingAgainstHiddenOpponentHandSlots()
         {
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "match-hidden-crafting", viewerPlayerId = "alice",
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
@@ -791,7 +1025,7 @@ namespace BiomeRivals.Core.Tests
             aliceSlots[0] = attacker.instanceId;
             bobSlots[1] = target.instanceId;
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "match-1", protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
                 revision = 2, lastEventId = 2, turn = 2, phase = "COMBAT", activePlayerIndex = 0,
@@ -845,7 +1079,7 @@ namespace BiomeRivals.Core.Tests
             var unitSlots = new string[4];
             unitSlots[2] = magmaCube.instanceId;
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "match-1", viewerPlayerId = "alice",
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
@@ -898,7 +1132,7 @@ namespace BiomeRivals.Core.Tests
         public void Apply_ReplaysPrivateDrawAndPublicBurnWithoutLeakingOpponentCard()
         {
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "match-1", viewerPlayerId = "alice",
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
@@ -937,7 +1171,7 @@ namespace BiomeRivals.Core.Tests
         public void Apply_ReplaysPrivateGeneratedHandCardsAndPublicGeneratedDiscards()
         {
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "match-1", viewerPlayerId = "alice",
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
@@ -981,7 +1215,7 @@ namespace BiomeRivals.Core.Tests
         public void Apply_ReplaysBurialAndPublicExcavationWithoutRevealingOpponentHandSlots()
         {
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "match-1", viewerPlayerId = "alice",
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
@@ -1054,7 +1288,7 @@ namespace BiomeRivals.Core.Tests
             templeSlots[0] = "object-20";
             templeSlots[1] = "object-20";
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "match-temple-trap", viewerPlayerId = "alice", status = "ACTIVE",
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
@@ -1148,7 +1382,7 @@ namespace BiomeRivals.Core.Tests
         public void Apply_ReplaysFatigueAsTrueHeroDamage()
         {
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "match-1", viewerPlayerId = "alice",
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
@@ -1184,7 +1418,7 @@ namespace BiomeRivals.Core.Tests
         public void Apply_ReplaysPlayedCardSelfDamagePrivateDrawAndArmor()
         {
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "match-1", viewerPlayerId = "alice",
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
@@ -1226,7 +1460,7 @@ namespace BiomeRivals.Core.Tests
         public void Apply_ReplaysHealingBeforeDamageInEventOrder()
         {
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "match-1", viewerPlayerId = "alice",
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
@@ -1248,7 +1482,7 @@ namespace BiomeRivals.Core.Tests
         public void Apply_ReplaysEndCrystalPulseAndTrueDamageBacklashFromStableSourceInstance()
         {
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "match-end-crystal", viewerPlayerId = "alice", status = "ACTIVE",
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
@@ -1303,7 +1537,7 @@ namespace BiomeRivals.Core.Tests
             var slots = new string[4];
             slots[1] = target.instanceId;
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "match-1", protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
                 players = new[]
@@ -1363,7 +1597,7 @@ namespace BiomeRivals.Core.Tests
             var slots = new string[4];
             slots[1] = target.instanceId;
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "match-health", protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
                 players = new[]
@@ -1436,7 +1670,7 @@ namespace BiomeRivals.Core.Tests
                 }
             };
 
-            Assert.Throws<InvalidOperationException>(() => store.Replace(snapshot));
+            Assert.Throws<InvalidOperationException>(() => ReplaceSnapshot(store, snapshot));
         }
 
         [Test]
@@ -1453,7 +1687,7 @@ namespace BiomeRivals.Core.Tests
                 health = 1, maxHealth = 5, slotKind = "BUILDING", slotIndex = 0, occupiedSlots = 1, summonedTurn = 1
             };
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "match-1", protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
                 players = new[]
@@ -1502,7 +1736,7 @@ namespace BiomeRivals.Core.Tests
         public void Apply_ReplaysPrivateCaveBatScryWithoutLeakingTheCardToAnOpponent()
         {
             var ownerStore = new MatchStateStore();
-            ownerStore.Replace(new MatchStateDto
+            ReplaceSnapshot(ownerStore, new MatchStateDto
             {
                 matchId = "match-bat", viewerPlayerId = "alice", protocolVersion = GameVersions.Protocol,
                 rulesetVersion = GameVersions.Ruleset, status = "ACTIVE", phase = "MAIN",
@@ -1569,7 +1803,7 @@ namespace BiomeRivals.Core.Tests
             Assert.That(ownerStore.Current.pendingChoice, Is.Null);
 
             var opponentStore = new MatchStateStore();
-            opponentStore.Replace(new MatchStateDto
+            ReplaceSnapshot(opponentStore, new MatchStateDto
             {
                 matchId = "match-bat", viewerPlayerId = "bob", protocolVersion = GameVersions.Protocol,
                 rulesetVersion = GameVersions.Ruleset, status = "ACTIVE", phase = "MAIN",
@@ -1629,7 +1863,7 @@ namespace BiomeRivals.Core.Tests
         public void Apply_ReplaysPrivateArchaeologyChoiceAndItsResolution()
         {
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "match-1", viewerPlayerId = "alice", protocolVersion = GameVersions.Protocol,
                 rulesetVersion = GameVersions.Ruleset, status = "ACTIVE", phase = "MAIN",
@@ -1727,7 +1961,7 @@ namespace BiomeRivals.Core.Tests
         public void Replace_AcceptsRedactedOpponentChoiceWithoutLeakingCardIds()
         {
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "match-1", viewerPlayerId = "bob", protocolVersion = GameVersions.Protocol,
                 rulesetVersion = GameVersions.Ruleset, status = "ACTIVE", phase = "MAIN",
@@ -1764,7 +1998,7 @@ namespace BiomeRivals.Core.Tests
             Assert.That(store.Current.pendingChoice.options.All(option => option.cardId == string.Empty), Is.True);
             Assert.That(store.Current.pendingChoice.options.All(option => !option.selectable), Is.True);
             store.Current.pendingChoice.options[0].cardId = "db_001";
-            Assert.Throws<InvalidOperationException>(() => store.Replace(store.Current),
+            Assert.Throws<InvalidOperationException>(() => ReplaceSnapshot(store, store.Current),
                 "A non-owner snapshot must be rejected if it leaks a real option card id.");
         }
 
@@ -1772,7 +2006,7 @@ namespace BiomeRivals.Core.Tests
         public void Apply_RejectsRevisionGapsBeforeMutation()
         {
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "match-1", protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
                 revision = 3, players = new[] { new PlayerStateDto(), new PlayerStateDto() }
@@ -1797,7 +2031,7 @@ namespace BiomeRivals.Core.Tests
                 health = 3, maxHealth = 3, slotKind = "UNIT", slotIndex = 1, occupiedSlots = 1, summonedTurn = 1
             };
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "slow-replay", protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
                 players = new[]
@@ -1871,7 +2105,7 @@ namespace BiomeRivals.Core.Tests
                 }
             };
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "poison-replay", protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
                 players = new[]
@@ -1945,7 +2179,7 @@ namespace BiomeRivals.Core.Tests
                 health = 4, maxHealth = 4, slotKind = "UNIT", slotIndex = 1, occupiedSlots = 1, summonedTurn = 1
             };
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "fire-replay", protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
                 players = new[]
@@ -2058,7 +2292,7 @@ namespace BiomeRivals.Core.Tests
                 }
             };
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "strider-replay", viewerPlayerId = "alice",
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
@@ -2142,7 +2376,7 @@ namespace BiomeRivals.Core.Tests
                 health = 4, maxHealth = 4, slotKind = "UNIT", slotIndex = 1, occupiedSlots = 1
             };
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "strider-invalid-replay", viewerPlayerId = "alice",
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
@@ -2188,7 +2422,7 @@ namespace BiomeRivals.Core.Tests
                 health = 6, maxHealth = 6, slotKind = "UNIT", slotIndex = 2, occupiedSlots = 1, summonedTurn = 1
             };
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "equipment-replay", viewerPlayerId = "alice", protocolVersion = GameVersions.Protocol,
                 rulesetVersion = GameVersions.Ruleset, status = "ACTIVE", phase = "MAIN", turn = 1, activePlayerIndex = 0,
@@ -2281,7 +2515,7 @@ namespace BiomeRivals.Core.Tests
                 health = 1, maxHealth = 2, slotKind = "UNIT", slotIndex = 2, occupiedSlots = 1, summonedTurn = 1
             };
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "snow-hut-replay", viewerPlayerId = "alice", protocolVersion = GameVersions.Protocol,
                 rulesetVersion = GameVersions.Ruleset, status = "ACTIVE", phase = "MAIN", turn = 2, activePlayerIndex = 0,
@@ -2348,7 +2582,7 @@ namespace BiomeRivals.Core.Tests
                 health = 2, maxHealth = 2, slotKind = "UNIT", slotIndex = 0, occupiedSlots = 1, summonedTurn = 1
             };
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "turtle-aura-replay", viewerPlayerId = "alice", protocolVersion = GameVersions.Protocol,
                 rulesetVersion = GameVersions.Ruleset, status = "ACTIVE", phase = "MAIN", turn = 1, activePlayerIndex = 0,
@@ -2395,7 +2629,7 @@ namespace BiomeRivals.Core.Tests
                 health = 2, maxHealth = 2, slotKind = "UNIT", slotIndex = 0, occupiedSlots = 1, summonedTurn = 1
             };
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "coral-growth-replay", viewerPlayerId = "alice", protocolVersion = GameVersions.Protocol,
                 rulesetVersion = GameVersions.Ruleset, status = "ACTIVE", phase = "MAIN", turn = 1, activePlayerIndex = 0,
@@ -2439,7 +2673,7 @@ namespace BiomeRivals.Core.Tests
                 summonedTurn = 1, keywords = new[] { "TAUNT" }
             };
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "iron-golem-replay", viewerPlayerId = "alice", protocolVersion = GameVersions.Protocol,
                 rulesetVersion = GameVersions.Ruleset, status = "ACTIVE", phase = "MAIN", turn = 1, activePlayerIndex = 0,
@@ -2485,7 +2719,7 @@ namespace BiomeRivals.Core.Tests
                 summonedTurn = 1, keywords = new[] { "TAUNT" }
             };
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "polar-bear-replay", viewerPlayerId = "alice", protocolVersion = GameVersions.Protocol,
                 rulesetVersion = GameVersions.Ruleset, status = "ACTIVE", phase = "MAIN", turn = 1, activePlayerIndex = 0,
@@ -2538,7 +2772,7 @@ namespace BiomeRivals.Core.Tests
                 summonedTurn = 1
             };
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "cactus-replay", viewerPlayerId = "alice", protocolVersion = GameVersions.Protocol,
                 rulesetVersion = GameVersions.Ruleset, status = "ACTIVE", phase = "COMBAT", turn = 1, activePlayerIndex = 0,
@@ -2586,7 +2820,7 @@ namespace BiomeRivals.Core.Tests
                 health = 1, maxHealth = 2, slotKind = "UNIT", slotIndex = 1, occupiedSlots = 1, summonedTurn = 1
             };
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "prismarine-replay", viewerPlayerId = "alice", protocolVersion = GameVersions.Protocol,
                 rulesetVersion = GameVersions.Ruleset, status = "ACTIVE", phase = "MAIN", turn = 1, activePlayerIndex = 0,
@@ -2667,7 +2901,7 @@ namespace BiomeRivals.Core.Tests
                 health = 2, maxHealth = 2, slotKind = "UNIT", slotIndex = 1, occupiedSlots = 1, summonedTurn = 1
             };
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "guardian-reaction-replay", viewerPlayerId = "alice", protocolVersion = GameVersions.Protocol,
                 rulesetVersion = GameVersions.Ruleset, status = "ACTIVE", phase = "MAIN", turn = 1, activePlayerIndex = 1,
@@ -2720,7 +2954,7 @@ namespace BiomeRivals.Core.Tests
         public void Apply_ReplaysDarkPlayerStatusAndTurnActionMarkers()
         {
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "dark-replay", viewerPlayerId = "alice", protocolVersion = GameVersions.Protocol,
                 rulesetVersion = GameVersions.Ruleset, status = "ACTIVE", phase = "MAIN", turn = 2, activePlayerIndex = 0,
@@ -2785,7 +3019,7 @@ namespace BiomeRivals.Core.Tests
         public void Replace_ReconnectSnapshotAtomicallyRestoresPrivateAndPersistentState()
         {
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "recovery-match", viewerPlayerId = "alice", protocolVersion = GameVersions.Protocol,
                 rulesetVersion = GameVersions.Ruleset, revision = 3, lastEventId = 8, status = "ACTIVE",
@@ -2854,7 +3088,7 @@ namespace BiomeRivals.Core.Tests
 
             var changedCount = 0;
             store.Changed += _ => changedCount++;
-            store.Replace(recovered);
+            ReplaceSnapshot(store, recovered);
 
             Assert.That(changedCount, Is.EqualTo(1));
             Assert.That(store.Current, Is.SameAs(recovered));
@@ -2879,7 +3113,7 @@ namespace BiomeRivals.Core.Tests
         public void Apply_ReplaysFirstHeroLifeLossForEitherPlayerAndClearsBothAtTurnEnd()
         {
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "hero-loss-replay", viewerPlayerId = "alice",
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
@@ -2936,7 +3170,7 @@ namespace BiomeRivals.Core.Tests
         public void Apply_RejectsHeroLifeLossMarkerAfterArmorOnlyDamage()
         {
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "armor-only-marker", viewerPlayerId = "alice",
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
@@ -3013,7 +3247,7 @@ namespace BiomeRivals.Core.Tests
             };
 
             var store = new MatchStateStore();
-            store.Replace(InitialState());
+            ReplaceSnapshot(store, InitialState());
             store.Apply(GrowthBatch(5));
             var piglin = store.Current.players[0].battlefield[0];
             Assert.That(store.Current.players[0].heroLifeLostThisTurn, Is.True);
@@ -3031,11 +3265,11 @@ namespace BiomeRivals.Core.Tests
             recovered.players[0].battlefield[0].attack = 5;
             recovered.players[0].battlefield[0].health = 2;
             recovered.players[0].battlefield[0].maxHealth = 3;
-            store.Replace(recovered);
+            ReplaceSnapshot(store, recovered);
             Assert.That(store.Current.players[0].battlefield[0].attack, Is.EqualTo(5));
 
             var invalid = new MatchStateStore();
-            invalid.Replace(InitialState());
+            ReplaceSnapshot(invalid, InitialState());
             Assert.Throws<InvalidOperationException>(() => invalid.Apply(GrowthBatch(6)));
         }
 
@@ -3048,7 +3282,7 @@ namespace BiomeRivals.Core.Tests
                 health = 2, maxHealth = 2, slotKind = "UNIT", slotIndex = 2, occupiedSlots = 1, summonedTurn = 1
             };
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "piglin-magma-replay", viewerPlayerId = "alice",
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
@@ -3162,7 +3396,7 @@ namespace BiomeRivals.Core.Tests
                 }
             };
             var store = new MatchStateStore();
-            store.Replace(InitialState());
+            ReplaceSnapshot(store, InitialState());
             store.Apply(new MatchEventBatchDto
             {
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
@@ -3175,7 +3409,7 @@ namespace BiomeRivals.Core.Tests
                 Is.EqualTo("tk_015"));
 
             var orphanStore = new MatchStateStore();
-            orphanStore.Replace(InitialState());
+            ReplaceSnapshot(orphanStore, InitialState());
             summon.eventId = 1;
             Assert.Throws<InvalidOperationException>(() => orphanStore.Apply(new MatchEventBatchDto
             {
@@ -3188,7 +3422,7 @@ namespace BiomeRivals.Core.Tests
         public void Apply_RejectsPiglinMagmaDamageWithoutMatchingPayment()
         {
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "piglin-magma-invalid", viewerPlayerId = "alice",
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
@@ -3232,7 +3466,7 @@ namespace BiomeRivals.Core.Tests
         public void Apply_ReplaysOrderedRespawnAnchorTemporaryGrantsAboveBaseCapacity()
         {
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "anchor-grant-replay", viewerPlayerId = "alice",
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
@@ -3302,7 +3536,7 @@ namespace BiomeRivals.Core.Tests
         public void Apply_RejectsRespawnAnchorGrantDuringOpponentsTurn()
         {
             var store = new MatchStateStore();
-            store.Replace(new MatchStateDto
+            ReplaceSnapshot(store, new MatchStateDto
             {
                 matchId = "anchor-off-turn-invalid", viewerPlayerId = "alice",
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
@@ -3358,7 +3592,7 @@ namespace BiomeRivals.Core.Tests
             var snapshot = CreateWitherSnapshot(target);
             var store = new MatchStateStore();
 
-            store.Replace(snapshot);
+            ReplaceSnapshot(store, snapshot);
 
             var restored = store.Current.players[1].battlefield[0].statuses.Single();
             Assert.That(restored.statusId, Is.EqualTo("WITHER"));
@@ -3386,7 +3620,7 @@ namespace BiomeRivals.Core.Tests
         {
             var target = CreateWitheredUnit(2, 4);
             var store = new MatchStateStore();
-            store.Replace(CreateWitherSnapshot(target));
+            ReplaceSnapshot(store, CreateWitherSnapshot(target));
 
             store.Apply(new MatchEventBatchDto
             {
@@ -3428,7 +3662,7 @@ namespace BiomeRivals.Core.Tests
                     sourceCardId = "cd_002", sourceInstanceId = "object-9", effectId = "effect.cd_002.01" }
             };
             var store = new MatchStateStore();
-            store.Replace(CreateWitherSnapshot(target));
+            ReplaceSnapshot(store, CreateWitherSnapshot(target));
             var refresh = WitherStatusPayload(2, 3);
             store.Apply(new MatchEventBatchDto
             {
@@ -3445,7 +3679,7 @@ namespace BiomeRivals.Core.Tests
 
             var invalidStore = new MatchStateStore();
             var invalidTarget = CreateWitheredUnit(2, 4);
-            invalidStore.Replace(CreateWitherSnapshot(invalidTarget));
+            ReplaceSnapshot(invalidStore, CreateWitherSnapshot(invalidTarget));
             var contradictory = WitherStatusPayload(2, 3);
             contradictory.sourcePlayerId = "bob";
             contradictory.sourceInstanceId = "object-100";
@@ -3461,7 +3695,7 @@ namespace BiomeRivals.Core.Tests
 
             var shortenedTarget = CreateWitheredUnit(1, 4);
             var sourceReplacementStore = new MatchStateStore();
-            sourceReplacementStore.Replace(CreateWitherSnapshot(shortenedTarget));
+            ReplaceSnapshot(sourceReplacementStore, CreateWitherSnapshot(shortenedTarget));
             var replacement = WitherStatusPayload(2, 3);
             replacement.sourceInstanceId = "object-100";
             sourceReplacementStore.Apply(new MatchEventBatchDto
@@ -3482,7 +3716,7 @@ namespace BiomeRivals.Core.Tests
         public void Apply_RejectsWitherTickWithoutMatchingDamageAndReplaysLethalDeath()
         {
             var invalidStore = new MatchStateStore();
-            invalidStore.Replace(CreateWitherSnapshot(CreateWitheredUnit(2, 4)));
+            ReplaceSnapshot(invalidStore, CreateWitherSnapshot(CreateWitheredUnit(2, 4)));
             Assert.Throws<InvalidOperationException>(() => invalidStore.Apply(new MatchEventBatchDto
             {
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
@@ -3492,7 +3726,7 @@ namespace BiomeRivals.Core.Tests
 
             var lethalTarget = CreateWitheredUnit(2, 1);
             var lethalStore = new MatchStateStore();
-            lethalStore.Replace(CreateWitherSnapshot(lethalTarget));
+            ReplaceSnapshot(lethalStore, CreateWitherSnapshot(lethalTarget));
             lethalStore.Apply(new MatchEventBatchDto
             {
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
@@ -3515,7 +3749,7 @@ namespace BiomeRivals.Core.Tests
             target.temporaryHealthModifier = 1;
             target.temporaryHealthModifierExpiresOnTurn = 3;
             var store = new MatchStateStore();
-            store.Replace(CreateWitherSnapshot(target));
+            ReplaceSnapshot(store, CreateWitherSnapshot(target));
             var damage = WitherDamageEvent(1, 4);
             damage.payload.maxHealth = 5;
             damage.payload.temporaryHealthModifier = 1;
@@ -3561,7 +3795,7 @@ namespace BiomeRivals.Core.Tests
                 }
             };
             var store = new MatchStateStore();
-            store.Replace(snapshot);
+            ReplaceSnapshot(store, snapshot);
             var activeApplication = WitherStatusPayload(2, 1);
             activeApplication.attack = 4;
             var retaliationApplication = new MatchEventPayloadDto
@@ -3592,7 +3826,7 @@ namespace BiomeRivals.Core.Tests
             var orphanTarget = CreateWitheredUnit(1, 4);
             orphanTarget.statuses = Array.Empty<BattlefieldStatusStateDto>();
             var orphanStore = new MatchStateStore();
-            orphanStore.Replace(CreateWitherSnapshot(orphanTarget));
+            ReplaceSnapshot(orphanStore, CreateWitherSnapshot(orphanTarget));
             Assert.Throws<InvalidOperationException>(() => orphanStore.Apply(new MatchEventBatchDto
             {
                 protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
@@ -3694,6 +3928,25 @@ namespace BiomeRivals.Core.Tests
             var payload = WitherStatusPayload(0, health);
             payload.reason = "DURATION_EXPIRED";
             return payload;
+        }
+
+        private static void ReplaceSnapshot(MatchStateStore targetStore, MatchStateDto snapshot)
+        {
+            foreach (var player in snapshot.players ?? Array.Empty<PlayerStateDto>())
+            {
+                if (player.hand == null) player.hand = Array.Empty<string>();
+                if (player.handCards != null && player.handCards.Length > 0) continue;
+                if (player.playerId == snapshot.viewerPlayerId)
+                {
+                    player.handCards = player.hand.Select((cardId, index) => new HandCardStateDto
+                    {
+                        handCardInstanceId = "hand-" + (90000 + index), cardId = cardId,
+                        costModifier = 0, expiresAtEndOfTurnPlayerId = string.Empty
+                    }).ToArray();
+                }
+                else player.handCards = new HandCardStateDto[player.hand.Length];
+            }
+            targetStore.Replace(snapshot);
         }
     }
 }

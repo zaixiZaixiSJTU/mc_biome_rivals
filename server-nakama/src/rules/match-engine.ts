@@ -54,9 +54,35 @@ namespace BiomeRivalsRules {
     return deck;
   }
 
-  export function getEffectiveCardCost(player: PlayerState, definition: CardRuleDefinition): number {
-    if (definition.id === 'db_005' && player.excavatedThisTurn) return Math.max(0, definition.cost - 1);
-    return definition.cost;
+  export function getEffectiveCardCost(
+    player: PlayerState,
+    definition: CardRuleDefinition,
+    handCardInstanceId?: string
+  ): number {
+    const handCard = handCardInstanceId === undefined ? null : player.handCards.filter(function (card): boolean {
+      return card.handCardInstanceId === handCardInstanceId && card.cardId === definition.id;
+    })[0] || null;
+    const handAdjustment = handCard === null ? 0 : handCard.costModifier;
+    const liveAdjustment = definition.id === 'db_005' && player.excavatedThisTurn ? -1 : 0;
+    return Math.max(0, definition.cost + handAdjustment + liveAdjustment);
+  }
+
+  function appendHandCard(state: MatchState, player: PlayerState, cardId: string, costModifier: number = 0,
+    expiresAtEndOfTurnPlayerId: string | null = null): HandCardState {
+    const card: HandCardState = {
+      handCardInstanceId: 'hand-' + String(state.nextHandCardInstanceId++),
+      cardId: cardId,
+      costModifier: costModifier,
+      expiresAtEndOfTurnPlayerId: costModifier === 0 ? null : expiresAtEndOfTurnPlayerId
+    };
+    player.hand.push(cardId);
+    player.handCards.push(card);
+    return card;
+  }
+
+  function removeHandCardAt(player: PlayerState, index: number): HandCardState {
+    player.hand.splice(index, 1);
+    return player.handCards.splice(index, 1)[0]!;
   }
 
   function cardHasTag(cardId: string, tag: string): boolean {
@@ -83,6 +109,7 @@ namespace BiomeRivalsRules {
       temporaryRedstone: 0,
       redstoneCapacity: 1,
       hand: hand,
+      handCards: [],
       deck: deck,
       buriedCardIds: [],
       excavatedThisTurn: false,
@@ -137,6 +164,7 @@ namespace BiomeRivalsRules {
       phase: 'MAIN',
       activePlayerIndex: 0,
       nextInstanceId: 1,
+      nextHandCardInstanceId: 1,
       players: [
         makePlayer(orderedPlayerIds[0]!, 3, orderedFactions[0]!, randomState),
         makePlayer(orderedPlayerIds[1]!, 4, orderedFactions[1]!, randomState)
@@ -145,6 +173,16 @@ namespace BiomeRivalsRules {
       winnerPlayerId: null,
       processedCommandIds: []
     };
+    state.players.forEach(function (player): void {
+      player.hand.forEach(function (cardId): void {
+        player.handCards.push({
+          handCardInstanceId: 'hand-' + String(state.nextHandCardInstanceId++),
+          cardId: cardId,
+          costModifier: 0,
+          expiresAtEndOfTurnPlayerId: null
+        });
+      });
+    });
     state.authoritativeRandomCounter = randomState.authoritativeRandomCounter;
     const violations = validateState(state);
     if (violations.length > 0) throw new Error(violations.join('; '));
@@ -179,6 +217,14 @@ namespace BiomeRivalsRules {
           redstoneCapacity: player.redstoneCapacity,
           hand: playerIndex === viewerIndex
             ? player.hand.slice()
+            : player.hand.map(function (): null { return null; }),
+          handCards: playerIndex === viewerIndex
+            ? player.handCards.map(function (card): HandCardState { return {
+              handCardInstanceId: card.handCardInstanceId,
+              cardId: card.cardId,
+              costModifier: card.costModifier,
+              expiresAtEndOfTurnPlayerId: card.expiresAtEndOfTurnPlayerId
+            }; })
             : player.hand.map(function (): null { return null; }),
           deckCount: player.deck.length,
           buriedCount: player.buriedCardIds.length,
@@ -260,8 +306,8 @@ namespace BiomeRivalsRules {
     };
   }
 
-  export function createClientEventBatch(batch: MatchEventBatch, viewerPlayerId: string): MatchEventBatch {
-    return {
+  export function createClientEventBatch(batch: MatchEventBatch, viewerPlayerId: string, state?: MatchState): MatchEventBatch {
+    const projected: MatchEventBatch = {
       protocolVersion: batch.protocolVersion,
       rulesetVersion: batch.rulesetVersion,
       revision: batch.revision,
@@ -290,9 +336,38 @@ namespace BiomeRivalsRules {
         if (event.type === 'MULLIGAN_COMPLETED' && payload.playerId !== viewerPlayerId && Array.isArray(payload.hand)) {
           payload.hand = (payload.hand as string[]).map(function (): null { return null; });
         }
+        if (event.type === 'HAND_CARD_COST_MODIFIER_EXPIRED' && payload.playerId !== viewerPlayerId) {
+          payload.handCardInstanceId = null;
+          payload.cardId = null;
+          payload.expiredCostModifier = null;
+          payload.costModifier = null;
+          payload.effectiveCost = null;
+        }
         return { eventId: event.eventId, type: event.type, payload: payload };
       })
     };
+    if (state) {
+      const own = state.players.filter(function (player): boolean { return player.playerId === viewerPlayerId; })[0];
+      const opponent = state.players.filter(function (player): boolean { return player.playerId !== viewerPlayerId; })[0];
+      if (!own || !opponent) throw new Error('hand projection viewer is not in the match');
+      projected.handProjection = {
+        ownPlayerId: own.playerId,
+        ownHand: own.hand.slice(),
+        ownHandCards: own.handCards.map(function (card): HandCardState { return {
+          handCardInstanceId: card.handCardInstanceId, cardId: card.cardId,
+          costModifier: card.costModifier, expiresAtEndOfTurnPlayerId: card.expiresAtEndOfTurnPlayerId
+        }; }),
+        opponentPlayerId: opponent.playerId,
+        opponentHandCount: opponent.hand.length
+      };
+    } else {
+      const privateProjection = (batch.privateHandProjections || []).filter(function (projection): boolean {
+        return projection.ownPlayerId === viewerPlayerId;
+      })[0];
+      if (!privateProjection) throw new Error('private hand projection is missing for viewer');
+      projected.handProjection = privateProjection;
+    }
+    return projected;
   }
 
   function cloneState(state: MatchState): MatchState {
@@ -309,6 +384,7 @@ namespace BiomeRivalsRules {
       phase: state.phase,
       activePlayerIndex: state.activePlayerIndex,
       nextInstanceId: state.nextInstanceId,
+      nextHandCardInstanceId: state.nextHandCardInstanceId,
       players: state.players.map(function (player): PlayerState {
         return {
           playerId: player.playerId,
@@ -320,6 +396,10 @@ namespace BiomeRivalsRules {
           temporaryRedstone: player.temporaryRedstone,
           redstoneCapacity: player.redstoneCapacity,
           hand: player.hand.slice(),
+          handCards: player.handCards.map(function (card): HandCardState { return {
+            handCardInstanceId: card.handCardInstanceId, cardId: card.cardId,
+            costModifier: card.costModifier, expiresAtEndOfTurnPlayerId: card.expiresAtEndOfTurnPlayerId
+          }; }),
           deck: player.deck.slice(),
           buriedCardIds: player.buriedCardIds.slice(),
           excavatedThisTurn: player.excavatedThisTurn,
@@ -471,6 +551,11 @@ namespace BiomeRivalsRules {
     if (command.expectedRevision !== state.revision && !isConcurrentMulligan) return reject(state, 'REVISION_MISMATCH', 'client state is stale');
     if (state.processedCommandIds.indexOf(command.commandId) >= 0) return reject(state, 'DUPLICATE_COMMAND', 'command was already processed');
     if (state.status === 'FINISHED') return reject(state, 'MATCH_FINISHED', 'match has finished');
+    if ((command.type === 'DEPLOY_CARD' || command.type === 'PLAY_CARD') &&
+        (!command.payload || typeof command.payload.handCardInstanceId !== 'string' ||
+         !/^hand-[0-9]+$/.test(command.payload.handCardInstanceId))) {
+      return reject(state, 'INVALID_COMMAND', command.type + ' requires a valid handCardInstanceId');
+    }
 
     const actorIndex = state.players.map(function (player): string { return player.playerId; }).indexOf(actorPlayerId);
     if (actorIndex < 0) return reject(state, 'NOT_A_PLAYER', 'actor does not belong to this match');
@@ -560,9 +645,26 @@ namespace BiomeRivalsRules {
         redstoneCapacity: player.redstoneCapacity
       });
     }
+    function expireHandCardCostModifiers(player: PlayerState): void {
+      player.handCards.forEach(function (card): void {
+        if (card.costModifier === 0 || card.expiresAtEndOfTurnPlayerId !== player.playerId) return;
+        const expiredModifier = card.costModifier;
+        card.costModifier = 0;
+        card.expiresAtEndOfTurnPlayerId = null;
+        emit('HAND_CARD_COST_MODIFIER_EXPIRED', {
+          playerId: player.playerId,
+          handCardInstanceId: card.handCardInstanceId,
+          cardId: card.cardId,
+          expiredCostModifier: expiredModifier,
+          costModifier: 0,
+          effectiveCost: getEffectiveCardCost(player, getCardDefinition(card.cardId)!, card.handCardInstanceId)
+        });
+      });
+    }
     function emit(type: EventType, payload: { [key: string]: unknown }): void {
       if (type === 'MATCH_ENDED') {
         expireTemporaryRedstone(next.players[next.activePlayerIndex]!);
+        if (command.type === 'END_TURN') expireHandCardCostModifiers(next.players[actorIndex]!);
       }
       if (type === 'OBJECT_STATS_CHANGED' && typeof payload.playerId === 'string' && typeof payload.instanceId === 'string') {
         const eventPlayer = next.players.filter(function (candidate): boolean { return candidate.playerId === payload.playerId; })[0];
@@ -613,14 +715,26 @@ namespace BiomeRivalsRules {
 
       const replacedCards: string[] = [];
       const keptCards: string[] = [];
+      const keptHandCards: HandCardState[] = [];
       for (let handIndex = 0; handIndex < player.hand.length; handIndex += 1) {
         if (selected[String(handIndex)]) replacedCards.push(player.hand[handIndex]!);
-        else keptCards.push(player.hand[handIndex]!);
+        else {
+          keptCards.push(player.hand[handIndex]!);
+          keptHandCards.push(player.handCards[handIndex]!);
+        }
       }
-      for (let index = 0; index < replacedCards.length; index += 1) keptCards.push(player.deck.pop()!);
+      for (let index = 0; index < replacedCards.length; index += 1) {
+        const replacement = player.deck.pop()!;
+        keptCards.push(replacement);
+        keptHandCards.push({
+          handCardInstanceId: 'hand-' + String(next.nextHandCardInstanceId++), cardId: replacement,
+          costModifier: 0, expiresAtEndOfTurnPlayerId: null
+        });
+      }
       for (let index = 0; index < replacedCards.length; index += 1) player.deck.push(replacedCards[index]!);
       if (replacedCards.length > 0) shuffleDeck(player.deck, next);
       player.hand = keptCards;
+      player.handCards = keptHandCards;
       player.mulliganCompleted = true;
       emit('MULLIGAN_COMPLETED', {
         playerId: player.playerId,
@@ -654,6 +768,7 @@ namespace BiomeRivalsRules {
         return reject(state, 'INVALID_COMMAND', 'DEPLOY_CARD requires an object payload');
       }
       const cardId = command.payload.cardId;
+      const requestedHandCardId = command.payload.handCardInstanceId;
       const slotKind = command.payload.slotKind;
       const slotIndex = command.payload.slotIndex;
       const paymentMethod = command.payload.paymentMethod;
@@ -667,8 +782,11 @@ namespace BiomeRivalsRules {
       if (!definition.manualPlayAllowed) return reject(state, 'CARD_NOT_PLAYABLE', 'card resolves automatically and cannot be deployed');
       const player = next.players[actorIndex]!;
       const opponentPlayer = next.players[actorIndex === 0 ? 1 : 0]!;
-      const handIndex = player.hand.indexOf(cardId);
+      const handIndex = player.handCards.findIndex(function (entry): boolean {
+        return entry.handCardInstanceId === requestedHandCardId && entry.cardId === cardId;
+      });
       if (handIndex < 0) return reject(state, 'CARD_NOT_IN_HAND', 'card is not in the actor hand');
+      const selectedHandCard = player.handCards[handIndex]!;
       let battlecryTargetPlayer: PlayerState | null = null;
       let battlecryTarget: BattlefieldObjectState | null = null;
       let drownedBattlecryActive = false;
@@ -793,7 +911,7 @@ namespace BiomeRivalsRules {
 
       const materialIndices: number[] = [];
       const consumedMaterials: string[] = [];
-      const effectiveCost = getEffectiveCardCost(player, definition);
+      const effectiveCost = getEffectiveCardCost(player, definition, selectedHandCard.handCardInstanceId);
       if (paymentMethod === 'REDSTONE') {
         if (effectiveCost > getAvailableRedstone(player)) return reject(state, 'INSUFFICIENT_REDSTONE', 'not enough redstone');
       } else {
@@ -848,7 +966,7 @@ namespace BiomeRivalsRules {
       for (let index = slotIndex; index < slotIndex + occupiedSlots; index += 1) occupiedRow[index] = instanceId;
       if (paymentMethod === 'CRAFTING') {
         materialIndices.sort(function (left, right): number { return right - left; });
-        for (let index = 0; index < materialIndices.length; index += 1) player.hand.splice(materialIndices[index]!, 1);
+        for (let index = 0; index < materialIndices.length; index += 1) removeHandCardAt(player, materialIndices[index]!);
         for (let index = 0; index < consumedMaterials.length; index += 1) player.discardPile.push(consumedMaterials[index]!);
         emit('MATERIALS_CONSUMED', {
           playerId: actorPlayerId,
@@ -861,9 +979,11 @@ namespace BiomeRivalsRules {
           discardCount: player.discardPile.length
         });
       }
-      const productHandIndex = player.hand.indexOf(cardId);
+      const productHandIndex = player.handCards.findIndex(function (entry): boolean {
+        return entry.handCardInstanceId === selectedHandCard.handCardInstanceId && entry.cardId === cardId;
+      });
       if (productHandIndex < 0) return reject(state, 'INVALID_STATE', 'crafted product was removed while consuming materials');
-      player.hand.splice(productHandIndex, 1);
+      removeHandCardAt(player, productHandIndex);
       if (paymentMethod === 'REDSTONE' && !trySpendRedstone(player, effectiveCost))
         throw new Error('validated deployment redstone payment unexpectedly failed');
       emit('CARD_DEPLOYED', {
@@ -2109,7 +2229,8 @@ namespace BiomeRivalsRules {
     ): void {
       if (getCardDefinition(cardId) === null) throw new Error('generated card is not registered: ' + cardId);
       const destination = player.hand.length >= HAND_LIMIT ? 'DISCARD' : 'HAND';
-      if (destination === 'HAND') player.hand.push(cardId);
+      let handCard: HandCardState | null = null;
+      if (destination === 'HAND') handCard = appendHandCard(next, player, cardId);
       else player.discardPile.push(cardId);
       emit('CARD_GENERATED', {
         playerId: player.playerId,
@@ -2192,8 +2313,8 @@ namespace BiomeRivalsRules {
       else if (cardId === 'tk_008') effectId = 'effect.tk_008.01';
       else throw new Error('buried effect handler is not registered: ' + cardId);
       const destination = player.hand.length >= HAND_LIMIT ? 'DISCARD' : 'HAND';
-      if (destination === 'HAND') player.hand.push(cardId);
-      else player.discardPile.push(cardId);
+      const handCard = destination === 'HAND' ? appendHandCard(next, player, cardId) : null;
+      if (destination === 'DISCARD') player.discardPile.push(cardId);
       player.excavatedThisTurn = true;
       emit('CARD_EXCAVATED', {
         playerId: player.playerId,
@@ -2266,7 +2387,7 @@ namespace BiomeRivalsRules {
           });
           return;
         }
-        player.hand.push(cardId);
+        const handCard = appendHandCard(next, player, cardId);
         emit('CARD_DRAWN', {
           playerId: player.playerId,
           cardId: cardId,
@@ -2624,14 +2745,19 @@ namespace BiomeRivalsRules {
           return reject(state, 'INVALID_TARGET', 'darkness restricts the first enemy battlefield target to a legal row edge');
         }
       }
-      const handIndex = player.hand.indexOf(cardId);
+      const requestedHandCardId = command.payload && command.payload.handCardInstanceId;
+      const handIndex = player.handCards.findIndex(function (entry): boolean {
+        return entry.handCardInstanceId === requestedHandCardId && entry.cardId === cardId;
+      });
       if (handIndex < 0) return reject(state, 'CARD_NOT_IN_HAND', 'card is not in the active players hand');
-      if (definition.cost > getAvailableRedstone(player)) return reject(state, 'INSUFFICIENT_REDSTONE', 'not enough redstone');
+      const selectedHandCard = player.handCards[handIndex]!;
+      const effectiveCost = getEffectiveCardCost(player, definition, selectedHandCard.handCardInstanceId);
+      if (effectiveCost > getAvailableRedstone(player)) return reject(state, 'INSUFFICIENT_REDSTONE', 'not enough redstone');
 
       if (targetedPlayer === opponent && targetedObject !== null) player.hasTargetedEnemyObjectThisTurn = true;
       player.cardsPlayedThisTurn += 1;
-      player.hand.splice(handIndex, 1);
-      if (!trySpendRedstone(player, definition.cost))
+      removeHandCardAt(player, handIndex);
+      if (!trySpendRedstone(player, effectiveCost))
         throw new Error('validated card redstone payment unexpectedly failed');
       if (definition.cardType === 'EQUIPMENT') {
         if (definition.durability <= 0 || definition.attack <= 0) {
@@ -3378,6 +3504,8 @@ namespace BiomeRivalsRules {
           }
         }
         expireTemporaryRedstone(next.players[actorIndex]!);
+        const endingPlayer = next.players[actorIndex]!;
+        expireHandCardCostModifiers(endingPlayer);
         next.players[actorIndex]!.excavatedThisTurn = false;
         next.players[actorIndex]!.cardsPlayedThisTurn = 0;
         next.players[actorIndex]!.hasTargetedEnemyObjectThisTurn = false;
@@ -3444,7 +3572,20 @@ namespace BiomeRivalsRules {
         rulesetVersion: next.rulesetVersion,
         revision: next.revision,
         acknowledgedCommandId: command.commandId,
-        events: events
+        events: events,
+        privateHandProjections: next.players.map(function (own): HandProjection {
+          const opponent = next.players.filter(function (candidate): boolean { return candidate !== own; })[0]!;
+          return {
+            ownPlayerId: own.playerId,
+            ownHand: own.hand.slice(),
+            ownHandCards: own.handCards.map(function (card): HandCardState {
+              return { handCardInstanceId: card.handCardInstanceId, cardId: card.cardId,
+                costModifier: card.costModifier, expiresAtEndOfTurnPlayerId: card.expiresAtEndOfTurnPlayerId };
+            }),
+            opponentPlayerId: opponent.playerId,
+            opponentHandCount: opponent.hand.length
+          };
+        })
       }
     };
   }

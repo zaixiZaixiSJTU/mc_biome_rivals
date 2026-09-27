@@ -46,6 +46,9 @@ namespace BiomeRivals.Networking
         public static string SerializeCommand(MatchCommandDto command)
         {
             if (command == null) throw new ArgumentNullException(nameof(command));
+            if ((command.type == MatchCommandTypes.DeployCard || command.type == MatchCommandTypes.PlayCard) &&
+                (command.payload == null || !IsValidHandCardInstanceId(command.payload.handCardInstanceId)))
+                throw new InvalidOperationException("Deploy and play commands require a valid handCardInstanceId.");
             switch (command.type)
             {
                 case MatchCommandTypes.Mulligan:
@@ -73,6 +76,16 @@ namespace BiomeRivals.Networking
                 default:
                     throw new InvalidOperationException($"Unsupported command type '{command.type}'.");
             }
+        }
+
+        private static bool IsValidHandCardInstanceId(string value)
+        {
+            const string prefix = "hand-";
+            if (string.IsNullOrEmpty(value) || !value.StartsWith(prefix, StringComparison.Ordinal) || value.Length == prefix.Length)
+                return false;
+            for (var index = prefix.Length; index < value.Length; index++)
+                if (value[index] < '0' || value[index] > '9') return false;
+            return true;
         }
 
         public Task DisconnectAsync() => _transport.DisconnectAsync();
@@ -183,6 +196,7 @@ namespace BiomeRivals.Networking
         private sealed class DeployWirePayload
         {
             public string cardId;
+            public string handCardInstanceId;
             public string slotKind;
             public int slotIndex;
             public string paymentMethod;
@@ -192,6 +206,7 @@ namespace BiomeRivals.Networking
         private sealed class TargetedDeployWirePayload
         {
             public string cardId;
+            public string handCardInstanceId;
             public string slotKind;
             public int slotIndex;
             public string paymentMethod;
@@ -203,12 +218,14 @@ namespace BiomeRivals.Networking
         private sealed class PlayWirePayload
         {
             public string cardId;
+            public string handCardInstanceId;
         }
 
         [Serializable]
         private sealed class TargetedPlayWirePayload
         {
             public string cardId;
+            public string handCardInstanceId;
             public string targetType;
             public string targetInstanceId;
         }
@@ -217,6 +234,7 @@ namespace BiomeRivals.Networking
         private sealed class MultiTargetedPlayWirePayload
         {
             public string cardId;
+            public string handCardInstanceId;
             public string targetType;
             public string[] targetInstanceIds;
         }
@@ -290,6 +308,7 @@ namespace BiomeRivals.Networking
                 payload = new DeployWirePayload
                 {
                     cardId = command.payload.cardId,
+                    handCardInstanceId = command.payload.handCardInstanceId,
                     slotKind = command.payload.slotKind,
                     slotIndex = command.payload.slotIndex,
                     paymentMethod = command.payload.paymentMethod
@@ -307,6 +326,7 @@ namespace BiomeRivals.Networking
                 payload = new TargetedDeployWirePayload
                 {
                     cardId = command.payload.cardId,
+                    handCardInstanceId = command.payload.handCardInstanceId,
                     slotKind = command.payload.slotKind,
                     slotIndex = command.payload.slotIndex,
                     paymentMethod = command.payload.paymentMethod,
@@ -323,7 +343,11 @@ namespace BiomeRivals.Networking
 
             public PlayCardCommandWire(MatchCommandDto command) : base(command)
             {
-                payload = new PlayWirePayload { cardId = command.payload.cardId };
+                payload = new PlayWirePayload
+                {
+                    cardId = command.payload.cardId,
+                    handCardInstanceId = command.payload.handCardInstanceId
+                };
             }
         }
 
@@ -337,6 +361,7 @@ namespace BiomeRivals.Networking
                 payload = new TargetedPlayWirePayload
                 {
                     cardId = command.payload.cardId,
+                    handCardInstanceId = command.payload.handCardInstanceId,
                     targetType = command.payload.targetType,
                     targetInstanceId = command.payload.targetInstanceId
                 };
@@ -353,6 +378,7 @@ namespace BiomeRivals.Networking
                 payload = new MultiTargetedPlayWirePayload
                 {
                     cardId = command.payload.cardId,
+                    handCardInstanceId = command.payload.handCardInstanceId,
                     targetType = command.payload.targetType,
                     targetInstanceIds = command.payload.targetInstanceIds ?? Array.Empty<string>()
                 };

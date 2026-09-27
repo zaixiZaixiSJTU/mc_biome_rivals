@@ -58,6 +58,50 @@ namespace BiomeRivals.Demo.Tests
         }
 
         [Test]
+        public void AuthoritativeViewUsesStableHandInstanceForDuplicateFees()
+        {
+            var store = CreateStore(viewerIndex: 0);
+            var player = store.Current.players[0];
+            player.hand = new[] { "pf_001", "pf_001" };
+            player.handCards = new[]
+            {
+                new HandCardStateDto { handCardInstanceId = "hand-11", cardId = "pf_001", costModifier = -1,
+                    expiresAtEndOfTurnPlayerId = "alice" },
+                new HandCardStateDto { handCardInstanceId = "hand-12", cardId = "pf_001", costModifier = 0 }
+            };
+            var view = new DemoAuthoritativeMatchView(store);
+            Assert.That(CardContentLoader.Load().TryGetDefinition("pf_001", out var definition), Is.True);
+
+            Assert.That(view.GetEffectiveCost(definition, "hand-11"), Is.EqualTo(Math.Max(0, definition.cost - 1)));
+            Assert.That(view.GetEffectiveCost(definition, "hand-12"), Is.EqualTo(definition.cost));
+            Assert.That(view.GetEffectiveCost(definition, "hand-99"), Is.EqualTo(definition.cost));
+        }
+
+        [Test]
+        public void EventHandProjectionReplacesExactInstancesWithoutRevealingOpponentCards()
+        {
+            var store = CreateStore(viewerIndex: 0);
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol,
+                rulesetVersion = GameVersions.Ruleset,
+                revision = 1,
+                events = System.Array.Empty<MatchEventDto>(),
+                handProjection = new HandProjectionDto
+                {
+                    ownPlayerId = "alice", ownHand = new[] { "pf_001" },
+                    ownHandCards = new[] { new HandCardStateDto { handCardInstanceId = "hand-17", cardId = "pf_001" } },
+                    opponentPlayerId = "bob", opponentHandCount = 2
+                }
+            });
+
+            Assert.That(store.Current.players[0].handCards[0].handCardInstanceId, Is.EqualTo("hand-17"));
+            Assert.That(store.Current.players[1].hand.Length, Is.EqualTo(2));
+            Assert.That(store.Current.players[1].hand[0], Is.Null);
+            Assert.That(store.Current.players[1].handCards[0], Is.Null);
+        }
+
+        [Test]
         public void AuthoritativeViewProjectsWoolHealthAfterRecoverySnapshotReplacement()
         {
             var store = CreateStore(viewerIndex: 0);
@@ -106,12 +150,13 @@ namespace BiomeRivals.Demo.Tests
             var gateway = new FakeGateway();
             using (var session = new DemoOnlineMatchSession(gateway, store))
             {
-                var pending = session.DeployAsync("pf_001", DemoSlotKind.Unit, 2);
+                var pending = session.DeployAsync("pf_001", DemoSlotKind.Unit, 2, handCardInstanceId: "hand-1");
 
                 Assert.That(session.HasPendingCommand, Is.True);
                 Assert.That(gateway.LastCommand, Is.Not.Null);
                 Assert.That(gateway.LastCommand.expectedRevision, Is.Zero);
                 Assert.That(gateway.LastCommand.payload.slotIndex, Is.EqualTo(2));
+                Assert.That(gateway.LastCommand.payload.handCardInstanceId, Is.EqualTo("hand-1"));
 
                 var batch = new MatchEventBatchDto
                 {
@@ -143,6 +188,46 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(result.Outcome, Is.EqualTo(MatchCommandOutcome.Accepted));
                 Assert.That(session.View.UnitSlots[2], Is.EqualTo("pf_001"));
                 Assert.That(session.View.GetObject(true, DemoSlotKind.Unit, 2).InstanceId, Is.EqualTo("object-1"));
+                Assert.That(session.View.Hand, Is.Empty);
+                Assert.That(session.HasPendingCommand, Is.False);
+            }
+        }
+
+        [Test]
+        public async Task OnlineSessionPlayCommandCarriesSelectedHandAndTargetInstances()
+        {
+            var store = CreateStore(viewerIndex: 0);
+            var gateway = new FakeGateway();
+            using (var session = new DemoOnlineMatchSession(gateway, store))
+            {
+                var pending = session.PlayCardAsync("tk_016", "hand-1", "UNIT", "object-9");
+
+                Assert.That(gateway.LastCommand, Is.Not.Null);
+                Assert.That(gateway.LastCommand.type, Is.EqualTo(MatchCommandTypes.PlayCard));
+                Assert.That(gateway.LastCommand.payload.handCardInstanceId, Is.EqualTo("hand-1"));
+                Assert.That(gateway.LastCommand.payload.cardId, Is.EqualTo("tk_016"));
+                Assert.That(gateway.LastCommand.payload.targetType, Is.EqualTo("UNIT"));
+                Assert.That(gateway.LastCommand.payload.targetInstanceId, Is.EqualTo("object-9"));
+
+                var batch = new MatchEventBatchDto
+                {
+                    protocolVersion = GameVersions.Protocol,
+                    rulesetVersion = GameVersions.Ruleset,
+                    revision = 1,
+                    acknowledgedCommandId = gateway.LastCommand.commandId,
+                    events = Array.Empty<MatchEventDto>(),
+                    handProjection = new HandProjectionDto
+                    {
+                        ownPlayerId = "alice", ownHand = Array.Empty<string>(),
+                        ownHandCards = Array.Empty<HandCardStateDto>(),
+                        opponentPlayerId = "bob", opponentHandCount = 1
+                    }
+                };
+                store.Apply(batch);
+                gateway.Emit(batch);
+
+                var result = await pending;
+                Assert.That(result.Outcome, Is.EqualTo(MatchCommandOutcome.Accepted));
                 Assert.That(session.View.Hand, Is.Empty);
                 Assert.That(session.HasPendingCommand, Is.False);
             }
@@ -286,13 +371,21 @@ namespace BiomeRivals.Demo.Tests
                 {
                     playerId = "alice", factionId = FactionIds.OceanRiver, life = 30, armor = 2,
                     redstone = 1, totalRedstone = 1, redstoneCapacity = 1,
-                    hand = new[] { "pf_001" }, unitSlots = new string[4], buildingSlots = new string[3]
+                    hand = new[] { "pf_001" },
+                    handCards = viewerIndex == 0
+                        ? new[] { new HandCardStateDto { handCardInstanceId = "hand-1", cardId = "pf_001" } }
+                        : new HandCardStateDto[] { null },
+                    unitSlots = new string[4], buildingSlots = new string[3]
                 },
                 new PlayerStateDto
                 {
                     playerId = "bob", factionId = FactionIds.End, life = 27, armor = 3,
                     redstone = 2, totalRedstone = 2, redstoneCapacity = 2,
-                    hand = new[] { "nt_001" }, unitSlots = new string[4], buildingSlots = new string[3]
+                    hand = new[] { "nt_001" },
+                    handCards = viewerIndex == 1
+                        ? new[] { new HandCardStateDto { handCardInstanceId = "hand-2", cardId = "nt_001" } }
+                        : new HandCardStateDto[] { null },
+                    unitSlots = new string[4], buildingSlots = new string[3]
                 }
             };
             var store = new MatchStateStore();
