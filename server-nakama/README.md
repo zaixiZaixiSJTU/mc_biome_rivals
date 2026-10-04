@@ -2,6 +2,8 @@
 
 `src/rules` 是纯规则核心；`src/matches` 和 `src/rpc` 是 Nakama 边界适配器。构建产物只有 `build/index.js`，供 Docker 容器加载。
 
+先完成 server build 再启动/重建 Nakama；不要把 build clean 与容器启动并行，否则可能加载零模块而只有裸 API 健康。Compose entrypoint 现在拒绝缺失或空的 index.js，真实客户端仍需通过版本 RPC/命令门禁。`scripts/test-nakama-runtime-startup.ps1` 可从仓库根运行只读、无网络/数据库的启动 guard 正负测试；它需要本机 Docker Engine，与静态 `-WithDockerConfig` 区分。已运行证据见 [QA-054](../docs/development/task-packets/QA-054.md)。
+
 先后手由公开对局 ID 的稳定排序决定，不依赖玩家进入房间的先后顺序。隐藏牌库洗牌、调度回洗、随机亡语与掩埋位置统一消费仅存在于权威 `MatchState` 的秘密随机种子和计数器；种子由 Nakama 在开局时生成，从不进入客户端快照或事件。
 
 当前实现工程闭环需要的 30 张牌库、先手 3 张/后手 4 张起手、双方各一次任意数量调度、首回合抽牌、7 张手牌上限、公开爆牌、递增真实疲劳、开局快照、卡牌部署、主行动/战斗阶段、普通攻击、同步反击、死亡离场、英雄伤害/护甲、胜负、结束回合和认输。调度时先暂时移出所选卡、抽取等量替换牌，再把原牌洗回隐藏牌库；双方确认前权威状态保持 `MULLIGAN`，普通对局命令不会生效。
@@ -16,7 +18,13 @@
 
 协议 opcode：`1` 命令、`2` 事件批次、`3` 命令拒绝、`4` 权威快照。协议结构以 `shared-schema/protocol` 为准。
 
+通用同时败北的双客户端验收使用**默认关闭**的测试夹具：只有在隔离 Nakama 部署中显式设置 `BIOME_RIVALS_ENABLE_TEST_FIXTURES=true`，双方才能通过预留 opcode `255` 请求服务器以普通 `PLAY_CARD` 规则命令触发确定性平局；生产默认值为 `false`，正常对局不能改变此开关。验收脚本 `npm run smoke:simultaneous-draw` 检查双方相同终局 revision/事件及一端重连后的权威快照。结果确认使用预留 opcode `5`；它不属于正式玩家命令协议，也不应由正式客户端使用。
+
 当前基础对局纵向切片使用 `protocolVersion: 36` 与 `rulesetVersion: prototype-0.61`。协议 36 提供战场生物 `WITHER` 的快照、事件与完整生命周期；规则集 0.61 启用下界要塞在结束阶段检查红石与空单位格、原子支付并召唤要塞凋灵骷髅。规则集 0.60 的凋灵骷髅战斗触发、0.59 的状态基础设施、协议 35 的炽足兽主动解除 FIRE 以及更早能力继续兼容。标准 JSON Schema 校验事件与快照，Unity 只接受同版本权威结果；旧协议或规则集客户端不能静默兼容。
+
+场地专项审查：隔离测试服务可同时设置 `BIOME_RIVALS_ENABLE_TEST_FIXTURES=true` 与 `BIOME_RIVALS_TEST_ARENA_ID=<已登记场地>`，以真实普通命令验证 5/2、3/4 等权威布局；它不接受客户端 arena/mode/faction 选场。开关不是精确字符串 `true` 时仍默认标准原野，未知测试场地拒绝创建；根 Compose 默认 false/空，不新增生产选场机制。运行时映射、真实 Unity 场景重建与验收见 [QA-052](../docs/development/task-packets/QA-052.md)。
+
+非法部署原子拒绝专项使用来源匹配的双 Unity Development Player 和客户端脚本 `-DeploymentRejections -RenderOnlineUi -TimeoutSeconds 300`。普通洞穴卡组、不注入资源；正式 DEPLOY 命令检查单位容量索引、建筑/结构边界与占用，拒绝后强制恢复快照并验证无支付/状态变化。领域测试额外比较包含双方牌序/RNG/计数器的完整秘密状态；不要把客户端查看者 hash 当作隐藏状态证明。场地由上面的隔离服务配置决定，默认原野也应在 fixture=false 的服务回归；详见 [QA-056](../docs/development/task-packets/QA-056.md)。
 
 运行：
 

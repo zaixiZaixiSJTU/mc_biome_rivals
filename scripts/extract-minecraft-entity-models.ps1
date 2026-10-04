@@ -3,7 +3,9 @@ param(
     [string]$MinecraftJar,
     [string]$SourceConfigPath = 'shared-schema\card-art\bedrock-entity-source.v1.json',
     [string]$JavaSourceConfigPath = 'shared-schema\card-art\minecraft-asset-source.v1.json',
-    [string]$OutputDirectory = 'client-unity\Assets\Generated\MinecraftWorldTextures\Resources\DemoWorld'
+    [string]$OutputDirectory = 'client-unity\Assets\Generated\MinecraftWorldTextures\Resources\DemoWorld',
+    # Partial extraction is staged separately; never replace a full provenance ledger.
+    [string[]]$OnlyKeys
 )
 # Extracts vanilla entity geometry (minecraft:geometry JSON) and matched entity
 # textures from Mojang's official public bedrock-samples repository, plus the
@@ -21,6 +23,18 @@ if (-not $outputRoot.StartsWith($repoRoot, [System.StringComparison]::OrdinalIgn
 }
 if (-not (Test-Path -LiteralPath $sourceConfigFile)) { throw "Entity source config not found: $sourceConfigFile" }
 $sourceConfig = Get-Content -LiteralPath $sourceConfigFile -Raw -Encoding UTF8 | ConvertFrom-Json
+if ($OnlyKeys) {
+    foreach ($key in $OnlyKeys) {
+        if ($key -notmatch '^[a-z0-9_]+$' -or
+            -not $sourceConfig.entityGeometry.PSObject.Properties[$key] -or
+            -not $sourceConfig.entityTextures.PSObject.Properties[$key]) {
+            throw "Partial extraction requires a registered geometry/texture pair: $key"
+        }
+    }
+    if (Test-Path -LiteralPath $outputRoot) {
+        throw 'Partial extraction requires a new staging directory; existing assets/provenance will not be overwritten.'
+    }
+}
 
 $commit = [string]$sourceConfig.pinnedCommit
 if ($commit -notmatch '^[0-9a-f]{40}$') { throw "Pinned bedrock-samples commit is not a full SHA: $commit" }
@@ -58,6 +72,7 @@ $provenance = [System.Collections.Generic.List[object]]::new()
 
 foreach ($item in $sourceConfig.entityGeometry.PSObject.Properties) {
     $key = $item.Name
+    if ($OnlyKeys -and $key -notin $OnlyKeys) { continue }
     if ($key -notmatch '^[a-z0-9_]+$') { throw "Unsafe entity model key: $key" }
     $sourcePath = [string]$item.Value
     if ($sourcePath -notmatch '^[A-Za-z0-9_.\-]+\.geo\.json$') { throw "Unsafe geometry path for ${key}: $sourcePath" }
@@ -75,6 +90,7 @@ foreach ($item in $sourceConfig.entityGeometry.PSObject.Properties) {
 
 foreach ($item in $sourceConfig.entityTextures.PSObject.Properties) {
     $key = $item.Name
+    if ($OnlyKeys -and $key -notin $OnlyKeys) { continue }
     if ($key -notmatch '^[a-z0-9_]+$') { throw "Unsafe entity texture key: $key" }
     $sourcePath = [string]$item.Value
     if ($sourcePath -notmatch '^[A-Za-z0-9_./\-]+$') { throw "Unsafe texture path for ${key}: $sourcePath" }
@@ -92,7 +108,7 @@ foreach ($item in $sourceConfig.entityTextures.PSObject.Properties) {
     })
 }
 
-if ($sourceConfig.localJavaJarExtras) {
+if ($sourceConfig.localJavaJarExtras -and -not $OnlyKeys) {
     $javaSourceConfig = Get-Content -LiteralPath $javaSourceConfigFile -Raw -Encoding UTF8 | ConvertFrom-Json
     if (-not $MinecraftJar) {
         $versionFolder = [string]$javaSourceConfig.versionFolder

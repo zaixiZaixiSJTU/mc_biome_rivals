@@ -6,6 +6,8 @@
     "clean": "node scripts/clean.mjs",
     "build": "npm run clean && tsc -p tsconfig.json",
     "smoke:integration": "node scripts/smoke-nakama.mjs",
+    "smoke:end-return": "node scripts/smoke-end-return.mjs",
+    "smoke:simultaneous-draw": "node scripts/smoke-simultaneous-draw.mjs",
     "smoke:nether-trigger": "node scripts/smoke-nether-trigger.mjs",
     "smoke:nether-status-summon": "node scripts/smoke-nether-status-summon.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",

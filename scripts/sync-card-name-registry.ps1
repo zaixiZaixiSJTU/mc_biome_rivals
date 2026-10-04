@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [string]$SourceMarkdown = 'docs\design\Minecraft_Biome_Rivals_Prototype_Cards_v0.1.md',
-    [string]$OutputPath = 'shared-schema\card-data\localization\card-name-registry.zh-CN.v1.json'
+    [string]$OutputPath = 'shared-schema\card-data\localization\card-name-registry.zh-CN.v1.json',
+    [switch]$Check
 )
 
 $ErrorActionPreference = 'Stop'
@@ -47,8 +48,17 @@ $document = [ordered]@{
     entries = $entries
 }
 
-$targetDirectory = Split-Path -Parent $targetPath
-[System.IO.Directory]::CreateDirectory($targetDirectory) | Out-Null
 $json = $document | ConvertTo-Json -Depth 6
-[System.IO.File]::WriteAllText($targetPath, $json + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false))
-Write-Output "Registered $($entries.Count) card names -> $targetPath"
+$expected = $json.Replace("`r`n", "`n") + "`n"
+if ($Check) {
+    if (-not (Test-Path -LiteralPath $targetPath)) { throw "Generated card name registry is missing: $targetPath" }
+    $actual = [System.IO.File]::ReadAllText($targetPath, [System.Text.Encoding]::UTF8)
+    if ($actual.Replace("`r`n", "`n") -cne $expected) { throw "Generated card name registry is stale. Run scripts/sync-card-name-registry.ps1: $targetPath" }
+    Write-Output "Card name registry is current with $($entries.Count) cards."
+}
+else {
+    $targetDirectory = Split-Path -Parent $targetPath
+    [System.IO.Directory]::CreateDirectory($targetDirectory) | Out-Null
+    [System.IO.File]::WriteAllText($targetPath, $expected, [System.Text.UTF8Encoding]::new($false))
+    Write-Output "Registered $($entries.Count) card names -> $targetPath"
+}

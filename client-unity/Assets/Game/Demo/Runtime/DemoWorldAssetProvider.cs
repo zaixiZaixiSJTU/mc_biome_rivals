@@ -61,9 +61,48 @@ namespace BiomeRivals.Demo
                          Shader.Find("Standard") ??
                          Shader.Find("Universal Render Pipeline/Lit");
             if (shader == null) throw new MissingReferenceException("No tracked demo entity shader is available.");
+            var layered = DemoMinecraftModelFactory.TryGetSurfaceBaseTextureKey(textureKey, out var baseKey);
+            Texture2D baseTexture = null;
+            Texture2D surfaceTexture = null;
+            if (layered)
+            {
+                baseTexture = LoadBlockTexture(baseKey);
+                surfaceTexture = LoadBlockTexture(textureKey);
+                if (baseTexture == null || surfaceTexture == null)
+                    throw new MissingReferenceException($"Entity surface '{textureKey}' requires both '{baseKey}' skin and biome texture.");
+                if (baseTexture.width != surfaceTexture.width || baseTexture.height != surfaceTexture.height)
+                    throw new System.FormatException("Registered entity surface layers must share an atlas size.");
+            }
             var material = CreateBlockMaterial(name, fallback, textureKey, Color.black, shader);
+            if (layered)
+            {
+                if (!material.HasProperty("_SurfaceOverlayTex") || !material.HasProperty("_UseSurfaceOverlay"))
+                {
+                    if (Application.isPlaying) Object.Destroy(material); else Object.DestroyImmediate(material);
+                    throw new MissingReferenceException("Entity shader does not support registered surface layers.");
+                }
+                SetTexture(material, "_MainTex", baseTexture);
+                SetTexture(material, "_BaseMap", baseTexture);
+                SetTexture(material, "_SurfaceOverlayTex", surfaceTexture);
+                material.SetFloat("_UseSurfaceOverlay", 1f);
+            }
             material.enableInstancing = false;
-            if (material.HasProperty("_Cutoff")) material.SetFloat("_Cutoff", 0.1f);
+            var alphaColorMask = DemoMinecraftModelFactory.UsesAlphaColorMask(textureKey);
+            if (alphaColorMask && !material.HasProperty("_UseAlphaColorMask"))
+            {
+                if (Application.isPlaying) Object.Destroy(material); else Object.DestroyImmediate(material);
+                throw new MissingReferenceException("Registered color-mask skin requires the entity shader.");
+            }
+            if (material.HasProperty("_UseAlphaColorMask")) material.SetFloat("_UseAlphaColorMask", alphaColorMask ? 1f : 0f);
+            var lowAlphaEmission = DemoMinecraftModelFactory.UsesLowAlphaEmission(textureKey);
+            if (lowAlphaEmission && !material.HasProperty("_UseLowAlphaEmission"))
+            {
+                if (Application.isPlaying) Object.Destroy(material); else Object.DestroyImmediate(material);
+                throw new MissingReferenceException("Registered low-alpha emission requires the entity shader.");
+            }
+            // Keep zero-alpha atlas padding transparent, but retain nonzero 8-bit eye pixels.
+            if (material.HasProperty("_Cutoff")) material.SetFloat("_Cutoff", lowAlphaEmission ? 0.5f / 255f : 0.1f);
+            if (material.HasProperty("_UseLowAlphaEmission")) material.SetFloat("_UseLowAlphaEmission", lowAlphaEmission ? 1f : 0f);
             if (material.HasProperty("_EmissiveBoost")) material.SetFloat("_EmissiveBoost", emissiveBoost);
             material.SetOverrideTag("RenderType", "TransparentCutout");
             material.renderQueue = 2450;

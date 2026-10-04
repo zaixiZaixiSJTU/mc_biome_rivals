@@ -6,6 +6,8 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $namesPath = Join-Path $repoRoot 'shared-schema\card-data\localization\card-name-registry.zh-CN.v1.json'
 $themesPath = Join-Path $repoRoot 'shared-schema\card-data\card-theme-registry.v1.json'
 $artPath = Join-Path $repoRoot 'shared-schema\card-art\card-art-registry.v1.json'
+$assetSourcePath = Join-Path $repoRoot 'shared-schema\card-art\minecraft-asset-source.v1.json'
+$worldTextureRegistryPath = Join-Path $repoRoot 'shared-schema\card-art\minecraft-world-texture-registry.v1.json'
 $definitionsPath = Join-Path $repoRoot 'shared-schema\card-data\card-definition-registry.v1.json'
 $textsPath = Join-Path $repoRoot 'shared-schema\card-data\localization\card-text-registry.zh-CN.v1.json'
 $implementedEffectsPath = Join-Path $repoRoot 'shared-schema\card-data\implemented-effect-registry.v1.json'
@@ -46,9 +48,50 @@ function Get-Contrast([string]$A, [string]$B) {
 $names = Read-Json $namesPath
 $themes = Read-Json $themesPath
 $art = Read-Json $artPath
+$assetSource = Read-Json $assetSourcePath
+$worldTextureRegistry = Read-Json $worldTextureRegistryPath
 $definitions = Read-Json $definitionsPath
 $texts = Read-Json $textsPath
 $implementedEffects = Read-Json $implementedEffectsPath
+& node (Join-Path $repoRoot 'server-nakama\scripts\validate-card-content-schemas.mjs')
+if ($LASTEXITCODE -ne 0) { throw 'Card content JSON Schema validation failed.' }
+if ($names.schemaVersion -ne 1 -or $names.locale -ne 'zh-CN') { throw 'Card name registry schema or locale is unsupported.' }
+if ($themes.schemaVersion -ne 1) { throw "Unsupported card theme registry schema version: $($themes.schemaVersion)" }
+if ($art.schemaVersion -ne 1) { throw "Unsupported card art registry schema version: $($art.schemaVersion)" }
+if ($art.defaultStatus -ne 'LOCAL_PROTOTYPE_ONLY') { throw "Unsupported card art default status: $($art.defaultStatus)" }
+if ([string]$art.sourceId -notmatch '^minecraft_java_local_[0-9]+_[0-9]+(?:_[0-9]+)?$') { throw "Invalid card art source id: $($art.sourceId)" }
+if ($assetSource.schemaVersion -ne 1 -or $assetSource.edition -ne 'Java') { throw 'Minecraft asset source schema or edition is unsupported.' }
+if ([string]$assetSource.gameVersion -notmatch '^\d+\.\d+(?:\.\d+)?$' -or
+    [string]$assetSource.versionFolder -notmatch ('^' + [regex]::Escape([string]$assetSource.gameVersion) + '(?:-|$)')) {
+    throw 'Minecraft asset source game version and installation folder do not match.'
+}
+$expectedArtSourceId = 'minecraft_java_local_' + ([string]$assetSource.gameVersion).Replace('.', '_')
+if ([string]$art.sourceId -cne $expectedArtSourceId) {
+    throw "Card art source id does not match the configured Minecraft installation: $($art.sourceId) != $expectedArtSourceId"
+}
+if ($assetSource.sourcePolicy -ne 'LOCAL_OWNED_INSTALLATION_ONLY' -or
+    $assetSource.redistributionPolicy -ne 'DO_NOT_COMMIT_EXTRACTED_ASSETS') {
+    throw 'Minecraft asset source redistribution policy is unsupported.'
+}
+if ([string]$assetSource.validatedJarSha256 -notmatch '^[0-9A-Fa-f]{64}$' -or [long]$assetSource.validatedJarSize -le 0) {
+    throw 'Minecraft asset source JAR provenance is incomplete.'
+}
+if ($worldTextureRegistry.schemaVersion -ne 1 -or $worldTextureRegistry.edition -ne 'Java' -or
+    $worldTextureRegistry.textureRoot -cne 'assets/minecraft/textures/block' -or $worldTextureRegistry.entries.Count -lt 1) {
+    throw 'Minecraft world texture registry source metadata is invalid.'
+}
+$worldTextureKeys = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+$worldTexturePaths = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+foreach ($texture in $worldTextureRegistry.entries) {
+    if ([string]$texture.key -notmatch '^[a-z0-9_]+$' -or -not $worldTextureKeys.Add([string]$texture.key)) {
+        throw "Invalid or duplicate Minecraft world texture key: $($texture.key)"
+    }
+    if ([string]$texture.sourcePath -notmatch '^assets/minecraft/textures/block/[a-z0-9_./]+\.png$' -or
+        -not $worldTexturePaths.Add([string]$texture.sourcePath)) {
+        throw "Invalid or duplicate Minecraft world texture source path: $($texture.sourcePath)"
+    }
+}
+if ($texts.schemaVersion -ne 1 -or $texts.locale -ne 'zh-CN') { throw 'Card text registry schema or locale is unsupported.' }
 if ($implementedEffects.schemaVersion -ne 1 -or $implementedEffects.contentVersion -lt 1) { throw 'Implemented effect registry version is invalid.' }
 $implementedEffectIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
 foreach ($effectId in $implementedEffects.implementedEffectIds) {
@@ -62,6 +105,10 @@ if ($themes.themes.Count -ne 7) { throw "Expected 7 themes, found $($themes.them
 if ($definitions.entries.Count -ne 74) { throw "Expected 74 definitions, found $($definitions.entries.Count)." }
 if ($texts.entries.Count -ne 74) { throw "Expected 74 localized texts, found $($texts.entries.Count)." }
 if ($definitions.schemaVersion -ne 4) { throw "Unsupported card definition schema version: $($definitions.schemaVersion)" }
+if ($definitions.contentVersion -lt 1) { throw 'Card definition contentVersion must be positive.' }
+if ([int]$definitions.implementedEffectRegistryVersion -ne [int]$implementedEffects.contentVersion) {
+    throw "Card definition registry references effect registry version $($definitions.implementedEffectRegistryVersion), but current version is $($implementedEffects.contentVersion). Regenerate card content."
+}
 
 $nameIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
 $nameKeys = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
@@ -78,6 +125,9 @@ foreach ($entry in $art.entries) {
     if (-not $artIds.Add([string]$entry.cardId)) { throw "Duplicate art card id: $($entry.cardId)" }
     if (-not $artKeys.Add([string]$entry.artKey)) { throw "Duplicate art key: $($entry.artKey)" }
     if ($entry.artKey -ne "card_art.$($entry.cardId)") { throw "Art key mismatch: $($entry.artKey)" }
+    if ($entry.usage -notin @('TEMPORARY_UNIT_ICON', 'TEMPORARY_BLOCK_MOTIF', 'TEMPORARY_ITEM_ICON')) {
+        throw "Unsupported card art usage: $($entry.cardId) -> $($entry.usage)"
+    }
     if ($entry.sourcePath -notmatch '^assets/minecraft/textures/(item|block)/[a-z0-9_/.]+\.png$') {
         throw "Unsafe or unsupported Minecraft texture path: $($entry.sourcePath)"
     }
@@ -93,6 +143,9 @@ $definitionById = @{}
 foreach ($entry in $definitions.entries) {
     $id = [string]$entry.id
     if (-not $definitionIds.Add($id)) { throw "Duplicate card definition id: $id" }
+    if ([int]$entry.contentVersion -lt 1 -or [int]$entry.contentVersion -gt [int]$definitions.contentVersion) {
+        throw "Card contentVersion is outside the registry version range: $id"
+    }
     $definitionById[$id] = $entry
     if ($entry.artKey -ne "card_art.$id") { throw "Definition art key mismatch: $id" }
     if ($entry.nameKey -ne "card.$id.name") { throw "Definition name key mismatch: $id" }
@@ -209,6 +262,10 @@ foreach ($entry in $names.entries) {
     }
 }
 
+& (Join-Path $PSScriptRoot 'sync-card-name-registry.ps1') -Check
+& (Join-Path $PSScriptRoot 'sync-card-definition-registry.ps1') -Check
+& (Join-Path $PSScriptRoot 'test-card-content-sync.ps1')
+
 $unityCopies = @(
     @($namesPath, (Join-Path $repoRoot 'client-unity\Assets\Game\Content\Resources\CardContent\card-name-registry.zh-CN.v1.json')),
     @($themesPath, (Join-Path $repoRoot 'client-unity\Assets\Game\Content\Resources\CardContent\card-theme-registry.v1.json')),
@@ -223,9 +280,11 @@ foreach ($pair in $unityCopies) {
 }
 
 & (Join-Path $PSScriptRoot 'sync-server-card-catalog.ps1') -Check
+& (Join-Path $PSScriptRoot 'validate-extracted-minecraft-assets.ps1')
+if (-not $?) { throw 'Local extracted Minecraft asset provenance validation failed.' }
 
 $pendingCount = @($definitions.entries | Where-Object effectImplementationStatus -eq 'PENDING').Count
 $implementedCount = @($definitions.entries | Where-Object effectImplementationStatus -eq 'IMPLEMENTED').Count
 $tauntCount = @($definitions.entries | Where-Object { $_.keywords -contains 'TAUNT' }).Count
 $chargeCount = @($definitions.entries | Where-Object { $_.keywords -contains 'CHARGE' }).Count
-Write-Output "Card content validation passed: 74 definitions/texts/art mappings, 7 accessible themes, $implementedCount implemented and $pendingCount reserved effects, $tauntCount TAUNT and $chargeCount CHARGE cards."
+Write-Output "Card content validation passed: 74 definitions/texts/art mappings, $($worldTextureRegistry.entries.Count) world texture sources, 7 accessible themes, $implementedCount implemented and $pendingCount reserved effects, $tauntCount TAUNT and $chargeCount CHARGE cards."

@@ -13,8 +13,8 @@ const timeoutMs = Number(process.env.BIOME_RIVALS_SMOKE_TIMEOUT_MS || 45000);
 const maximumAttempts = Number(process.env.BIOME_RIVALS_NETHER_STATUS_PROBE_ATTEMPTS || 24);
 const reportPath = resolve(process.env.BIOME_RIVALS_NETHER_STATUS_PROBE_REPORT ||
   '../artifacts/nether-status-summon-online-probe.json');
-const protocolVersion = 36;
-const rulesetVersion = 'prototype-0.61';
+const protocolVersion = 40;
+const rulesetVersion = 'prototype-0.65';
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -133,6 +133,23 @@ function samePublicEventOrder(batches, label) {
   assert(JSON.stringify(left) === JSON.stringify(right), `${label}: clients observed different public event order`);
 }
 
+function assertPrivateHandProjections(batches, playerIds, label) {
+  for (let index = 0; index < batches.length; index += 1) {
+    const projection = batches[index].handProjection;
+    const opponentIndex = index === 0 ? 1 : 0;
+    assert(projection?.ownPlayerId === playerIds[index] &&
+      projection.opponentPlayerId === playerIds[opponentIndex],
+    `${label}: hand projection player identities were misrouted`);
+    assert(projection.ownHand.length === projection.ownHandCards.length &&
+      projection.opponentHandCount === batches[opponentIndex].handProjection.ownHand.length,
+    `${label}: private hand projection counts disagree`);
+    for (const card of batches[opponentIndex].handProjection.ownHandCards) {
+      assert(!projection.ownHandCards.some((ownCard) => ownCard.handCardInstanceId === card.handCardInstanceId),
+        `${label}: opponent hand instance ${card.handCardInstanceId} leaked`);
+    }
+  }
+}
+
 function assertProjectedEventEqual(batches, index, label) {
   assert(index >= 0 && index < batches[0].events.length, `${label}: event index is out of range`);
   const left = batches[0].events[index];
@@ -218,6 +235,7 @@ async function createScenario(scenarioName, attempt, factions) {
     const snapshots = await Promise.all(players.map((player) => player.snapshots.next('initial')));
     const playerIds = snapshots.map((snapshot) => snapshot.viewerPlayerId);
     const hands = snapshots.map((snapshot) => ownState(snapshot).hand.slice());
+    const handCards = snapshots.map((snapshot) => ownState(snapshot).handCards.slice());
     const energy = new Map();
     for (const snapshot of snapshots) {
       assert(snapshot.matchId === matchId, `${scenarioName}: initial snapshot match ID mismatch`);
@@ -237,6 +255,7 @@ async function createScenario(scenarioName, attempt, factions) {
       snapshots,
       playerIds,
       hands,
+      handCards,
       energy,
       revision: snapshots[0].revision,
       phase: snapshots[0].phase,
@@ -247,19 +266,30 @@ async function createScenario(scenarioName, attempt, factions) {
 
     scenario.send = async (actorIndex, type, payload, label) => {
       const commandId = `${scenarioName}-${attempt}-${scenario.commands.length}-${randomUUID()}`;
+      const commandPayload = { ...payload };
+      if (type === 'DEPLOY_CARD' || type === 'PLAY_CARD') {
+        const handCard = scenario.handCards[actorIndex].find((card) => card.cardId === commandPayload.cardId);
+        assert(handCard, `${scenarioName} ${label}: no hand instance for ${commandPayload.cardId}`);
+        commandPayload.handCardInstanceId = handCard.handCardInstanceId;
+      }
       await players[actorIndex].socket.sendMatchState(matchId, 1, JSON.stringify({
         protocolVersion,
         rulesetVersion,
         commandId,
         expectedRevision: scenario.revision,
         type,
-        payload
+        payload: commandPayload
       }));
       const batches = await Promise.all(players.map((player) => player.batches.next(label)));
       samePublicEventOrder(batches, `${scenarioName} ${label}`);
+      assertPrivateHandProjections(batches, playerIds, `${scenarioName} ${label}`);
       assert(batches.every((batch) => batch.acknowledgedCommandId === commandId),
         `${scenarioName} ${label}: command acknowledgement did not converge`);
       scenario.revision = batches[0].revision;
+      for (let index = 0; index < players.length; index += 1) {
+        scenario.hands[index] = batches[index].handProjection.ownHand.slice();
+        scenario.handCards[index] = batches[index].handProjection.ownHandCards.slice();
+      }
       for (const event of batches[0].events) {
         const eventPayload = event.payload;
         if (event.type === 'PHASE_CHANGED') scenario.phase = eventPayload.phase;
@@ -270,20 +300,6 @@ async function createScenario(scenarioName, attempt, factions) {
         }
         if (typeof eventPayload.playerId === 'string' && Number.isInteger(eventPayload.totalRedstone)) {
           scenario.energy.set(eventPayload.playerId, eventPayload.totalRedstone);
-        }
-      }
-      for (let index = 0; index < players.length; index += 1) {
-        for (const event of batches[index].events) {
-          const eventPayload = event.payload;
-          if (event.type === 'MULLIGAN_COMPLETED' && eventPayload.playerId === playerIds[index]) {
-            scenario.hands[index] = eventPayload.hand.slice();
-          } else if (event.type === 'CARD_DRAWN' && eventPayload.playerId === playerIds[index]) {
-            scenario.hands[index].push(eventPayload.cardId);
-          } else if ((event.type === 'CARD_DEPLOYED' || event.type === 'CARD_PLAYED') &&
-                     eventPayload.playerId === playerIds[index]) {
-            const handIndex = scenario.hands[index].indexOf(eventPayload.cardId);
-            if (handIndex >= 0) scenario.hands[index].splice(handIndex, 1);
-          }
         }
       }
       scenario.commands.push({

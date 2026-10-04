@@ -29,15 +29,18 @@ namespace BiomeRivals.Demo
     {
         private const float ReferenceWidth = 1920f;
         private const float ReferenceHeight = 1080f;
-
-        private static readonly float[] PlayerUnitX = { -4.65f, -1.55f, 1.55f, 4.65f };
-        private static readonly float[] PlayerBuildingX = { -4.35f, 0f, 4.35f };
-        private static readonly float[] OpponentUnitX = { -4.8f, -1.6f, 1.6f, 4.8f };
-        private static readonly float[] OpponentBuildingX = { -4.5f, 0f, 4.5f };
+        private const float SlotSurfaceLocalY = 0.072f;
+        private const float SlotInteractionColliderThickness = 0.02f;
+        private static readonly Color FriendlyTargetLow = Hex("#587F33");
+        private static readonly Color FriendlyTargetHigh = Hex("#B8DD6B");
+        private static readonly Color EnemyTargetLow = Hex("#92522A");
+        private static readonly Color EnemyTargetHigh = Hex("#E4A348");
 
         private readonly Dictionary<string, Material> _materials = new Dictionary<string, Material>(StringComparer.Ordinal);
         private readonly Dictionary<string, SlotMarker> _slotMarkers = new Dictionary<string, SlotMarker>(StringComparer.Ordinal);
+        private readonly Dictionary<string, Transform> _pieceTransforms = new Dictionary<string, Transform>(StringComparer.Ordinal);
         private readonly List<Floater> _floaters = new List<Floater>();
+        private readonly List<CombatDamagePopup> _combatDamagePopups = new List<CombatDamagePopup>();
         private readonly List<MeshRenderer> _playerGroundRenderers = new List<MeshRenderer>();
         private readonly List<MeshRenderer> _opponentGroundRenderers = new List<MeshRenderer>();
         private readonly List<MeshRenderer> _playerFoundationRenderers = new List<MeshRenderer>();
@@ -48,17 +51,108 @@ namespace BiomeRivals.Demo
         private Transform _terrainRoot;
         private Transform _piecesRoot;
         private Transform _decorRoot;
+        private Transform _combatFeedbackRoot;
         private Camera _camera;
+        private Camera _letterboxCamera;
         private Light _opponentEnvironmentLight;
         private Light _playerEnvironmentLight;
+        private int _viewportWidth = -1;
+        private int _viewportHeight = -1;
         private bool _built;
         private string _pieceSignature = string.Empty;
+        private ArenaLayoutDefinition _arenaLayout = ArenaLayouts.Default;
         private string _playerFactionId = "plains_forest";
         private string _opponentFactionId = "nether";
 
         public Camera BoardCamera => _camera;
+        public Camera LetterboxCamera => _letterboxCamera;
         public string PlayerFactionId => _playerFactionId;
         public string OpponentFactionId => _opponentFactionId;
+        public string ArenaId => _arenaLayout.Id;
+        public bool HasActiveGameplayHighlights => _slotMarkers.Values.Any(marker =>
+            marker.ValidTarget || marker.PriorityTarget || marker.EndPhaseThreat ||
+            marker.EngineReadyKind != DemoEngineReadyKind.None || marker.Hovered || marker.Pressed ||
+            marker.HoverRejected || marker.PressRejected);
+
+        public int GetSlotCount(DemoSlotKind kind) =>
+            kind == DemoSlotKind.Unit ? _arenaLayout.UnitSlotCount : _arenaLayout.BuildingSlotCount;
+
+        public void ConfigureArena(string arenaId)
+        {
+            if (!ArenaLayouts.TryGet(arenaId, out var arenaLayout))
+                throw new ArgumentOutOfRangeException(nameof(arenaId), arenaId, "Arena is not registered.");
+            if (_built && ArenaId != arenaLayout.Id)
+                throw new InvalidOperationException("Arena layout must be configured before the battlefield is built.");
+            _arenaLayout = arenaLayout;
+        }
+
+        // Snapshot-controlled match transitions rebuild the entire slot topology together.
+        // Keep ConfigureArena's pre-build guard for all ordinary callers.
+        public void ApplyAuthoritativeArena(string arenaId)
+        {
+            if (!ArenaLayouts.TryGet(arenaId, out var layout))
+                throw new ArgumentOutOfRangeException(nameof(arenaId), arenaId, "Arena is not registered.");
+            if (ArenaId == arenaId) return;
+            if (!_built) { ConfigureArena(arenaId); return; }
+            ClearSlotInteractions();
+            foreach (var marker in _slotMarkers.Values)
+            {
+                marker.Root.gameObject.SetActive(false); // Destroy is deferred in Player: disable raycasts immediately.
+                // DemoGeneratedMeshOwner releases both generated meshes with their objects.
+                RetireArenaObject(marker.SurfaceMaterial);
+                RetireArenaObject(marker.RiserMaterial);
+                marker.Root.name = "Retired_" + marker.Root.name;
+                RetireArenaObject(marker.Root.gameObject);
+            }
+            _slotMarkers.Clear();
+            foreach (var key in _materials.Keys.Where(key => key.StartsWith("ground_surface_", StringComparison.Ordinal) ||
+                key.StartsWith("ground_riser_", StringComparison.Ordinal)).ToArray()) _materials.Remove(key);
+            _arenaLayout = layout;
+            // Coordinates changed even when object ids/stats have not.
+            _pieceSignature = null;
+            foreach (Transform piece in _piecesRoot) piece.gameObject.SetActive(false);
+            ClearChildren(_piecesRoot);
+            _pieceTransforms.Clear();
+            _floaters.Clear();
+            _combatDamagePopups.Clear();
+            foreach (Transform feedback in _combatFeedbackRoot) feedback.gameObject.SetActive(false);
+            ClearChildren(_combatFeedbackRoot);
+            BuildSlotPads();
+            Physics.SyncTransforms();
+        }
+
+        private static void RetireArenaObject(UnityEngine.Object value)
+        {
+            if (Application.isPlaying) Destroy(value);
+            else DestroyImmediate(value);
+        }
+
+        public static Rect CalculateAspectViewport(float targetAspect, float contentAspect = 16f / 9f)
+        {
+            if (targetAspect <= 0f || contentAspect <= 0f)
+                throw new ArgumentOutOfRangeException(nameof(targetAspect), "Target and content aspect ratios must be positive.");
+
+            if (targetAspect < contentAspect)
+            {
+                var height = targetAspect / contentAspect;
+                return new Rect(0f, (1f - height) * 0.5f, 1f, height);
+            }
+
+            var width = contentAspect / targetAspect;
+            return new Rect((1f - width) * 0.5f, 0f, width, 1f);
+        }
+
+        public void RefreshCameraViewport()
+        {
+            if (_camera == null) return;
+            var width = _camera.targetTexture != null ? _camera.targetTexture.width : Screen.width;
+            var height = _camera.targetTexture != null ? _camera.targetTexture.height : Screen.height;
+            if (width <= 0 || height <= 0) return;
+
+            _camera.rect = CalculateAspectViewport(width / (float)height);
+            _viewportWidth = width;
+            _viewportHeight = height;
+        }
 
         public void Configure(Shader worldShader, Shader interactiveGroundShader)
         {
@@ -76,6 +170,7 @@ namespace BiomeRivals.Demo
             BuildTerrain();
             BuildSlotPads();
             RebuildDecor();
+            Physics.SyncTransforms();
         }
 
         public void SetBattlefieldThemes(string playerFactionId, string opponentFactionId)
@@ -98,6 +193,7 @@ namespace BiomeRivals.Demo
 
             if (_playerEnvironmentLight != null) _playerEnvironmentLight.color = playerTheme.EnvironmentLight;
             if (_opponentEnvironmentLight != null) _opponentEnvironmentLight.color = opponentTheme.EnvironmentLight;
+            ApplySkyColor();
             ApplyTerrainThemes();
             RebuildDecor();
         }
@@ -126,15 +222,78 @@ namespace BiomeRivals.Demo
 
         public Vector3 GetSlotWorldPosition(bool player, DemoSlotKind kind, int index)
         {
-            var xValues = player
-                ? kind == DemoSlotKind.Unit ? PlayerUnitX : PlayerBuildingX
-                : kind == DemoSlotKind.Unit ? OpponentUnitX : OpponentBuildingX;
-            if (index < 0 || index >= xValues.Length) throw new ArgumentOutOfRangeException(nameof(index));
+            var slotCount = GetSlotCount(kind);
+            if (index < 0 || index >= slotCount) throw new ArgumentOutOfRangeException(nameof(index));
+            var spacing = kind == DemoSlotKind.Unit
+                ? player ? 3.1f : 3.2f
+                : player ? 4.35f : 4.5f;
+            // Four building cells share the standard three-cell row's outer anchors.
+            // Reusing the standard spacing pushes the end models under the details HUD.
+            // 2.90/3.00 spacing still exceeds the 2.85-wide ground pad.
+            if (kind == DemoSlotKind.Building && slotCount == 4) spacing *= 2f / 3f;
+            var x = (index - (slotCount - 1) * 0.5f) * spacing;
             var z = player
                 ? kind == DemoSlotKind.Unit ? -2.15f : -4.35f
                 : kind == DemoSlotKind.Unit ? 2.05f : 4.15f;
             var y = player ? 0.22f : 0.30f;
-            return new Vector3(xValues[index], y, z);
+            return new Vector3(x, y, z);
+        }
+
+        public Vector3 GetSlotInteractionWorldPosition(bool player, DemoSlotKind kind, int index)
+        {
+            BuildNow();
+            if (!_slotMarkers.TryGetValue(SlotKey(player, kind, index), out var marker))
+                throw new ArgumentOutOfRangeException(nameof(index));
+            return marker.Root.TransformPoint(new Vector3(0f, SlotSurfaceLocalY, 0f));
+        }
+
+        public Transform FindPieceTransform(string instanceId)
+        {
+            BuildNow();
+            return !string.IsNullOrEmpty(instanceId) && _pieceTransforms.TryGetValue(instanceId, out var piece)
+                ? piece
+                : null;
+        }
+
+        public void ShowCombatDamageNumber(bool player, DemoSlotKind kind, int startIndex, int occupiedSlots, int amount)
+        {
+            if (amount <= 0) return;
+            var slotCount = GetSlotCount(kind);
+            if (startIndex < 0 || startIndex >= slotCount) return;
+            BuildNow();
+
+            var range = Mathf.Clamp(occupiedSlots, 1, slotCount - startIndex);
+            var root = new GameObject("CombatDamage_" + (player ? "Player" : "Opponent"));
+            root.transform.SetParent(_combatFeedbackRoot, false);
+            var basePosition = GetOccupiedWorldPosition(player, kind, startIndex, range) + Vector3.up * 2.1f;
+            root.transform.localPosition = basePosition;
+
+            var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            var shadow = CreateDamageText(root.transform, "Shadow", amount, font, new Vector3(0.035f, -0.035f, -0.015f), Hex("#1A1110"));
+            var label = CreateDamageText(root.transform, "Label", amount, font, Vector3.zero, Hex("#FF6752"));
+            _combatDamagePopups.Add(new CombatDamagePopup(root.transform, label, shadow, basePosition.y, 0.92f));
+        }
+
+        private static TextMesh CreateDamageText(Transform parent, string name, int amount, Font font, Vector3 offset, Color color)
+        {
+            var textObject = new GameObject(name);
+            textObject.transform.SetParent(parent, false);
+            textObject.transform.localPosition = offset;
+            var text = textObject.AddComponent<TextMesh>();
+            text.text = "-" + amount;
+            text.anchor = TextAnchor.MiddleCenter;
+            text.alignment = TextAlignment.Center;
+            text.font = font;
+            text.fontSize = 72;
+            text.characterSize = 0.105f;
+            text.fontStyle = FontStyle.Bold;
+            text.color = color;
+            text.richText = false;
+            var renderer = textObject.GetComponent<MeshRenderer>();
+            renderer.shadowCastingMode = ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
+            renderer.sortingOrder = 310;
+            return text;
         }
 
         public Vector2 GetSlotReferencePosition(bool player, DemoSlotKind kind, int index)
@@ -229,6 +388,22 @@ namespace BiomeRivals.Demo
             UpdateSlotMarker(marker, Time.unscaledTime, 0f);
         }
 
+        // Clear input affordances without erasing final objects, passive statuses, or event pulses.
+        public void ClearSlotInteractions()
+        {
+            BuildNow();
+            foreach (var marker in _slotMarkers.Values)
+            {
+                marker.ValidTarget = false;
+                marker.PriorityTarget = false;
+                marker.Hovered = false;
+                marker.Pressed = false;
+                marker.HoverRejected = false;
+                marker.PressRejected = false;
+                UpdateSlotMarker(marker, Time.unscaledTime, 0f);
+            }
+        }
+
         public void SetSlotHovered(bool player, DemoSlotKind kind, int index, bool hovered)
         {
             BuildNow();
@@ -250,6 +425,28 @@ namespace BiomeRivals.Demo
             SetSlotRangeInteraction(player, kind, startIndex, occupiedSlots, hovered, false, rejected);
         }
 
+        public void PulseSlotRange(
+            bool player,
+            DemoSlotKind kind,
+            int startIndex,
+            int occupiedSlots,
+            Color color,
+            float duration = 0.95f)
+        {
+            BuildNow();
+            var slotCount = GetSlotCount(kind);
+            var rangeEnd = Mathf.Min(slotCount, startIndex + Mathf.Max(1, occupiedSlots));
+            var startTime = Time.unscaledTime;
+            for (var index = Mathf.Max(0, startIndex); index < rangeEnd; index++)
+            {
+                if (!_slotMarkers.TryGetValue(SlotKey(player, kind, index), out var marker)) continue;
+                marker.PresentationPulseColor = color;
+                marker.PresentationPulseStartedAt = startTime;
+                marker.PresentationPulseDuration = Mathf.Max(0.05f, duration);
+                UpdateSlotMarker(marker, startTime, 0f);
+            }
+        }
+
         public void SetSlotRangePressed(bool player, DemoSlotKind kind, int startIndex, int occupiedSlots, bool pressed, bool rejected)
         {
             SetSlotRangeInteraction(player, kind, startIndex, occupiedSlots, pressed, true, rejected);
@@ -265,7 +462,7 @@ namespace BiomeRivals.Demo
             bool rejected)
         {
             BuildNow();
-            var slotCount = kind == DemoSlotKind.Unit ? 4 : 3;
+            var slotCount = GetSlotCount(kind);
             var rangeEnd = Mathf.Min(slotCount, startIndex + Mathf.Max(1, occupiedSlots));
             for (var index = Mathf.Max(0, startIndex); index < rangeEnd; index++)
             {
@@ -302,6 +499,7 @@ namespace BiomeRivals.Demo
             if (signature == _pieceSignature) return;
             _pieceSignature = signature;
             ClearChildren(_piecesRoot);
+            _pieceTransforms.Clear();
             _floaters.Clear();
             CreateSidePieces(true, playerObjects, registry);
             CreateSidePieces(false, opponentObjects, registry);
@@ -309,6 +507,11 @@ namespace BiomeRivals.Demo
 
         private void Update()
         {
+            var outputWidth = _camera != null && _camera.targetTexture != null ? _camera.targetTexture.width : Screen.width;
+            var outputHeight = _camera != null && _camera.targetTexture != null ? _camera.targetTexture.height : Screen.height;
+            if (outputWidth != _viewportWidth || outputHeight != _viewportHeight)
+                RefreshCameraViewport();
+
             var time = Time.unscaledTime;
             foreach (var floater in _floaters)
             {
@@ -316,7 +519,42 @@ namespace BiomeRivals.Demo
                 var position = floater.Transform.localPosition;
                 position.y = floater.BaseY + Mathf.Sin(time * 2.1f + floater.Phase) * 0.055f;
                 floater.Transform.localPosition = position;
-                floater.Transform.localRotation = Quaternion.Euler(0, Mathf.Sin(time * 0.7f + floater.Phase) * 5f, 0);
+                floater.Transform.localRotation = floater.BaseRotation * Quaternion.Euler(0, Mathf.Sin(time * 0.7f + floater.Phase) * 5f, 0);
+            }
+
+            for (var index = _combatDamagePopups.Count - 1; index >= 0; index--)
+            {
+                var popup = _combatDamagePopups[index];
+                if (popup.Root == null)
+                {
+                    _combatDamagePopups.RemoveAt(index);
+                    continue;
+                }
+
+                popup.Age += Time.unscaledDeltaTime;
+                var progress = Mathf.Clamp01(popup.Age / popup.Duration);
+                var position = popup.Root.localPosition;
+                position.y = popup.BaseY + progress * 0.82f;
+                popup.Root.localPosition = position;
+                popup.Root.localScale = Vector3.one * (progress < 0.16f
+                    ? Mathf.Lerp(0.72f, 1.08f, progress / 0.16f)
+                    : Mathf.Lerp(1.08f, 0.94f, Mathf.InverseLerp(0.16f, 1f, progress)));
+                if (_camera != null)
+                    popup.Root.rotation = Quaternion.LookRotation(_camera.transform.position - popup.Root.position, _camera.transform.up);
+
+                var alpha = 1f - Mathf.SmoothStep(0.38f, 1f, progress);
+                var labelColor = popup.Label.color;
+                labelColor.a = alpha;
+                popup.Label.color = labelColor;
+                var shadowColor = popup.Shadow.color;
+                shadowColor.a = alpha * 0.9f;
+                popup.Shadow.color = shadowColor;
+                if (progress >= 1f)
+                {
+                    if (Application.isPlaying) Destroy(popup.Root.gameObject);
+                    else DestroyImmediate(popup.Root.gameObject);
+                    _combatDamagePopups.RemoveAt(index);
+                }
             }
 
             foreach (var marker in _slotMarkers.Values) UpdateSlotMarker(marker, time, Time.unscaledDeltaTime);
@@ -331,6 +569,12 @@ namespace BiomeRivals.Demo
             var actionableHover = marker.Hovered && marker.ValidTarget;
             var actionablePress = marker.Pressed && marker.ValidTarget;
             var engineReady = marker.EngineReadyKind != DemoEngineReadyKind.None;
+            var presentationPulseAge = time - marker.PresentationPulseStartedAt;
+            var presentationPulseActive = marker.PresentationPulseDuration > 0f &&
+                presentationPulseAge >= 0f && presentationPulseAge < marker.PresentationPulseDuration;
+            var presentationPulseFade = presentationPulseActive
+                ? 1f - Mathf.Clamp01(presentationPulseAge / marker.PresentationPulseDuration)
+                : 0f;
             var engineColor = marker.EngineReadyKind == DemoEngineReadyKind.Nursery
                 ? Color.Lerp(Hex("#41672D"), Hex("#A8D66D"), pulse)
                 : marker.EngineReadyKind == DemoEngineReadyKind.Cactus
@@ -361,7 +605,9 @@ namespace BiomeRivals.Demo
                      : marker.ValidTarget
                          ? marker.PriorityTarget
                              ? Color.Lerp(Hex("#A97727"), Hex("#FFE08A"), pulse)
-                             : Color.Lerp(Hex("#3D9E8F"), Hex("#79E0CB"), pulse)
+                             : marker.Player
+                                 ? Color.Lerp(FriendlyTargetLow, FriendlyTargetHigh, pulse)
+                                 : Color.Lerp(EnemyTargetLow, EnemyTargetHigh, pulse)
                     : marker.EndPhaseThreat
                         ? Color.Lerp(Hex("#8A2E24"), Hex("#FF8865"), pulse)
                      : marker.Burning
@@ -398,6 +644,13 @@ namespace BiomeRivals.Demo
                         : engineReady
                             ? 0.13f + pulse * 0.07f
                         : marker.Hovered && !marker.Occupied ? 0.12f : 0f;
+            if (presentationPulseFade > 0f && !rejectedPreview)
+            {
+                // Event feedback must remain legible even while target highlights are active.
+                var pulseWeight = presentationPulseFade * 0.92f;
+                highlightColor = Color.Lerp(highlightColor, marker.PresentationPulseColor, pulseWeight);
+                highlightStrength = Mathf.Max(highlightStrength, 0.22f + presentationPulseFade * 0.72f);
+            }
             SetGroundHighlight(marker.SurfaceMaterial, highlightColor, highlightStrength);
             if (marker.RiserRenderer != null)
                 marker.RiserRenderer.enabled = (actionableHover && !actionablePress || rejectedPreview) && !marker.Occupied;
@@ -406,8 +659,13 @@ namespace BiomeRivals.Demo
                     rejectedPreview ? Hex("#7D142E") : actionableHover ? Hex("#8F642B") : Hex("#332A20"),
                     rejectedPreview ? Hex("#E9274C") : actionableHover ? Hex("#6B4318") : Color.black);
             var targetPosition = marker.BasePosition;
-            targetPosition.y += rejectedPreview && !marker.Occupied ? 0.045f : actionablePress && !marker.Occupied ? 0.025f : actionableHover && !marker.Occupied ? 0.085f : marker.ValidTarget && !marker.Occupied ? pulse * 0.012f : marker.Hovered && !marker.Occupied ? 0.018f : 0f;
+            var interactionLift = rejectedPreview && !marker.Occupied ? 0.045f : actionablePress && !marker.Occupied ? 0.025f : actionableHover && !marker.Occupied ? 0.085f : marker.ValidTarget && !marker.Occupied ? pulse * 0.012f : marker.Hovered && !marker.Occupied ? 0.018f : 0f;
+            var presentationLift = presentationPulseFade > 0f && !marker.Occupied && !rejectedPreview && !actionablePress && !actionableHover
+                ? presentationPulseFade * 0.035f
+                : 0f;
+            targetPosition.y += interactionLift + presentationLift;
             var targetScale = rejectedPreview && !marker.Occupied ? new Vector3(0.992f, 1f, 0.992f) : actionablePress && !marker.Occupied ? new Vector3(0.985f, 1f, 0.985f) : actionableHover && !marker.Occupied ? new Vector3(1.018f, 1f, 1.018f) : Vector3.one;
+            if (presentationLift > 0f) targetScale = new Vector3(1f + presentationPulseFade * 0.018f, 1f, 1f + presentationPulseFade * 0.018f);
             var blend = deltaTime <= 0f ? 0f : 1f - Mathf.Exp(-16f * deltaTime);
             marker.Root.localPosition = Vector3.Lerp(marker.Root.localPosition, targetPosition, blend);
             marker.Root.localScale = Vector3.Lerp(marker.Root.localScale, targetScale, blend);
@@ -418,6 +676,7 @@ namespace BiomeRivals.Demo
             _terrainRoot = NewRoot("BattlefieldGeometry");
             _piecesRoot = NewRoot("BattlefieldPieces");
             _decorRoot = NewRoot("BattlefieldDecor");
+            _combatFeedbackRoot = NewRoot("CombatFeedback");
         }
 
         private Transform NewRoot(string name)
@@ -463,18 +722,28 @@ namespace BiomeRivals.Demo
             RenderSettings.fogStartDistance = 16f;
             RenderSettings.fogEndDistance = 34f;
 
+            var skyColor = DemoBattlefieldThemeCatalog.GetSkyColor(_playerFactionId, _opponentFactionId);
+            var letterboxCameraObject = new GameObject("BattlefieldLetterboxCamera", typeof(Camera));
+            letterboxCameraObject.transform.SetParent(transform, false);
+            _letterboxCamera = letterboxCameraObject.GetComponent<Camera>();
+            _letterboxCamera.clearFlags = CameraClearFlags.SolidColor;
+            _letterboxCamera.backgroundColor = skyColor;
+            _letterboxCamera.cullingMask = 0;
+            _letterboxCamera.depth = -1f;
+            _letterboxCamera.useOcclusionCulling = false;
+
             var cameraObject = new GameObject("BattlefieldCamera", typeof(Camera));
             cameraObject.tag = "MainCamera";
             cameraObject.transform.SetParent(transform, false);
             _camera = cameraObject.GetComponent<Camera>();
             _camera.clearFlags = CameraClearFlags.SolidColor;
-            _camera.backgroundColor = Hex("#090B0A");
+            _camera.backgroundColor = skyColor;
             _camera.orthographic = false;
             _camera.fieldOfView = 42.5f;
-            _camera.aspect = 16f / 9f;
             _camera.nearClipPlane = 0.1f;
             _camera.farClipPlane = 80f;
             _camera.allowHDR = true;
+            RefreshCameraViewport();
             _camera.transform.position = new Vector3(0, 12.8f, -14.2f);
             _camera.transform.LookAt(new Vector3(0, -0.1f, 0.25f));
 
@@ -491,6 +760,13 @@ namespace BiomeRivals.Demo
 
             _opponentEnvironmentLight = CreatePointLight("OpponentEnvironmentLight", new Vector3(0, 4.2f, 5.5f), Hex("#FF6A2B"), 7.5f, 2.4f);
             _playerEnvironmentLight = CreatePointLight("PlayerEnvironmentLight", new Vector3(-3.5f, 4.8f, -4.5f), Hex("#8FC7B7"), 8f, 1.25f);
+        }
+
+        private void ApplySkyColor()
+        {
+            var skyColor = DemoBattlefieldThemeCatalog.GetSkyColor(_playerFactionId, _opponentFactionId);
+            if (_camera != null) _camera.backgroundColor = skyColor;
+            if (_letterboxCamera != null) _letterboxCamera.backgroundColor = skyColor;
         }
 
         private Light CreatePointLight(string name, Vector3 position, Color color, float range, float intensity)
@@ -559,12 +835,12 @@ namespace BiomeRivals.Demo
 
         private void BuildSlotPads()
         {
-            for (var i = 0; i < 4; i++)
+            for (var i = 0; i < GetSlotCount(DemoSlotKind.Unit); i++)
             {
                 CreateSlotPad(true, DemoSlotKind.Unit, i, new Vector3(2.35f, 0.10f, 1.62f));
                 CreateSlotPad(false, DemoSlotKind.Unit, i, new Vector3(2.35f, 0.10f, 1.62f));
             }
-            for (var i = 0; i < 3; i++)
+            for (var i = 0; i < GetSlotCount(DemoSlotKind.Building); i++)
             {
                 CreateSlotPad(true, DemoSlotKind.Building, i, new Vector3(2.85f, 0.10f, 1.20f));
                 CreateSlotPad(false, DemoSlotKind.Building, i, new Vector3(2.85f, 0.10f, 1.20f));
@@ -658,6 +934,13 @@ namespace BiomeRivals.Demo
             renderer.shadowCastingMode = ShadowCastingMode.Off;
             renderer.receiveShadows = false;
             surface.GetComponent<DemoGeneratedMeshOwner>().Configure(mesh);
+
+            var interactionFootprint = new GameObject("InteractionFootprint", typeof(BoxCollider), typeof(DemoBattlefieldSlotTarget));
+            interactionFootprint.transform.SetParent(parent, false);
+            var footprintCollider = interactionFootprint.GetComponent<BoxCollider>();
+            footprintCollider.center = new Vector3(0f, SlotSurfaceLocalY, 0f);
+            footprintCollider.size = new Vector3(size.x, SlotInteractionColliderThickness, size.z);
+            interactionFootprint.GetComponent<DemoBattlefieldSlotTarget>().Configure(player, kind, index);
             return renderer;
         }
 
@@ -674,10 +957,10 @@ namespace BiomeRivals.Demo
         {
             var localVertices = new[]
             {
-                new Vector3(left, 0.072f, near),
-                new Vector3(left, 0.072f, far),
-                new Vector3(right, 0.072f, far),
-                new Vector3(right, 0.072f, near)
+                new Vector3(left, SlotSurfaceLocalY, near),
+                new Vector3(left, SlotSurfaceLocalY, far),
+                new Vector3(right, SlotSurfaceLocalY, far),
+                new Vector3(right, SlotSurfaceLocalY, near)
             };
             var start = vertices.Count;
             var fallbackUv = new[] { Vector2.zero, Vector2.up, Vector2.one, Vector2.right };
@@ -989,6 +1272,7 @@ namespace BiomeRivals.Demo
                 instance.name = "Piece_" + battlefieldObject.InstanceId + "_" + cardId;
                 instance.transform.localPosition = position;
                 instance.transform.localRotation = Quaternion.Euler(0, player ? 0 : 180, 0);
+                _pieceTransforms[battlefieldObject.InstanceId] = instance.transform;
                 if (battlefieldObject.HasStatus("FIRE")) BuildFireStatusEffect(instance.transform, battlefieldObject.InstanceId);
                 if (battlefieldObject.HasStatus("WITHER")) BuildWitherStatusEffect(instance.transform, battlefieldObject.InstanceId);
                 return;
@@ -1004,6 +1288,7 @@ namespace BiomeRivals.Demo
             }
 
             var root = NewChildRoot(_piecesRoot, "Piece_" + battlefieldObject.InstanceId + "_" + cardId, position);
+            _pieceTransforms[battlefieldObject.InstanceId] = root;
             if (battlefieldObject.SlotKind == DemoSlotKind.Building)
             {
                 var footprintWidth = GetOccupiedWorldWidth(
@@ -1551,6 +1836,7 @@ namespace BiomeRivals.Demo
 
         private void OnDestroy()
         {
+            _combatDamagePopups.Clear();
             foreach (var material in _materials.Values)
             {
                 if (material == null) continue;
@@ -1571,12 +1857,33 @@ namespace BiomeRivals.Demo
             public readonly Transform Transform;
             public readonly float BaseY;
             public readonly float Phase;
+            public readonly Quaternion BaseRotation;
 
             public Floater(Transform transform, float baseY, float phase)
             {
                 Transform = transform;
                 BaseY = baseY;
                 Phase = phase;
+                BaseRotation = transform.localRotation;
+            }
+        }
+
+        private sealed class CombatDamagePopup
+        {
+            public readonly Transform Root;
+            public readonly TextMesh Label;
+            public readonly TextMesh Shadow;
+            public readonly float BaseY;
+            public readonly float Duration;
+            public float Age;
+
+            public CombatDamagePopup(Transform root, TextMesh label, TextMesh shadow, float baseY, float duration)
+            {
+                Root = root;
+                Label = label;
+                Shadow = shadow;
+                BaseY = baseY;
+                Duration = duration;
             }
         }
 
@@ -1604,6 +1911,9 @@ namespace BiomeRivals.Demo
             public bool Pressed;
             public bool HoverRejected;
             public bool PressRejected;
+            public Color PresentationPulseColor;
+            public float PresentationPulseStartedAt = float.NegativeInfinity;
+            public float PresentationPulseDuration;
 
             public SlotMarker(
                 bool player,

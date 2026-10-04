@@ -21,13 +21,16 @@ namespace BiomeRivals.Networking
         public readonly string Detail;
         public readonly string MatchId;
         public readonly int Attempt;
+        public readonly ServerCompatibilityFailure CompatibilityFailure;
 
-        public MatchConnectionStatus(MatchConnectionPhase phase, string detail = "", string matchId = "", int attempt = 0)
+        public MatchConnectionStatus(MatchConnectionPhase phase, string detail = "", string matchId = "", int attempt = 0,
+            ServerCompatibilityFailure compatibilityFailure = null)
         {
             Phase = phase;
             Detail = detail ?? string.Empty;
             MatchId = matchId ?? string.Empty;
             Attempt = attempt;
+            CompatibilityFailure = compatibilityFailure;
         }
 
         public bool CanSendCommands => Phase == MatchConnectionPhase.Ready && !string.IsNullOrEmpty(MatchId);

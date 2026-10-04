@@ -13,6 +13,7 @@
   "entityGeometry": {
     "entity_bee": "bee.geo.json",
     "entity_sheep": "sheep.geo.json",
+    "entity_sheep_baby": "baby_sheep.geo.json",
     "entity_wolf": "wolf.geo.json",
     "entity_villager": "villager_v2.geo.json",
     "entity_vindicator": "vindicator.geo.json",
@@ -46,6 +47,7 @@
   "entityTextures": {
     "entity_bee": "bee/bee.png",
     "entity_sheep": "sheep/sheep.tga",
+    "entity_sheep_baby": "sheep/sheep_baby.tga",
     "entity_wolf": "wolf/wolf.png",
     "entity_villager": "villager2/villager.png",
     "entity_vindicator": "vindicator.png",

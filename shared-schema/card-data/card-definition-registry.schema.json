@@ -4,10 +4,11 @@
   "title": "CardDefinitionRegistry",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "contentVersion", "source", "entries"],
+  "required": ["schemaVersion", "contentVersion", "implementedEffectRegistryVersion", "source", "entries"],
   "properties": {
     "schemaVersion": { "const": 4 },
     "contentVersion": { "type": "integer", "minimum": 1 },
+    "implementedEffectRegistryVersion": { "type": "integer", "minimum": 1 },
     "source": { "type": "string", "minLength": 1 },
     "entries": {
       "type": "array",

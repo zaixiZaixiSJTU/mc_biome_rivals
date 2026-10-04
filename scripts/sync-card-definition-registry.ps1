@@ -3,16 +3,65 @@ param(
     [string]$SourceMarkdown = 'docs\design\Minecraft_Biome_Rivals_Prototype_Cards_v0.1.md',
     [string]$DefinitionOutput = 'shared-schema\card-data\card-definition-registry.v1.json',
     [string]$TextOutput = 'shared-schema\card-data\localization\card-text-registry.zh-CN.v1.json',
-    [string]$ImplementedEffects = 'shared-schema\card-data\implemented-effect-registry.v1.json'
+    [string]$ImplementedEffects = 'shared-schema\card-data\implemented-effect-registry.v1.json',
+    [string]$VersionSource = 'shared-schema\card-data\card-definition-registry.v1.json',
+    [switch]$Check
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
+
+function ConvertTo-CanonicalJson($Value) {
+    if ($null -eq $Value) { return 'null' }
+    if ($Value -is [System.Collections.IDictionary]) {
+        $keys = [string[]]@($Value.Keys | ForEach-Object { [string]$_ })
+        [Array]::Sort($keys, [System.StringComparer]::Ordinal)
+        if ($keys.Count -eq 0) { return '{}' }
+        $members = foreach ($key in $keys) {
+            $encodedKey = ConvertTo-Json -InputObject $key -Compress
+            $encodedValue = ConvertTo-CanonicalJson $Value[$key]
+            "${encodedKey}:$encodedValue"
+        }
+        return '{' + [string]::Join(',', $members) + '}'
+    }
+    if ($Value -is [System.Management.Automation.PSCustomObject]) {
+        $keys = [string[]]@($Value.PSObject.Properties.Name)
+        [Array]::Sort($keys, [System.StringComparer]::Ordinal)
+        $members = foreach ($key in $keys) {
+            $encodedKey = ConvertTo-Json -InputObject $key -Compress
+            $encodedValue = ConvertTo-CanonicalJson $Value.$key
+            "${encodedKey}:$encodedValue"
+        }
+        return '{' + [string]::Join(',', $members) + '}'
+    }
+    if ($Value -is [System.Collections.IEnumerable] -and $Value -isnot [string]) {
+        $items = @(foreach ($item in $Value) { ConvertTo-CanonicalJson $item })
+        return '[' + [string]::Join(',', $items) + ']'
+    }
+    return ConvertTo-Json -InputObject $Value -Compress -Depth 10
+}
+
+$versionSourcePath = Join-Path $repoRoot $VersionSource
+if (-not (Test-Path -LiteralPath $versionSourcePath)) {
+    throw "Card definition version source not found: $versionSourcePath. Create the canonical registry or pass -VersionSource."
+}
+$versionSourceDocument = Get-Content -LiteralPath $versionSourcePath -Raw -Encoding UTF8 | ConvertFrom-Json
+$contentVersion = [int]$versionSourceDocument.contentVersion
+if ($contentVersion -lt 1) { throw "Card definition contentVersion is invalid in $versionSourcePath" }
+# Existing per-card versions are authored metadata; new cards start at the registry's current version.
+$cardContentVersions = @{}
+foreach ($versionedCard in $versionSourceDocument.entries) {
+    if (-not [string]::IsNullOrWhiteSpace([string]$versionedCard.id) -and [int]$versionedCard.contentVersion -gt 0) {
+        $cardContentVersions[[string]$versionedCard.id] = [int]$versionedCard.contentVersion
+    }
+}
 $sourcePath = Join-Path $repoRoot $SourceMarkdown
 if (-not (Test-Path -LiteralPath $sourcePath)) { throw "Card design source not found: $sourcePath" }
 $implementedEffectsPath = Join-Path $repoRoot $ImplementedEffects
 if (-not (Test-Path -LiteralPath $implementedEffectsPath)) { throw "Implemented effect registry not found: $implementedEffectsPath" }
 $implementedEffectDocument = Get-Content -LiteralPath $implementedEffectsPath -Raw -Encoding UTF8 | ConvertFrom-Json
+$implementedEffectRegistryVersion = [int]$implementedEffectDocument.contentVersion
+if ($implementedEffectRegistryVersion -lt 1) { throw "Implemented effect registry version is invalid in $implementedEffectsPath" }
 $implementedEffectIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
 foreach ($effectId in $implementedEffectDocument.implementedEffectIds) {
     if (-not $implementedEffectIds.Add([string]$effectId)) { throw "Duplicate implemented effect id: $effectId" }
@@ -159,12 +208,13 @@ foreach ($line in Get-Content -LiteralPath $sourcePath -Encoding UTF8) {
     if ($hasEffect) { $effectIds.Add($effectId) }
     $recipe = $recipesByTarget[$designId]
     $hasCraftingRecipe = $null -ne $recipe
+    $cardContentVersion = if ($cardContentVersions.ContainsKey($cardId)) { $cardContentVersions[$cardId] } else { $contentVersion }
     $craftingRecipe = [System.Collections.Generic.List[object]]::new()
     if ($hasCraftingRecipe) {
         foreach ($ingredient in $recipe.ingredients) { $craftingRecipe.Add($ingredient) }
     }
     $definitions.Add([ordered]@{
-        id=$cardId; designId=$designId; contentVersion=41; collectible=(-not $isToken)
+        id=$cardId; designId=$designId; contentVersion=$cardContentVersion; collectible=(-not $isToken)
         manualPlayAllowed=($cardId -notin @('tk_006', 'tk_007', 'tk_008'))
         nameKey="card.$cardId.name"; rulesTextKey="card.$cardId.rules"
         factionId=$factionId; themeId=$themeId; rarity=$rarity; cardType=$cardType; cost=$cost
@@ -203,15 +253,29 @@ foreach ($targetDesignId in $recipesByTarget.Keys) {
 }
 
 if ($definitions.Count -ne 74) { throw "Expected 74 card definitions, found $($definitions.Count)." }
-$definitionDocument = [ordered]@{ schemaVersion=4; contentVersion=41; source=$SourceMarkdown.Replace('\','/'); entries=$definitions }
+$definitionDocument = [ordered]@{ schemaVersion=4; contentVersion=$contentVersion; implementedEffectRegistryVersion=$implementedEffectRegistryVersion; source=$SourceMarkdown.Replace('\','/'); entries=$definitions }
 $textDocument = [ordered]@{ schemaVersion=1; locale='zh-CN'; source=$SourceMarkdown.Replace('\','/'); entries=$texts }
 
 foreach ($output in @(
-    @((Join-Path $repoRoot $DefinitionOutput), $definitionDocument),
-    @((Join-Path $repoRoot $TextOutput), $textDocument)
+    @((Join-Path $repoRoot $DefinitionOutput), $definitionDocument, 'card definition registry'),
+    @((Join-Path $repoRoot $TextOutput), $textDocument, 'card text registry')
 )) {
-    [System.IO.Directory]::CreateDirectory((Split-Path -Parent $output[0])) | Out-Null
-    $json = $output[1] | ConvertTo-Json -Depth 10
-    [System.IO.File]::WriteAllText($output[0], $json + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false))
+    $expected = ($output[1] | ConvertTo-Json -Depth 10) + [Environment]::NewLine
+    if ($Check) {
+        if (-not (Test-Path -LiteralPath $output[0])) { throw "Generated $($output[2]) is missing: $($output[0])" }
+        $actual = Get-Content -LiteralPath $output[0] -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ((ConvertTo-CanonicalJson $actual) -cne (ConvertTo-CanonicalJson $output[1])) {
+            throw "Generated $($output[2]) is stale. Run scripts/sync-card-definition-registry.ps1: $($output[0])"
+        }
+    }
+    else {
+        [System.IO.Directory]::CreateDirectory((Split-Path -Parent $output[0])) | Out-Null
+        [System.IO.File]::WriteAllText($output[0], $expected, [System.Text.UTF8Encoding]::new($false))
+    }
 }
-Write-Output "Registered $($definitions.Count) complete card definitions and localized texts."
+if ($Check) {
+    Write-Output "Card definition registry and localized texts are current with $($definitions.Count) cards at content version $contentVersion."
+}
+else {
+    Write-Output "Registered $($definitions.Count) complete card definitions and localized texts at content version $contentVersion."
+}

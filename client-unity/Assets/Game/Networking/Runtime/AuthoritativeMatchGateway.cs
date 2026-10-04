@@ -5,7 +5,10 @@ using UnityEngine;
 
 namespace BiomeRivals.Networking
 {
-    public sealed class AuthoritativeMatchGateway : IMatchGateway, IMatchReconnectDiagnostics
+    public sealed partial class AuthoritativeMatchGateway : IMatchGateway, IMatchReconnectDiagnostics
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        , IMatchTestFixtureDiagnostics, IMatchInboundDeliveryDiagnostics
+#endif
     {
         private readonly IMatchTransport _transport;
         private MatchConnectionStatus _currentStatus;
@@ -90,6 +93,18 @@ namespace BiomeRivals.Networking
 
         public Task DisconnectAsync() => _transport.DisconnectAsync();
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        public event Action<MatchTestFixtureResult> TestFixtureResultReceived;
+        public Task RequestSimultaneousDefeatFixtureAsync(bool readableHand = false)
+        {
+            if (_disposed || _compatibilityFailed || !_currentStatus.CanSendCommands)
+                throw new InvalidOperationException("Test fixture diagnostics require a compatible ready match.");
+            return _transport.SendAsync(255, readableHand
+                ? "{\"fixture\":\"simultaneous-defeat-readable\"}"
+                : "{\"fixture\":\"simultaneous-defeat\"}");
+        }
+#endif
+
         public Task SimulateUnexpectedDisconnectAsync()
         {
             if (_transport is IMatchReconnectDiagnostics diagnostics)
@@ -100,12 +115,46 @@ namespace BiomeRivals.Networking
 
         private void HandleMessage(int opcode, string json)
         {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            lock (_inboundDeliveryLock)
+            {
+                if (_disposed) return;
+                if (_holdingInbound || _drainingInbound)
+                {
+                    if (_heldInbound.Count >= 64 || _heldInboundCharacters + (json?.Length ?? 0) > 2 * 1024 * 1024)
+                    {
+                        CancelInboundDeliveryHold();
+                        HandleFault(new InvalidOperationException("Development inbound hold exceeded its bounded receive buffer."));
+                        return;
+                    }
+                    _heldInbound.Enqueue(new HeldInboundMessage(opcode, json));
+                    _heldInboundCharacters += json?.Length ?? 0;
+                    return;
+                }
+                DeliverMessage(opcode, json);
+            }
+#else
+            DeliverMessage(opcode, json);
+#endif
+        }
+
+        private void DeliverMessage(int opcode, string json)
+        {
             try
             {
                 switch (opcode)
                 {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                    case 5:
+                        var fixture = MatchWireJson.Deserialize<MatchTestFixtureResult>(json);
+                        if (fixture == null || !fixture.ok || fixture.revision < 1 ||
+                            fixture.reason != "SIMULTANEOUS_DEFEAT" || !string.IsNullOrEmpty(fixture.winnerPlayerId))
+                            throw new InvalidOperationException("Invalid test fixture acknowledgement.");
+                        TestFixtureResultReceived?.Invoke(fixture);
+                        break;
+#endif
                     case MatchOpcodes.EventBatch:
-                        var batch = JsonUtility.FromJson<MatchEventBatchDto>(json);
+                        var batch = MatchWireJson.Deserialize<MatchEventBatchDto>(json);
                         if (batch == null || !HasCompatibleVersion(batch.protocolVersion, batch.rulesetVersion))
                         {
                             FailCompatibility("Server event protocol or ruleset version is unsupported.");
@@ -114,11 +163,10 @@ namespace BiomeRivals.Networking
                         EventBatchReceived?.Invoke(batch);
                         break;
                     case MatchOpcodes.Rejection:
-                        CommandRejected?.Invoke(JsonUtility.FromJson<CommandRejectionDto>(json));
+                        CommandRejected?.Invoke(MatchWireJson.Deserialize<CommandRejectionDto>(json));
                         break;
                     case MatchOpcodes.Snapshot:
-                        var snapshot = JsonUtility.FromJson<MatchStateDto>(json);
-                        if (snapshot != null && IsExplicitJsonNull(json, "pendingChoice")) snapshot.pendingChoice = null;
+                        var snapshot = MatchWireJson.Deserialize<MatchStateDto>(json);
                         if (snapshot == null || !HasCompatibleVersion(snapshot.protocolVersion, snapshot.rulesetVersion))
                         {
                             FailCompatibility("Server snapshot protocol or ruleset version is unsupported.");
@@ -130,15 +178,24 @@ namespace BiomeRivals.Networking
             }
             catch (Exception exception)
             {
-                Faulted?.Invoke(exception);
+                HandleFault(exception);
             }
         }
 
-        private void HandleFault(Exception exception) => Faulted?.Invoke(exception);
+        private void HandleFault(Exception exception)
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            CancelInboundDeliveryHold();
+#endif
+            Faulted?.Invoke(exception);
+        }
 
         private void HandleConnectionState(MatchConnectionStatus status)
         {
             if (_compatibilityFailed) return;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (!status.CanSendCommands || status.MatchId != _currentStatus.MatchId) CancelInboundDeliveryHold();
+#endif
             _currentStatus = status;
             ConnectionStateChanged?.Invoke(status);
         }
@@ -151,6 +208,9 @@ namespace BiomeRivals.Networking
         {
             if (_compatibilityFailed) return;
             _compatibilityFailed = true;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            CancelInboundDeliveryHold();
+#endif
             var exception = new InvalidOperationException(message);
             _currentStatus = new MatchConnectionStatus(
                 MatchConnectionPhase.Failed,
@@ -161,22 +221,13 @@ namespace BiomeRivals.Networking
             Faulted?.Invoke(exception);
         }
 
-        private static bool IsExplicitJsonNull(string json, string propertyName)
-        {
-            if (string.IsNullOrEmpty(json) || string.IsNullOrEmpty(propertyName)) return false;
-            var propertyIndex = json.IndexOf("\"" + propertyName + "\"", StringComparison.Ordinal);
-            if (propertyIndex < 0) return false;
-            var colonIndex = json.IndexOf(':', propertyIndex + propertyName.Length + 2);
-            if (colonIndex < 0) return false;
-            var valueIndex = colonIndex + 1;
-            while (valueIndex < json.Length && char.IsWhiteSpace(json[valueIndex])) valueIndex++;
-            return valueIndex + 4 <= json.Length && string.CompareOrdinal(json, valueIndex, "null", 0, 4) == 0;
-        }
-
         public void Dispose()
         {
             if (_disposed) return;
             _disposed = true;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            CancelInboundDeliveryHold();
+#endif
             _transport.MessageReceived -= HandleMessage;
             _transport.Faulted -= HandleFault;
             _transport.ConnectionStateChanged -= HandleConnectionState;

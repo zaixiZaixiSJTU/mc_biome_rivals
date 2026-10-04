@@ -56,7 +56,10 @@ namespace BiomeRivals.Bootstrap
             BindGateway(new AuthoritativeMatchGateway(transport));
         }
 
-        public IMatchGateway RegisterDefaultOnlineTransport(string factionId = FactionIds.PlainsForest)
+        public IMatchGateway RegisterDefaultOnlineTransport(
+            string factionId,
+            int cardContentVersion,
+            int implementedEffectRegistryVersion)
         {
             var settings = NakamaConnectionSettings.Load();
             var accountService = EnsurePlayerAccountService(settings);
@@ -64,7 +67,7 @@ namespace BiomeRivals.Bootstrap
                 throw new System.InvalidOperationException("The configured account service cannot provide a matchmaking session.");
             RegisterOnlineTransport(new NakamaMatchTransport(
                 settings,
-                new MatchmakingPreferences(factionId),
+                new MatchmakingPreferences(factionId, cardContentVersion, implementedEffectRegistryVersion),
                 sessionProvider));
             return _matchGateway;
         }

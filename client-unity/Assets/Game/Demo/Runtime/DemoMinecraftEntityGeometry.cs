@@ -17,8 +17,10 @@ namespace BiomeRivals.Demo
         public string Name;
         public string Parent;
         public float[] Pivot = { 0f, 0f, 0f };
-        /// <summary>Bind rotation in bedrock degrees, exactly as stored in the file.</summary>
+        /// <summary>Bone transform rotation in Bedrock degrees; inherited by children.</summary>
         public float[] Rotation;
+        /// <summary>Source mesh binding pose about Pivot, independent of child transforms.</summary>
+        public float[] BindPoseRotation;
         public List<DemoEntityCube> Cubes = new List<DemoEntityCube>();
     }
 
@@ -45,31 +47,77 @@ namespace BiomeRivals.Demo
     /// </summary>
     public static class DemoMinecraftEntityGeometryParser
     {
+        /// <summary>Reads an explicitly registered legacy cube overlay, not general geometry inheritance.</summary>
+        public static DemoEntityGeometry ParseLegacyOverlay(string json, string identifier, string baseIdentifier)
+        {
+            if (string.IsNullOrWhiteSpace(identifier) || identifier.Contains(":"))
+                throw new FormatException("Overlay identifier must name a single derived geometry.");
+            var baseGeometry = Parse(json, baseIdentifier); // Exact base must exist; no silent fallback.
+            var root = DemoJsonParser.ParseObject(json);
+            var key = identifier + ":" + baseIdentifier;
+            if (!root.TryGetValue(key, out var value) || !(value is Dictionary<string, object> definition))
+                throw new FormatException($"Requested overlay '{key}' was not found.");
+            var overlay = ParseLegacyGeometry(identifier, definition);
+            if (overlay.Bones.Count == 0 || overlay.Bones.Select(bone => bone.Name).Distinct().Count() != overlay.Bones.Count)
+                throw new FormatException("Overlay must contain distinct named bones.");
+            foreach (var bone in overlay.Bones)
+            {
+                var source = baseGeometry.Bones.SingleOrDefault(candidate => candidate.Name == bone.Name);
+                if (source == null || !bone.Pivot.SequenceEqual(source.Pivot) ||
+                    (bone.Parent != null && bone.Parent != source.Parent) || bone.Rotation != null)
+                    throw new FormatException($"Overlay bone '{bone.Name}' does not share its base skeleton.");
+            }
+            overlay.TextureWidth = baseGeometry.TextureWidth;
+            overlay.TextureHeight = baseGeometry.TextureHeight;
+            return overlay;
+        }
+
         public static DemoEntityGeometry Parse(string json, string preferredIdentifier = null)
         {
+            if (preferredIdentifier != null && string.IsNullOrWhiteSpace(preferredIdentifier))
+                throw new FormatException("Requested geometry identifier must not be empty.");
             var root = DemoJsonParser.ParseObject(json);
             if (root.TryGetValue("minecraft:geometry", out var geometryList) && geometryList is List<object> geometries && geometries.Count > 0)
             {
                 Dictionary<string, object> chosen = null;
-                foreach (var candidate in geometries.OfType<Dictionary<string, object>>())
+                var identifiers = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var entry in geometries)
                 {
+                    if (!(entry is Dictionary<string, object> candidate))
+                        throw new FormatException("Invalid minecraft:geometry entry.");
                     var description = candidate.TryGetValue("description", out var descriptionValue)
                         ? descriptionValue as Dictionary<string, object>
                         : null;
                     var identifier = description?.TryGetValue("identifier", out var identifierValue) == true
                         ? identifierValue as string
                         : null;
-                    if (preferredIdentifier != null && string.Equals(identifier, preferredIdentifier, StringComparison.Ordinal))
-                    {
-                        chosen = candidate;
-                        break;
-                    }
-                    chosen ??= candidate;
+                    if (string.IsNullOrWhiteSpace(identifier))
+                        throw new FormatException("Geometry description is missing its identifier.");
+                    if (!identifiers.Add(identifier))
+                        throw new FormatException($"Duplicate geometry identifier '{identifier}'.");
+                    if (preferredIdentifier == null) chosen ??= candidate;
+                    else if (string.Equals(identifier, preferredIdentifier, StringComparison.Ordinal)) chosen = candidate;
                 }
-                if (chosen == null) throw new FormatException("No minecraft:geometry entry could be selected.");
+                if (chosen == null) throw new FormatException($"Requested geometry '{preferredIdentifier}' was not found.");
                 return ParseModernGeometry(chosen);
             }
 
+            if (preferredIdentifier != null)
+            {
+                foreach (var pair in root)
+                {
+                    if (!pair.Key.StartsWith("geometry.", StringComparison.Ordinal)) continue;
+                    var derivedName = pair.Key.Split(':')[0];
+                    if (pair.Key.Contains(":") &&
+                        (pair.Key == preferredIdentifier || derivedName == preferredIdentifier))
+                        throw new FormatException($"Requested derived geometry '{preferredIdentifier}' is not supported; inheritance must be resolved explicitly.");
+                    if (pair.Key != preferredIdentifier) continue;
+                    if (!(pair.Value is Dictionary<string, object> selected))
+                        throw new FormatException($"Requested geometry '{preferredIdentifier}' has an invalid definition.");
+                    return ParseLegacyGeometry(pair.Key, selected);
+                }
+                throw new FormatException($"Requested geometry '{preferredIdentifier}' was not found.");
+            }
             foreach (var pair in root)
             {
                 if (!pair.Key.StartsWith("geometry.", StringComparison.Ordinal)) continue;
@@ -116,20 +164,21 @@ namespace BiomeRivals.Demo
         {
             float[] rotation = null;
             if (bone.TryGetValue("rotation", out var rotationValue) && rotationValue is List<object>) rotation = ReadVector(bone, "rotation", null);
-            if (rotation == null && bone.TryGetValue("bind_pose_rotation", out _)) rotation = ReadVector(bone, "bind_pose_rotation", null);
             var result = new DemoEntityBone
             {
                 Name = bone.TryGetValue("name", out var nameValue) ? nameValue as string : throw new FormatException("Geometry bone is missing a name."),
                 Parent = bone.TryGetValue("parent", out var parentValue) ? parentValue as string : null,
                 Pivot = ReadVector(bone, "pivot", new[] { 0f, 0f, 0f }),
-                Rotation = rotation
+                Rotation = rotation,
+                BindPoseRotation = ReadVector(bone, "bind_pose_rotation", null)
             };
             var boneInflate = bone.TryGetValue("inflate", out var inflateValue) ? (float)Convert.ToDouble(inflateValue) : 0f;
+            var boneMirror = bone.TryGetValue("mirror", out var boneMirrorValue) && Convert.ToBoolean(boneMirrorValue);
             if (bone.TryGetValue("cubes", out var cubesValue) && cubesValue is List<object> cubes)
             {
                 foreach (var cube in cubes.OfType<Dictionary<string, object>>())
                 {
-                    var parsed = ParseCube(cube);
+                    var parsed = ParseCube(cube, boneMirror);
                     parsed.Inflate += boneInflate;
                     result.Cubes.Add(parsed);
                 }
@@ -137,13 +186,14 @@ namespace BiomeRivals.Demo
             return result;
         }
 
-        private static DemoEntityCube ParseCube(Dictionary<string, object> cube)
+        private static DemoEntityCube ParseCube(Dictionary<string, object> cube, bool boneMirror)
         {
             var result = new DemoEntityCube
             {
                 Origin = ReadVector(cube, "origin", new[] { 0f, 0f, 0f }),
                 Size = ReadVector(cube, "size", new[] { 1f, 1f, 1f }),
-                Mirror = cube.TryGetValue("mirror", out var mirrorValue) && Convert.ToBoolean(mirrorValue),
+                // Absence inherits only the owning bone. Explicit false must not be lost.
+                Mirror = cube.TryGetValue("mirror", out var mirrorValue) ? Convert.ToBoolean(mirrorValue) : boneMirror,
                 Inflate = cube.TryGetValue("inflate", out var inflateValue) ? (float)Convert.ToDouble(inflateValue) : 0f
             };
             if (cube.TryGetValue("uv", out var uvValue))

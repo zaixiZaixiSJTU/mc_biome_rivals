@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using BiomeRivals.Core;
 using NUnit.Framework;
@@ -8,6 +9,151 @@ namespace BiomeRivals.Networking.Tests
     public sealed class AuthoritativeMatchGatewayTests
     {
         [Test]
+        public void NetworkSnapshotPreservesPrivateHandAndOptionalWireNullsInStateStore()
+        {
+            var transport = new FakeTransport();
+            var store = new MatchStateStore();
+            Exception fault = null;
+            using (var gateway = new AuthoritativeMatchGateway(transport))
+            {
+                gateway.SnapshotReceived += store.Replace;
+                gateway.Faulted += exception => fault = exception;
+                transport.Emit(MatchOpcodes.Snapshot, CreatePrivateSnapshotWire());
+                Assert.That(fault, Is.Null, "Nakama's wire-null hand placeholders must survive JSON decoding.");
+                Assert.That(store.Current, Is.Not.Null);
+                Assert.That(store.Current.players[1].hand, Is.EqualTo(new string[] { null, null }));
+                Assert.That(store.Current.players[1].handCards, Is.EqualTo(new HandCardStateDto[] { null, null }));
+                Assert.That(store.Current.players[0].handCards[0].handCardInstanceId, Is.EqualTo("hand-1"));
+                Assert.That(store.Current.players[0].handCards[0].expiresAtEndOfTurnPlayerId, Is.Null);
+                Assert.That(store.Current.players[0].equipment, Is.Null);
+                Assert.That(store.Current.players[1].equipment, Is.Null);
+                Assert.That(store.Current.pendingChoice, Is.Null);
+                Assert.That(store.Current.winnerPlayerId, Is.Null);
+            }
+        }
+
+        [Test]
+        public void NetworkSnapshotDoesNotSilentlyEraseLeakedOpponentHandInstances()
+        {
+            var transport = new FakeTransport();
+            var store = new MatchStateStore();
+            Exception fault = null;
+            using (var gateway = new AuthoritativeMatchGateway(transport))
+            {
+                gateway.SnapshotReceived += store.Replace;
+                gateway.Faulted += exception => fault = exception;
+                var leakedWire = CreatePrivateSnapshotWire().Replace("\"handCards\":[null,null]",
+                    "\"handCards\":[{\"handCardInstanceId\":\"hand-2\",\"cardId\":\"db_001\",\"costModifier\":0},null]");
+                transport.Emit(MatchOpcodes.Snapshot, leakedWire);
+                Assert.That(fault, Is.TypeOf<InvalidOperationException>());
+                Assert.That(fault.Message, Does.Contain("invalid hand card instances"));
+                Assert.That(store.Current, Is.Null, "Reject privacy-invalid snapshots; do not sanitize them into accepted ones.");
+            }
+        }
+
+        [Test]
+        public void NetworkEventBatchPreservesOptionalReferenceAndRedactedStringNulls()
+        {
+            var transport = new FakeTransport();
+            using (var gateway = new AuthoritativeMatchGateway(transport))
+            {
+                MatchEventBatchDto received = null;
+                gateway.EventBatchReceived += batch => received = batch;
+                transport.Emit(MatchOpcodes.EventBatch, "{\"protocolVersion\":" + GameVersions.Protocol +
+                    ",\"rulesetVersion\":\"" + GameVersions.Ruleset + "\",\"revision\":1,\"handProjection\":null," +
+                    "\"events\":[{\"eventId\":1,\"type\":\"MATCH_ENDED\",\"payload\":{\"winnerPlayerId\":null}}]}");
+                Assert.That(received, Is.Not.Null);
+                Assert.That(received.handProjection, Is.Null);
+                Assert.That(received.events[0].payload.winnerPlayerId, Is.Null);
+            }
+        }
+
+        [TestCase(31, false)]
+        [TestCase(32, true)]
+        public void NetworkDecoderBoundsNestingBeforeCallingTheSdkParser(int arrayDepth, bool shouldFail)
+        {
+            var transport = new FakeTransport();
+            using (var gateway = new AuthoritativeMatchGateway(transport))
+            {
+                MatchStateDto received = null;
+                Exception fault = null;
+                gateway.SnapshotReceived += snapshot => received = snapshot;
+                gateway.Faulted += exception => fault = exception;
+                var wire = "{\"protocolVersion\":" + GameVersions.Protocol + ",\"rulesetVersion\":\"" +
+                    GameVersions.Ruleset + "\",\"ignored\":" + new string('[', arrayDepth) +
+                    "null" + new string(']', arrayDepth) + "}";
+                transport.Emit(MatchOpcodes.Snapshot, wire);
+                Assert.That(fault != null, Is.EqualTo(shouldFail));
+                Assert.That(received == null, Is.EqualTo(shouldFail));
+                if (shouldFail) Assert.That(fault.Message, Does.Contain("nesting limit"));
+            }
+        }
+
+        [TestCase("{]")]
+        [TestCase("{\"broken\":\"unfinished}")]
+        public void NetworkDecoderRejectsIncompleteOrMismatchedJson(string wire)
+        {
+            var transport = new FakeTransport();
+            using (var gateway = new AuthoritativeMatchGateway(transport))
+            {
+                Exception fault = null;
+                MatchStateDto received = null;
+                gateway.Faulted += exception => fault = exception;
+                gateway.SnapshotReceived += snapshot => received = snapshot;
+                transport.Emit(MatchOpcodes.Snapshot, wire);
+                Assert.That(fault, Is.TypeOf<FormatException>());
+                Assert.That(received, Is.Null);
+            }
+        }
+
+        [Test]
+        public void NetworkDecoderRejectsOversizedMessagesBeforeParsing()
+        {
+            var transport = new FakeTransport();
+            using (var gateway = new AuthoritativeMatchGateway(transport))
+            {
+                Exception fault = null;
+                gateway.Faulted += exception => fault = exception;
+                transport.Emit(MatchOpcodes.Snapshot, "{\"ignored\":\"" + new string('x', 262144) + "\"}");
+                Assert.That(fault, Is.TypeOf<FormatException>());
+                Assert.That(fault.Message, Does.Contain("message size limit"));
+            }
+        }
+
+        [Test]
+        public void NetworkDecoderDoesNotConfuseQuotedBracketsWithNestingOrEraseRealChoices()
+        {
+            var transport = new FakeTransport();
+            using (var gateway = new AuthoritativeMatchGateway(transport))
+            {
+                Exception fault = null;
+                MatchStateDto received = null;
+                gateway.Faulted += exception => fault = exception;
+                gateway.SnapshotReceived += snapshot => received = snapshot;
+                var wire = CreatePrivateSnapshotWire().Replace("\"pendingChoice\":null",
+                    "\"pendingChoice\":{\"choiceId\":\"choice-1\",\"kind\":\"MOVE\",\"options\":[{\"optionIndex\":0,\"selectable\":true}]}")
+                    .Replace("\"matchId\":\"wire-match\"", "\"ignored\":\"" + new string('[', 64) +
+                    "\\\"pendingChoice\\\":null\\\\tail\",\"matchId\":\"wire-match\"");
+                transport.Emit(MatchOpcodes.Snapshot, wire);
+                Assert.That(fault, Is.Null);
+                Assert.That(received.pendingChoice.choiceId, Is.EqualTo("choice-1"));
+                Assert.That(received.pendingChoice.options[0].selectable, Is.True);
+            }
+        }
+
+        private static string CreatePrivateSnapshotWire() =>
+            "{\"matchId\":\"wire-match\",\"viewerPlayerId\":\"alice\",\"arenaId\":\"standard_meadow\",\"protocolVersion\":" +
+            GameVersions.Protocol + ",\"rulesetVersion\":\"" + GameVersions.Ruleset + "\",\"status\":\"ACTIVE\"," +
+            "\"turn\":1,\"phase\":\"MAIN\",\"activePlayerIndex\":0,\"nextInstanceId\":1,\"pendingChoice\":null,\"winnerPlayerId\":null," +
+            "\"players\":[{\"playerId\":\"alice\",\"factionId\":\"plains_forest\",\"life\":30,\"redstone\":1," +
+            "\"redstoneCapacity\":1,\"totalRedstone\":1,\"hand\":[\"pf_001\"],\"handCards\":[{\"handCardInstanceId\":\"hand-1\"," +
+            "\"cardId\":\"pf_001\",\"costModifier\":0,\"expiresAtEndOfTurnPlayerId\":null}],\"equipment\":null," +
+            "\"unitSlots\":[null,null,null,null],\"buildingSlots\":[null,null,null],\"battlefield\":[]}," +
+            "{\"playerId\":\"bob\",\"factionId\":\"desert_badlands\",\"life\":30,\"redstone\":1,\"redstoneCapacity\":1," +
+            "\"totalRedstone\":1,\"hand\":[null,null],\"handCards\":[null,null],\"equipment\":null," +
+            "\"unitSlots\":[null,null,null,null],\"buildingSlots\":[null,null,null],\"battlefield\":[]}]}";
+
+        [Test]
         public void SnapshotOpcodePublishesAuthoritativeState()
         {
             var transport = new FakeTransport();
@@ -16,7 +162,7 @@ namespace BiomeRivals.Networking.Tests
                 MatchStateDto received = null;
                 gateway.SnapshotReceived += snapshot => received = snapshot;
                 transport.Emit(MatchOpcodes.Snapshot,
-                    "{\"matchId\":\"match-1\",\"viewerPlayerId\":\"alice\",\"protocolVersion\":37,\"rulesetVersion\":\"prototype-0.62\",\"revision\":0," +
+                    "{\"matchId\":\"match-1\",\"viewerPlayerId\":\"alice\",\"arenaId\":\"standard_meadow\",\"protocolVersion\":40,\"rulesetVersion\":\"prototype-0.65\",\"revision\":0," +
                     "\"lastEventId\":0,\"status\":\"ACTIVE\",\"turn\":1,\"phase\":\"MAIN\",\"activePlayerIndex\":0,\"nextInstanceId\":1," +
                     "\"players\":[{\"playerId\":\"alice\",\"factionId\":\"ocean_river\",\"mulliganCompleted\":true,\"life\":30,\"armor\":0,\"redstone\":6," +
                     "\"temporaryRedstone\":0,\"totalRedstone\":6,\"redstoneCapacity\":6,\"hand\":[\"pf_001\"],\"deckCount\":26,\"buriedCount\":0,\"excavatedThisTurn\":false,\"discardPile\":[],\"fatigueCount\":0,\"unitSlots\":[null,null,null,null]," +
@@ -33,11 +179,9 @@ namespace BiomeRivals.Networking.Tests
                 Assert.That(received.viewerPlayerId, Is.EqualTo("alice"));
                 Assert.That(received.players[0].factionId, Is.EqualTo(FactionIds.OceanRiver));
                 Assert.That(received.players[1].factionId, Is.EqualTo(FactionIds.End));
-                Assert.That(received.players[1].hand[0], Is.Empty,
-                    "Unity JsonUtility represents a null string array entry as an empty string.");
+                Assert.That(received.players[1].hand[0], Is.Null);
                 Assert.That(received.players[1].deckCount, Is.EqualTo(26));
-                Assert.That(received.pendingChoice, Is.Null,
-                    "Unity JsonUtility requires explicit wire-null normalization for serializable reference fields.");
+                Assert.That(received.pendingChoice, Is.Null);
             }
         }
 
@@ -50,13 +194,13 @@ namespace BiomeRivals.Networking.Tests
                 MatchEventBatchDto received = null;
                 gateway.EventBatchReceived += batch => received = batch;
                 transport.Emit(MatchOpcodes.EventBatch,
-                    "{\"protocolVersion\":37,\"rulesetVersion\":\"prototype-0.62\",\"revision\":1," +
+                    "{\"protocolVersion\":40,\"rulesetVersion\":\"prototype-0.65\",\"arenaId\":\"standard_meadow\",\"revision\":1," +
                     "\"acknowledgedCommandId\":\"turn-1\",\"events\":[{\"eventId\":1,\"type\":\"CARD_DRAWN\"," +
                     "\"payload\":{\"playerId\":\"bob\",\"cardId\":null,\"handCount\":5,\"deckCount\":25}}]}");
 
                 Assert.That(received, Is.Not.Null);
                 Assert.That(received.events[0].type, Is.EqualTo(MatchEventTypes.CardDrawn));
-                Assert.That(received.events[0].payload.cardId, Is.Empty);
+                Assert.That(received.events[0].payload.cardId, Is.Null);
                 Assert.That(received.events[0].payload.handCount, Is.EqualTo(5));
                 Assert.That(received.events[0].payload.deckCount, Is.EqualTo(25));
             }
@@ -301,7 +445,7 @@ namespace BiomeRivals.Networking.Tests
                     TimeSpan.FromSeconds(1));
                 Assert.That(dispatcher.PendingCount, Is.EqualTo(1));
                 transport.Emit(MatchOpcodes.EventBatch,
-                    "{\"protocolVersion\":37,\"rulesetVersion\":\"prototype-0.62\",\"revision\":5," +
+                    "{\"protocolVersion\":40,\"rulesetVersion\":\"prototype-0.65\",\"arenaId\":\"standard_meadow\",\"revision\":5," +
                     "\"acknowledgedCommandId\":\"ack-1\",\"events\":[]}");
 
                 var result = await pending;
@@ -389,6 +533,280 @@ namespace BiomeRivals.Networking.Tests
             }
         }
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        private static string HeldSnapshotWire(int revision) =>
+            "{\"protocolVersion\":" + GameVersions.Protocol + ",\"rulesetVersion\":\"" + GameVersions.Ruleset + "\",\"revision\":" + revision + "}";
+
+        [Test]
+        public async Task InboundHoldLeavesDispatcherPendingUntilBufferedServerAcknowledgementIsDelivered()
+        {
+            var transport = new FakeTransport();
+            using (var gateway = new AuthoritativeMatchGateway(transport))
+            using (var dispatcher = new MatchCommandDispatcher(gateway))
+            {
+                transport.EmitStatus(new MatchConnectionStatus(MatchConnectionPhase.Ready, "ready", "match-1"));
+                var scope = gateway.HoldIncomingMatchMessages();
+                var pending = dispatcher.SendAndWaitAsync(MatchCommandFactory.EndTurn("hold-ack", 4), TimeSpan.FromSeconds(5));
+                transport.Emit(MatchOpcodes.EventBatch,
+                    "{\"protocolVersion\":" + GameVersions.Protocol + ",\"rulesetVersion\":\"" + GameVersions.Ruleset +
+                    "\",\"revision\":5,\"acknowledgedCommandId\":\"hold-ack\",\"events\":[]}");
+                Assert.That(dispatcher.PendingCount, Is.EqualTo(1));
+                Assert.That(pending.IsCompleted, Is.False);
+                Assert.That(gateway.HeldIncomingMessageCount, Is.EqualTo(1));
+                scope.Dispose();
+                var result = await pending;
+                Assert.That(result.Outcome, Is.EqualTo(MatchCommandOutcome.Accepted));
+                Assert.That(result.Revision, Is.EqualTo(5));
+                Assert.That(dispatcher.PendingCount, Is.Zero);
+            }
+        }
+
+        [Test]
+        public void InboundHoldOldDrainFinallyCannotCancelNewScopeAcquiredByFaultCallback()
+        {
+            var transport = new FakeTransport();
+            using (var gateway = new AuthoritativeMatchGateway(transport))
+            {
+                transport.EmitStatus(new MatchConnectionStatus(MatchConnectionPhase.Ready, "ready", "match-1"));
+                IDisposable replacement = null;
+                var delivered = 0;
+                gateway.SnapshotReceived += snapshot => delivered++;
+                gateway.Faulted += error =>
+                {
+                    replacement = gateway.HoldIncomingMatchMessages();
+                    transport.Emit(MatchOpcodes.Snapshot, HeldSnapshotWire(7));
+                };
+                var scope = gateway.HoldIncomingMatchMessages();
+                transport.Emit(5, "null");
+                scope.Dispose();
+                Assert.That(delivered, Is.Zero);
+                Assert.That(gateway.HeldIncomingMessageCount, Is.EqualTo(1));
+                replacement.Dispose();
+                Assert.That(delivered, Is.EqualTo(1));
+            }
+        }
+
+        [Test]
+        public void InboundHoldCompatibilityFailureDiscardsRemainingFramesAndDisposalDiscardsQueuedFrames()
+        {
+            var transport = new FakeTransport();
+            var gateway = new AuthoritativeMatchGateway(transport);
+            transport.EmitStatus(new MatchConnectionStatus(MatchConnectionPhase.Ready, "ready", "match-1"));
+            var delivered = 0;
+            gateway.SnapshotReceived += snapshot => delivered++;
+            var scope = gateway.HoldIncomingMatchMessages();
+            transport.Emit(MatchOpcodes.Snapshot, "{\"protocolVersion\":-1,\"rulesetVersion\":\"wrong\"}");
+            transport.Emit(MatchOpcodes.Snapshot, HeldSnapshotWire(2));
+            scope.Dispose();
+            Assert.That(delivered, Is.Zero);
+            Assert.That(gateway.HeldIncomingMessageCount, Is.Zero);
+            Assert.Throws<InvalidOperationException>(() => gateway.HoldIncomingMatchMessages());
+            gateway.Dispose();
+            var other = new AuthoritativeMatchGateway(transport);
+            other.SnapshotReceived += snapshot => delivered++;
+            var otherScope = other.HoldIncomingMatchMessages();
+            transport.Emit(MatchOpcodes.Snapshot, HeldSnapshotWire(3));
+            other.Dispose();
+            otherScope.Dispose();
+            Assert.That(delivered, Is.Zero);
+            Assert.That(other.HeldIncomingMessageCount, Is.Zero);
+        }
+
+        [Test]
+        public async Task InboundHoldPreservesOutgoingCommandsAndReplaysInWireOrderExactlyOnce()
+        {
+            var transport = new FakeTransport();
+            using (var gateway = new AuthoritativeMatchGateway(transport))
+            {
+                transport.EmitStatus(new MatchConnectionStatus(MatchConnectionPhase.Ready, "ready", "match-1"));
+                var delivered = new List<string>();
+                gateway.SnapshotReceived += snapshot => delivered.Add("snapshot:" + snapshot.revision);
+                gateway.CommandRejected += rejection => delivered.Add("rejection:" + rejection.commandId);
+                var scope = gateway.HoldIncomingMatchMessages();
+                var command = MatchCommandFactory.EndTurn("held-1", 1);
+                await gateway.SendCommandAsync(command);
+                Assert.That(transport.LastOpcode, Is.EqualTo(MatchOpcodes.Command));
+                Assert.That(transport.LastJson, Is.EqualTo(AuthoritativeMatchGateway.SerializeCommand(command)));
+                transport.Emit(MatchOpcodes.Snapshot, HeldSnapshotWire(1));
+                transport.Emit(MatchOpcodes.Rejection, "{\"commandId\":\"held-1\",\"code\":\"NOT_YOUR_TURN\"}");
+                transport.Emit(MatchOpcodes.Snapshot, HeldSnapshotWire(2));
+                Assert.That(delivered, Is.Empty);
+                Assert.That(gateway.HeldIncomingMessageCount, Is.EqualTo(3));
+                scope.Dispose();
+                scope.Dispose();
+                Assert.That(delivered, Is.EqualTo(new[] { "snapshot:1", "rejection:held-1", "snapshot:2" }));
+                Assert.That(gateway.HeldIncomingMessageCount, Is.Zero);
+                transport.Emit(MatchOpcodes.Snapshot, HeldSnapshotWire(3));
+                Assert.That(delivered.Count, Is.EqualTo(4));
+            }
+        }
+
+        [Test]
+        public void InboundHoldRejectsNestingAndAppendsReentrantFramesBehindBufferedFrames()
+        {
+            var transport = new FakeTransport();
+            using (var gateway = new AuthoritativeMatchGateway(transport))
+            {
+                transport.EmitStatus(new MatchConnectionStatus(MatchConnectionPhase.Ready, "ready", "match-1"));
+                var delivered = new List<int>();
+                gateway.SnapshotReceived += snapshot =>
+                {
+                    delivered.Add(snapshot.revision);
+                    if (snapshot.revision != 1) return;
+                    Assert.Throws<InvalidOperationException>(() => gateway.HoldIncomingMatchMessages());
+                    transport.Emit(MatchOpcodes.Snapshot, HeldSnapshotWire(3));
+                };
+                var scope = gateway.HoldIncomingMatchMessages();
+                Assert.Throws<InvalidOperationException>(() => gateway.HoldIncomingMatchMessages());
+                transport.Emit(MatchOpcodes.Snapshot, HeldSnapshotWire(1));
+                transport.Emit(MatchOpcodes.Snapshot, HeldSnapshotWire(2));
+                scope.Dispose();
+                Assert.That(delivered, Is.EqualTo(new[] { 1, 2, 3 }));
+            }
+        }
+
+        [TestCase("fault")]
+        [TestCase("disconnect")]
+        [TestCase("new-match")]
+        public void InboundHoldInvalidationPreventsOldScopeFromReleasingNewMatchFrames(string cause)
+        {
+            var transport = new FakeTransport();
+            using (var gateway = new AuthoritativeMatchGateway(transport))
+            {
+                transport.EmitStatus(new MatchConnectionStatus(MatchConnectionPhase.Ready, "ready", "match-1"));
+                var delivered = new List<int>();
+                gateway.SnapshotReceived += snapshot => delivered.Add(snapshot.revision);
+                var old = gateway.HoldIncomingMatchMessages();
+                transport.Emit(MatchOpcodes.Snapshot, HeldSnapshotWire(1));
+                if (cause == "fault") transport.EmitFault(new Exception("socket failed"));
+                else transport.EmitStatus(new MatchConnectionStatus(cause == "disconnect" ? MatchConnectionPhase.Reconnecting : MatchConnectionPhase.Ready, "changed", "match-2"));
+                Assert.That(gateway.HeldIncomingMessageCount, Is.Zero);
+                transport.EmitStatus(new MatchConnectionStatus(MatchConnectionPhase.Ready, "ready", "match-2"));
+                var current = gateway.HoldIncomingMatchMessages();
+                transport.Emit(MatchOpcodes.Snapshot, HeldSnapshotWire(2));
+                old.Dispose();
+                Assert.That(delivered, Is.Empty);
+                Assert.That(gateway.HeldIncomingMessageCount, Is.EqualTo(1));
+                current.Dispose();
+                Assert.That(delivered, Is.EqualTo(new[] { 2 }));
+            }
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void InboundHoldBufferOverflowFaultsAndNeverReplaysPartialQueue(bool oversizedFrame)
+        {
+            var transport = new FakeTransport();
+            using (var gateway = new AuthoritativeMatchGateway(transport))
+            {
+                transport.EmitStatus(new MatchConnectionStatus(MatchConnectionPhase.Ready, "ready", "match-1"));
+                var faults = 0;
+                var delivered = 0;
+                gateway.Faulted += error => faults++;
+                gateway.SnapshotReceived += snapshot => delivered++;
+                var scope = gateway.HoldIncomingMatchMessages();
+                if (oversizedFrame) transport.Emit(MatchOpcodes.Snapshot, new string('x', 2 * 1024 * 1024 + 1));
+                else for (var index = 0; index < 65; index++) transport.Emit(MatchOpcodes.Snapshot, HeldSnapshotWire(index));
+                Assert.That(faults, Is.EqualTo(1));
+                Assert.That(gateway.HeldIncomingMessageCount, Is.Zero);
+                scope.Dispose();
+                Assert.That(delivered, Is.Zero);
+            }
+        }
+
+        [Test]
+        public void InboundHoldFaultDuringReplayStopsRemainingFramesAndDisposedGatewayCannotHold()
+        {
+            var transport = new FakeTransport();
+            var gateway = new AuthoritativeMatchGateway(transport);
+            Assert.Throws<InvalidOperationException>(() => gateway.HoldIncomingMatchMessages());
+            transport.EmitStatus(new MatchConnectionStatus(MatchConnectionPhase.Ready, "ready", "match-1"));
+            var delivered = 0;
+            var faults = 0;
+            gateway.SnapshotReceived += snapshot => delivered++;
+            gateway.Faulted += error => faults++;
+            var scope = gateway.HoldIncomingMatchMessages();
+            transport.Emit(5, "null");
+            transport.Emit(MatchOpcodes.Snapshot, HeldSnapshotWire(2));
+            scope.Dispose();
+            Assert.That(faults, Is.EqualTo(1));
+            Assert.That(delivered, Is.Zero);
+            Assert.That(gateway.HeldIncomingMessageCount, Is.Zero);
+            gateway.Dispose();
+            Assert.Throws<InvalidOperationException>(() => gateway.HoldIncomingMatchMessages());
+        }
+
+        [Test]
+        public async Task DrawFixtureDiagnosticsSendOnlyWhenReadyAndStopAfterDisposal()
+        {
+            var transport = new FakeTransport();
+            var gateway = new AuthoritativeMatchGateway(transport);
+            Assert.Throws<InvalidOperationException>(() => gateway.RequestSimultaneousDefeatFixtureAsync());
+            Assert.That(transport.LastOpcode, Is.Zero);
+            transport.EmitStatus(new MatchConnectionStatus(MatchConnectionPhase.Ready, "ready", "match-1"));
+            await gateway.RequestSimultaneousDefeatFixtureAsync();
+            Assert.That(transport.LastOpcode, Is.EqualTo(255));
+            Assert.That(transport.LastJson, Is.EqualTo("{\"fixture\":\"simultaneous-defeat\"}"));
+            await gateway.RequestSimultaneousDefeatFixtureAsync(true);
+            Assert.That(transport.LastJson, Is.EqualTo("{\"fixture\":\"simultaneous-defeat-readable\"}"));
+            gateway.Dispose();
+            Assert.Throws<InvalidOperationException>(() => gateway.RequestSimultaneousDefeatFixtureAsync());
+        }
+
+        [Test]
+        public void DrawFixtureDiagnosticsCannotBypassCompatibilityFailure()
+        {
+            var transport = new FakeTransport();
+            using (var gateway = new AuthoritativeMatchGateway(transport))
+            {
+                transport.EmitStatus(new MatchConnectionStatus(MatchConnectionPhase.Ready, "ready", "match-1"));
+                transport.Emit(MatchOpcodes.EventBatch, "{\"protocolVersion\":-1,\"rulesetVersion\":\"wrong\",\"events\":[]}");
+                Assert.Throws<InvalidOperationException>(() => gateway.RequestSimultaneousDefeatFixtureAsync());
+                Assert.That(transport.LastOpcode, Is.Zero);
+            }
+        }
+
+        [Test]
+        public void DrawFixtureAckPreservesWinnerlessWireAndUnsubscribesOnDisposal()
+        {
+            var transport = new FakeTransport();
+            var gateway = new AuthoritativeMatchGateway(transport);
+            MatchTestFixtureResult received = null;
+            Exception fault = null;
+            gateway.TestFixtureResultReceived += result => received = result;
+            gateway.Faulted += error => fault = error;
+            const string wire = "{\"ok\":true,\"revision\":3,\"winnerPlayerId\":null,\"reason\":\"SIMULTANEOUS_DEFEAT\"}";
+            transport.Emit(5, wire);
+            Assert.That(fault, Is.Null);
+            Assert.That(received.revision, Is.EqualTo(3));
+            Assert.That(received.winnerPlayerId, Is.Null);
+            received = null;
+            gateway.Dispose();
+            transport.Emit(5, wire);
+            Assert.That(received, Is.Null);
+        }
+
+        [TestCase("{\"ok\":false,\"revision\":3,\"reason\":\"SIMULTANEOUS_DEFEAT\"}")]
+        [TestCase("{\"ok\":true,\"revision\":0,\"reason\":\"SIMULTANEOUS_DEFEAT\"}")]
+        [TestCase("{\"ok\":true,\"revision\":3,\"reason\":\"CONCEDED\"}")]
+        [TestCase("{\"ok\":true,\"revision\":3,\"reason\":\"SIMULTANEOUS_DEFEAT\",\"winnerPlayerId\":\"winner\"}")]
+        [TestCase("null")]
+        public void InvalidDrawFixtureAckIsFaultedWithoutPublishingSuccess(string wire)
+        {
+            var transport = new FakeTransport();
+            using (var gateway = new AuthoritativeMatchGateway(transport))
+            {
+                MatchTestFixtureResult received = null;
+                Exception fault = null;
+                gateway.TestFixtureResultReceived += result => received = result;
+                gateway.Faulted += error => fault = error;
+                transport.Emit(5, wire);
+                Assert.That(fault, Is.Not.Null);
+                Assert.That(received, Is.Null);
+            }
+        }
+#endif
+
         private sealed class FakeTransport : IMatchTransport
         {
             public event Action<int, string> MessageReceived;
@@ -411,6 +829,7 @@ namespace BiomeRivals.Networking.Tests
             }
 
             public void Emit(int opcode, string json) => MessageReceived?.Invoke(opcode, json);
+            public void EmitFault(Exception error) => Faulted?.Invoke(error);
 
             public void EmitStatus(MatchConnectionStatus status)
             {

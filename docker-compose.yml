@@ -18,6 +18,9 @@ services:
 
   nakama:
     image: registry.heroiclabs.com/heroiclabs/nakama:3.40.0
+    environment:
+      BIOME_RIVALS_ENABLE_TEST_FIXTURES: ${BIOME_RIVALS_ENABLE_TEST_FIXTURES:-false}
+      BIOME_RIVALS_TEST_ARENA_ID: ${BIOME_RIVALS_TEST_ARENA_ID:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -25,12 +28,18 @@ services:
       - /bin/sh
       - -ec
       - |
+        if [ ! -s /nakama/data/modules/index.js ]; then
+          echo 'Biome Rivals runtime module is missing or empty; complete npm run build before starting Nakama.' >&2
+          exit 1
+        fi
         /nakama/nakama migrate up --database.address ${POSTGRES_USER:-nakama}:${POSTGRES_PASSWORD:-local_only_change_me}@postgres:5432/${POSTGRES_DB:-nakama}
         exec /nakama/nakama \
           --name biome-rivals \
           --database.address ${POSTGRES_USER:-nakama}:${POSTGRES_PASSWORD:-local_only_change_me}@postgres:5432/${POSTGRES_DB:-nakama} \
           --logger.level DEBUG \
           --runtime.path /nakama/data/modules \
+          --runtime.env "BIOME_RIVALS_ENABLE_TEST_FIXTURES=$${BIOME_RIVALS_ENABLE_TEST_FIXTURES:-false}" \
+          --runtime.env "BIOME_RIVALS_TEST_ARENA_ID=$${BIOME_RIVALS_TEST_ARENA_ID:-}" \
           --socket.server_key ${NAKAMA_SERVER_KEY:-local_only_change_me} \
           --console.username ${NAKAMA_CONSOLE_USERNAME:-admin} \
           --console.password ${NAKAMA_CONSOLE_PASSWORD:-local_only_change_me}

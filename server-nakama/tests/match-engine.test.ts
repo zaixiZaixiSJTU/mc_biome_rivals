@@ -342,6 +342,61 @@ TestHarness.test('hand card cost modifier expires at owner end turn and is priva
   assertSnapshotMatchesSchema(BiomeRivalsRules.createClientSnapshot(result.state, actor.playerId));
 });
 
+TestHarness.test('return discount expires on the controller turn even when the original owner holds the card', function (): void {
+  const state = activeState('match-return-owner-expiry', ['alice', 'bob'], ['end', 'end']);
+  const actorIndex = state.activePlayerIndex;
+  const actor = state.players[actorIndex]!;
+  const owner = state.players[actorIndex === 0 ? 1 : 0]!;
+  actor.redstoneCapacity = 10;
+  actor.redstone = 10;
+  actor.hand = ['ed_005'];
+  placeUnit(state, actorIndex, 'pf_001', 1, 'object-10', state.turn);
+  actor.battlefield[0]!.ownerPlayerId = owner.playerId;
+
+  const played = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('return-owner-expiry-play', state.revision, 'ed_005', 'UNIT', 'object-10'));
+  TestHarness.ok(played.accepted, JSON.stringify(played));
+  if (!played.accepted) return;
+  const returnedCard = played.state.players.filter(function (candidate): boolean {
+    return candidate.playerId === owner.playerId;
+  })[0]!.handCards.slice(-1)[0]!;
+  TestHarness.equal(returnedCard.costModifier, -2);
+  TestHarness.equal(returnedCard.expiresAtEndOfTurnPlayerId, actor.playerId);
+
+  const ended = BiomeRivalsRules.applyCommand(played.state, actor.playerId,
+    command('return-owner-expiry-end', played.state.revision, 'END_TURN'));
+  TestHarness.ok(ended.accepted, JSON.stringify(ended));
+  if (!ended.accepted) return;
+  const ownerAfter = ended.state.players.filter(function (candidate): boolean {
+    return candidate.playerId === owner.playerId;
+  })[0]!;
+  const expiredCard = ownerAfter.handCards.filter(function (card): boolean {
+    return card.handCardInstanceId === returnedCard.handCardInstanceId;
+  })[0]!;
+  TestHarness.equal(expiredCard.costModifier, 0);
+  TestHarness.equal(expiredCard.expiresAtEndOfTurnPlayerId, null);
+  const expiry = ended.batch.events.filter(function (event): boolean {
+    return event.type === 'HAND_CARD_COST_MODIFIER_EXPIRED';
+  })[0]!;
+  TestHarness.equal(expiry.payload.playerId, owner.playerId);
+  TestHarness.equal(expiry.payload.expiredAtEndOfTurnPlayerId, actor.playerId);
+  TestHarness.equal(expiry.payload.handCardInstanceId, returnedCard.handCardInstanceId);
+  const ownerBatch = BiomeRivalsRules.createClientEventBatch(ended.batch, owner.playerId);
+  const actorBatch = BiomeRivalsRules.createClientEventBatch(ended.batch, actor.playerId);
+  const ownerExpiry = ownerBatch.events.filter(function (event): boolean {
+    return event.type === 'HAND_CARD_COST_MODIFIER_EXPIRED';
+  })[0]!;
+  const actorExpiry = actorBatch.events.filter(function (event): boolean {
+    return event.type === 'HAND_CARD_COST_MODIFIER_EXPIRED';
+  })[0]!;
+  TestHarness.equal(ownerExpiry.payload.handCardInstanceId, returnedCard.handCardInstanceId);
+  TestHarness.equal(actorExpiry.payload.handCardInstanceId, null);
+  TestHarness.equal(actorExpiry.payload.cardId, null);
+  assertEventBatchMatchesSchema(ownerBatch);
+  assertEventBatchMatchesSchema(actorBatch);
+  assertSnapshotMatchesSchema(BiomeRivalsRules.createClientSnapshot(ended.state, owner.playerId));
+});
+
 function placeUnit(
   state: BiomeRivalsRules.MatchState,
   playerIndex: number,
@@ -355,6 +410,7 @@ function placeUnit(
   player.unitSlots[slotIndex] = instanceId;
   player.battlefield.push({
     instanceId: instanceId,
+    ownerPlayerId: player.playerId,
     cardId: cardId,
     cardType: 'UNIT',
     attack: definition.attack,
@@ -389,6 +445,7 @@ function placeBuilding(
   for (let index = slotIndex; index < slotIndex + occupiedSlots; index += 1) player.buildingSlots[index] = instanceId;
   player.battlefield.push({
     instanceId: instanceId,
+    ownerPlayerId: player.playerId,
     cardId: cardId,
     cardType: definition.cardType === 'STRUCTURE' ? 'STRUCTURE' : 'BUILDING',
     attack: definition.attack,
@@ -409,6 +466,127 @@ function placeBuilding(
   });
 }
 
+TestHarness.test('End return atomically removes a friendly unit, preserves owner, and discounts only its new hand instance', function (): void {
+  const state = activeState('match-end-return-owner-instance', ['alice', 'bob'], ['end', 'end']);
+  const actorIndex = state.activePlayerIndex;
+  const actor = state.players[actorIndex]!;
+  actor.redstoneCapacity = 10;
+  actor.redstone = 10;
+  actor.hand = ['ed_002'];
+  placeUnit(state, actorIndex, 'pf_001', 1, 'object-10', state.turn);
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('end-return-owner-instance', state.revision, 'ed_002', 'UNIT', 'object-10'));
+  TestHarness.equal(result.accepted, true);
+  if (!result.accepted) return;
+  const owner = result.state.players[actorIndex]!;
+  TestHarness.equal(owner.battlefield.some(function (object): boolean { return object.instanceId === 'object-10'; }), false);
+  TestHarness.equal(owner.unitSlots[1], null);
+  TestHarness.equal(owner.hand[owner.hand.length - 1], 'pf_001');
+  const returned = owner.handCards[owner.handCards.length - 1]!;
+  TestHarness.equal(returned.costModifier, -1);
+  TestHarness.equal(returned.expiresAtEndOfTurnPlayerId, actor.playerId);
+  TestHarness.equal(owner.discardPile.indexOf('pf_001') >= 0, false);
+  TestHarness.equal(result.batch.events.map(function (event): string { return event.type; }).join(',').indexOf('CARD_PLAYED,OBJECT_RETURNED') >= 0, true);
+  TestHarness.equal(result.batch.events.filter(function (event): boolean { return event.type === 'OBJECT_DIED'; }).length, 0);
+  assertEventBatchMatchesSchema(BiomeRivalsRules.createClientEventBatch(result.batch, actor.playerId));
+  const opponent = result.state.players.filter(function (candidate): boolean { return candidate.playerId !== actor.playerId; })[0]!;
+  const opponentBatch = BiomeRivalsRules.createClientEventBatch(result.batch, opponent.playerId);
+  const opponentReturn = opponentBatch.events.filter(function (event): boolean { return event.type === 'OBJECT_RETURNED'; })[0]!;
+  TestHarness.equal(opponentReturn.payload.returnedHandCardInstanceId, null);
+  TestHarness.equal(opponentReturn.payload.costModifier, null);
+  TestHarness.equal(opponentReturn.payload.expiresAtEndOfTurnPlayerId, null);
+  assertEventBatchMatchesSchema(opponentBatch);
+  assertSnapshotMatchesSchema(BiomeRivalsRules.createClientSnapshot(result.state, actor.playerId));
+});
+
+TestHarness.test('End return cards reject enemy objects atomically before payment', function (): void {
+  ['ed_002', 'ed_005'].forEach(function (cardId): void {
+    const state = activeState('match-end-return-enemy-' + cardId, ['alice', 'bob'], ['end', 'end']);
+    const actorIndex = state.activePlayerIndex;
+    const enemyIndex = actorIndex === 0 ? 1 : 0;
+    const actor = state.players[actorIndex]!;
+    actor.redstoneCapacity = 10;
+    actor.redstone = 10;
+    actor.hand = [cardId];
+    placeUnit(state, enemyIndex, 'pf_001', 0, 'enemy-object-10', state.turn);
+    const revisionBefore = state.revision;
+    const redstoneBefore = actor.redstone;
+
+    const rejected = BiomeRivalsRules.applyCommand(state, actor.playerId,
+      playCommand('end-return-enemy-' + cardId, revisionBefore, cardId, 'UNIT', 'enemy-object-10'));
+
+    TestHarness.equal(rejected.accepted, false, cardId + ' cannot target an enemy object');
+    if (!rejected.accepted) TestHarness.equal(rejected.code, 'INVALID_TARGET');
+    TestHarness.equal(state.revision, revisionBefore);
+    TestHarness.equal(actor.redstone, redstoneBefore);
+    TestHarness.equal(actor.hand[0], cardId);
+    TestHarness.equal(actor.discardPile.length, 0);
+    TestHarness.equal(state.players[enemyIndex]!.battlefield[0]!.instanceId, 'enemy-object-10');
+  });
+});
+
+TestHarness.test('End Pearl cannot return TK-017 with its controller\'s spell and rejection is atomic', function (): void {
+  const state = activeState('match-end-return-dragon-shield', ['alice', 'bob'], ['end', 'end']);
+  const actorIndex = state.activePlayerIndex;
+  const actor = state.players[actorIndex]!;
+  actor.redstoneCapacity = 10;
+  actor.redstone = 10;
+  actor.hand = ['ed_005'];
+  placeUnit(state, actorIndex, 'tk_017', 1, 'object-10', state.turn);
+  const originalRevision = state.revision;
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('end-return-dragon-shield', originalRevision, 'ed_005', 'UNIT', 'object-10'));
+  TestHarness.equal(result.accepted, false);
+  if (result.accepted) return;
+  TestHarness.equal(result.code, 'INVALID_TARGET');
+  TestHarness.equal(state.revision, originalRevision);
+  TestHarness.equal(state.players[actorIndex]!.hand[0], 'ed_005');
+  TestHarness.equal(state.players[actorIndex]!.battlefield[0]!.instanceId, 'object-10');
+});
+
+TestHarness.test('Chorus Fruit can return TK-017 because its source is a material, not a spell', function (): void {
+  const state = activeState('match-end-return-dragon-material', ['alice', 'bob'], ['end', 'end']);
+  const actorIndex = state.activePlayerIndex;
+  const actor = state.players[actorIndex]!;
+  actor.redstoneCapacity = 10;
+  actor.redstone = 10;
+  actor.hand = ['ed_002'];
+  placeUnit(state, actorIndex, 'tk_017', 1, 'object-10', state.turn);
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('end-return-dragon-material', state.revision, 'ed_002', 'UNIT', 'object-10'));
+  TestHarness.equal(result.accepted, true);
+  if (!result.accepted) return;
+  const returned = result.state.players[actorIndex]!.handCards[0]!;
+  TestHarness.equal(returned.cardId, 'tk_017');
+  TestHarness.equal(returned.costModifier, -1);
+  TestHarness.equal(result.state.players[actorIndex]!.battlefield.length, 0);
+});
+
+TestHarness.test('End return sends a full original-owner hand to discard without retaining the battlefield object', function (): void {
+  const state = activeState('match-end-return-full-owner-hand', ['alice', 'bob'], ['end', 'end']);
+  const actorIndex = state.activePlayerIndex;
+  const actor = state.players[actorIndex]!;
+  const owner = state.players[actorIndex === 0 ? 1 : 0]!;
+  actor.redstoneCapacity = 10;
+  actor.redstone = 10;
+  actor.hand = ['ed_005'];
+  owner.hand = ['pf_001', 'pf_001', 'pf_001', 'pf_001', 'pf_001', 'pf_001', 'pf_001'];
+  placeUnit(state, actorIndex, 'pf_001', 1, 'object-10', state.turn);
+  actor.battlefield[0]!.ownerPlayerId = owner.playerId;
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('end-return-full-owner-hand', state.revision, 'ed_005', 'UNIT', 'object-10'));
+  TestHarness.equal(result.accepted, true);
+  if (!result.accepted) return;
+  const returnedOwner = result.state.players.filter(function (candidate): boolean { return candidate.playerId === owner.playerId; })[0]!;
+  TestHarness.equal(returnedOwner.hand.length, 7);
+  TestHarness.equal(returnedOwner.discardPile[returnedOwner.discardPile.length - 1], 'pf_001');
+  TestHarness.equal(result.state.players[actorIndex]!.battlefield.length, 0);
+  const returnedEvent = result.batch.events.filter(function (event): boolean { return event.type === 'OBJECT_RETURNED'; })[0]!;
+  TestHarness.equal(returnedEvent.payload.destination, 'DISCARD');
+  TestHarness.equal(returnedEvent.payload.returnedHandCardInstanceId, null);
+  assertEventBatchMatchesSchema(BiomeRivalsRules.createClientEventBatch(result.batch, actor.playerId));
+});
+
 TestHarness.test('temporary health state survives authoritative snapshot projection', function (): void {
   const state = activeState('match-temporary-health-snapshot', ['alice', 'bob']);
   placeUnit(state, 0, 'pf_001', 0, 'object-1', state.turn);
@@ -426,6 +604,76 @@ TestHarness.test('temporary health state survives authoritative snapshot project
   TestHarness.equal(projected.maxHealth, object.maxHealth);
   TestHarness.equal(BiomeRivalsRules.validateState(state).length, 0);
   assertSnapshotMatchesSchema(snapshot);
+});
+
+TestHarness.test('battlefield object instance ids are unique across both players', function (): void {
+  const state = activeState('match-duplicate-battlefield-instance', ['alice', 'bob']);
+  placeUnit(state, 0, 'pf_001', 0, 'object-shared', state.turn);
+  placeUnit(state, 1, 'pf_001', 0, 'object-shared', state.turn);
+
+  TestHarness.ok(BiomeRivalsRules.validateState(state).indexOf(
+    'battlefield instance ids must be unique across the match') >= 0);
+});
+
+TestHarness.test('simultaneous hero defeat is a valid draw snapshot and MATCH_ENDED wire event', function (): void {
+  const state = activeState('match-simultaneous-draw', ['alice', 'bob']);
+  state.status = 'FINISHED';
+  state.players[0]!.life = 0;
+  state.players[1]!.life = 0;
+  state.winnerPlayerId = null;
+
+  TestHarness.equal(BiomeRivalsRules.validateState(state).length, 0);
+  const snapshot = BiomeRivalsRules.createClientSnapshot(state, 'alice');
+  TestHarness.equal(snapshot.status, 'FINISHED');
+  TestHarness.equal(snapshot.winnerPlayerId, null);
+  assertSnapshotMatchesSchema(snapshot);
+
+  const drawBatch: BiomeRivalsRules.MatchEventBatch = {
+    protocolVersion: BiomeRivalsRules.PROTOCOL_VERSION,
+    rulesetVersion: BiomeRivalsRules.RULESET_VERSION,
+    arenaId: state.arenaId,
+    revision: 1,
+    acknowledgedCommandId: 'simultaneous-draw',
+    events: [{ eventId: 1, type: 'MATCH_ENDED', payload: {
+      winnerPlayerId: null, reason: 'SIMULTANEOUS_DEFEAT'
+    } }],
+    handProjection: {
+      ownPlayerId: 'alice', ownHand: [], ownHandCards: [], opponentPlayerId: 'bob', opponentHandCount: 0
+    }
+  };
+  TestHarness.ok(validateEventBatchSchema(drawBatch),
+    'draw event schema errors: ' + JSON.stringify(validateEventBatchSchema.errors));
+
+  state.players[1]!.life = 1;
+  TestHarness.ok(BiomeRivalsRules.validateState(state).indexOf(
+    'finished match without a winner requires simultaneous hero defeat') >= 0);
+  const invalidWinnerBatch = JSON.parse(JSON.stringify(drawBatch)) as BiomeRivalsRules.MatchEventBatch;
+  invalidWinnerBatch.events[0]!.payload.winnerPlayerId = 'alice';
+  TestHarness.equal(validateEventBatchSchema(invalidWinnerBatch), false);
+});
+
+TestHarness.test('generic lethal resolution emits a draw when both heroes are already defeated at the check', function (): void {
+  const state = activeState('match-simultaneous-lethal-resolution', ['alice', 'bob']);
+  const actor = state.players[state.activePlayerIndex]!;
+  actor.hand = ['cd_006'];
+  actor.deck = ['cd_001'];
+  actor.redstone = 2;
+  actor.redstoneCapacity = 2;
+  state.players[0]!.life = 0;
+  state.players[1]!.life = 0;
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('simultaneous-lethal-resolution', state.revision, 'cd_006'));
+
+  TestHarness.ok(result.accepted, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.status, 'FINISHED');
+  TestHarness.equal(result.state.winnerPlayerId, null);
+  const ended = result.batch.events.filter(function (event): boolean { return event.type === 'MATCH_ENDED'; })[0]!;
+  TestHarness.equal(ended.payload.winnerPlayerId, null);
+  TestHarness.equal(ended.payload.reason, 'SIMULTANEOUS_DEFEAT');
+  assertEventBatchMatchesSchema(result.batch);
+  assertSnapshotMatchesSchema(BiomeRivalsRules.createClientSnapshot(result.state, actor.playerId));
 });
 
 TestHarness.test('temporary attack and health expire together in one authoritative stats event', function (): void {
@@ -543,6 +791,7 @@ TestHarness.test('resource-change shape is schema replayable and rejects malform
   const batch: BiomeRivalsRules.MatchEventBatch = {
     protocolVersion: BiomeRivalsRules.PROTOCOL_VERSION,
     rulesetVersion: BiomeRivalsRules.RULESET_VERSION,
+    arenaId: state.arenaId,
     revision: 1, acknowledgedCommandId: 'resource-shape', events: [event],
     handProjection: {
       ownPlayerId: actor.playerId,
@@ -1261,6 +1510,51 @@ TestHarness.test('creates a valid two-player initial state', function (): void {
   TestHarness.equal(BiomeRivalsRules.validateState(state).length, 0);
 });
 
+TestHarness.test('initializes every registered arena symmetrically and binds its slot counts to the snapshot', function (): void {
+  const cases: Array<{ arenaId: BiomeRivalsRules.ArenaId; unitSlots: number; buildingSlots: number }> = [
+    { arenaId: 'standard_meadow', unitSlots: 4, buildingSlots: 3 },
+    { arenaId: 'plains_sunrise', unitSlots: 4, buildingSlots: 3 },
+    { arenaId: 'deep_caverns', unitSlots: 5, buildingSlots: 2 },
+    { arenaId: 'nether_lava_sea', unitSlots: 3, buildingSlots: 4 },
+    { arenaId: 'end_void', unitSlots: 3, buildingSlots: 4 },
+    { arenaId: 'deep_ocean', unitSlots: 4, buildingSlots: 3 },
+    { arenaId: 'desert_storm', unitSlots: 4, buildingSlots: 3 }
+  ];
+  cases.forEach(function (testCase): void {
+    const state = BiomeRivalsRules.createInitialState(
+      'match-arena-' + testCase.arenaId, ['alice', 'bob'], undefined, 'arena-secret', testCase.arenaId
+    );
+    TestHarness.equal(state.arenaId, testCase.arenaId);
+    state.players.forEach(function (player): void {
+      TestHarness.equal(player.unitSlots.length, testCase.unitSlots);
+      TestHarness.equal(player.buildingSlots.length, testCase.buildingSlots);
+    });
+    TestHarness.equal(BiomeRivalsRules.validateState(state).length, 0);
+    const snapshot = BiomeRivalsRules.createClientSnapshot(state, state.players[0]!.playerId);
+    TestHarness.equal(snapshot.arenaId, testCase.arenaId);
+    assertSnapshotMatchesSchema(snapshot);
+
+    const malformed = JSON.parse(JSON.stringify(snapshot)) as BiomeRivalsRules.MatchSnapshot;
+    malformed.players[0]!.unitSlots.pop();
+    TestHarness.ok(!validateSnapshotSchema(malformed), 'snapshot schema must reject a slot count that disagrees with its arenaId');
+    const invalidState = JSON.parse(JSON.stringify(state)) as BiomeRivalsRules.MatchState;
+    invalidState.players[1]!.buildingSlots.pop();
+    TestHarness.ok(BiomeRivalsRules.validateState(invalidState).some(function (violation): boolean {
+      return violation.indexOf('building slots do not match the arena layout') >= 0;
+    }));
+  });
+
+  let rejectedUnknownArena = false;
+  try {
+    BiomeRivalsRules.createInitialState(
+      'match-arena-unknown', ['alice', 'bob'], undefined, 'arena-secret', 'unknown_arena' as BiomeRivalsRules.ArenaId
+    );
+  } catch (_error) {
+    rejectedUnknownArena = true;
+  }
+  TestHarness.ok(rejectedUnknownArena, 'initialization must reject unregistered arena IDs');
+});
+
 TestHarness.test('uses injected authoritative entropy without projecting it to clients', function (): void {
   const left = BiomeRivalsRules.createInitialState(
     'same-public-match', ['alice', 'bob'], ['plains_forest', 'nether'], 'server-secret-left'
@@ -1456,6 +1750,22 @@ TestHarness.test('resolves the bee battlecry after deployment', function (): voi
   TestHarness.equal(result.batch.events[1]!.type, 'HERO_HEALED');
   TestHarness.equal(result.batch.events[1]!.payload.effectId, 'effect.pf_001.01');
   TestHarness.equal(result.batch.events[1]!.payload.healing, 1);
+});
+
+TestHarness.test('bee battlecry emits a zero-healing event at the hero life cap', function (): void {
+  const state = activeState('match-bee-at-cap', ['alice', 'bob']);
+  state.players[0]!.hand = ['pf_001'];
+  state.players[0]!.life = 30;
+  const result = BiomeRivalsRules.applyCommand(state, 'alice', deployCommand('deploy-bee-at-cap', 0, 'pf_001', 'UNIT', 0));
+  TestHarness.ok(result.accepted);
+  if (!result.accepted) return;
+  TestHarness.equal(result.state.players[0]!.life, 30);
+  TestHarness.equal(result.batch.events.length, 2);
+  TestHarness.equal(result.batch.events[0]!.type, 'CARD_DEPLOYED');
+  TestHarness.equal(result.batch.events[1]!.type, 'HERO_HEALED');
+  TestHarness.equal(result.batch.events[1]!.payload.effectId, 'effect.pf_001.01');
+  TestHarness.equal(result.batch.events[1]!.payload.healing, 0);
+  TestHarness.equal(result.batch.events[1]!.payload.life, 30);
 });
 
 TestHarness.test('Villager Farmer generates private Wheat after deployment', function (): void {
@@ -1960,6 +2270,85 @@ TestHarness.test('rejects a structure whose declared range overlaps an occupied 
   TestHarness.equal(state.players[0]!.redstone, 6);
   TestHarness.equal(state.players[0]!.buildingSlots[0], null);
   TestHarness.equal(state.players[0]!.buildingSlots[1], 'object-1');
+});
+
+TestHarness.test('variable-arena deployment rejections preserve the entire secret state and allow a legal follow-up', function (): void {
+  const arenas: BiomeRivalsRules.ArenaId[] = ['standard_meadow', 'deep_caverns', 'nether_lava_sea'];
+  arenas.forEach(function (arena): void {
+    const state = BiomeRivalsRules.createInitialState('atomic-' + arena, ['alice', 'bob'], ['cave_dark_forest', 'cave_dark_forest'], 'atomic-secret', arena);
+    state.status = 'ACTIVE';
+    state.players.forEach(function (player): void { player.mulliganCompleted = true; });
+    const actor = state.players[0]!;
+    actor.redstoneCapacity = 10;
+    actor.redstone = 10;
+    actor.hand = ['cd_002', 'cd_007'];
+    actor.handCards = actor.hand.map(function (cardId): BiomeRivalsRules.HandCardState {
+      return { cardId: cardId, handCardInstanceId: 'hand-' + String(state.nextHandCardInstanceId++), costModifier: 0, expiresAtEndOfTurnPlayerId: null };
+    });
+    placeUnit(state, 0, 'cd_003', actor.unitSlots.length - 1, 'object-1', state.turn);
+    placeBuilding(state, 0, 'cd_004', actor.buildingSlots.length - 1, 'object-2');
+    state.nextInstanceId = 3;
+    const cases: Array<{ cardIndex: number; kind: BiomeRivalsRules.DeploySlotKind; slot: number; code: string }> = [
+      { cardIndex: 0, kind: 'UNIT', slot: -1, code: 'INVALID_TARGET' },
+      { cardIndex: 0, kind: 'UNIT', slot: actor.unitSlots.length, code: 'INVALID_TARGET' },
+      { cardIndex: 0, kind: 'UNIT', slot: actor.unitSlots.length + 1, code: 'INVALID_TARGET' },
+      { cardIndex: 0, kind: 'UNIT', slot: actor.unitSlots.length - 1, code: 'SLOT_OCCUPIED' },
+      { cardIndex: 1, kind: 'BUILDING', slot: -1, code: 'INVALID_TARGET' },
+      { cardIndex: 1, kind: 'BUILDING', slot: actor.buildingSlots.length, code: 'INVALID_TARGET' },
+      { cardIndex: 1, kind: 'BUILDING', slot: actor.buildingSlots.length - 1, code: 'INVALID_TARGET' },
+      { cardIndex: 1, kind: 'BUILDING', slot: actor.buildingSlots.length - 2, code: 'SLOT_OCCUPIED' }
+    ];
+    const before = JSON.stringify(state); // Includes both private decks/order, RNG and sequence counters.
+    cases.forEach(function (sample, index): void {
+      const card = actor.handCards[sample.cardIndex]!;
+      const request = deployCommand('atomic-' + index, state.revision, card.cardId, sample.kind, sample.slot);
+      request.payload.handCardInstanceId = card.handCardInstanceId;
+      const rejected = applyCommandStrict(state, actor.playerId, request);
+      TestHarness.equal(rejected.accepted, false);
+      if (rejected.accepted) return;
+      TestHarness.equal(rejected.code, sample.code);
+      TestHarness.equal(rejected.state.revision, state.revision);
+      TestHarness.equal(JSON.stringify(rejected.state), before, 'returned rejection state changed: ' + arena + '/' + index);
+      TestHarness.equal(JSON.stringify(state), before, 'rejection mutated the complete secret state: ' + arena + '/' + index);
+    });
+    const valid = deployCommand('atomic-valid', state.revision, 'cd_002', 'UNIT', 0);
+    valid.payload.handCardInstanceId = actor.handCards[0]!.handCardInstanceId;
+    const accepted = applyCommandStrict(state, actor.playerId, valid);
+    TestHarness.equal(accepted.accepted, true);
+    if (!accepted.accepted) return;
+    TestHarness.equal(accepted.state.revision, state.revision + 1);
+    TestHarness.equal(accepted.state.players[0]!.redstone, 8);
+    TestHarness.equal(accepted.state.players[0]!.handCards.length, 1);
+    TestHarness.ok(accepted.state.players[0]!.unitSlots[0] !== null);
+    TestHarness.equal(JSON.stringify(state), before, 'the accepted immutable transition also modified its input');
+  });
+});
+
+TestHarness.test('single building cannot invade either occupied structure cell or mutate secret state', function (): void {
+  (['standard_meadow', 'deep_caverns', 'nether_lava_sea'] as BiomeRivalsRules.ArenaId[]).forEach(function (arena): void {
+    const state = BiomeRivalsRules.createInitialState('reverse-overlap-' + arena, ['alice', 'bob'], ['cave_dark_forest', 'cave_dark_forest'], 'overlap-secret', arena);
+    state.status = 'ACTIVE';
+    state.players.forEach(function (player): void { player.mulliganCompleted = true; });
+    const actor = state.players[0]!;
+    actor.redstoneCapacity = 10;
+    actor.redstone = 10;
+    actor.hand = ['cd_004'];
+    actor.handCards = [{ cardId: 'cd_004', handCardInstanceId: 'hand-' + String(state.nextHandCardInstanceId++), costModifier: 0, expiresAtEndOfTurnPlayerId: null }];
+    const anchor = actor.buildingSlots.length - 2;
+    placeBuilding(state, 0, 'cd_007', anchor, 'object-1');
+    state.nextInstanceId = 2;
+    const before = JSON.stringify(state);
+    [anchor, anchor + 1].forEach(function (slot): void {
+      const request = deployCommand('reverse-overlap-' + slot, state.revision, 'cd_004', 'BUILDING', slot);
+      request.payload.handCardInstanceId = actor.handCards[0]!.handCardInstanceId;
+      const result = applyCommandStrict(state, actor.playerId, request);
+      TestHarness.equal(result.accepted, false);
+      if (result.accepted) return;
+      TestHarness.equal(result.code, 'SLOT_OCCUPIED');
+      TestHarness.equal(JSON.stringify(result.state), before);
+      TestHarness.equal(JSON.stringify(state), before);
+    });
+  });
 });
 
 TestHarness.test('damages a three-slot structure once and releases its complete range on death', function (): void {
@@ -3714,6 +4103,70 @@ TestHarness.test('Turtle grants a live adjacent health aura without buffing itse
   TestHarness.equal(drowned.adjacencyHealthModifier, 1);
   TestHarness.equal(turtle.health, 6);
   TestHarness.equal(turtle.adjacencyHealthModifier, 0);
+});
+
+TestHarness.test('returning a Turtle recalculates adjacent health before completing the play transaction', function (): void {
+  const state = activeState('match-return-turtle-aura', ['alice', 'bob'], ['ocean_river', 'nether']);
+  const actorIndex = state.players[0]!.playerId === 'alice' ? 0 : 1;
+  const actor = state.players[actorIndex]!;
+  state.activePlayerIndex = actorIndex;
+  actor.hand = ['ed_002'];
+  actor.redstone = 10;
+  actor.redstoneCapacity = 10;
+  placeUnit(state, actorIndex, 'or_005', 1, 'object-10', 1);
+  placeUnit(state, actorIndex, 'or_001', 2, 'object-11', 1);
+  actor.battlefield[1]!.adjacencyHealthModifier = 1;
+  actor.battlefield[1]!.maxHealth += 1;
+  actor.battlefield[1]!.health += 1;
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('return-turtle-aura', state.revision, 'ed_002', 'UNIT', 'object-10'));
+  TestHarness.ok(result.accepted, JSON.stringify(result));
+  if (!result.accepted) return;
+  TestHarness.equal(result.batch.events[0]!.type, 'CARD_PLAYED');
+  TestHarness.equal(result.batch.events[1]!.type, 'OBJECT_RETURNED');
+  TestHarness.equal(result.batch.events[2]!.type, 'OBJECT_STATS_CHANGED');
+  TestHarness.equal(result.batch.events[2]!.payload.reason, 'AURA_RECALCULATED');
+  TestHarness.equal(result.batch.events[2]!.payload.instanceId, 'object-11');
+  const returnedPlayer = result.state.players[actorIndex]!;
+  TestHarness.equal(returnedPlayer.battlefield.some(function (object): boolean { return object.instanceId === 'object-10'; }), false);
+  const adjacent = returnedPlayer.battlefield.filter(function (object): boolean { return object.instanceId === 'object-11'; })[0]!;
+  TestHarness.equal(adjacent.adjacencyHealthModifier, 0);
+  TestHarness.equal(adjacent.maxHealth, 2);
+  TestHarness.equal(adjacent.health, 2);
+  assertEventBatchMatchesSchema(BiomeRivalsRules.createClientEventBatch(result.batch, actor.playerId));
+});
+
+TestHarness.test('returning a Turtle settles lethal aura loss and resolves the adjacent unit deathrattle', function (): void {
+  const state = activeState('match-return-turtle-aura-lethal', ['alice', 'bob'], ['ocean_river', 'nether']);
+  const actorIndex = state.players[0]!.playerId === 'alice' ? 0 : 1;
+  const actor = state.players[actorIndex]!;
+  state.activePlayerIndex = actorIndex;
+  actor.hand = ['ed_002'];
+  actor.redstone = 10;
+  actor.redstoneCapacity = 10;
+  placeUnit(state, actorIndex, 'or_005', 1, 'object-10', 1);
+  placeUnit(state, actorIndex, 'nt_001', 2, 'object-11', 1);
+  actor.battlefield[1]!.adjacencyHealthModifier = 1;
+  actor.battlefield[1]!.maxHealth += 1;
+  actor.battlefield[1]!.health = 1;
+
+  const result = BiomeRivalsRules.applyCommand(state, actor.playerId,
+    playCommand('return-turtle-aura-lethal', state.revision, 'ed_002', 'UNIT', 'object-10'));
+  TestHarness.ok(result.accepted, JSON.stringify(result));
+  if (!result.accepted) return;
+  const eventTypes = result.batch.events.map(function (event): string { return event.type; });
+  TestHarness.equal(eventTypes.slice(0, 5).join(','),
+    'CARD_PLAYED,OBJECT_RETURNED,OBJECT_STATS_CHANGED,OBJECT_DIED,OBJECT_SUMMONED');
+  TestHarness.equal(result.batch.events[2]!.payload.health, 0);
+  TestHarness.equal(result.batch.events[2]!.payload.reason, 'AURA_RECALCULATED');
+  TestHarness.equal(result.batch.events[3]!.payload.instanceId, 'object-11');
+  TestHarness.equal(result.batch.events[4]!.payload.cardId, 'tk_014');
+  TestHarness.equal(result.state.players[actorIndex]!.battlefield.some(function (object): boolean {
+    return object.instanceId === 'object-11';
+  }), false);
+  TestHarness.equal(result.state.players[actorIndex]!.discardPile.indexOf('nt_001') >= 0, true);
+  TestHarness.equal(BiomeRivalsRules.validateState(result.state).length, 0);
 });
 
 TestHarness.test('Losing Turtle aura during movement can kill before Prismarine healing', function (): void {

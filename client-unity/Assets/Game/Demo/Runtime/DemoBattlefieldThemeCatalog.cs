@@ -99,5 +99,14 @@ namespace BiomeRivals.Demo
             if (factionId != null && Themes.TryGetValue(factionId, out var theme)) return theme;
             throw new ArgumentException("Unknown battlefield faction: " + factionId, nameof(factionId));
         }
+
+        public static Color GetSkyColor(string playerFactionId, string opponentFactionId)
+        {
+            var playerLight = Get(playerFactionId).EnvironmentLight;
+            var opponentLight = Get(opponentFactionId).EnvironmentLight;
+            var combinedLight = Color.Lerp(playerLight, opponentLight, 0.5f);
+            Color baseSky = new Color32(9, 11, 10, 255);
+            return Color.Lerp(baseSky, combinedLight, 0.16f);
+        }
     }
 }

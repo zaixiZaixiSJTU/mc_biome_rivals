@@ -4,10 +4,11 @@
   "title": "MatchEventBatch",
   "type": "object",
   "additionalProperties": false,
-  "required": ["protocolVersion", "rulesetVersion", "revision", "acknowledgedCommandId", "events", "handProjection"],
+  "required": ["protocolVersion", "rulesetVersion", "arenaId", "revision", "acknowledgedCommandId", "events", "handProjection"],
   "properties": {
-    "protocolVersion": { "const": 37 },
+    "protocolVersion": { "const": 40 },
     "rulesetVersion": { "type": "string" },
+    "arenaId": { "enum": ["standard_meadow", "plains_sunrise", "deep_caverns", "nether_lava_sea", "end_void", "deep_ocean", "desert_storm"] },
     "revision": { "type": "integer", "minimum": 0 },
     "acknowledgedCommandId": { "type": "string" },
     "events": {
@@ -18,7 +19,7 @@
         "required": ["eventId", "type", "payload"],
         "properties": {
           "eventId": { "type": "integer", "minimum": 1 },
-          "type": { "enum": ["MULLIGAN_COMPLETED", "MATCH_STARTED", "MATERIALS_CONSUMED", "CARD_DEPLOYED", "OBJECT_SUMMONED", "CARD_PLAYED", "CARD_EQUIPPED", "EQUIPMENT_DURABILITY_CHANGED", "EQUIPMENT_DESTROYED", "CARD_BURIED", "CHOICE_OFFERED", "CHOICE_RESOLVED", "CARD_EXCAVATED", "CARD_DRAWN", "CARD_BURNED", "CARD_GENERATED", "HAND_CARD_COST_MODIFIER_EXPIRED", "FATIGUE_DAMAGE", "HERO_DAMAGED", "HERO_LIFE_LOSS_MARKED", "HERO_HEALED", "ARMOR_GAINED", "REDSTONE_CHANGED", "OBJECT_STATS_CHANGED", "OBJECT_STATUS_APPLIED", "OBJECT_STATUS_TICKED", "OBJECT_STATUS_REMOVED", "PLAYER_STATUS_APPLIED", "PLAYER_STATUS_TICKED", "PLAYER_STATUS_REMOVED", "OBJECT_MOVED", "PHASE_CHANGED", "ATTACK_RESOLVED", "OBJECT_DIED", "TURN_ENDED", "TURN_STARTED", "PLAYER_CONCEDED", "MATCH_ENDED"] },
+          "type": { "enum": ["MULLIGAN_COMPLETED", "MATCH_STARTED", "MATERIALS_CONSUMED", "CARD_DEPLOYED", "OBJECT_SUMMONED", "CARD_PLAYED", "OBJECT_RETURNED", "CARD_EQUIPPED", "EQUIPMENT_DURABILITY_CHANGED", "EQUIPMENT_DESTROYED", "CARD_BURIED", "CHOICE_OFFERED", "CHOICE_RESOLVED", "CARD_EXCAVATED", "CARD_DRAWN", "CARD_BURNED", "CARD_GENERATED", "HAND_CARD_COST_MODIFIER_EXPIRED", "FATIGUE_DAMAGE", "HERO_DAMAGED", "HERO_LIFE_LOSS_MARKED", "HERO_HEALED", "ARMOR_GAINED", "REDSTONE_CHANGED", "OBJECT_STATS_CHANGED", "OBJECT_STATUS_APPLIED", "OBJECT_STATUS_TICKED", "OBJECT_STATUS_REMOVED", "PLAYER_STATUS_APPLIED", "PLAYER_STATUS_TICKED", "PLAYER_STATUS_REMOVED", "OBJECT_MOVED", "PHASE_CHANGED", "ATTACK_RESOLVED", "OBJECT_DIED", "TURN_ENDED", "TURN_STARTED", "PLAYER_CONCEDED", "MATCH_ENDED"] },
           "payload": { "type": "object" }
         },
         "allOf": [
@@ -26,9 +27,10 @@
             "if": { "properties": { "type": { "const": "HAND_CARD_COST_MODIFIER_EXPIRED" } } },
             "then": { "properties": { "payload": {
               "type": "object", "additionalProperties": false,
-              "required": ["playerId", "handCardInstanceId", "cardId", "expiredCostModifier", "costModifier", "effectiveCost"],
+              "required": ["playerId", "expiredAtEndOfTurnPlayerId", "handCardInstanceId", "cardId", "expiredCostModifier", "costModifier", "effectiveCost"],
               "properties": {
                 "playerId": { "type": "string", "minLength": 1 },
+                "expiredAtEndOfTurnPlayerId": { "type": "string", "minLength": 1 },
                 "handCardInstanceId": {}, "cardId": {}, "expiredCostModifier": {},
                 "costModifier": {}, "effectiveCost": {}
               },
@@ -298,7 +300,7 @@
                         "properties": {
                           "optionIndex": { "type": "integer", "minimum": 0, "maximum": 3 },
                           "cardId": { "type": ["string", "null"], "pattern": "^[a-z0-9_]+$" },
-                          "slotIndex": { "type": "integer", "minimum": -1, "maximum": 3 },
+                          "slotIndex": { "type": "integer", "minimum": -1, "maximum": 4 },
                           "selectable": { "type": "boolean" }
                         }
                       }
@@ -669,8 +671,8 @@
                 "sourceCardId": { "enum": ["si_004", "or_001", "or_006", "tk_012"] },
                 "sourceInstanceId": { "type": "string", "pattern": "^(object|equipment|effect)-[0-9]+$" },
                 "effectId": { "enum": ["effect.si_004.01", "effect.or_001.01", "effect.or_006.01", "effect.tk_012.01"] },
-                "fromSlotIndex": { "type": "integer", "minimum": 0, "maximum": 3 },
-                "toSlotIndex": { "type": "integer", "minimum": 0, "maximum": 3 }
+                "fromSlotIndex": { "type": "integer", "minimum": 0, "maximum": 4 },
+                "toSlotIndex": { "type": "integer", "minimum": 0, "maximum": 4 }
               }
             } } }
           },
@@ -757,11 +759,50 @@
                   "type": "object", "additionalProperties": false,
                   "required": ["winnerPlayerId", "reason"],
                   "properties": {
-                    "winnerPlayerId": { "type": "string", "minLength": 1 },
-                    "reason": { "enum": ["FATIGUE", "SELF_DAMAGE", "HERO_DEFEATED", "CONCEDE", "BURIED_EXPLOSION"] }
-                  }
+                    "winnerPlayerId": { "type": ["string", "null"], "minLength": 1 },
+                    "reason": { "enum": ["FATIGUE", "SELF_DAMAGE", "HERO_DEFEATED", "CONCEDE", "BURIED_EXPLOSION", "SIMULTANEOUS_DEFEAT"] }
+                  },
+                  "allOf": [
+                    {
+                      "if": { "properties": { "reason": { "const": "SIMULTANEOUS_DEFEAT" } } },
+                      "then": { "properties": { "winnerPlayerId": { "type": "null" } } },
+                      "else": { "properties": { "winnerPlayerId": { "type": "string", "minLength": 1 } } }
+                    }
+                  ]
                 }
               }
+            }
+          },
+          {
+            "if": { "properties": { "type": { "const": "OBJECT_RETURNED" } } },
+            "then": {
+              "properties": { "payload": {
+                "type": "object", "additionalProperties": false,
+                "required": ["instanceId", "cardId", "ownerPlayerId", "controllerPlayerId", "sourcePlayerId", "sourceCardId", "sourceInstanceId", "effectId", "fromSlotKind", "fromSlotIndex", "destination", "returnedHandCardInstanceId", "costModifier", "expiresAtEndOfTurnPlayerId", "ownerHandCount", "ownerDiscardCount"],
+                "properties": {
+                  "instanceId": { "type": "string", "pattern": "^object-[0-9]+$" },
+                  "cardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+                  "ownerPlayerId": { "type": "string", "minLength": 1 },
+                  "controllerPlayerId": { "type": "string", "minLength": 1 },
+                  "sourcePlayerId": { "type": "string", "minLength": 1 },
+                  "sourceCardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+                  "sourceInstanceId": { "type": "string", "pattern": "^effect-[0-9]+$" },
+                  "effectId": { "enum": ["effect.ed_002.01", "effect.ed_005.01"] },
+                  "fromSlotKind": { "const": "UNIT" },
+                  "fromSlotIndex": { "type": "integer", "minimum": 0, "maximum": 4 },
+                  "destination": { "enum": ["HAND", "DISCARD"] },
+                  "returnedHandCardInstanceId": { "type": ["string", "null"], "pattern": "^hand-[0-9]+$" },
+                  "costModifier": { "type": ["integer", "null"], "enum": [-2, -1, 0, null] },
+                  "expiresAtEndOfTurnPlayerId": { "type": ["string", "null"] },
+                  "ownerHandCount": { "type": "integer", "minimum": 0, "maximum": 7 },
+                  "ownerDiscardCount": { "type": "integer", "minimum": 0 }
+                },
+                "oneOf": [
+                  { "properties": { "destination": { "const": "HAND" }, "returnedHandCardInstanceId": { "type": "string", "pattern": "^hand-[0-9]+$" }, "costModifier": { "enum": [-2, -1] }, "expiresAtEndOfTurnPlayerId": { "type": "string", "minLength": 1 } } },
+                  { "properties": { "destination": { "const": "HAND" }, "returnedHandCardInstanceId": { "const": null }, "costModifier": { "const": null }, "expiresAtEndOfTurnPlayerId": { "const": null } } },
+                  { "properties": { "destination": { "const": "DISCARD" }, "returnedHandCardInstanceId": { "const": null }, "costModifier": { "const": 0 }, "expiresAtEndOfTurnPlayerId": { "const": null } } }
+                ]
+              } }
             }
           },
           {

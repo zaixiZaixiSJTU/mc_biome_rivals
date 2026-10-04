@@ -66,8 +66,11 @@ Shader "BiomeRivals/Demo/GroundSurface"
                 float edgeDistance = min(min(input.cellUv.x, 1.0 - input.cellUv.x), min(input.cellUv.y, 1.0 - input.cellUv.y));
                 float edge = 1.0 - smoothstep(_EdgeWidth, _EdgeWidth * 2.0, edgeDistance);
                 float strength = saturate(_HighlightStrength);
-                float surfaceMask = strength * lerp(0.84, 1.0, edge);
-                fixed3 activated = lerp(ground.rgb, _HighlightColor.rgb, 0.44 + edge * 0.18) * (1.0 + strength * 0.10);
+                // Keep the tile interior close to its biome texture while making
+                // the projected voxel-cell seams unmistakably respond to input/events.
+                float surfaceMask = strength * lerp(0.42, 1.0, edge);
+                float tintWeight = 0.52 + edge * 0.40;
+                fixed3 activated = lerp(ground.rgb, _HighlightColor.rgb, tintWeight) * (1.0 + strength * 0.10 * edge);
                 return fixed4(lerp(ground.rgb, activated, surfaceMask), 1.0);
             }
             ENDCG

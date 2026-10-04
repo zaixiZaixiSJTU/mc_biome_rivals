@@ -16,10 +16,13 @@
     "src/generated/card-catalog.ts",
     "src/rules/invariants.ts",
     "src/rules/match-engine.ts",
+    "src/rpc/health.ts",
     "src/matches/biome-rivals-matchmaker.ts",
     "src/matches/biome-rivals-match.ts",
     "tests/test-harness.ts",
+    "tests/health.test.ts",
     "tests/match-engine.test.ts",
-    "tests/matchmaker.test.ts"
+    "tests/matchmaker.test.ts",
+    "tests/test-runner.ts"
   ]
 }

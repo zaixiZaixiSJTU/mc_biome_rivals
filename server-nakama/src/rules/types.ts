@@ -1,10 +1,30 @@
 namespace BiomeRivalsRules {
-  export const PROTOCOL_VERSION = 37;
-  export const RULESET_VERSION = 'prototype-0.62';
+  export const PROTOCOL_VERSION = 40;
+  export const RULESET_VERSION = 'prototype-0.65';
+  export const DEFAULT_ARENA_ID: ArenaId = 'standard_meadow';
+
+  export type ArenaId = 'standard_meadow' | 'plains_sunrise' | 'deep_caverns' | 'nether_lava_sea' | 'end_void' | 'deep_ocean' | 'desert_storm';
+  export interface ArenaLayout {
+    unitSlotCount: number;
+    buildingSlotCount: number;
+  }
+  export const ARENA_LAYOUTS: { [arenaId: string]: ArenaLayout } = {
+    standard_meadow: { unitSlotCount: 4, buildingSlotCount: 3 },
+    plains_sunrise: { unitSlotCount: 4, buildingSlotCount: 3 },
+    deep_caverns: { unitSlotCount: 5, buildingSlotCount: 2 },
+    nether_lava_sea: { unitSlotCount: 3, buildingSlotCount: 4 },
+    end_void: { unitSlotCount: 3, buildingSlotCount: 4 },
+    deep_ocean: { unitSlotCount: 4, buildingSlotCount: 3 },
+    desert_storm: { unitSlotCount: 4, buildingSlotCount: 3 }
+  };
+
+  export function isArenaId(value: unknown): value is ArenaId {
+    return typeof value === 'string' && Object.prototype.hasOwnProperty.call(ARENA_LAYOUTS, value);
+  }
 
   export type MatchStatus = 'WAITING' | 'MULLIGAN' | 'ACTIVE' | 'FINISHED';
   export type CommandType = 'MULLIGAN' | 'DEPLOY_CARD' | 'PLAY_CARD' | 'RESOLVE_CHOICE' | 'ENTER_COMBAT' | 'ATTACK' | 'END_TURN' | 'CONCEDE';
-  export type EventType = 'MULLIGAN_COMPLETED' | 'MATCH_STARTED' | 'MATERIALS_CONSUMED' | 'CARD_DEPLOYED' | 'OBJECT_SUMMONED' | 'CARD_PLAYED' | 'CARD_EQUIPPED' | 'EQUIPMENT_DURABILITY_CHANGED' | 'EQUIPMENT_DESTROYED' | 'CARD_BURIED' | 'CHOICE_OFFERED' | 'CHOICE_RESOLVED' | 'CARD_EXCAVATED' | 'CARD_DRAWN' | 'CARD_BURNED' | 'CARD_GENERATED' | 'HAND_CARD_COST_MODIFIER_EXPIRED' | 'FATIGUE_DAMAGE' | 'HERO_DAMAGED' | 'HERO_LIFE_LOSS_MARKED' | 'HERO_HEALED' | 'ARMOR_GAINED' | 'REDSTONE_CHANGED' | 'OBJECT_STATS_CHANGED' | 'OBJECT_STATUS_APPLIED' | 'OBJECT_STATUS_TICKED' | 'OBJECT_STATUS_REMOVED' | 'PLAYER_STATUS_APPLIED' | 'PLAYER_STATUS_TICKED' | 'PLAYER_STATUS_REMOVED' | 'OBJECT_MOVED' | 'PHASE_CHANGED' | 'ATTACK_RESOLVED' | 'OBJECT_DIED' | 'TURN_ENDED' | 'TURN_STARTED' | 'PLAYER_CONCEDED' | 'MATCH_ENDED';
+  export type EventType = 'MULLIGAN_COMPLETED' | 'MATCH_STARTED' | 'MATERIALS_CONSUMED' | 'CARD_DEPLOYED' | 'OBJECT_SUMMONED' | 'CARD_PLAYED' | 'OBJECT_RETURNED' | 'CARD_EQUIPPED' | 'EQUIPMENT_DURABILITY_CHANGED' | 'EQUIPMENT_DESTROYED' | 'CARD_BURIED' | 'CHOICE_OFFERED' | 'CHOICE_RESOLVED' | 'CARD_EXCAVATED' | 'CARD_DRAWN' | 'CARD_BURNED' | 'CARD_GENERATED' | 'HAND_CARD_COST_MODIFIER_EXPIRED' | 'FATIGUE_DAMAGE' | 'HERO_DAMAGED' | 'HERO_LIFE_LOSS_MARKED' | 'HERO_HEALED' | 'ARMOR_GAINED' | 'REDSTONE_CHANGED' | 'OBJECT_STATS_CHANGED' | 'OBJECT_STATUS_APPLIED' | 'OBJECT_STATUS_TICKED' | 'OBJECT_STATUS_REMOVED' | 'PLAYER_STATUS_APPLIED' | 'PLAYER_STATUS_TICKED' | 'PLAYER_STATUS_REMOVED' | 'OBJECT_MOVED' | 'PHASE_CHANGED' | 'ATTACK_RESOLVED' | 'OBJECT_DIED' | 'TURN_ENDED' | 'TURN_STARTED' | 'PLAYER_CONCEDED' | 'MATCH_ENDED';
   export type DeploySlotKind = 'UNIT' | 'BUILDING';
   export type PaymentMethod = 'REDSTONE' | 'CRAFTING';
   export type TurnPhase = 'MAIN' | 'COMBAT';
@@ -63,6 +83,7 @@ namespace BiomeRivalsRules {
 
   export interface BattlefieldObjectState {
     instanceId: string;
+    ownerPlayerId: string;
     cardId: string;
     cardType: 'UNIT' | 'BUILDING' | 'STRUCTURE';
     attack: number;
@@ -174,6 +195,7 @@ namespace BiomeRivalsRules {
 
   export interface MatchState {
     matchId: string;
+    arenaId: ArenaId;
     /** Authoritative-only entropy. Never include this value in snapshots or event payloads. */
     authoritativeRandomSeed: string;
     /** Authoritative-only PRF counter paired with authoritativeRandomSeed. */
@@ -226,6 +248,7 @@ namespace BiomeRivalsRules {
   export interface MatchSnapshot {
     matchId: string;
     viewerPlayerId: string;
+    arenaId: ArenaId;
     protocolVersion: number;
     rulesetVersion: string;
     revision: number;
@@ -258,6 +281,7 @@ namespace BiomeRivalsRules {
   export interface MatchEventBatch {
     protocolVersion: number;
     rulesetVersion: string;
+    arenaId: ArenaId;
     revision: number;
     acknowledgedCommandId: string;
     events: MatchEvent[];

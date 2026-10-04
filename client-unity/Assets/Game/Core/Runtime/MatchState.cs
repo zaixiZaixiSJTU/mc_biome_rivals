@@ -32,6 +32,7 @@ namespace BiomeRivals.Core
     public sealed class BattlefieldObjectStateDto
     {
         public string instanceId = string.Empty;
+        public string ownerPlayerId = string.Empty;
         public string cardId = string.Empty;
         public string cardType = string.Empty;
         public int attack;
@@ -96,8 +97,8 @@ namespace BiomeRivals.Core
         public bool heroLifeLostThisTurn;
         public string[] triggeredEffectKeysThisTurn = Array.Empty<string>();
         public PlayerStatusStateDto[] statuses = Array.Empty<PlayerStatusStateDto>();
-        public string[] unitSlots = Array.Empty<string>();
-        public string[] buildingSlots = Array.Empty<string>();
+        public string[] unitSlots = new string[4];
+        public string[] buildingSlots = new string[3];
         public BattlefieldObjectStateDto[] battlefield = Array.Empty<BattlefieldObjectStateDto>();
     }
 
@@ -106,6 +107,7 @@ namespace BiomeRivals.Core
     {
         public string matchId = string.Empty;
         public string viewerPlayerId = string.Empty;
+        public string arenaId = ArenaLayouts.DefaultArenaId;
         public int protocolVersion;
         public string rulesetVersion = string.Empty;
         public int revision;
@@ -134,12 +136,29 @@ namespace BiomeRivals.Core
                 throw new InvalidOperationException("Snapshot protocol or ruleset version is unsupported.");
             if (snapshot.players == null || snapshot.players.Length != 2)
                 throw new InvalidOperationException("Snapshot must contain exactly two players.");
+            if (!ArenaLayouts.TryGet(snapshot.arenaId, out var arenaLayout))
+                throw new InvalidOperationException("Snapshot contains an unsupported arena.");
+            if (snapshot.status == "FINISHED")
+            {
+                if (string.IsNullOrWhiteSpace(snapshot.winnerPlayerId) &&
+                    snapshot.players.Any(player => player == null || player.life > 0))
+                    throw new InvalidOperationException("A finished draw requires both heroes to be defeated.");
+                if (!string.IsNullOrWhiteSpace(snapshot.winnerPlayerId) &&
+                    snapshot.players.All(player => player == null || player.playerId != snapshot.winnerPlayerId))
+                    throw new InvalidOperationException("Snapshot winner is not a match participant.");
+            }
+            else if (!string.IsNullOrWhiteSpace(snapshot.winnerPlayerId))
+                throw new InvalidOperationException("An unfinished match cannot have a winner.");
             if (snapshot.activePlayerIndex < 0 || snapshot.activePlayerIndex >= snapshot.players.Length)
                 throw new InvalidOperationException("Snapshot contains an invalid active player index.");
+            var seenBattlefieldInstanceIds = new HashSet<string>(StringComparer.Ordinal);
             foreach (var player in snapshot.players)
             {
                 if (player == null || !FactionIds.IsSupported(player.factionId))
                     throw new InvalidOperationException("Snapshot contains an unsupported player faction.");
+                if (player.unitSlots == null || player.unitSlots.Length != arenaLayout.UnitSlotCount ||
+                    player.buildingSlots == null || player.buildingSlots.Length != arenaLayout.BuildingSlotCount)
+                    throw new InvalidOperationException("Snapshot slot counts do not match its arena layout.");
                 if (player.cardsPlayedThisTurn < 0)
                     throw new InvalidOperationException("Snapshot contains an invalid card play counter.");
                 if (player.redstoneCapacity < 0 || player.redstoneCapacity > 10 ||
@@ -190,6 +209,12 @@ namespace BiomeRivals.Core
                 foreach (var battlefieldObject in player.battlefield ?? Array.Empty<BattlefieldObjectStateDto>())
                 {
                     if (battlefieldObject == null) throw new InvalidOperationException("Snapshot contains a missing battlefield object.");
+                    if (string.IsNullOrWhiteSpace(battlefieldObject.instanceId) ||
+                        !seenBattlefieldInstanceIds.Add(battlefieldObject.instanceId))
+                        throw new InvalidOperationException("Snapshot contains a missing or duplicate battlefield object instance id.");
+                    if (string.IsNullOrWhiteSpace(battlefieldObject.ownerPlayerId) ||
+                        snapshot.players.All(candidate => candidate == null || candidate.playerId != battlefieldObject.ownerPlayerId))
+                        throw new InvalidOperationException("Snapshot contains a battlefield object with an unknown owner.");
                     if (battlefieldObject.temporaryHealthModifier < 0 || battlefieldObject.temporaryHealthModifierExpiresOnTurn < 0 ||
                         (battlefieldObject.temporaryHealthModifier == 0) != (battlefieldObject.temporaryHealthModifierExpiresOnTurn == 0) ||
                         (battlefieldObject.temporaryHealthModifier > 0 &&
@@ -234,7 +259,8 @@ namespace BiomeRivals.Core
         {
             if (Current == null) throw new InvalidOperationException("An authoritative snapshot is required before applying events.");
             if (batch == null) throw new ArgumentNullException(nameof(batch));
-            if (batch.protocolVersion != GameVersions.Protocol || batch.rulesetVersion != Current.rulesetVersion)
+            if (batch.protocolVersion != GameVersions.Protocol || batch.rulesetVersion != Current.rulesetVersion ||
+                batch.arenaId != Current.arenaId)
                 throw new InvalidOperationException("Event batch version does not match the current snapshot.");
             if (batch.revision != Current.revision + 1)
                 throw new InvalidOperationException($"Expected revision {Current.revision + 1}, received {batch.revision}.");
@@ -383,6 +409,91 @@ namespace BiomeRivals.Core
                     var playedDiscard = new List<string>(playingPlayer.discardPile ?? Array.Empty<string>()) { payload.cardId };
                     if (playedDiscard.Count != payload.discardCount) throw new InvalidOperationException("Play event discard count does not match projected discard pile.");
                     playingPlayer.discardPile = playedDiscard.ToArray();
+                    break;
+                case MatchEventTypes.HandCardCostModifierExpired:
+                    var expiringPlayer = Current.players[Current.activePlayerIndex];
+                    if (payload.expiredAtEndOfTurnPlayerId != expiringPlayer.playerId)
+                        throw new InvalidOperationException("Hand cost expiration does not match the ending active player's turn.");
+                    var expiredHandOwner = FindPlayer(payload.playerId);
+                    if (expiredHandOwner.playerId == Current.viewerPlayerId)
+                    {
+                        var expiredCard = (expiredHandOwner.handCards ?? Array.Empty<HandCardStateDto>())
+                            .SingleOrDefault(card => card != null && card.handCardInstanceId == payload.handCardInstanceId);
+                        if (expiredCard == null || expiredCard.cardId != payload.cardId ||
+                            expiredCard.costModifier != payload.expiredCostModifier ||
+                            expiredCard.expiresAtEndOfTurnPlayerId != payload.expiredAtEndOfTurnPlayerId ||
+                            payload.costModifier != 0)
+                            throw new InvalidOperationException("Hand cost expiration does not match its private hand instance.");
+                        expiredCard.costModifier = 0;
+                        expiredCard.expiresAtEndOfTurnPlayerId = string.Empty;
+                    }
+                    else if (!string.IsNullOrEmpty(payload.handCardInstanceId) || !string.IsNullOrEmpty(payload.cardId) ||
+                             payload.expiredCostModifier != 0 || payload.costModifier != 0 || payload.effectiveCost != 0)
+                    {
+                        throw new InvalidOperationException("Opponent hand cost expiration leaks private card data.");
+                    }
+                    break;
+                case MatchEventTypes.ObjectReturned:
+                    var controllingPlayer = FindPlayer(payload.controllerPlayerId);
+                    var returnedObject = FindObject(controllingPlayer, payload.instanceId);
+                    var expectedReturnModifier = payload.effectId == "effect.ed_002.01" ? -1 :
+                        payload.effectId == "effect.ed_005.01" ? -2 : 0;
+                    var returnSourceCard = payload.effectId == "effect.ed_002.01" ? "ed_002" :
+                        payload.effectId == "effect.ed_005.01" ? "ed_005" : string.Empty;
+                    if (returnedObject.cardType != "UNIT" || returnedObject.cardId != payload.cardId ||
+                        returnedObject.ownerPlayerId != payload.ownerPlayerId || returnedObject.slotKind != payload.fromSlotKind ||
+                        returnedObject.slotIndex != payload.fromSlotIndex || payload.sourcePlayerId != controllingPlayer.playerId ||
+                        payload.sourcePlayerId != Current.players[Current.activePlayerIndex].playerId ||
+                        payload.sourceCardId != returnSourceCard || expectedReturnModifier == 0 ||
+                        payload.destination != "HAND" && payload.destination != "DISCARD")
+                        throw new InvalidOperationException("Return event does not match the public battlefield object or destination.");
+                    var returnedOwner = FindPlayer(payload.ownerPlayerId);
+                    if (payload.destination == "HAND" &&
+                        (returnedOwner.hand.Length >= MaxHandSize || payload.ownerHandCount != returnedOwner.hand.Length + 1 ||
+                         payload.ownerDiscardCount != returnedOwner.discardPile.Length))
+                        throw new InvalidOperationException("Return-to-hand event has invalid capacity, instance, or discount data.");
+                    if (payload.destination == "HAND" && returnedOwner.playerId == Current.viewerPlayerId &&
+                        (payload.returnedHandCardInstanceId.Length == 0 || payload.costModifier != expectedReturnModifier ||
+                         payload.expiresAtEndOfTurnPlayerId != payload.sourcePlayerId))
+                        throw new InvalidOperationException("Owner return event omits its private hand instance or discount.");
+                    if (payload.destination == "HAND" && returnedOwner.playerId != Current.viewerPlayerId &&
+                        (!string.IsNullOrEmpty(payload.returnedHandCardInstanceId) || payload.costModifier != 0 ||
+                         !string.IsNullOrEmpty(payload.expiresAtEndOfTurnPlayerId)))
+                        throw new InvalidOperationException("Opponent return event leaks private hand instance or discount data.");
+                    if (payload.destination == "DISCARD" &&
+                        (returnedOwner.hand.Length != payload.ownerHandCount ||
+                         payload.ownerDiscardCount != returnedOwner.discardPile.Length + 1 ||
+                         !string.IsNullOrEmpty(payload.returnedHandCardInstanceId) || payload.costModifier != 0 ||
+                         !string.IsNullOrEmpty(payload.expiresAtEndOfTurnPlayerId)))
+                        throw new InvalidOperationException("Full-hand return event has invalid discard projection data.");
+                    if (returnedObject.slotKind == "UNIT")
+                    {
+                        for (var slot = returnedObject.slotIndex; slot < returnedObject.slotIndex + returnedObject.occupiedSlots; slot++)
+                            if (slot >= 0 && slot < controllingPlayer.unitSlots.Length && controllingPlayer.unitSlots[slot] == returnedObject.instanceId)
+                                controllingPlayer.unitSlots[slot] = null;
+                    }
+                    else
+                    {
+                        for (var slot = returnedObject.slotIndex; slot < returnedObject.slotIndex + returnedObject.occupiedSlots; slot++)
+                            if (slot >= 0 && slot < controllingPlayer.buildingSlots.Length && controllingPlayer.buildingSlots[slot] == returnedObject.instanceId)
+                                controllingPlayer.buildingSlots[slot] = null;
+                    }
+                    RemoveObject(controllingPlayer, returnedObject.instanceId);
+                    if (payload.destination == "HAND")
+                    {
+                        var returnedHand = new List<string>(returnedOwner.hand ?? Array.Empty<string>());
+                        returnedHand.Add(returnedOwner.playerId == Current.viewerPlayerId ? payload.cardId : string.Empty);
+                        if (returnedHand.Count != payload.ownerHandCount || returnedHand.Count > MaxHandSize)
+                            throw new InvalidOperationException("Return event hand count is invalid.");
+                        returnedOwner.hand = returnedHand.ToArray();
+                    }
+                    else
+                    {
+                        var returnedDiscard = new List<string>(returnedOwner.discardPile ?? Array.Empty<string>()) { payload.cardId };
+                        if (returnedDiscard.Count != payload.ownerDiscardCount)
+                            throw new InvalidOperationException("Return event discard count is invalid.");
+                        returnedOwner.discardPile = returnedDiscard.ToArray();
+                    }
                     break;
                 case MatchEventTypes.CardEquipped:
                     var equippingPlayer = FindPlayer(payload.playerId);
@@ -953,8 +1064,13 @@ namespace BiomeRivals.Core
                     }
                     break;
                 case MatchEventTypes.MatchEnded:
+                    var draw = string.IsNullOrWhiteSpace(payload.winnerPlayerId);
+                    if (draw != (payload.reason == "SIMULTANEOUS_DEFEAT") ||
+                        draw && Current.players.Any(player => player == null || player.life > 0) ||
+                        !draw && Current.players.All(player => player == null || player.playerId != payload.winnerPlayerId))
+                        throw new InvalidOperationException("Match-ended event contains a contradictory winner result.");
                     Current.status = "FINISHED";
-                    Current.winnerPlayerId = payload.winnerPlayerId;
+                    Current.winnerPlayerId = draw ? string.Empty : payload.winnerPlayerId;
                     break;
             }
         }
@@ -1134,6 +1250,7 @@ namespace BiomeRivals.Core
                 new BattlefieldObjectStateDto
                 {
                     instanceId = payload.instanceId,
+                    ownerPlayerId = string.IsNullOrEmpty(payload.ownerPlayerId) ? player.playerId : payload.ownerPlayerId,
                     cardId = payload.cardId,
                     cardType = payload.cardType,
                     attack = payload.attack,

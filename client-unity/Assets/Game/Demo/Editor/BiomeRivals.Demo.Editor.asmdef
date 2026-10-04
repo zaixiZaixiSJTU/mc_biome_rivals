@@ -1,7 +1,7 @@
 {
   "name": "BiomeRivals.Demo.Editor",
   "rootNamespace": "BiomeRivals.Demo.Editor",
-  "references": ["BiomeRivals.Demo"],
+  "references": ["BiomeRivals.Demo", "BiomeRivals.Core", "BiomeRivals.Networking"],
   "includePlatforms": ["Editor"],
   "autoReferenced": false
 }

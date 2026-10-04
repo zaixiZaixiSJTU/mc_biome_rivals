@@ -5,7 +5,7 @@ using BiomeRivals.Networking;
 
 namespace BiomeRivals.Demo
 {
-    public sealed class DemoOnlineMatchSession : IDisposable
+    public sealed class DemoOnlineMatchSession : IDisposable, IPlayerOperations
     {
         private static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(8);
         private readonly IMatchGateway _gateway;
@@ -26,6 +26,47 @@ namespace BiomeRivals.Demo
         public bool CanIssueCommand => HasAuthoritativeState && !View.IsFinished &&
             _gateway.CurrentStatus.CanSendCommands && _dispatcher.PendingCount == 0;
         public bool HasPendingCommand => _dispatcher.PendingCount > 0;
+
+        public PlayerObservation Observe()
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(DemoOnlineMatchSession));
+            return PlayerObservation.FromSnapshot(HasAuthoritativeState ? _store.Current : null, CanIssueCommand);
+        }
+
+        public Task<MatchCommandDispatchResult> ExecuteAsync(PlayerActionRequest action)
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(DemoOnlineMatchSession));
+            if (action == null) throw new ArgumentNullException(nameof(action));
+            var id = NewCommandId();
+            if (!CanIssueCommand) return RejectAction(id, "NOT_READY", "The player session is not ready.");
+            if (action.matchId != _store.Current.matchId)
+                return RejectAction(id, "MATCH_MISMATCH", "The action belongs to a different match.");
+            if (action.expectedRevision != Revision)
+                return RejectAction(id, "STALE_OBSERVATION", "Observe the current state before deciding again.");
+            switch (action.type)
+            {
+                case MatchCommandTypes.Mulligan:
+                case MatchCommandTypes.DeployCard:
+                case MatchCommandTypes.PlayCard:
+                case MatchCommandTypes.ResolveChoice:
+                case MatchCommandTypes.EnterCombat:
+                case MatchCommandTypes.Attack:
+                case MatchCommandTypes.EndTurn:
+                case MatchCommandTypes.Concede: break;
+                default: return RejectAction(id, "UNKNOWN_ACTION", "Unsupported player operation.");
+            }
+            if (action.payload == null) return RejectAction(id, "INVALID_PAYLOAD", "An action payload is required.");
+            // Freeze caller-owned arrays before asynchronous transport starts.
+            var payload = UnityEngine.JsonUtility.FromJson<MatchCommandPayloadDto>(
+                UnityEngine.JsonUtility.ToJson(action.payload));
+            return Send(new MatchCommandDto { protocolVersion = GameVersions.Protocol,
+                rulesetVersion = GameVersions.Ruleset, commandId = id, expectedRevision = action.expectedRevision,
+                type = action.type, payload = payload });
+        }
+
+        private Task<MatchCommandDispatchResult> RejectAction(string id, string code, string message) =>
+            Task.FromResult(new MatchCommandDispatchResult(id, MatchCommandOutcome.Rejected,
+                code, message, _store.Current?.revision ?? -1));
 
         public DemoOnlineMatchSession(IMatchGateway gateway, MatchStateStore store)
         {

@@ -49,6 +49,7 @@ namespace BiomeRivals.Content
     {
         public int schemaVersion;
         public int contentVersion;
+        public int implementedEffectRegistryVersion;
         public CardDefinitionEntry[] entries = Array.Empty<CardDefinitionEntry>();
     }
 
@@ -159,6 +160,8 @@ namespace BiomeRivals.Content
         public int ThemeCount => _themes.Count;
         public int DefinitionCount => _definitions.Count;
         public int TextCount => _texts.Count;
+        public int ContentVersion { get; }
+        public int ImplementedEffectRegistryVersion { get; }
 
         public CardContentRegistry(
             string nameRegistryJson,
@@ -180,6 +183,11 @@ namespace BiomeRivals.Content
             if (definitions?.entries == null) throw new FormatException("Card definition registry has no entries.");
             if (texts?.entries == null) throw new FormatException("Card text registry has no entries.");
             if (definitions.schemaVersion != 4) throw new FormatException($"Unsupported card definition schema version: {definitions.schemaVersion}.");
+            if (definitions.contentVersion < 1) throw new FormatException("Card definition content version must be positive.");
+            if (definitions.implementedEffectRegistryVersion < 1)
+                throw new FormatException("Card definition registry has no implemented-effect version.");
+            ContentVersion = definitions.contentVersion;
+            ImplementedEffectRegistryVersion = definitions.implementedEffectRegistryVersion;
 
             foreach (var entry in names.entries)
             {

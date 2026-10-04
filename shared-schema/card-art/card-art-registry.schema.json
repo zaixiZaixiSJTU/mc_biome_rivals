@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://biome-rivals.local/schema/card-art-registry.schema.json",
+  "title": "CardArtRegistry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "sourceId", "defaultStatus", "entries"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "sourceId": { "type": "string", "pattern": "^minecraft_java_local_[0-9]+_[0-9]+(?:_[0-9]+)?$" },
+    "defaultStatus": { "const": "LOCAL_PROTOTYPE_ONLY" },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["cardId", "artKey", "sourcePath", "usage"],
+        "properties": {
+          "cardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+          "artKey": { "type": "string", "pattern": "^card_art\\.[a-z0-9_]+$" },
+          "sourcePath": { "type": "string", "pattern": "^assets/minecraft/textures/(item|block)/[a-z0-9_/.]+\\.png$" },
+          "usage": { "enum": ["TEMPORARY_UNIT_ICON", "TEMPORARY_BLOCK_MOTIF", "TEMPORARY_ITEM_ICON"] }
+        }
+      }
+    }
+  }
+}

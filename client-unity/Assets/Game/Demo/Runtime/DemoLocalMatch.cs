@@ -36,18 +36,33 @@ namespace BiomeRivals.Demo
         private bool _opponentHasTargetedEnemyObjectThisTurn;
         private bool _playerHeroLifeLostThisTurn;
         private bool _opponentHeroLifeLostThisTurn;
+        private bool? _terminalPlayerWinnerOverride;
         private int _temporaryEnergy;
-        private int _opponentEnergy = 6;
+        private int _opponentEnergy = 1;
+        private int _opponentMaxEnergy = 1;
         private int _opponentTemporaryEnergy;
+
+        public DemoLocalMatch(string arenaId = ArenaLayouts.DefaultArenaId)
+        {
+            if (!ArenaLayouts.TryGet(arenaId, out var layout))
+                throw new ArgumentOutOfRangeException(nameof(arenaId), arenaId, "Arena is not registered.");
+
+            ArenaId = layout.Id;
+            UnitSlots = new string[layout.UnitSlotCount];
+            BuildingSlots = new string[layout.BuildingSlotCount];
+            OpponentUnitSlots = new string[layout.UnitSlotCount];
+            OpponentBuildingSlots = new string[layout.BuildingSlotCount];
+        }
 
         public IReadOnlyList<string> Hand => _hand;
         public IReadOnlyList<HandCardStateDto> HandCards => _handCards.Select(CloneHandCard).ToArray();
         public IReadOnlyList<string> Deck => _deck;
         public IReadOnlyList<string> DiscardPile => _discardPile;
-        public string[] UnitSlots { get; } = new string[4];
-        public string[] BuildingSlots { get; } = new string[3];
-        public string[] OpponentUnitSlots { get; } = new string[4];
-        public string[] OpponentBuildingSlots { get; } = new string[3];
+        public string ArenaId { get; }
+        public string[] UnitSlots { get; }
+        public string[] BuildingSlots { get; }
+        public string[] OpponentUnitSlots { get; }
+        public string[] OpponentBuildingSlots { get; }
         public IReadOnlyList<DemoBattlefieldObject> PlayerBattlefield => _playerBattlefield;
         public IReadOnlyList<DemoBattlefieldObject> OpponentBattlefield => _opponentBattlefield;
         public bool IsAuthoritative => false;
@@ -65,9 +80,12 @@ namespace BiomeRivals.Demo
         public int DiscardCount => _discardPile.Count;
         public int OpponentHandCount => _opponentHandCount;
         public int Round { get; private set; } = 1;
-        public int MaxEnergy { get; private set; } = 6;
-        public int Energy { get; private set; } = 6;
+        public int MaxEnergy { get; private set; } = 1;
+        public int Energy { get; private set; } = 1;
         public int TemporaryEnergy => _temporaryEnergy;
+        public int OpponentMaxEnergy => _opponentMaxEnergy;
+        public int OpponentEnergy => _opponentEnergy;
+        public int OpponentTemporaryEnergy => _opponentTemporaryEnergy;
         public bool IsPlayerTurn { get; private set; } = true;
         public DemoTurnPhase Phase { get; private set; } = DemoTurnPhase.Main;
         public int PlayerLife { get; private set; } = 30;
@@ -80,7 +98,29 @@ namespace BiomeRivals.Demo
         public DemoDrawResult LastDrawResult { get; private set; }
         public int OpponentLife { get; private set; } = 30;
         public bool IsFinished { get; private set; }
+        public bool HasWinner => IsFinished && (_terminalPlayerWinnerOverride.HasValue ||
+            (PlayerLife <= 0) != (OpponentLife <= 0));
+        public bool IsPlayerWinner => HasWinner && (_terminalPlayerWinnerOverride ?? PlayerLife > 0);
         public int Revision { get; private set; }
+
+        private void ApplyHeroDamage(bool player, int amount, bool trueDamage = false)
+        {
+            if (amount < 0) throw new ArgumentOutOfRangeException(nameof(amount));
+            var lifeBefore = player ? PlayerLife : OpponentLife;
+            var remainingDamage = amount;
+            if (!trueDamage)
+            {
+                var armor = player ? PlayerArmor : OpponentArmor;
+                var armorDamage = Math.Min(armor, remainingDamage);
+                remainingDamage -= armorDamage;
+                if (player) PlayerArmor -= armorDamage;
+                else OpponentArmor -= armorDamage;
+            }
+
+            if (player) PlayerLife = Math.Max(0, PlayerLife - remainingDamage);
+            else OpponentLife = Math.Max(0, OpponentLife - remainingDamage);
+            ObserveHeroLifeLoss(player, lifeBefore);
+        }
 
         private void ObserveHeroLifeLoss(bool player, int lifeBefore)
         {
@@ -153,6 +193,20 @@ namespace BiomeRivals.Demo
         {
             if (life < 1 || life > 30) throw new ArgumentOutOfRangeException(nameof(life));
             PlayerLife = life;
+        }
+
+        public void ResetPlayerRedstoneForScenario(int energy, int capacity)
+        {
+            if (capacity < 1 || capacity > 10) throw new ArgumentOutOfRangeException(nameof(capacity));
+            if (energy < 0 || energy > 10) throw new ArgumentOutOfRangeException(nameof(energy));
+            MaxEnergy = capacity;
+            Energy = energy;
+        }
+
+        public void ResetOpponentLife(int life)
+        {
+            if (life < 1 || life > 30) throw new ArgumentOutOfRangeException(nameof(life));
+            OpponentLife = life;
         }
 
         public void ResetHand(IEnumerable<string> cardIds)
@@ -320,6 +374,7 @@ namespace BiomeRivals.Demo
             {
                 InstanceId = $"object-{_nextBattlefieldInstanceId++}",
                 CardId = definition.id,
+                OwnerPlayerId = "local-player",
                 Player = true,
                 SlotKind = command.payload.slotKind == "UNIT" ? DemoSlotKind.Unit : DemoSlotKind.Building,
                 SlotIndex = command.payload.slotIndex,
@@ -351,7 +406,10 @@ namespace BiomeRivals.Demo
             {
                 var lifeBefore = PlayerLife;
                 PlayerLife = Math.Min(30, PlayerLife + 1);
-                deployMessage += $"；蜜蜂战吼恢复 {PlayerLife - lifeBefore} 点生命。";
+                var healing = PlayerLife - lifeBefore;
+                deployMessage += healing > 0
+                    ? $"；蜜蜂战吼恢复 {healing} 点生命。"
+                    : "；蜜蜂战吼未恢复生命，英雄生命已满。";
             }
             else if (definition.effectImplementationStatus == "IMPLEMENTED" &&
                 definition.effectIds != null && definition.effectIds.Contains("effect.pf_003.01"))
@@ -725,7 +783,7 @@ namespace BiomeRivals.Demo
                 effectId != "effect.si_001.01" && effectId != "effect.si_006.01" && effectId != "effect.tk_005.01" &&
                 effectId != "effect.tk_001.01" && effectId != "effect.tk_002.01" && effectId != "effect.tk_009.01" && effectId != "effect.tk_010.01" && effectId != "effect.or_006.01" &&
                 effectId != "effect.tk_012.01" && effectId != "effect.tk_013.01" && effectId != "effect.tk_016.01" && effectId != "effect.pf_006.01" &&
-                effectId != "effect.pf_007.01")
+                effectId != "effect.pf_007.01" && effectId != "effect.ed_002.01" && effectId != "effect.ed_005.01")
                 return Reject(DemoCommandRejectionCode.EffectNotImplemented, "找不到该 effectId 的规则处理器。");
             DemoBattlefieldObject targetedObject = null;
             var targetedObjects = new List<DemoBattlefieldObject>();
@@ -777,6 +835,29 @@ namespace BiomeRivals.Demo
             _discardPile.Add(definition.id);
             switch (effectId)
             {
+                case "effect.ed_002.01":
+                case "effect.ed_005.01":
+                    if (targetedObject == null || !targetedObject.Player || targetedObject.SlotKind != DemoSlotKind.Unit)
+                        throw new InvalidOperationException("Validated End return target disappeared before resolution.");
+                    var returnedCostModifier = effectId == "effect.ed_002.01" ? -1 : -2;
+                    _playerBattlefield.Remove(targetedObject);
+                    for (var slot = targetedObject.SlotIndex; slot < targetedObject.SlotIndex + targetedObject.OccupiedSlots; slot++)
+                        UnitSlots[slot] = string.Empty;
+                    if (_hand.Count < 7)
+                    {
+                        AddHandCard(targetedObject.CardId, returnedCostModifier, "local-player");
+                        message = $"{definition.id}：{targetedObject.CardId} 回到原所有者手牌，本回合费用 {returnedCostModifier}。";
+                    }
+                    else
+                    {
+                        _discardPile.Add(targetedObject.CardId);
+                        message = $"{definition.id}：手牌已满，{targetedObject.CardId} 进入原所有者弃牌堆。";
+                    }
+                    RecalculateAdjacencyHealthAuras();
+                    var auraLossDeathMessages = SettleDeaths();
+                    if (auraLossDeathMessages.Count > 0)
+                        message += " " + string.Join(" ", auraLossDeathMessages);
+                    break;
                 case "effect.tk_001.01":
                     targetedObject.MaxHealth += 1;
                     targetedObject.Health += 1;
@@ -827,9 +908,7 @@ namespace BiomeRivals.Demo
                     if (deathrattleMessages.Count > 0) message += " " + string.Join(" ", deathrattleMessages);
                     break;
                 case "effect.nt_006.01":
-                    var lifeBeforeSacrifice = PlayerLife;
-                    PlayerLife = Math.Max(0, PlayerLife - 2);
-                    ObserveHeroLifeLoss(true, lifeBeforeSacrifice);
+                    ApplyHeroDamage(true, 2, trueDamage: true);
                     if (PlayerLife == 0)
                     {
                         IsFinished = true;
@@ -863,9 +942,7 @@ namespace BiomeRivals.Demo
                     break;
                 case "effect.tk_005.01":
                     PlayerLife = Math.Min(30, PlayerLife + 2);
-                    var lifeBeforeRottenFlesh = PlayerLife;
-                    PlayerLife = Math.Max(0, PlayerLife - 1);
-                    ObserveHeroLifeLoss(true, lifeBeforeRottenFlesh);
+                    ApplyHeroDamage(true, 1, trueDamage: true);
                     message = "腐肉：先恢复 2 点生命，再受到 1 点真实伤害。";
                     break;
                 case "effect.tk_002.01":
@@ -963,7 +1040,7 @@ namespace BiomeRivals.Demo
                     throw new InvalidOperationException("Validated effect handler was not dispatched.");
             }
 
-            var playSensorTriggers = CompletePlayerCardPlay();
+            var playSensorTriggers = IsFinished ? 0 : CompletePlayerCardPlay();
             if (playSensorTriggers > 0)
                 message += $" 幽匿感测体触发 {playSensorTriggers} 次，你陷入黑暗。";
             AcceptCommand(command);
@@ -1116,9 +1193,7 @@ namespace BiomeRivals.Demo
             else attacker.HasAttacked = true;
             if (command.payload.targetType == "HERO")
             {
-                var lifeBeforeHeroAttack = OpponentLife;
-                OpponentLife = Math.Max(0, OpponentLife - attackValue);
-                ObserveHeroLifeLoss(false, lifeBeforeHeroAttack);
+                ApplyHeroDamage(false, attackValue);
                 var cactusDeathMessages = new List<string>();
                 var cactusTriggers = heroAttack ? 0 : TriggerCactusFenceReaction(attacker, out cactusDeathMessages);
                 if (heroAttack) ConsumeEquipmentDurability();
@@ -1146,11 +1221,7 @@ namespace BiomeRivals.Demo
             target.Health = Math.Max(0, target.Health - attackValue);
             if (heroAttack)
             {
-                var armorDamage = Math.Min(PlayerArmor, retaliation);
-                PlayerArmor -= armorDamage;
-                var lifeBeforeRetaliation = PlayerLife;
-                PlayerLife = Math.Max(0, PlayerLife - (retaliation - armorDamage));
-                ObserveHeroLifeLoss(true, lifeBeforeRetaliation);
+                ApplyHeroDamage(true, retaliation);
             }
             else attacker.Health = Math.Max(0, attacker.Health - retaliation);
             var targetDied = target.Health == 0;
@@ -1271,7 +1342,8 @@ namespace BiomeRivals.Demo
             _playerHeroLifeLostThisTurn = false;
             _opponentHeroLifeLostThisTurn = false;
             IsPlayerTurn = false;
-            _opponentEnergy = Math.Min(10, 5 + Round);
+            if (Round > 1) _opponentMaxEnergy = Math.Min(10, _opponentMaxEnergy + 1);
+            _opponentEnergy = _opponentMaxEnergy;
             _opponentTemporaryEnergy = 0;
             AcceptCommand(command);
             var monumentMessage = monumentDamage > 0
@@ -1339,9 +1411,7 @@ namespace BiomeRivals.Demo
                 if (_deck.Count == 0)
                 {
                     FatigueCount++;
-                    var lifeBeforeFatigue = PlayerLife;
-                    PlayerLife = Math.Max(0, PlayerLife - FatigueCount);
-                    ObserveHeroLifeLoss(true, lifeBeforeFatigue);
+                    ApplyHeroDamage(true, FatigueCount, trueDamage: true);
                     if (PlayerLife == 0) IsFinished = true;
                     return RememberDraw(new DemoDrawResult(DemoDrawOutcome.Fatigue, string.Empty, FatigueCount, excavated.ToArray()));
                 }
@@ -1380,17 +1450,16 @@ namespace BiomeRivals.Demo
             else if (cardId == "tk_007") GenerateCard("tk_018");
             else
             {
-                var opponentArmorDamage = Math.Min(OpponentArmor, 3);
-                OpponentArmor -= opponentArmorDamage;
-                var opponentLifeBeforeTrap = OpponentLife;
-                OpponentLife = Math.Max(0, OpponentLife - (3 - opponentArmorDamage));
-                ObserveHeroLifeLoss(false, opponentLifeBeforeTrap);
-                var playerLifeBeforeTrap = PlayerLife;
-                PlayerLife = Math.Max(0, PlayerLife - 1);
-                ObserveHeroLifeLoss(true, playerLifeBeforeTrap);
+                ApplyHeroDamage(false, 3);
+                ApplyHeroDamage(true, 1, trueDamage: true);
             }
             HealDesertTemples();
-            if (cardId == "tk_008" && (PlayerLife == 0 || OpponentLife == 0)) IsFinished = true;
+            if (cardId == "tk_008" && (PlayerLife == 0 || OpponentLife == 0))
+            {
+                IsFinished = true;
+                if (PlayerLife == 0 && OpponentLife == 0)
+                    _terminalPlayerWinnerOverride = true;
+            }
             return IsFinished;
         }
 
@@ -1443,7 +1512,7 @@ namespace BiomeRivals.Demo
             return true;
         }
 
-        private void AddHandCard(string cardId)
+        private void AddHandCard(string cardId, int costModifier = 0, string expiresAtEndOfTurnPlayerId = "")
         {
             if (string.IsNullOrWhiteSpace(cardId)) throw new ArgumentException("Hand card id cannot be empty.", nameof(cardId));
             _hand.Add(cardId);
@@ -1451,8 +1520,8 @@ namespace BiomeRivals.Demo
             {
                 handCardInstanceId = $"local-hand-{_nextHandCardInstanceId++}",
                 cardId = cardId,
-                costModifier = 0,
-                expiresAtEndOfTurnPlayerId = string.Empty
+                costModifier = costModifier,
+                expiresAtEndOfTurnPlayerId = costModifier == 0 ? string.Empty : expiresAtEndOfTurnPlayerId
             });
         }
 
@@ -1789,7 +1858,7 @@ namespace BiomeRivals.Demo
             if (slotIndex + occupiedSlots > slots.Length) return;
             var instance = new DemoBattlefieldObject
             {
-                InstanceId = $"object-{_nextBattlefieldInstanceId++}", CardId = definition.id, Player = false,
+                InstanceId = $"object-{_nextBattlefieldInstanceId++}", CardId = definition.id, OwnerPlayerId = "local-opponent", Player = false,
                 SlotKind = kind, SlotIndex = slotIndex, OccupiedSlots = occupiedSlots,
                 Attack = definition.attack, Health = definition.health, MaxHealth = definition.health, SummonedRound = 0,
                 Tags = (definition.tags ?? Array.Empty<string>()).ToArray(),
@@ -1882,6 +1951,7 @@ namespace BiomeRivals.Demo
             {
                 InstanceId = $"object-{_nextBattlefieldInstanceId++}",
                 CardId = definition.id,
+                OwnerPlayerId = player ? "local-player" : "local-opponent",
                 Player = player,
                 SlotKind = DemoSlotKind.Unit,
                 SlotIndex = slotIndex,
@@ -2059,20 +2129,12 @@ namespace BiomeRivals.Demo
                 if (!battlefield.Contains(piglin) || piglin.Health <= 0 || IsFinished || !TrySpendEnergy(player, 1)) continue;
                 if (player)
                 {
-                    var armorDamage = Math.Min(OpponentArmor, 1);
-                    OpponentArmor -= armorDamage;
-                    var lifeBefore = OpponentLife;
-                    OpponentLife = Math.Max(0, OpponentLife - (1 - armorDamage));
-                    ObserveHeroLifeLoss(false, lifeBefore);
+                    ApplyHeroDamage(false, 1);
                     if (OpponentLife == 0) IsFinished = true;
                 }
                 else
                 {
-                    var armorDamage = Math.Min(PlayerArmor, 1);
-                    PlayerArmor -= armorDamage;
-                    var lifeBefore = PlayerLife;
-                    PlayerLife = Math.Max(0, PlayerLife - (1 - armorDamage));
-                    ObserveHeroLifeLoss(true, lifeBefore);
+                    ApplyHeroDamage(true, 1);
                     if (PlayerLife == 0) IsFinished = true;
                 }
                 triggered++;
@@ -2119,20 +2181,12 @@ namespace BiomeRivals.Demo
                 if (!battlefield.Contains(crystal) || crystal.Health <= 0 || IsFinished) continue;
                 if (player)
                 {
-                    var armorDamage = Math.Min(OpponentArmor, 2);
-                    OpponentArmor -= armorDamage;
-                    var lifeBeforeCrystalPulse = OpponentLife;
-                    OpponentLife = Math.Max(0, OpponentLife - (2 - armorDamage));
-                    ObserveHeroLifeLoss(false, lifeBeforeCrystalPulse);
+                    ApplyHeroDamage(false, 2);
                     if (OpponentLife == 0) IsFinished = true;
                 }
                 else
                 {
-                    var armorDamage = Math.Min(PlayerArmor, 2);
-                    PlayerArmor -= armorDamage;
-                    var lifeBeforeCrystalPulse = PlayerLife;
-                    PlayerLife = Math.Max(0, PlayerLife - (2 - armorDamage));
-                    ObserveHeroLifeLoss(true, lifeBeforeCrystalPulse);
+                    ApplyHeroDamage(true, 2);
                     if (PlayerLife == 0) IsFinished = true;
                 }
                 triggered++;
@@ -2541,9 +2595,7 @@ namespace BiomeRivals.Demo
             {
                 if (value.Player)
                 {
-                    var lifeBeforeCrystalDeath = PlayerLife;
-                    PlayerLife = Math.Max(0, PlayerLife - 2);
-                    ObserveHeroLifeLoss(true, lifeBeforeCrystalDeath);
+                    ApplyHeroDamage(true, 2, trueDamage: true);
                     if (PlayerLife == 0)
                     {
                         IsFinished = true;
@@ -2551,9 +2603,7 @@ namespace BiomeRivals.Demo
                     }
                     return "末影水晶亡语：己方英雄受到 2 点真实伤害。";
                 }
-                var opponentLifeBeforeCrystalDeath = OpponentLife;
-                OpponentLife = Math.Max(0, OpponentLife - 2);
-                ObserveHeroLifeLoss(false, opponentLifeBeforeCrystalDeath);
+                ApplyHeroDamage(false, 2, trueDamage: true);
                 if (OpponentLife == 0)
                 {
                     IsFinished = true;

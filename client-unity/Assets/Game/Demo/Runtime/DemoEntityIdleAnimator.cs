@@ -16,6 +16,8 @@ namespace BiomeRivals.Demo
         public sealed class IdleTrackSpec
         {
             public string BoneName;
+            /// <summary>Optional source-pixel orbit, relative to its t=0 pose. No pivot or mesh rewriting.</summary>
+            public SourceOrbitSpec SourceOrbit;
             /// <summary>Rotation amplitude in degrees; 0 disables rotation.</summary>
             public float AmplitudeDegrees;
             /// <summary>Position amplitude in Unity units; 0 disables offset.</summary>
@@ -25,6 +27,21 @@ namespace BiomeRivals.Demo
             public float Frequency = 1f;
             /// <summary>Phase offset in radians.</summary>
             public float Phase;
+        }
+
+        /// <summary>Explicit source animation parameters; degrees and pixels, not a Molang interpreter.</summary>
+        public sealed class SourceOrbitSpec
+        {
+            public float Radius, AngularVelocityDegrees, PhaseDegrees;
+            public float VerticalBase, VerticalAmplitude = 1f, VerticalVelocityDegrees, VerticalPhaseDegrees;
+
+            public Vector3 EvaluateSourceOffset(float seconds)
+            {
+                var angle = (PhaseDegrees + AngularVelocityDegrees * seconds) * Mathf.Deg2Rad;
+                var vertical = (VerticalPhaseDegrees + VerticalVelocityDegrees * seconds) * Mathf.Deg2Rad;
+                return new Vector3(Radius * Mathf.Cos(angle), VerticalBase + VerticalAmplitude * Mathf.Cos(vertical),
+                    Radius * Mathf.Sin(angle));
+            }
         }
 
         private sealed class Track
@@ -76,8 +93,29 @@ namespace BiomeRivals.Demo
         private void Update()
         {
             _time += Time.unscaledDeltaTime;
+            ApplyPose();
+        }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        /// <summary>Deterministic visual audit; unavailable in a production Player.</summary>
+        public void SampleForAudit(float seconds)
+        {
+            if (float.IsNaN(seconds) || float.IsInfinity(seconds) || seconds < 0f)
+                throw new ArgumentOutOfRangeException(nameof(seconds));
+            _time = seconds;
+            ApplyPose();
+        }
+#endif
+
+        private void ApplyPose()
+        {
             foreach (var track in _tracks)
             {
+                if (track.Spec.SourceOrbit != null)
+                {
+                    var delta = track.Spec.SourceOrbit.EvaluateSourceOffset(_time) - track.Spec.SourceOrbit.EvaluateSourceOffset(0f);
+                    track.Bone.localPosition = track.InitialPosition + new Vector3(-delta.x, delta.y, delta.z) / 16f;
+                }
                 var wave = Mathf.Sin(_time * track.Spec.Frequency * Mathf.PI * 2f + track.Spec.Phase);
                 if (track.Spec.AmplitudeDegrees != 0f)
                 {

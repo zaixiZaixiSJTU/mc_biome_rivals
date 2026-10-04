@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://biome-rivals.local/schema/minecraft-asset-source.schema.json",
+  "title": "MinecraftAssetSource",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "edition", "versionFolder", "gameVersion", "validatedJarSha256", "validatedJarSize", "sourcePolicy", "redistributionPolicy", "usageGuidelines"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "edition": { "const": "Java" },
+    "versionFolder": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+(?:\\.[0-9]+)?(?:-[A-Za-z0-9._-]+)?$" },
+    "gameVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+(?:\\.[0-9]+)?$" },
+    "validatedJarSha256": { "type": "string", "pattern": "^[0-9A-Fa-f]{64}$" },
+    "validatedJarSize": { "type": "integer", "minimum": 1 },
+    "sourcePolicy": { "const": "LOCAL_OWNED_INSTALLATION_ONLY" },
+    "redistributionPolicy": { "const": "DO_NOT_COMMIT_EXTRACTED_ASSETS" },
+    "usageGuidelines": { "type": "string", "pattern": "^https://" }
+  }
+}

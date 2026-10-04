@@ -38,6 +38,7 @@ namespace BiomeRivals.Demo
     {
         public string InstanceId { get; set; }
         public string CardId { get; set; }
+        public string OwnerPlayerId { get; set; }
         public bool Player { get; set; }
         public DemoSlotKind SlotKind { get; set; }
         public int SlotIndex { get; set; }
@@ -79,6 +80,7 @@ namespace BiomeRivals.Demo
     public interface IDemoMatchView
     {
         bool IsAuthoritative { get; }
+        string ArenaId { get; }
         string PlayerFactionId { get; }
         string OpponentFactionId { get; }
         bool IsMulligan { get; }
@@ -104,6 +106,9 @@ namespace BiomeRivals.Demo
         int MaxEnergy { get; }
         int Energy { get; }
         int TemporaryEnergy { get; }
+        int OpponentMaxEnergy { get; }
+        int OpponentEnergy { get; }
+        int OpponentTemporaryEnergy { get; }
         bool IsPlayerTurn { get; }
         DemoTurnPhase Phase { get; }
         int PlayerLife { get; }
@@ -114,6 +119,8 @@ namespace BiomeRivals.Demo
         bool PlayerHeroHasAttacked { get; }
         int OpponentLife { get; }
         bool IsFinished { get; }
+        bool HasWinner { get; }
+        bool IsPlayerWinner { get; }
         int Revision { get; }
         bool HasTriggeredEffect(bool player, string sourceInstanceId, string effectId);
         bool HasPlayerStatus(bool player, string statusId);

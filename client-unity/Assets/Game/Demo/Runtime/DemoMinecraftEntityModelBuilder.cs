@@ -16,8 +16,8 @@ namespace BiomeRivals.Demo
     /// - Bedrock geometry stores X mirrored relative to Java models, so X is
     ///   negated once when converting into Unity space; the box-UV side
     ///   regions below already follow that converted orientation.
-    /// - Bedrock rotations are degrees and invert the X/Z signs relative to
-    ///   right-handed math (verified against the sheep body bind pose).
+    /// - In the X-mirrored model frame, source rotations negate X/Y and retain Z.
+    ///   Axis and combined-coordinate fixtures cover bones and cube rotations.
     /// - Box UV layout per cube (u, v, dx, dy, dz):
     ///     up    [u+dz,     v,      dx, dz]
     ///     down  [u+dz+dx,  v,      dx, dz]
@@ -43,18 +43,29 @@ namespace BiomeRivals.Demo
             public float TargetWidth;
             /// <summary>World Y placed under the model's lowest point.</summary>
             public float BaseY = 0f;
+            /// <summary>Opt-in grounding for inflated meshes even when BaseY is zero.</summary>
+            public bool GroundToBaseY;
             /// <summary>Per-bone pivot overrides in bedrock model units, used to bake static poses (blaze rod rings).</summary>
             public Dictionary<string, float[]> BonePivotOverrides;
             /// <summary>Per-bone rotation overrides in bedrock degrees, baking poses that vanilla applies via animation.</summary>
             public Dictionary<string, float[]> BoneRotationOverrides;
+            /// <summary>Registered static pose offsets in source pixels; inherited by children, not baked into vertices.</summary>
+            public Dictionary<string, float[]> BonePositionOffsets;
+            /// <summary>Mesh-only binding pose about the bone pivot; never inherited by child bones.</summary>
+            public Dictionary<string, float[]> BoneMeshBindPoseOverrides;
             /// <summary>Overlay layers (e.g. sheep wool) rendered on top of the primary texture.</summary>
             public List<OverlayLayer> Layers = new List<OverlayLayer>();
         }
 
         public sealed class OverlayLayer
         {
+            /// <summary>Optional source cubes attached to the existing skeleton, rather than copying all base cubes.</summary>
+            public DemoEntityGeometry Geometry;
             public string TextureKey;
             public float Inflate;
+            /// <summary>Optional atlas size; zero inherits the base geometry dimensions.</summary>
+            public int TextureWidth;
+            public int TextureHeight;
         }
 
         public static bool TryBuild(Transform parent, DemoEntityGeometry geometry, BuildOptions options)
@@ -107,6 +118,8 @@ namespace BiomeRivals.Demo
             var gameObject = new GameObject("Bone_" + bone.Name);
             gameObject.transform.SetParent(bone.Parent == null ? modelRoot : boneTransforms[bone.Parent], false);
             gameObject.transform.localPosition = ConvertPosition(pivot, parentPivot);
+            if (options.BonePositionOffsets != null && options.BonePositionOffsets.TryGetValue(bone.Name, out var offset))
+                gameObject.transform.localPosition += ConvertPosition(offset, new[] { 0f, 0f, 0f });
             var rotation = options.BoneRotationOverrides != null && options.BoneRotationOverrides.TryGetValue(bone.Name, out var overriddenRotation)
                 ? overriddenRotation
                 : bone.Rotation;
@@ -117,16 +130,39 @@ namespace BiomeRivals.Demo
 
             foreach (var cube in bone.Cubes)
             {
-                AddCubeLayer(gameObject.transform, pivot, cube, options.PrimaryTextureKey, cube.Inflate, options);
-                foreach (var layer in options.Layers)
+                AddCubeLayer(gameObject.transform, pivot, cube, options.PrimaryTextureKey, cube.Inflate, options, bone.BindPoseRotation);
+                foreach (var layer in options.Layers.Where(candidate => candidate.Geometry == null))
                 {
-                    AddCubeLayer(gameObject.transform, pivot, cube, layer.TextureKey, cube.Inflate + layer.Inflate, options);
+                    // An overlay atlas need not have the base texture's aspect ratio.
+                    var layerOptions = new BuildOptions
+                    {
+                        MaterialProvider = options.MaterialProvider,
+                        BoneMeshBindPoseOverrides = options.BoneMeshBindPoseOverrides,
+                        TextureWidth = layer.TextureWidth > 0 ? layer.TextureWidth : options.TextureWidth,
+                        TextureHeight = layer.TextureHeight > 0 ? layer.TextureHeight : options.TextureHeight
+                    };
+                    AddCubeLayer(gameObject.transform, pivot, cube, layer.TextureKey, cube.Inflate + layer.Inflate, layerOptions, bone.BindPoseRotation);
                 }
+            }
+            foreach (var layer in options.Layers.Where(candidate => candidate.Geometry != null))
+            {
+                var overlayBone = layer.Geometry.Bones.SingleOrDefault(candidate => candidate.Name == bone.Name);
+                if (overlayBone == null) continue;
+                var layerOptions = new BuildOptions
+                {
+                    MaterialProvider = options.MaterialProvider,
+                    BoneMeshBindPoseOverrides = options.BoneMeshBindPoseOverrides,
+                    TextureWidth = layer.Geometry.TextureWidth,
+                    TextureHeight = layer.Geometry.TextureHeight
+                };
+                foreach (var cube in overlayBone.Cubes)
+                    AddCubeLayer(gameObject.transform, pivot, cube, layer.TextureKey, cube.Inflate + layer.Inflate,
+                        layerOptions, overlayBone.BindPoseRotation ?? bone.BindPoseRotation, "Overlay_");
             }
         }
 
         private static void AddCubeLayer(
-            Transform bone, float[] bonePivot, DemoEntityCube cube, string textureKey, float inflate, BuildOptions options)
+            Transform bone, float[] bonePivot, DemoEntityCube cube, string textureKey, float inflate, BuildOptions options, float[] sourceBindPose, string prefix = "Cube_")
         {
             var vertices = new List<Vector3>(24);
             var uv = new List<Vector2>(24);
@@ -134,6 +170,17 @@ namespace BiomeRivals.Demo
             var triangles = new List<int>(36);
             AppendCube(vertices, uv, colors, triangles, bonePivot, cube, inflate, options);
             if (triangles.Count == 0) return;
+            var bindPose = sourceBindPose;
+            if (options.BoneMeshBindPoseOverrides != null &&
+                options.BoneMeshBindPoseOverrides.TryGetValue(bone.name.Substring("Bone_".Length), out var overridePose))
+                bindPose = overridePose;
+            if (bindPose != null)
+            {
+                // Vertices are already bone-local, so zero is the source bone pivot.
+                // Bake after cube rotations; leave bone transforms/child pivots/UVs alone.
+                var rotation = ConvertBoneRotation(bindPose);
+                for (var index = 0; index < vertices.Count; index++) vertices[index] = rotation * vertices[index];
+            }
 
             var mesh = new Mesh { name = $"{bone.name}_{textureKey}_Mesh" };
             mesh.SetVertices(vertices);
@@ -143,7 +190,7 @@ namespace BiomeRivals.Demo
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
 
-            var gameObject = new GameObject("Cube_" + textureKey, typeof(MeshFilter), typeof(MeshRenderer), typeof(DemoGeneratedMeshOwner));
+            var gameObject = new GameObject(prefix + textureKey, typeof(MeshFilter), typeof(MeshRenderer), typeof(DemoGeneratedMeshOwner));
             gameObject.transform.SetParent(bone, false);
             gameObject.GetComponent<MeshFilter>().sharedMesh = mesh;
             gameObject.GetComponent<MeshRenderer>().sharedMaterial = options.MaterialProvider(textureKey);
@@ -177,8 +224,9 @@ namespace BiomeRivals.Demo
             // Vanilla entity shading: unlit per-face brightness (top 100%, N/S 80%, E/W 60%, bottom 50%).
             AddFace(vertices, uv, colors, triangles, bonePivotMirrored, rotationPivotMirrored, rotation, center, half, Face.North, new Vector4(u + dz, v + dz, dx, dy), FaceShade.NorthSouth, cube, options);
             AddFace(vertices, uv, colors, triangles, bonePivotMirrored, rotationPivotMirrored, rotation, center, half, Face.South, new Vector4(u + 2 * dz + dx, v + dz, dx, dy), FaceShade.NorthSouth, cube, options);
-            AddFace(vertices, uv, colors, triangles, bonePivotMirrored, rotationPivotMirrored, rotation, center, half, Face.West, new Vector4(u + dz + dx, v + dz, dz, dy), FaceShade.EastWest, cube, options);
-            AddFace(vertices, uv, colors, triangles, bonePivotMirrored, rotationPivotMirrored, rotation, center, half, Face.East, new Vector4(u, v + dz, dz, dy), FaceShade.EastWest, cube, options);
+            // Source mirror swaps side regions as well as their horizontal direction.
+            AddFace(vertices, uv, colors, triangles, bonePivotMirrored, rotationPivotMirrored, rotation, center, half, Face.West, new Vector4(cube.Mirror ? u : u + dz + dx, v + dz, dz, dy), FaceShade.EastWest, cube, options);
+            AddFace(vertices, uv, colors, triangles, bonePivotMirrored, rotationPivotMirrored, rotation, center, half, Face.East, new Vector4(cube.Mirror ? u + dz + dx : u, v + dz, dz, dy), FaceShade.EastWest, cube, options);
             AddFace(vertices, uv, colors, triangles, bonePivotMirrored, rotationPivotMirrored, rotation, center, half, Face.Up, new Vector4(u + dz, v, dx, dz), FaceShade.Up, cube, options);
             AddFace(vertices, uv, colors, triangles, bonePivotMirrored, rotationPivotMirrored, rotation, center, half, Face.Down, new Vector4(u + dz + dx, v, dx, dz), FaceShade.Down, cube, options);
         }
@@ -200,8 +248,8 @@ namespace BiomeRivals.Demo
             return cube.RotationAxis switch
             {
                 "x" => Quaternion.AngleAxis(-cube.RotationAngle, Vector3.right),
-                "y" => Quaternion.AngleAxis(cube.RotationAngle, Vector3.up),
-                "z" => Quaternion.AngleAxis(-cube.RotationAngle, Vector3.forward),
+                "y" => Quaternion.AngleAxis(-cube.RotationAngle, Vector3.up),
+                "z" => Quaternion.AngleAxis(cube.RotationAngle, Vector3.forward),
                 _ => Quaternion.identity
             };
         }
@@ -239,7 +287,11 @@ namespace BiomeRivals.Demo
             var right = region.x + region.z;
             var top = region.y;
             var bottom = region.y + region.w;
-            if (cube.Mirror) { (left, right) = (right, left); }
+            // Physical vertices already reflect source X. Unmirrored source U
+            // therefore runs opposite our corner order; mirror cancels that flip.
+            if (!cube.Mirror) { (left, right) = (right, left); }
+            // The bottom box-UV island has the opposite V direction to the top.
+            if (face == Face.Down) { (top, bottom) = (bottom, top); }
 
             var start = vertices.Count;
             var corners = new[] { bottomLeft, topLeft, topRight, bottomRight };
@@ -284,12 +336,12 @@ namespace BiomeRivals.Demo
         private static Vector3 ConvertPosition(float[] modelPosition, float[] parentModelPosition) =>
             new Vector3(-(modelPosition[0] - parentModelPosition[0]), modelPosition[1] - parentModelPosition[1], modelPosition[2] - parentModelPosition[2]) / PixelsPerUnit;
 
-        /// <summary>Bedrock bone rotation (degrees) → Unity right-handed quaternion (X/Z signs inverted).</summary>
+        /// <summary>Source degrees in the X-mirrored frame: negate X/Y, retain Z. Bedrock ZYX product applies X, then Y, then Z.</summary>
         public static Quaternion ConvertBoneRotation(float[] rotationDegrees)
         {
-            return Quaternion.AngleAxis(-rotationDegrees[0], Vector3.right) *
-                   Quaternion.AngleAxis(rotationDegrees[1], Vector3.up) *
-                   Quaternion.AngleAxis(-rotationDegrees[2], Vector3.forward);
+            return Quaternion.AngleAxis(rotationDegrees[2], Vector3.forward) *
+                   Quaternion.AngleAxis(-rotationDegrees[1], Vector3.up) *
+                   Quaternion.AngleAxis(-rotationDegrees[0], Vector3.right);
         }
 
         private static void FitModel(GameObject model, BuildOptions options)
@@ -309,7 +361,7 @@ namespace BiomeRivals.Demo
                 model.transform.localScale = Vector3.one * (options.TargetHeight / height);
                 bounds = RenderersBounds(renderers);
             }
-            if (!Mathf.Approximately(options.BaseY, 0f))
+            if (options.GroundToBaseY || !Mathf.Approximately(options.BaseY, 0f))
             {
                 model.transform.localPosition += new Vector3(0f, options.BaseY - bounds.min.y, 0f);
             }

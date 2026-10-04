@@ -112,6 +112,15 @@ namespace BiomeRivals.Demo
             "选择水生目标", "请选择一个拥有相邻空格的己方水生生物；右键或 Esc 取消。", "当前没有可移动的己方水生生物。",
             (match, target) => HasRegisteredTag(target, "aquatic") && HasAdjacentEmptyUnitSlot(match, target));
 
+        private static readonly DemoCardTargetRule ChorusFruit = new DemoCardTargetRule(
+            "effect.ed_002.01", DemoTargetOwner.Friendly, DemoSlotKind.Unit, "UNIT",
+            "选择回手目标", "选择一个己方生物，将其送回原所有者手牌并使其本回合费用 -1。", "当前没有可回手的己方生物。");
+
+        private static readonly DemoCardTargetRule EnderPearl = new DemoCardTargetRule(
+            "effect.ed_005.01", DemoTargetOwner.Friendly, DemoSlotKind.Unit, "UNIT",
+            "选择回手目标", "选择一个己方生物，将其送回原所有者手牌并使其本回合费用 -2。末影龙化身免疫控制者自己的法术。", "当前没有可回手的己方生物。",
+            (match, target) => target.CardId != "tk_017");
+
         private static readonly DemoCardTargetRule BreedingSeason = new DemoCardTargetRule(
             "effect.pf_006.01", DemoTargetOwner.Friendly, DemoSlotKind.Unit, "UNIT",
             "选择两个己方动物", "请选择两个发光的己方动物；已选目标会变为金色。", "场上至少需要两个己方动物。",
@@ -138,6 +147,8 @@ namespace BiomeRivals.Demo
                     case "effect.tk_012.01": rule = PrismarineShard; return true;
                     case "effect.tk_013.01": rule = BlazeRod; return true;
                     case "effect.pf_006.01": rule = BreedingSeason; return true;
+                    case "effect.ed_002.01": rule = ChorusFruit; return true;
+                    case "effect.ed_005.01": rule = EnderPearl; return true;
                 }
             }
             return false;

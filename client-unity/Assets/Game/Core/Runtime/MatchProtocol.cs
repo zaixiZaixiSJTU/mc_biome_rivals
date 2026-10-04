@@ -31,6 +31,7 @@ namespace BiomeRivals.Core
         public const string CardDeployed = "CARD_DEPLOYED";
         public const string ObjectSummoned = "OBJECT_SUMMONED";
         public const string CardPlayed = "CARD_PLAYED";
+        public const string ObjectReturned = "OBJECT_RETURNED";
         public const string CardEquipped = "CARD_EQUIPPED";
         public const string EquipmentDurabilityChanged = "EQUIPMENT_DURABILITY_CHANGED";
         public const string EquipmentDestroyed = "EQUIPMENT_DESTROYED";
@@ -292,12 +293,14 @@ namespace BiomeRivals.Core
         public string reason = string.Empty;
         public string cardId = string.Empty;
         public string handCardInstanceId = string.Empty;
+        public string expiredAtEndOfTurnPlayerId = string.Empty;
         public int expiredCostModifier;
         public int costModifier;
         public int effectiveCost;
         public string[] hand = Array.Empty<string>();
         public string[] keywords = Array.Empty<string>();
         public string slotKind = string.Empty;
+        public string fromSlotKind = string.Empty;
         public int slotIndex;
         public int occupiedSlots;
         public string paymentMethod = string.Empty;
@@ -308,6 +311,12 @@ namespace BiomeRivals.Core
         public int activePlayerIndex;
         public string phase = string.Empty;
         public string instanceId = string.Empty;
+        public string ownerPlayerId = string.Empty;
+        public string controllerPlayerId = string.Empty;
+        public string returnedHandCardInstanceId = string.Empty;
+        public string expiresAtEndOfTurnPlayerId = string.Empty;
+        public int ownerHandCount;
+        public int ownerDiscardCount;
         public string cardType = string.Empty;
         public int attack;
         public int health;
@@ -383,6 +392,7 @@ namespace BiomeRivals.Core
     {
         public int protocolVersion;
         public string rulesetVersion = string.Empty;
+        public string arenaId = ArenaLayouts.DefaultArenaId;
         public int revision;
         public string acknowledgedCommandId = string.Empty;
         public MatchEventDto[] events = Array.Empty<MatchEventDto>();

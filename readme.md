@@ -2,6 +2,10 @@
 
 这是《Minecraft：群系争霸》的最小工程骨架。当前目标不是一次写完玩法，而是先建立一个可构建、可测试、可替换依赖的纵向切片：
 
+当前源码基线（2026-10-05）：Unity 705/705，服务端245/245；包含材质化UI、MC实体渲染修复、权威对局和可替换AI玩家操作接口。接口与独立AI客户端启动见 [AI 玩家操作接口](docs/development/ai-player-operations.md)。这是源码原型，不是完整游戏发行包。
+
+仓库不包含 `Temp`/构建产物、私人联机日志、`.env` 或提取的Minecraft原版素材。取得源码后请使用自己的本地资源和下面的提取脚本重建素材；无素材时的通用占位外观不代表最终MC模型。不要把生成素材强制加入Git。
+
 - `client-unity/`：Unity 6 客户端，按 Core / Networking / Presentation / Bootstrap 分层；
 - `server-nakama/`：Nakama TypeScript Runtime 与不依赖运行时的纯规则核心；
 - `shared-schema/`：客户端和服务端共同遵守的 JSON Schema 协议；
@@ -40,10 +44,10 @@ docker compose up --build
 .\scripts\extract-minecraft-world-textures.ps1
 .\scripts\extract-minecraft-entity-models.ps1
 
-# 检查 74 个定义/文本/卡图映射、7 套主题和文字对比度
+# 检查卡牌注册表/Unity 副本/服务器目录、主题对比度及本机 Minecraft 素材来源与哈希
 .\scripts\validate-card-content.ps1
 
-# 直接调用锁定版本的 Unity，编译并运行 EditMode 测试
+# 通过 Unity CLI 检查注册表/资源副本无漂移，再调用锁定版本的 Unity 运行 EditMode 测试
 .\scripts\validate-unity.ps1
 ```
 
@@ -51,7 +55,7 @@ docker compose up --build
 
 ## 最基础可玩 Demo
 
-Unity 中打开 `client-unity/Assets/Game/Demo/Scenes/Demo.unity` 后点击 Play。当前 Demo 是便于快速验证卡牌和 UI 的离线展示沙盒（初始红石为 6；正式权威规则按 GDD 从 1 开始），使用固定斜俯视透视摄像机把完全由体素构成的真实 2.5D 战场与屏幕空间卡牌 UI 组合，并支持：
+Unity 中打开 `client-unity/Assets/Game/Demo/Scenes/Demo.unity` 后点击 Play。当前 Demo 是便于快速验证卡牌和 UI 的离线展示沙盒（默认红石1/1，与正式起始规则一致；诊断夹具可另设场景），使用固定斜俯视透视摄像机把完全由体素构成的真实 2.5D 战场与屏幕空间卡牌 UI 组合，并支持：
 
 - 七个群系主题即时切换，每个群系装载 5 张已注册卡牌；战场不再使用任何手绘背景图：地形、地基、边框、部署格与群系灯光全部由群系对应的 Minecraft 方块纹理驱动并在切换时整体换装；
 - 场上生物由 Mojang 官方 bedrock-samples 仓库（固定 commit）提供的原版 `minecraft:geometry` 几何 JSON + 配套实体贴图驱动构建（运行 `extract-minecraft-entity-models.ps1` 提取后启用），自动按卡牌缩放与落地；实体使用原版风格着色器（逐面明暗顶点色 + 镂空，火焰生物自发光提亮）并带骨骼级程序化待机动画（扇翅、摆尾、火棒浮动、手臂摆动、头部扫视）；未提取资产时回退为通用方块生物；建筑按 `cardId` 热替换正式 Prefab；多格结构以稳定对象实例为单位渲染并居中横跨其全部建筑格，相邻同名建筑不会被错误合并；
@@ -99,12 +103,19 @@ Nakama 权威规则已支持开局快照、私有牌库投影、起手调度、�
 |---|---|
 | `.\scripts\bootstrap.ps1` | 检查工具并按锁文件安装 Node 依赖 |
 | `npm test` | 编译并运行服务端纯规则测试 |
+| `npm run typecheck` | 只检查服务端 TypeScript 类型 |
 | `npm run build` | 构建 Nakama JavaScript 模块 |
-| `.\scripts\validate.ps1` | 执行仓库级静态检查、测试和构建 |
-| `.\scripts\validate.ps1 -WithUnity` | 在统一验证中追加 Unity 编译与 EditMode 测试 |
+| `.\scripts\validate-card-content.ps1` | 校验共享注册表、Unity 副本及服务端生成目录 |
+| `.\scripts\validate.ps1` | 执行内容、服务端类型检查/测试/构建；逐层显示耗时并在失败处停止 |
+| `.\scripts\validate.ps1 -WithUnity` | 在统一验证中追加 Unity 编译与 EditMode 测试（需要关闭该工程的 Unity Editor） |
+| `.\scripts\validate.ps1 -WithDockerConfig` | 追加 Compose 配置静态检查；不启动 Docker Engine |
+| `.\scripts\validate-online-demo.ps1` | Docker/Nakama 启动后运行双 Windows Player 联机与重连 smoke |
 | `.\scripts\build-demo.ps1` | 用锁定版本 Unity 重新生成可 Play 的 Demo 场景 |
+| `.\scripts\capture-demo-preview.ps1 -ExecutablePath <Player.exe> -ProjectPath <UnityProject> [-PreviewHandHover]` | 校验构建源码清单后启动 Player；可捕获手牌悬停预览，并生成 SHA-256/JSON 清单 |
 | `docker compose up --build` | 启动 PostgreSQL 与 Nakama |
 | `docker compose down` | 停止本地服务并保留数据库卷 |
+
+GitHub Actions 的 `Validate` 工作流在 Windows runner 上执行 `npm ci` 后调用同一个 `scripts/validate.ps1`；Unity Editor/许可证测试与 Docker Engine 在线 smoke 不包含在这条 CI job 中。
 
 ## 工程约束
 

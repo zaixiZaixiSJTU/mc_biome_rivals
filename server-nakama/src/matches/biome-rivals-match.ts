@@ -2,10 +2,13 @@ const BIOME_RIVALS_COMMAND_OPCODE = 1;
 const BIOME_RIVALS_EVENT_BATCH_OPCODE = 2;
 const BIOME_RIVALS_REJECTION_OPCODE = 3;
 const BIOME_RIVALS_SNAPSHOT_OPCODE = 4;
+const BIOME_RIVALS_TEST_FIXTURE_RESULT_OPCODE = 5;
+const BIOME_RIVALS_TEST_FIXTURE_OPCODE = 255;
 const BIOME_RIVALS_TICK_RATE = 5;
 
 interface BiomeRivalsMatchState extends nkruntime.MatchState {
   presences: { [sessionId: string]: nkruntime.Presence };
+  arenaId: BiomeRivalsRules.ArenaId;
   factionByPlayerId: { [playerId: string]: BiomeRivalsRules.FactionId };
   game: BiomeRivalsRules.MatchState | null;
 }
@@ -29,6 +32,140 @@ function encodeMatchMessage(value: unknown): string {
   return JSON.stringify(value);
 }
 
+function isTestFixtureEnabled(ctx: nkruntime.Context): boolean {
+  return !!ctx.env && ctx.env.BIOME_RIVALS_ENABLE_TEST_FIXTURES === 'true';
+}
+
+// Only an isolated server's audit configuration may override the frozen prototype mode.
+// Neither match params nor player faction/preferences can select a production arena.
+function resolveAuditArena(ctx: nkruntime.Context): BiomeRivalsRules.ArenaId {
+  const requested = isTestFixtureEnabled(ctx) && ctx.env ? ctx.env.BIOME_RIVALS_TEST_ARENA_ID : undefined;
+  if (requested === undefined || requested === '') return BiomeRivalsRules.DEFAULT_ARENA_ID;
+  if (!BiomeRivalsRules.isArenaId(requested)) throw new Error('unsupported server audit arena');
+  return requested;
+}
+
+function broadcastAcceptedMatchResult(
+  dispatcher: nkruntime.MatchDispatcher,
+  state: BiomeRivalsMatchState,
+  game: BiomeRivalsRules.MatchState,
+  batch: BiomeRivalsRules.MatchEventBatch,
+  sender: nkruntime.Presence | null
+): void {
+  const recipients = Object.keys(state.presences).map(function (sessionId): nkruntime.Presence {
+    return state.presences[sessionId]!;
+  });
+  for (let recipientIndex = 0; recipientIndex < recipients.length; recipientIndex += 1) {
+    const recipient = recipients[recipientIndex]!;
+    const isPlayer = game.players.some(function (player): boolean { return player.playerId === recipient.userId; });
+    if (!isPlayer) continue;
+    dispatcher.broadcastMessage(
+      BIOME_RIVALS_EVENT_BATCH_OPCODE,
+      encodeMatchMessage(BiomeRivalsRules.createClientEventBatch(batch, recipient.userId, game)),
+      [recipient],
+      sender,
+      true
+    );
+  }
+}
+
+function applySimultaneousDefeatTestFixture(
+  ctx: nkruntime.Context,
+  logger: nkruntime.Logger,
+  dispatcher: nkruntime.MatchDispatcher,
+  state: BiomeRivalsMatchState,
+  sender: nkruntime.Presence,
+  fixtureName: unknown
+): string | null {
+  if (!isTestFixtureEnabled(ctx)) return 'test fixtures are disabled';
+  const readable = fixtureName === 'simultaneous-defeat-readable';
+  if (fixtureName !== 'simultaneous-defeat' && !readable) return 'unsupported test fixture';
+  if (state.game === null || state.game.status !== 'ACTIVE' || state.game.pendingChoice !== null) {
+    return 'test fixture requires an active match without a pending choice';
+  }
+  if (!state.game.players.some(function (player): boolean { return player.playerId === sender.userId; })) {
+    return 'test fixture sender is not a match participant';
+  }
+  if (Object.keys(state.presences).length < 2) return 'test fixture requires both players to be connected';
+
+  const fixtureState = JSON.parse(JSON.stringify(state.game)) as BiomeRivalsRules.MatchState;
+  const activePlayer = fixtureState.players[fixtureState.activePlayerIndex]!;
+  const inactivePlayer = fixtureState.players[fixtureState.activePlayerIndex === 0 ? 1 : 0]!;
+  if (fixtureState.phase !== 'MAIN' || activePlayer.handCards.length === 0) {
+    return 'test fixture could not prepare its deterministic command';
+  }
+
+  // Route the fixture through the same ordinary PLAY_CARD command path and terminal settlement as
+  // the generic lethal rules test. The injected 0-life precondition is only reachable when the
+  // explicit test-fixture environment gate is enabled.
+  activePlayer.life = 0;
+  inactivePlayer.life = 0;
+  activePlayer.hand = ['cd_006'];
+  activePlayer.handCards = [{
+    handCardInstanceId: activePlayer.handCards[0]!.handCardInstanceId,
+    cardId: 'cd_006',
+    costModifier: 0,
+    expiresAtEndOfTurnPlayerId: null
+  }];
+  activePlayer.redstone = Math.max(2, activePlayer.redstone);
+  activePlayer.redstoneCapacity = Math.max(2, activePlayer.redstoneCapacity);
+  if (readable) {
+    const hand = ['ed_002', 'ed_003', 'ed_004', 'ed_005', 'ed_006', 'ed_007', 'ed_008'];
+    fixtureState.players.forEach(function (player): void {
+      player.hand = hand.slice();
+      player.handCards = hand.map(function (cardId): BiomeRivalsRules.HandCardState {
+        return { handCardInstanceId: 'hand-' + String(fixtureState.nextHandCardInstanceId++),
+          cardId: cardId, costModifier: 0, expiresAtEndOfTurnPlayerId: null };
+      });
+    });
+    // The existing ordinary CD-006 play consumes one card and draws one, retaining seven.
+    activePlayer.hand[0] = 'cd_006';
+    activePlayer.handCards[0]!.cardId = 'cd_006';
+  }
+
+  const command: BiomeRivalsRules.MatchCommand = {
+    protocolVersion: BiomeRivalsRules.PROTOCOL_VERSION,
+    rulesetVersion: fixtureState.rulesetVersion,
+    commandId: 'test-fixture-simultaneous-defeat-' + String(fixtureState.revision),
+    expectedRevision: fixtureState.revision,
+    type: 'PLAY_CARD',
+    payload: { cardId: 'cd_006', handCardInstanceId: activePlayer.handCards[0]!.handCardInstanceId }
+  };
+  const result = BiomeRivalsRules.applyCommand(fixtureState, activePlayer.playerId, command);
+  if (!result.accepted) {
+    logger.warn('Simultaneous defeat test fixture command was rejected: %s', result.message);
+    return 'test fixture command was rejected: ' + result.code;
+  }
+  if (result.state.status !== 'FINISHED' || result.state.winnerPlayerId !== null ||
+      !result.batch.events.some(function (event): boolean {
+        return event.type === 'MATCH_ENDED' && event.payload.reason === 'SIMULTANEOUS_DEFEAT';
+      })) {
+    logger.warn('Simultaneous defeat test fixture did not produce the expected terminal result.');
+    return 'test fixture did not produce a simultaneous defeat';
+  }
+
+  // The fixture injects life/hand preconditions outside normal gameplay. Real clients must receive
+  // that private baseline before replaying the ordinary command, otherwise hand counts and the
+  // defeated opponent cannot be reconstructed. Publish nothing if validation above failed.
+  const recipients = Object.keys(state.presences).map(function (sessionId): nkruntime.Presence {
+    return state.presences[sessionId]!;
+  });
+  for (let index = 0; index < recipients.length; index += 1) {
+    const recipient = recipients[index]!;
+    if (!fixtureState.players.some(function (player): boolean { return player.playerId === recipient.userId; })) continue;
+    dispatcher.broadcastMessage(
+      BIOME_RIVALS_SNAPSHOT_OPCODE,
+      encodeMatchMessage(BiomeRivalsRules.createClientSnapshot(fixtureState, recipient.userId)),
+      [recipient],
+      null,
+      true
+    );
+  }
+  state.game = result.state;
+  broadcastAcceptedMatchResult(dispatcher, state, result.state, result.batch, sender);
+  return null;
+}
+
 function biomeRivalsMatchInit(
   ctx: nkruntime.Context,
   logger: nkruntime.Logger,
@@ -37,7 +174,10 @@ function biomeRivalsMatchInit(
 ): { state: BiomeRivalsMatchState; tickRate: number; label: string } {
   logger.info('Biome Rivals match created: %s', ctx.matchId || 'pending');
   return {
-    state: { presences: {}, factionByPlayerId: parseRequestedFactions(params), game: null },
+    state: {
+      presences: {}, arenaId: resolveAuditArena(ctx),
+      factionByPlayerId: parseRequestedFactions(params), game: null
+    },
     tickRate: BIOME_RIVALS_TICK_RATE,
     label: JSON.stringify({ mode: 'prototype', open: true })
   };
@@ -96,7 +236,9 @@ function biomeRivalsMatchJoin(
     const factionIds = playerIds.map(function (playerId, index): BiomeRivalsRules.FactionId {
       return state.factionByPlayerId[playerId] || (index === 0 ? 'plains_forest' : 'nether');
     });
-    state.game = BiomeRivalsRules.createInitialState(ctx.matchId || 'unknown', playerIds, factionIds, nk.uuidv4());
+    state.game = BiomeRivalsRules.createInitialState(
+      ctx.matchId || 'unknown', playerIds, factionIds, nk.uuidv4(), state.arenaId
+    );
     snapshotRecipients = connected;
   }
   if (state.game !== null) {
@@ -142,6 +284,40 @@ function biomeRivalsMatchLoop(
 
   for (let i = 0; i < messages.length; i += 1) {
     const message = messages[i]!;
+    if (message.opCode === BIOME_RIVALS_TEST_FIXTURE_OPCODE) {
+      let fixtureName: unknown = null;
+      try {
+        if (isTestFixtureEnabled(ctx)) {
+          const request = JSON.parse(nk.binaryToString(message.data)) as { fixture?: unknown };
+          fixtureName = request && request.fixture;
+        }
+        const response = applySimultaneousDefeatTestFixture(
+          ctx, logger, dispatcher, state, message.sender, fixtureName
+        );
+        dispatcher.broadcastMessage(
+          response === null ? BIOME_RIVALS_TEST_FIXTURE_RESULT_OPCODE : BIOME_RIVALS_REJECTION_OPCODE,
+          encodeMatchMessage(response === null ? {
+            ok: true,
+            revision: state.game.revision,
+            winnerPlayerId: state.game.winnerPlayerId,
+            reason: 'SIMULTANEOUS_DEFEAT'
+          } : { code: 'TEST_FIXTURE_REJECTED', message: response }),
+          [message.sender],
+          null,
+          true
+        );
+      } catch (error) {
+        logger.warn('Rejected malformed test fixture request from %s: %s', message.sender.userId, String(error));
+        dispatcher.broadcastMessage(
+          BIOME_RIVALS_REJECTION_OPCODE,
+          encodeMatchMessage({ code: 'INVALID_COMMAND', message: 'malformed test fixture request' }),
+          [message.sender],
+          null,
+          true
+        );
+      }
+      continue;
+    }
     if (message.opCode !== BIOME_RIVALS_COMMAND_OPCODE) continue;
     try {
       const command = JSON.parse(nk.binaryToString(message.data)) as BiomeRivalsRules.MatchCommand;
@@ -165,21 +341,7 @@ function biomeRivalsMatchLoop(
       const result = BiomeRivalsRules.applyCommand(state.game, message.sender.userId, command);
       if (result.accepted) {
         state.game = result.state;
-        const recipients = Object.keys(state.presences).map(function (sessionId): nkruntime.Presence {
-          return state.presences[sessionId]!;
-        });
-        for (let recipientIndex = 0; recipientIndex < recipients.length; recipientIndex += 1) {
-          const recipient = recipients[recipientIndex]!;
-          const isPlayer = state.game.players.some(function (player): boolean { return player.playerId === recipient.userId; });
-          if (!isPlayer) continue;
-          dispatcher.broadcastMessage(
-            BIOME_RIVALS_EVENT_BATCH_OPCODE,
-            encodeMatchMessage(BiomeRivalsRules.createClientEventBatch(result.batch, recipient.userId, state.game)),
-            [recipient],
-            message.sender,
-            true
-          );
-        }
+        broadcastAcceptedMatchResult(dispatcher, state, result.state, result.batch, message.sender);
       } else {
         dispatcher.broadcastMessage(
           BIOME_RIVALS_REJECTION_OPCODE,

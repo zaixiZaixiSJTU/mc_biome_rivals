@@ -21,14 +21,23 @@ namespace BiomeRivals.Demo
         {
             public string GeometryId;
             public string TextureKey;
+            // Optional skin below a biome clothing surface; not a second inflated mesh.
+            public string SurfaceBaseTextureKey;
+            public bool LowAlphaEmission;
+            public bool AlphaColorMask;
             public float TargetHeight;
             public float TargetWidth;
             public float HoverY;
+            public bool GroundToBaseY;
             public float ExtraScale = 1f;
             public string OverlayTextureKey;
+            public string OverlayGeometryId;
             public float OverlayInflate;
-            public Dictionary<string, float[]> BonePivotOverrides;
+            public int OverlayTextureWidth;
+            public int OverlayTextureHeight;
             public Dictionary<string, float[]> BoneRotationOverrides;
+            public Dictionary<string, float[]> BonePositionOffsets;
+            public Dictionary<string, float[]> BoneMeshBindPoseOverrides;
             public DemoEntityIdleAnimator.IdleTrackSpec[] IdleTracks;
         }
 
@@ -43,13 +52,17 @@ namespace BiomeRivals.Demo
             {
                 "pf_002", new EntitySpec
                 { GeometryId = "geometry.sheep.sheared.v1.8", TextureKey = "entity_sheep",
-                    TargetHeight = 1.45f, OverlayTextureKey = "entity_sheep_wool", OverlayInflate = 1.2f
+                    TargetHeight = 1.45f, OverlayTextureKey = "entity_sheep", OverlayGeometryId = "geometry.sheep.v1.8",
+                    GroundToBaseY = true, AlphaColorMask = true
                 }
             },
             {
                 "tk_003", new EntitySpec
-                { GeometryId = "geometry.sheep.sheared.v1.8", TextureKey = "entity_sheep",
-                    TargetHeight = 1.45f, ExtraScale = 0.62f, OverlayTextureKey = "entity_sheep_wool", OverlayInflate = 1.2f
+                { GeometryId = "geometry.sheep.baby", TextureKey = "entity_sheep_baby",
+                    // Dedicated 32x32 source already contains wool and juvenile proportions.
+                    // .9 is this board's readability height, not Bedrock's global model scale.
+                    TargetHeight = 0.9f,
+                    GroundToBaseY = true, AlphaColorMask = true
                 }
             },
             {
@@ -109,7 +122,20 @@ namespace BiomeRivals.Demo
                 "cd_002", new EntitySpec
                 { GeometryId = "geometry.spider.v1.8", TextureKey = "entity_cave_spider",
                     // Spiders span far wider than they are tall; fit the leg spread instead of the height.
-                    TargetWidth = 2.2f, ExtraScale = 0.9f
+                    TargetWidth = 2.2f, ExtraScale = 0.9f, GroundToBaseY = true, LowAlphaEmission = true,
+                    // Official animation.spider.default_leg_pose, evaluated at the zero-rotation source pose.
+                    // Preserve source angles; the builder performs coordinate conversion once.
+                    BoneRotationOverrides = new Dictionary<string, float[]>
+                    {
+                        { "leg0", new[] { 0f, 45f, -45f } },
+                        { "leg1", new[] { 0f, -45f, 45f } },
+                        { "leg2", new[] { 0f, 22.5f, -33.3f } },
+                        { "leg3", new[] { 0f, -22.5f, 33.3f } },
+                        { "leg4", new[] { 0f, -22.5f, -33.3f } },
+                        { "leg5", new[] { 0f, 22.5f, 33.3f } },
+                        { "leg6", new[] { 0f, -45f, -45f } },
+                        { "leg7", new[] { 0f, 45f, 45f } }
+                    }
                 }
             },
             {
@@ -127,7 +153,7 @@ namespace BiomeRivals.Demo
             {
                 "nt_003", new EntitySpec
                 { GeometryId = "geometry.blaze", TextureKey = "entity_blaze",
-                    TargetHeight = 2.05f, BonePivotOverrides = BlazeRodPivots()
+                    TargetHeight = 2.05f, HoverY = 0.3f
                 }
             },
             {
@@ -157,7 +183,29 @@ namespace BiomeRivals.Demo
             {
                 "or_004", new EntitySpec
                 { GeometryId = "geometry.guardian.v1.8", TextureKey = "entity_guardian",
-                    TargetHeight = 1.6f, HoverY = 0.4f
+                    TargetHeight = 1.6f, HoverY = 0.4f,
+                    // Source setup angles; static extended-spike pose (extension/shake/wobble = 0).
+                    // Offsets are relative to original pivots, not replacements for the skeleton.
+                    BoneRotationOverrides = new Dictionary<string, float[]>
+                    {
+                        { "spikepart0", new[] { -45f, 0f, 0f } }, { "spikepart1", new[] { 45f, 0f, 0f } },
+                        { "spikepart2", new[] { 0f, 0f, 45f } }, { "spikepart3", new[] { 0f, 0f, -45f } },
+                        { "spikepart4", new[] { 90f, 45f, 0f } }, { "spikepart5", new[] { 90f, -45f, 0f } },
+                        { "spikepart6", new[] { 90f, -135f, 0f } }, { "spikepart7", new[] { 90f, 135f, 0f } },
+                        { "spikepart8", new[] { -135f, 0f, 0f } }, { "spikepart9", new[] { 135f, 0f, 0f } },
+                        { "spikepart10", new[] { 0f, 0f, 135f } }, { "spikepart11", new[] { 0f, 0f, -135f } }
+                    },
+                    BonePositionOffsets = new Dictionary<string, float[]>
+                    {
+                        { "eye", new[] { 0f, 0f, -8.25f } },
+                        { "tailpart1", new[] { -1.5f, -0.5f, 14f } }, { "tailpart2", new[] { 0.5f, -0.5f, 6f } },
+                        { "spikepart0", new[] { 0f, -8f, 8f } }, { "spikepart1", new[] { 0f, -8f, -8f } },
+                        { "spikepart2", new[] { 8f, -8f, 0f } }, { "spikepart3", new[] { -8f, -8f, 0f } },
+                        { "spikepart4", new[] { -8f, -16f, -8f } }, { "spikepart5", new[] { 8f, -16f, -8f } },
+                        { "spikepart6", new[] { 8f, -16f, 8f } }, { "spikepart7", new[] { -8f, -16f, 8f } },
+                        { "spikepart8", new[] { 0f, -24f, 8f } }, { "spikepart9", new[] { 0f, -24f, -8f } },
+                        { "spikepart10", new[] { 8f, -24f, 0f } }, { "spikepart11", new[] { -8f, -24f, 0f } }
+                    }
                 }
             },
             {
@@ -169,7 +217,7 @@ namespace BiomeRivals.Demo
             {
                 "db_003", new EntitySpec
                 { GeometryId = "geometry.villager_v2", TextureKey = "entity_villager_desert",
-                    TargetHeight = 2.05f
+                    SurfaceBaseTextureKey = "entity_villager", TargetHeight = 2.05f
                 }
             },
             {
@@ -188,7 +236,12 @@ namespace BiomeRivals.Demo
             {
                 "si_005", new EntitySpec
                 { GeometryId = "geometry.polarbear", TextureKey = "entity_polar_bear",
-                    TargetHeight = 2f
+                    TargetHeight = 2f,
+                    // Mojang bedrock-samples v1.20.50.3 polar_bear.geo.json declares
+                    // body bind_pose_rotation=[90,0,0]; the registered modern file
+                    // retains the identical cubes/pivots/UVs but omits this binding pose.
+                    // Apply only to body meshes: head/legs remain in their authored frame.
+                    BoneMeshBindPoseOverrides = new Dictionary<string, float[]> { { "body", new[] { 90f, 0f, 0f } } }
                 }
             },
             {
@@ -230,7 +283,12 @@ namespace BiomeRivals.Demo
             {
                 "ed_003", new EntitySpec
                 { GeometryId = "geometry.enderman.v1.8", TextureKey = "entity_enderman",
-                    TargetHeight = 2.8f
+                    LowAlphaEmission = true, TargetHeight = 2.8f,
+                    // Static standing adapter: source body top=38, inherited humanoid head origin=24.
+                    // Inner head (hat) is already authored at 37.5: cancel inherited +14 there.
+                    // Not a general Molang evaluator; original pivots/cubes/UV remain untouched.
+                    BonePositionOffsets = new Dictionary<string, float[]>
+                    { { "head", new[] { 0f, 14f, 0f } }, { "hat", new[] { 0f, -14f, 0f } } }
                 }
             },
             {
@@ -271,10 +329,24 @@ namespace BiomeRivals.Demo
                 Track("leftWingTip", -24f, flap, 6.5f, 0.6f)
             };
             var blazeRods = new List<DemoEntityIdleAnimator.IdleTrackSpec>();
+            Entities["nt_003"].BonePositionOffsets = new Dictionary<string, float[]>();
             for (var rod = 0; rod < 12; rod++)
             {
-                blazeRods.Add(Track("upperBodyParts" + rod, 0f, Vector3.up, 1.7f, rod * 0.55f, 0.045f));
-                blazeRods.Add(Track("upperBodyParts" + rod, 16f, Vector3.up, 0.9f, rod * 0.55f));
+                // Mojang animation.blaze.move: source positions, not relocated pivots.
+                var ring = rod / 4;
+                var orbit = new DemoEntityIdleAnimator.SourceOrbitSpec
+                {
+                    Radius = ring == 0 ? 9f : ring == 1 ? 7f : 5f,
+                    AngularVelocityDegrees = ring == 0 ? -360f : ring == 1 ? 108f : -180f,
+                    PhaseDegrees = rod % 4 * 90f + (ring == 0 ? 0f : ring == 1 ? 45f : 27f),
+                    VerticalBase = ring == 0 ? 2f : ring == 1 ? -2f : -11f,
+                    VerticalVelocityDegrees = 20f * 14.32f,
+                    VerticalPhaseDegrees = rod * (ring == 2 ? 1.5f : 2f) * 14.32f
+                };
+                var position = orbit.EvaluateSourceOffset(0f);
+                var name = "upperBodyParts" + rod;
+                Entities["nt_003"].BonePositionOffsets.Add(name, new[] { position.x, position.y, position.z });
+                blazeRods.Add(new DemoEntityIdleAnimator.IdleTrackSpec { BoneName = name, SourceOrbit = orbit });
             }
             blazeRods.Add(Track("head", 5f, Vector3.right, 0.7f));
             Entities["nt_003"].IdleTracks = blazeRods.ToArray();
@@ -426,12 +498,74 @@ namespace BiomeRivals.Demo
             return TryGetTextureKey(cardId, out modelKey);
         }
 
+        /// <summary>Exact source geometry ID; never an implicit first-entry fallback.</summary>
+        public static bool TryGetGeometryId(string cardId, out string geometryId)
+        {
+            if (Entities.TryGetValue(cardId, out var spec))
+            {
+                geometryId = spec.GeometryId;
+                return true;
+            }
+            geometryId = null;
+            return false;
+        }
+
+        /// <summary>Immutable registration snapshot for source audits and render catalogues.</summary>
+        public static IReadOnlyList<string> GetRegisteredEntityCardIds() =>
+            Array.AsReadOnly(new List<string>(Entities.Keys).ToArray());
+
+        public static bool TryGetOverlayGeometryId(string cardId, out string identifier)
+        {
+            identifier = Entities.TryGetValue(cardId, out var spec) ? spec.OverlayGeometryId : null;
+            return identifier != null;
+        }
+
+        /// <summary>Registered skin underneath a raw biome surface texture. Geometry/UVs remain unchanged.</summary>
+        public static bool TryGetSurfaceBaseTextureKey(string surfaceKey, out string baseKey)
+        {
+            foreach (var spec in Entities.Values)
+                if (string.Equals(spec.TextureKey, surfaceKey, StringComparison.Ordinal) &&
+                    !string.IsNullOrEmpty(spec.SurfaceBaseTextureKey))
+                {
+                    baseKey = spec.SurfaceBaseTextureKey;
+                    return true;
+                }
+            baseKey = null;
+            return false;
+        }
+
+        /// <summary>Explicit material registration; never infer emissive alpha from texture darkness.</summary>
+        public static bool UsesLowAlphaEmission(string textureKey)
+        {
+            foreach (var spec in Entities.Values)
+                if (string.Equals(spec.TextureKey, textureKey, StringComparison.Ordinal) && spec.LowAlphaEmission) return true;
+            return false;
+        }
+
+        public static bool UsesAlphaColorMask(string textureKey)
+        {
+            foreach (var spec in Entities.Values)
+                if (spec.TextureKey == textureKey && spec.AlphaColorMask) return true;
+            return false;
+        }
+
         /// <summary>materialProvider receives a texture key (entity_*) per cube layer.</summary>
         public static bool TryBuild(Transform root, string cardId, bool player, Func<string, Material> materialProvider)
         {
             if (!Entities.TryGetValue(cardId, out var spec)) return false;
             var geometry = LoadGeometry(spec.TextureKey, spec.GeometryId);
             if (geometry == null) return false;
+            DemoEntityGeometry overlayGeometry = null;
+            if (spec.OverlayGeometryId != null)
+            {
+                var source = Resources.Load<TextAsset>(ModelResourceRoot + spec.TextureKey);
+                try { overlayGeometry = DemoMinecraftEntityGeometryParser.ParseLegacyOverlay(source.text, spec.OverlayGeometryId, spec.GeometryId); }
+                catch (FormatException error)
+                {
+                    Debug.LogWarning($"Skipping entity overlay '{spec.OverlayGeometryId}': {error.Message}");
+                    return false;
+                }
+            }
 
             root.localRotation = Quaternion.Euler(0f, player ? 180f : 0f, 0f);
 
@@ -444,15 +578,20 @@ namespace BiomeRivals.Demo
                 TargetHeight = spec.TargetHeight,
                 TargetWidth = spec.TargetWidth,
                 BaseY = spec.HoverY,
-                BonePivotOverrides = spec.BonePivotOverrides,
-                BoneRotationOverrides = spec.BoneRotationOverrides
+                GroundToBaseY = spec.GroundToBaseY,
+                BoneRotationOverrides = spec.BoneRotationOverrides,
+                BonePositionOffsets = spec.BonePositionOffsets,
+                BoneMeshBindPoseOverrides = spec.BoneMeshBindPoseOverrides
             };
             if (!string.IsNullOrEmpty(spec.OverlayTextureKey))
             {
                 options.Layers.Add(new DemoMinecraftEntityModelBuilder.OverlayLayer
                 {
                     TextureKey = spec.OverlayTextureKey,
-                    Inflate = spec.OverlayInflate
+                    Geometry = overlayGeometry,
+                    Inflate = spec.OverlayInflate,
+                    TextureWidth = spec.OverlayTextureWidth,
+                    TextureHeight = spec.OverlayTextureHeight
                 });
             }
             if (!DemoMinecraftEntityModelBuilder.TryBuild(root, geometry, options)) return false;
@@ -477,27 +616,5 @@ namespace BiomeRivals.Demo
             }
         }
 
-        /// <summary>
-        /// The vanilla blaze geometry stacks all twelve rods on one column and
-        /// relies on runtime animation; bake the resting ring pose so the
-        /// static battlefield model shows the classic three-ring silhouette.
-        /// </summary>
-        private static Dictionary<string, float[]> BlazeRodPivots()
-        {
-            var pivots = new Dictionary<string, float[]>();
-            for (var rod = 0; rod < 12; rod++)
-            {
-                var ring = rod / 4;
-                var angle = (float)((rod % 4) * System.Math.PI * 0.5 + ring * 0.58);
-                var radius = ring == 1 ? 10.5f : 7.5f;
-                pivots["upperBodyParts" + rod] = new[]
-                {
-                    Mathf.Cos(angle) * radius,
-                    24f - ring * 7f,
-                    Mathf.Sin(angle) * radius
-                };
-            }
-            return pivots;
-        }
     }
 }

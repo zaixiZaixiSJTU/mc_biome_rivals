@@ -40,6 +40,27 @@ namespace BiomeRivals.Demo
             CreateRivet(root, "SE", new Vector2(size.x * 0.5f - 3f, -size.y * 0.5f + 3f), frameTint);
         }
 
+        public void ResizeDecoratedPanel(RectTransform root, Vector2 size)
+        {
+            if (root == null) return;
+            const float bevelOffset = 2f;
+            var contentInset = DemoUiMetrics.FrameBorderPixels;
+            var bodySize = new Vector2(Mathf.Max(0, size.x - contentInset * 2f), Mathf.Max(0, size.y - contentInset * 2f));
+            root.sizeDelta = size;
+            SetDecorationRect(root, "FrameSlice", Vector2.zero, size);
+            SetDecorationRect(root, "MaterialFill", Vector2.zero, bodySize);
+            SetDecorationRect(root, "InnerBevelTop",
+                new Vector2(0, size.y * 0.5f - contentInset - bevelOffset),
+                new Vector2(bodySize.x, 1f));
+            SetDecorationRect(root, "InnerBevelBottom",
+                new Vector2(0, -size.y * 0.5f + contentInset + bevelOffset),
+                new Vector2(bodySize.x, 2f));
+            SetDecorationRect(root, "RivetNW", new Vector2(-size.x * 0.5f + 3f, size.y * 0.5f - 3f), new Vector2(3f, 3f));
+            SetDecorationRect(root, "RivetNE", new Vector2(size.x * 0.5f - 3f, size.y * 0.5f - 3f), new Vector2(3f, 3f));
+            SetDecorationRect(root, "RivetSW", new Vector2(-size.x * 0.5f + 3f, -size.y * 0.5f + 3f), new Vector2(3f, 3f));
+            SetDecorationRect(root, "RivetSE", new Vector2(size.x * 0.5f - 3f, -size.y * 0.5f + 3f), new Vector2(3f, 3f));
+        }
+
         public void Dispose()
         {
             foreach (var sprite in _sprites.Values)
@@ -62,6 +83,14 @@ namespace BiomeRivals.Demo
         private void CreateRivet(Transform parent, string suffix, Vector2 position, Color edge)
         {
             CreateSolidPanel(parent, "Rivet" + suffix, position, new Vector2(3f, 3f), Color.Lerp(edge, _rivetHighlight, 0.52f));
+        }
+
+        private static void SetDecorationRect(Transform parent, string childName, Vector2 position, Vector2 size)
+        {
+            var child = parent.Find(childName) as RectTransform;
+            if (child == null) return;
+            child.anchoredPosition = position;
+            child.sizeDelta = size;
         }
 
         private Texture2D GetTexture(string key)

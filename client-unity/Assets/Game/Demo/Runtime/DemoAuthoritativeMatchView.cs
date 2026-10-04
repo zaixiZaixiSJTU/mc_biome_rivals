@@ -17,6 +17,7 @@ namespace BiomeRivals.Demo
         }
 
         public bool IsAuthoritative => Current != null;
+        public string ArenaId => Current?.arenaId ?? ArenaLayouts.DefaultArenaId;
         public string PlayerFactionId => Player?.factionId ?? FactionIds.PlainsForest;
         public string OpponentFactionId => Opponent?.factionId ?? FactionIds.Nether;
         public bool IsMulligan => Current?.status == "MULLIGAN";
@@ -42,6 +43,9 @@ namespace BiomeRivals.Demo
         public int MaxEnergy => Player?.redstoneCapacity ?? 0;
         public int Energy => Player?.totalRedstone ?? 0;
         public int TemporaryEnergy => Player?.temporaryRedstone ?? 0;
+        public int OpponentMaxEnergy => Opponent?.redstoneCapacity ?? 0;
+        public int OpponentEnergy => Opponent?.totalRedstone ?? 0;
+        public int OpponentTemporaryEnergy => Opponent?.temporaryRedstone ?? 0;
         public bool IsPlayerTurn => Current != null && ViewerIndex >= 0 && Current.activePlayerIndex == ViewerIndex;
         public DemoTurnPhase Phase => Current?.phase == "COMBAT" ? DemoTurnPhase.Combat : DemoTurnPhase.Main;
         public int PlayerLife => Player?.life ?? 0;
@@ -52,6 +56,8 @@ namespace BiomeRivals.Demo
         public bool PlayerHeroHasAttacked => Player?.heroHasAttacked == true;
         public int OpponentLife => Opponent?.life ?? 0;
         public bool IsFinished => Current?.status == "FINISHED";
+        public bool HasWinner => IsFinished && !string.IsNullOrWhiteSpace(Current?.winnerPlayerId);
+        public bool IsPlayerWinner => HasWinner && Current.winnerPlayerId == Current.viewerPlayerId;
         public int Revision => Current?.revision ?? 0;
 
         public bool HasTriggeredEffect(bool player, string sourceInstanceId, string effectId)
@@ -212,6 +218,7 @@ namespace BiomeRivals.Demo
             {
                 InstanceId = value.instanceId,
                 CardId = value.cardId,
+                OwnerPlayerId = value.ownerPlayerId,
                 Player = player,
                 SlotKind = value.slotKind == "BUILDING" ? DemoSlotKind.Building : DemoSlotKind.Unit,
                 SlotIndex = value.slotIndex,

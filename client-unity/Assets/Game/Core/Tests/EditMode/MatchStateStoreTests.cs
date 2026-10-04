@@ -26,6 +26,143 @@ namespace BiomeRivals.Core.Tests
         }
 
         [Test]
+        public void Replace_ValidatesArenaIdAndSymmetricSlotCounts()
+        {
+            var snapshot = new MatchStateDto
+            {
+                matchId = "deep-cavern-snapshot", arenaId = "deep_caverns",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                players = new[]
+                {
+                    new PlayerStateDto { unitSlots = new string[5], buildingSlots = new string[2] },
+                    new PlayerStateDto { unitSlots = new string[5], buildingSlots = new string[2] }
+                }
+            };
+            Assert.DoesNotThrow(() => ReplaceSnapshot(new MatchStateStore(), snapshot));
+
+            snapshot.players[1].buildingSlots = new string[3];
+            Assert.Throws<InvalidOperationException>(() => ReplaceSnapshot(new MatchStateStore(), snapshot));
+            snapshot.players[1].buildingSlots = new string[2];
+            snapshot.arenaId = "unknown_arena";
+            Assert.Throws<InvalidOperationException>(() => ReplaceSnapshot(new MatchStateStore(), snapshot));
+        }
+
+        [Test]
+        public void Apply_RejectsEventBatchFromAnotherArena()
+        {
+            var store = new MatchStateStore();
+            ReplaceSnapshot(store, new MatchStateDto
+            {
+                matchId = "arena-event-mismatch", arenaId = "deep_caverns",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                players = new[]
+                {
+                    new PlayerStateDto { unitSlots = new string[5], buildingSlots = new string[2] },
+                    new PlayerStateDto { unitSlots = new string[5], buildingSlots = new string[2] }
+                }
+            });
+
+            Assert.Throws<InvalidOperationException>(() => store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                arenaId = "end_void", revision = 1
+            }));
+        }
+
+        [Test]
+        public void Apply_MatchEndedWithNullWinnerProjectsAuthoritativeDraw()
+        {
+            var store = new MatchStateStore();
+            ReplaceSnapshot(store, new MatchStateDto
+            {
+                matchId = "match-draw", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                status = "ACTIVE", phase = "COMBAT", turn = 1,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice", life = 0 },
+                    new PlayerStateDto { playerId = "bob", life = 0 }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 1, type = MatchEventTypes.MatchEnded,
+                        payload = new MatchEventPayloadDto { winnerPlayerId = null, reason = "SIMULTANEOUS_DEFEAT" }
+                    }
+                },
+                handProjection = new HandProjectionDto
+                {
+                    ownPlayerId = "alice", ownHand = Array.Empty<string>(), ownHandCards = Array.Empty<HandCardStateDto>(),
+                    opponentPlayerId = "bob", opponentHandCount = 0
+                }
+            });
+
+            Assert.That(store.Current.status, Is.EqualTo("FINISHED"));
+            Assert.That(store.Current.winnerPlayerId, Is.Empty);
+        }
+
+        [Test]
+        public void Replace_RejectsDrawSnapshotsUnlessBothHeroesAreDefeated()
+        {
+            var snapshot = new MatchStateDto
+            {
+                matchId = "invalid-draw", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                status = "FINISHED", phase = "COMBAT", turn = 1,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice", life = 0 },
+                    new PlayerStateDto { playerId = "bob", life = 1 }
+                }
+            };
+
+            Assert.Throws<InvalidOperationException>(() => ReplaceSnapshot(new MatchStateStore(), snapshot));
+            snapshot.players[1].life = 0;
+            Assert.DoesNotThrow(() => ReplaceSnapshot(new MatchStateStore(), snapshot));
+        }
+
+        [Test]
+        public void Apply_RejectsMatchEndedEventWithContradictoryDrawReason()
+        {
+            var store = new MatchStateStore();
+            ReplaceSnapshot(store, new MatchStateDto
+            {
+                matchId = "match-invalid-draw-event", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                status = "ACTIVE", phase = "COMBAT", turn = 1,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice", life = 0 },
+                    new PlayerStateDto { playerId = "bob", life = 0 }
+                }
+            });
+
+            Assert.Throws<InvalidOperationException>(() => store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 1, type = MatchEventTypes.MatchEnded,
+                        payload = new MatchEventPayloadDto { winnerPlayerId = null, reason = "HERO_DEFEATED" }
+                    }
+                },
+                handProjection = new HandProjectionDto
+                {
+                    ownPlayerId = "alice", ownHand = Array.Empty<string>(), ownHandCards = Array.Empty<HandCardStateDto>(),
+                    opponentPlayerId = "bob", opponentHandCount = 0
+                }
+            }));
+        }
+
+        [Test]
         public void Replace_RecoverySnapshotPreservesOwnDuplicateHandInstancesAndHidesOpponent()
         {
             var store = new MatchStateStore();
@@ -194,6 +331,287 @@ namespace BiomeRivals.Core.Tests
         });
 
         [Test]
+        public void Apply_ReplaysEndReturnAfterCardPaymentAndRestoresDiscountedOwnerHandInstance()
+        {
+            var store = new MatchStateStore();
+            ReplaceSnapshot(store, new MatchStateDto
+            {
+                matchId = "end-return-replay", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                status = "ACTIVE", turn = 1, phase = "MAIN", activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto
+                    {
+                        playerId = "alice", life = 30, redstone = 1, totalRedstone = 1, redstoneCapacity = 1,
+                        hand = new[] { "ed_002" },
+                        unitSlots = new[] { null, "object-1", null, null }, buildingSlots = new string[3],
+                        battlefield = new[]
+                        {
+                            new BattlefieldObjectStateDto
+                            {
+                                instanceId = "object-1", ownerPlayerId = "alice", cardId = "pf_001", cardType = "UNIT",
+                                slotKind = "UNIT", slotIndex = 1, occupiedSlots = 1, attack = 1, health = 1,
+                                maxHealth = 1, summonedTurn = 1
+                            }
+                        }
+                    },
+                    new PlayerStateDto { playerId = "bob", life = 30, unitSlots = new string[4], buildingSlots = new string[3] }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 1, type = MatchEventTypes.CardPlayed,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", cardId = "ed_002", cardType = "MATERIAL", effectId = "effect.ed_002.01",
+                            redstone = 0, temporaryRedstone = 0, totalRedstone = 0, handCount = 0, discardCount = 1,
+                            cardsPlayedThisTurn = 1
+                        }
+                    },
+                    new MatchEventDto
+                    {
+                        eventId = 2, type = MatchEventTypes.ObjectReturned,
+                        payload = new MatchEventPayloadDto
+                        {
+                            instanceId = "object-1", cardId = "pf_001", ownerPlayerId = "alice",
+                            controllerPlayerId = "alice", sourcePlayerId = "alice", sourceCardId = "ed_002",
+                            sourceInstanceId = "effect-1", effectId = "effect.ed_002.01", fromSlotKind = "UNIT",
+                            fromSlotIndex = 1, destination = "HAND", returnedHandCardInstanceId = "hand-92",
+                            costModifier = -1, expiresAtEndOfTurnPlayerId = "alice", ownerHandCount = 1, ownerDiscardCount = 1
+                        }
+                    }
+                },
+                handProjection = new HandProjectionDto
+                {
+                    ownPlayerId = "alice", ownHand = new[] { "pf_001" },
+                    ownHandCards = new[]
+                    {
+                        new HandCardStateDto
+                        {
+                            handCardInstanceId = "hand-92", cardId = "pf_001", costModifier = -1,
+                            expiresAtEndOfTurnPlayerId = "alice"
+                        }
+                    },
+                    opponentPlayerId = "bob", opponentHandCount = 0
+                }
+            });
+
+            Assert.That(store.Current.players[0].battlefield, Is.Empty);
+            Assert.That(store.Current.players[0].unitSlots[1], Is.Null);
+            Assert.That(store.Current.players[0].hand, Is.EqualTo(new[] { "pf_001" }));
+            Assert.That(store.Current.players[0].handCards.Single().handCardInstanceId, Is.EqualTo("hand-92"));
+            Assert.That(store.Current.players[0].handCards.Single().costModifier, Is.EqualTo(-1));
+        }
+
+        [TestCase("alice", false)]
+        [TestCase("bob", true)]
+        public void Apply_ReplaysCrossOwnerReturnWithViewerSpecificHandPrivacy(string viewerPlayerId, bool viewerOwnsReturnedUnit)
+        {
+            var store = new MatchStateStore();
+            var aliceHand = viewerPlayerId == "alice" ? new[] { "ed_005" } : new[] { string.Empty };
+            var aliceHandCards = viewerPlayerId == "alice"
+                ? new[] { new HandCardStateDto { handCardInstanceId = "hand-90", cardId = "ed_005" } }
+                : new HandCardStateDto[] { null };
+            ReplaceSnapshot(store, new MatchStateDto
+            {
+                matchId = "cross-owner-return-" + viewerPlayerId, viewerPlayerId = viewerPlayerId,
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                status = "ACTIVE", turn = 2, phase = "MAIN", activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto
+                    {
+                        playerId = "alice", life = 30, redstone = 2, totalRedstone = 2, redstoneCapacity = 2,
+                        hand = aliceHand, handCards = aliceHandCards,
+                        unitSlots = new[] { null, "object-owned-by-bob", null, null }, buildingSlots = new string[3],
+                        battlefield = new[]
+                        {
+                            new BattlefieldObjectStateDto
+                            {
+                                instanceId = "object-owned-by-bob", ownerPlayerId = "bob", cardId = "pf_004",
+                                cardType = "UNIT", slotKind = "UNIT", slotIndex = 1, occupiedSlots = 1,
+                                attack = 2, health = 4, maxHealth = 4, summonedTurn = 1
+                            }
+                        }
+                    },
+                    new PlayerStateDto
+                    {
+                        playerId = "bob", life = 30, hand = Array.Empty<string>(),
+                        handCards = Array.Empty<HandCardStateDto>(), unitSlots = new string[4], buildingSlots = new string[3]
+                    }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 1, type = MatchEventTypes.CardPlayed,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", cardId = "ed_005", cardType = "SPELL", effectId = "effect.ed_005.01",
+                            redstone = 0, temporaryRedstone = 0, totalRedstone = 0, handCount = 0, discardCount = 1,
+                            cardsPlayedThisTurn = 1
+                        }
+                    },
+                    new MatchEventDto
+                    {
+                        eventId = 2, type = MatchEventTypes.ObjectReturned,
+                        payload = new MatchEventPayloadDto
+                        {
+                            instanceId = "object-owned-by-bob", cardId = "pf_004", ownerPlayerId = "bob",
+                            controllerPlayerId = "alice", sourcePlayerId = "alice", sourceCardId = "ed_005",
+                            sourceInstanceId = "effect-2", effectId = "effect.ed_005.01", fromSlotKind = "UNIT",
+                            fromSlotIndex = 1, destination = "HAND",
+                            returnedHandCardInstanceId = viewerOwnsReturnedUnit ? "hand-91" : string.Empty,
+                            costModifier = viewerOwnsReturnedUnit ? -2 : 0,
+                            expiresAtEndOfTurnPlayerId = viewerOwnsReturnedUnit ? "alice" : string.Empty,
+                            ownerHandCount = 1, ownerDiscardCount = 0
+                        }
+                    }
+                },
+                handProjection = viewerOwnsReturnedUnit
+                    ? new HandProjectionDto
+                    {
+                        ownPlayerId = "bob",
+                        ownHand = new[] { "pf_004" },
+                        ownHandCards = new[]
+                        {
+                            new HandCardStateDto
+                            {
+                                handCardInstanceId = "hand-91", cardId = "pf_004", costModifier = -2,
+                                expiresAtEndOfTurnPlayerId = "alice"
+                            }
+                        },
+                        opponentPlayerId = "alice", opponentHandCount = 0
+                    }
+                    : new HandProjectionDto
+                    {
+                        ownPlayerId = "alice", ownHand = Array.Empty<string>(),
+                        ownHandCards = Array.Empty<HandCardStateDto>(), opponentPlayerId = "bob", opponentHandCount = 1
+                    }
+            });
+
+            Assert.That(store.Current.players[0].battlefield, Is.Empty);
+            Assert.That(store.Current.players[0].unitSlots[1], Is.Null);
+            Assert.That(store.Current.players[1].hand, Has.Length.EqualTo(1));
+            if (viewerOwnsReturnedUnit)
+            {
+                Assert.That(store.Current.players[1].hand[0], Is.EqualTo("pf_004"));
+                Assert.That(store.Current.players[1].handCards.Single().handCardInstanceId, Is.EqualTo("hand-91"));
+                Assert.That(store.Current.players[1].handCards.Single().costModifier, Is.EqualTo(-2));
+                Assert.That(store.Current.players[1].handCards.Single().expiresAtEndOfTurnPlayerId, Is.EqualTo("alice"));
+            }
+            else
+            {
+                Assert.That(string.IsNullOrEmpty(store.Current.players[1].hand[0]), Is.True);
+                Assert.That(store.Current.players[1].handCards, Has.Length.EqualTo(1));
+                Assert.That(store.Current.players[1].handCards[0], Is.Null);
+            }
+        }
+
+        [Test]
+        public void Apply_ReplaysAuraLossAfterReturningItsSource()
+        {
+            var store = new MatchStateStore();
+            ReplaceSnapshot(store, new MatchStateDto
+            {
+                matchId = "return-aura-source-replay", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                status = "ACTIVE", turn = 1, phase = "MAIN", activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto
+                    {
+                        playerId = "alice", life = 30, redstone = 1, totalRedstone = 1, redstoneCapacity = 1,
+                        hand = new[] { "ed_002" },
+                        unitSlots = new[] { null, "object-1", "object-2", null }, buildingSlots = new string[3],
+                        battlefield = new[]
+                        {
+                            new BattlefieldObjectStateDto
+                            {
+                                instanceId = "object-1", ownerPlayerId = "alice", cardId = "or_005", cardType = "UNIT",
+                                slotKind = "UNIT", slotIndex = 1, occupiedSlots = 1, attack = 3, health = 5,
+                                maxHealth = 5, summonedTurn = 1
+                            },
+                            new BattlefieldObjectStateDto
+                            {
+                                instanceId = "object-2", ownerPlayerId = "alice", cardId = "or_001", cardType = "UNIT",
+                                slotKind = "UNIT", slotIndex = 2, occupiedSlots = 1, attack = 1, health = 3,
+                                maxHealth = 3, adjacencyHealthModifier = 1, summonedTurn = 1
+                            }
+                        }
+                    },
+                    new PlayerStateDto { playerId = "bob", life = 30, unitSlots = new string[4], buildingSlots = new string[3] }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 1, type = MatchEventTypes.CardPlayed,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", cardId = "ed_002", cardType = "MATERIAL", effectId = "effect.ed_002.01",
+                            redstone = 0, totalRedstone = 0, handCount = 0, discardCount = 1, cardsPlayedThisTurn = 1
+                        }
+                    },
+                    new MatchEventDto
+                    {
+                        eventId = 2, type = MatchEventTypes.ObjectReturned,
+                        payload = new MatchEventPayloadDto
+                        {
+                            instanceId = "object-1", cardId = "or_005", ownerPlayerId = "alice",
+                            controllerPlayerId = "alice", sourcePlayerId = "alice", sourceCardId = "ed_002",
+                            sourceInstanceId = "effect-2", effectId = "effect.ed_002.01", fromSlotKind = "UNIT",
+                            fromSlotIndex = 1, destination = "HAND", returnedHandCardInstanceId = "hand-92",
+                            costModifier = -1, expiresAtEndOfTurnPlayerId = "alice", ownerHandCount = 1, ownerDiscardCount = 1
+                        }
+                    },
+                    new MatchEventDto
+                    {
+                        eventId = 3, type = MatchEventTypes.ObjectStatsChanged,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "alice", instanceId = "object-2", sourceCardId = "or_005",
+                            effectId = "effect.or_005.01", reason = "AURA_RECALCULATED",
+                            attack = 1, health = 2, maxHealth = 2, adjacencyHealthModifier = 0
+                        }
+                    }
+                },
+                handProjection = new HandProjectionDto
+                {
+                    ownPlayerId = "alice", ownHand = new[] { "or_005" },
+                    ownHandCards = new[] { new HandCardStateDto
+                    {
+                        handCardInstanceId = "hand-92", cardId = "or_005", costModifier = -1,
+                        expiresAtEndOfTurnPlayerId = "alice"
+                    } },
+                    opponentPlayerId = "bob", opponentHandCount = 0
+                }
+            });
+
+            Assert.That(store.Current.players[0].battlefield.Select(value => value.instanceId), Is.EqualTo(new[] { "object-2" }));
+            Assert.That(store.Current.players[0].battlefield[0].adjacencyHealthModifier, Is.Zero);
+            Assert.That(store.Current.players[0].battlefield[0].health, Is.EqualTo(2));
+            Assert.That(store.Current.players[0].battlefield[0].maxHealth, Is.EqualTo(2));
+        }
+
+        [Test]
         public void Apply_TerminalEndTurnProjectionClearsExpiredHandDiscountAndKeepsOpponentHandPrivate()
         {
             var store = new MatchStateStore();
@@ -229,6 +647,7 @@ namespace BiomeRivals.Core.Tests
                         payload = new MatchEventPayloadDto
                         {
                             playerId = "alice", handCardInstanceId = "hand-1", cardId = "pf_001",
+                            expiredAtEndOfTurnPlayerId = "alice",
                             expiredCostModifier = -1, costModifier = 0, effectiveCost = 1
                         }
                     },
@@ -257,6 +676,107 @@ namespace BiomeRivals.Core.Tests
             Assert.That(store.Current.players[1].hand, Is.EqualTo(new string[] { null }));
             Assert.That(store.Current.players[1].handCards, Has.Length.EqualTo(1));
             Assert.That(store.Current.players[1].handCards[0], Is.Null);
+        }
+
+        [Test]
+        public void Apply_ExpiresReturnedOpponentOwnedCardAtTheActingPlayersEndTurn()
+        {
+            var store = new MatchStateStore();
+            ReplaceSnapshot(store, new MatchStateDto
+            {
+                matchId = "returned-card-owner-expiry", viewerPlayerId = "bob",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                revision = 0, lastEventId = 0, status = "ACTIVE", turn = 1, phase = "MAIN", activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice", hand = new string[] { null } },
+                    new PlayerStateDto
+                    {
+                        playerId = "bob", hand = new[] { "pf_001" },
+                        handCards = new[] { new HandCardStateDto
+                        {
+                            handCardInstanceId = "hand-92", cardId = "pf_001", costModifier = -2,
+                            expiresAtEndOfTurnPlayerId = "alice"
+                        } }
+                    }
+                }
+            });
+
+            store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 1, type = MatchEventTypes.HandCardCostModifierExpired,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "bob", expiredAtEndOfTurnPlayerId = "alice",
+                            handCardInstanceId = "hand-92", cardId = "pf_001",
+                            expiredCostModifier = -2, costModifier = 0, effectiveCost = 1
+                        }
+                    }
+                },
+                handProjection = new HandProjectionDto
+                {
+                    ownPlayerId = "bob", ownHand = new[] { "pf_001" },
+                    ownHandCards = new[] { new HandCardStateDto
+                    {
+                        handCardInstanceId = "hand-92", cardId = "pf_001", costModifier = 0
+                    } },
+                    opponentPlayerId = "alice", opponentHandCount = 1
+                }
+            });
+
+            Assert.That(store.Current.players[1].handCards[0].costModifier, Is.Zero);
+            Assert.That(store.Current.players[1].handCards[0].expiresAtEndOfTurnPlayerId, Is.Empty);
+            Assert.That(store.Current.players[0].hand, Is.EqualTo(new string[] { null }));
+        }
+
+        [Test]
+        public void Apply_RejectsCrossOwnerCostExpiryThatLeaksTheOpponentsCardInstance()
+        {
+            var store = new MatchStateStore();
+            ReplaceSnapshot(store, new MatchStateDto
+            {
+                matchId = "private-returned-card-expiry", viewerPlayerId = "alice",
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset,
+                revision = 0, lastEventId = 0, status = "ACTIVE", turn = 1, phase = "MAIN", activePlayerIndex = 0,
+                players = new[]
+                {
+                    new PlayerStateDto { playerId = "alice" },
+                    new PlayerStateDto
+                    {
+                        playerId = "bob", hand = new string[] { null },
+                        handCards = new HandCardStateDto[] { null }
+                    }
+                }
+            });
+
+            Assert.Throws<InvalidOperationException>(() => store.Apply(new MatchEventBatchDto
+            {
+                protocolVersion = GameVersions.Protocol, rulesetVersion = GameVersions.Ruleset, revision = 1,
+                events = new[]
+                {
+                    new MatchEventDto
+                    {
+                        eventId = 1, type = MatchEventTypes.HandCardCostModifierExpired,
+                        payload = new MatchEventPayloadDto
+                        {
+                            playerId = "bob", expiredAtEndOfTurnPlayerId = "alice",
+                            handCardInstanceId = "hand-92", cardId = "pf_001",
+                            expiredCostModifier = -2, costModifier = 0, effectiveCost = 1
+                        }
+                    }
+                },
+                handProjection = new HandProjectionDto
+                {
+                    ownPlayerId = "alice", ownHand = Array.Empty<string>(),
+                    ownHandCards = Array.Empty<HandCardStateDto>(),
+                    opponentPlayerId = "bob", opponentHandCount = 1
+                }
+            }));
         }
 
         [Test]
@@ -3616,6 +4136,17 @@ namespace BiomeRivals.Core.Tests
         }
 
         [Test]
+        public void Replace_RejectsBattlefieldInstanceIdsDuplicatedAcrossPlayers()
+        {
+            var target = CreateWitheredUnit(2, 4);
+            target.instanceId = "object-99";
+            var snapshot = CreateWitherSnapshot(target);
+            snapshot.players[1].unitSlots[0] = "object-99";
+
+            Assert.Throws<InvalidOperationException>(() => new MatchStateStore().Replace(snapshot));
+        }
+
+        [Test]
         public void Apply_ReplaysWitherTrueDamageTickAndExpiryInOrder()
         {
             var target = CreateWitheredUnit(2, 4);
@@ -3934,6 +4465,9 @@ namespace BiomeRivals.Core.Tests
         {
             foreach (var player in snapshot.players ?? Array.Empty<PlayerStateDto>())
             {
+                foreach (var battlefieldObject in player.battlefield ?? Array.Empty<BattlefieldObjectStateDto>())
+                    if (battlefieldObject != null && string.IsNullOrWhiteSpace(battlefieldObject.ownerPlayerId))
+                        battlefieldObject.ownerPlayerId = player.playerId;
                 if (player.hand == null) player.hand = Array.Empty<string>();
                 if (player.handCards != null && player.handCards.Length > 0) continue;
                 if (player.playerId == snapshot.viewerPlayerId)

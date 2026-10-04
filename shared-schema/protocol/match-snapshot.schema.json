@@ -4,11 +4,12 @@
   "title": "MatchSnapshot",
   "type": "object",
   "additionalProperties": false,
-  "required": ["matchId", "viewerPlayerId", "protocolVersion", "rulesetVersion", "revision", "lastEventId", "status", "turn", "phase", "activePlayerIndex", "nextInstanceId", "players", "pendingChoice", "winnerPlayerId"],
+  "required": ["matchId", "viewerPlayerId", "arenaId", "protocolVersion", "rulesetVersion", "revision", "lastEventId", "status", "turn", "phase", "activePlayerIndex", "nextInstanceId", "players", "pendingChoice", "winnerPlayerId"],
   "properties": {
     "matchId": { "type": "string", "minLength": 1 },
     "viewerPlayerId": { "type": "string", "minLength": 1 },
-    "protocolVersion": { "const": 37 },
+    "arenaId": { "enum": ["standard_meadow", "plains_sunrise", "deep_caverns", "nether_lava_sea", "end_void", "deep_ocean", "desert_storm"] },
+    "protocolVersion": { "const": 40 },
     "rulesetVersion": { "type": "string", "minLength": 1 },
     "revision": { "type": "integer", "minimum": 0 },
     "lastEventId": { "type": "integer", "minimum": 0 },
@@ -93,20 +94,21 @@
             }
           },
           "unitSlots": {
-            "type": "array", "minItems": 4, "maxItems": 4,
+            "type": "array", "minItems": 3, "maxItems": 5,
             "items": { "type": ["string", "null"], "pattern": "^object-[0-9]+$" }
           },
           "buildingSlots": {
-            "type": "array", "minItems": 3, "maxItems": 3,
+            "type": "array", "minItems": 2, "maxItems": 4,
             "items": { "type": ["string", "null"], "pattern": "^object-[0-9]+$" }
           },
           "battlefield": {
             "type": "array",
             "items": {
               "type": "object", "additionalProperties": false,
-              "required": ["instanceId", "cardId", "cardType", "attack", "health", "maxHealth", "adjacencyHealthModifier", "slotKind", "slotIndex", "occupiedSlots", "summonedTurn", "hasAttacked", "keywords", "temporaryAttackModifier", "temporaryAttackModifierExpiresOnTurn", "temporaryHealthModifier", "temporaryHealthModifierExpiresOnTurn", "statuses"],
+              "required": ["instanceId", "ownerPlayerId", "cardId", "cardType", "attack", "health", "maxHealth", "adjacencyHealthModifier", "slotKind", "slotIndex", "occupiedSlots", "summonedTurn", "hasAttacked", "keywords", "temporaryAttackModifier", "temporaryAttackModifierExpiresOnTurn", "temporaryHealthModifier", "temporaryHealthModifierExpiresOnTurn", "statuses"],
               "properties": {
                 "instanceId": { "type": "string", "pattern": "^object-[0-9]+$" },
+                "ownerPlayerId": { "type": "string", "minLength": 1 },
                 "cardId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
                 "cardType": { "enum": ["UNIT", "BUILDING", "STRUCTURE"] },
                 "attack": { "type": "integer", "minimum": 0 },
@@ -177,7 +179,7 @@
             "properties": {
               "optionIndex": { "type": "integer", "minimum": 0, "maximum": 3 },
               "cardId": { "type": ["string", "null"], "pattern": "^[a-z0-9_]+$" },
-              "slotIndex": { "type": "integer", "minimum": -1, "maximum": 3 },
+              "slotIndex": { "type": "integer", "minimum": -1, "maximum": 4 },
               "selectable": { "type": "boolean" }
             }
           }
@@ -187,6 +189,34 @@
     "winnerPlayerId": { "type": ["string", "null"] }
   },
   "allOf": [
+    {
+      "if": { "properties": { "arenaId": { "const": "standard_meadow" } }, "required": ["arenaId"] },
+      "then": { "properties": { "players": { "items": { "properties": { "unitSlots": { "minItems": 4, "maxItems": 4 }, "buildingSlots": { "minItems": 3, "maxItems": 3 } } } } } }
+    },
+    {
+      "if": { "properties": { "arenaId": { "const": "plains_sunrise" } }, "required": ["arenaId"] },
+      "then": { "properties": { "players": { "items": { "properties": { "unitSlots": { "minItems": 4, "maxItems": 4 }, "buildingSlots": { "minItems": 3, "maxItems": 3 } } } } } }
+    },
+    {
+      "if": { "properties": { "arenaId": { "const": "deep_caverns" } }, "required": ["arenaId"] },
+      "then": { "properties": { "players": { "items": { "properties": { "unitSlots": { "minItems": 5, "maxItems": 5 }, "buildingSlots": { "minItems": 2, "maxItems": 2 } } } } } }
+    },
+    {
+      "if": { "properties": { "arenaId": { "const": "nether_lava_sea" } }, "required": ["arenaId"] },
+      "then": { "properties": { "players": { "items": { "properties": { "unitSlots": { "minItems": 3, "maxItems": 3 }, "buildingSlots": { "minItems": 4, "maxItems": 4 } } } } } }
+    },
+    {
+      "if": { "properties": { "arenaId": { "const": "end_void" } }, "required": ["arenaId"] },
+      "then": { "properties": { "players": { "items": { "properties": { "unitSlots": { "minItems": 3, "maxItems": 3 }, "buildingSlots": { "minItems": 4, "maxItems": 4 } } } } } }
+    },
+    {
+      "if": { "properties": { "arenaId": { "const": "deep_ocean" } }, "required": ["arenaId"] },
+      "then": { "properties": { "players": { "items": { "properties": { "unitSlots": { "minItems": 4, "maxItems": 4 }, "buildingSlots": { "minItems": 3, "maxItems": 3 } } } } } }
+    },
+    {
+      "if": { "properties": { "arenaId": { "const": "desert_storm" } }, "required": ["arenaId"] },
+      "then": { "properties": { "players": { "items": { "properties": { "unitSlots": { "minItems": 4, "maxItems": 4 }, "buildingSlots": { "minItems": 3, "maxItems": 3 } } } } } }
+    },
     {
       "if": { "properties": { "status": { "const": "ACTIVE" }, "activePlayerIndex": { "const": 0 } } },
       "then": { "properties": { "players": { "prefixItems": [{}, { "properties": { "temporaryRedstone": { "const": 0 } } }] } } }
@@ -198,6 +228,17 @@
     {
       "if": { "properties": { "status": { "not": { "const": "ACTIVE" } } } },
       "then": { "properties": { "players": { "items": { "properties": { "temporaryRedstone": { "const": 0 } } } } } }
+    },
+    {
+      "if": { "properties": { "status": { "const": "FINISHED" }, "winnerPlayerId": { "type": "null" } } },
+      "then": { "properties": { "players": { "prefixItems": [
+        { "properties": { "life": { "const": 0 } } },
+        { "properties": { "life": { "const": 0 } } }
+      ] } } }
+    },
+    {
+      "if": { "properties": { "status": { "not": { "const": "FINISHED" } } } },
+      "then": { "properties": { "winnerPlayerId": { "type": "null" } } }
     }
   ]
 }

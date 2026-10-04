@@ -51,6 +51,12 @@ function eventStream(playerIndex) {
 async function createPlayer(index, factionId) {
   const client = new Client(serverKey, host, port, false);
   const session = await client.authenticateDevice(`biome-rivals-smoke-${index}-${randomUUID()}`, true);
+  const healthResponse = await client.rpc(session, 'biome_rivals_health', {});
+  const health = healthResponse.payload;
+  if (health?.ok !== true || health.protocolVersion !== 40 || health.rulesetVersion !== 'prototype-0.65' ||
+      health.cardContentVersion !== 42 || health.implementedEffectRegistryVersion !== 48) {
+    throw new Error(`server health version mismatch: ${JSON.stringify(health)}`);
+  }
   const socket = client.createSocket(false, false);
   const matched = deferred(`player ${index} matchmaking`);
   const snapshot = deferred(`player ${index} snapshot`);
@@ -86,8 +92,15 @@ try {
   const snapshots = await Promise.all(players.map((player) => player.snapshot.promise));
   for (let index = 0; index < players.length; index += 1) {
     const snapshot = snapshots[index];
-    if (snapshot.protocolVersion !== 36 || snapshot.rulesetVersion !== 'prototype-0.61') {
+    if (snapshot.protocolVersion !== 40 || snapshot.rulesetVersion !== 'prototype-0.65') {
       throw new Error(`snapshot ${index + 1} version mismatch: ${snapshot.protocolVersion}/${snapshot.rulesetVersion}`);
+    }
+    if (snapshot.arenaId !== 'standard_meadow') {
+      throw new Error(`snapshot ${index + 1} arena mismatch: expected standard_meadow, got ${snapshot.arenaId}`);
+    }
+    if (snapshot.players.length !== 2 || snapshot.players.some((entry) =>
+      entry.units.length !== 4 || entry.buildings.length !== 3)) {
+      throw new Error(`snapshot ${index + 1} does not contain symmetric standard_meadow 4/3 rows`);
     }
     const ownPlayer = snapshot.players.find((entry) => entry.playerId === snapshot.viewerPlayerId);
     if (ownPlayer?.factionId !== players[index].factionId) {
@@ -144,6 +157,9 @@ try {
     players: players.map((player) => player.session.user_id),
     factions: players.map((player) => player.factionId),
     initialRevision: snapshots[0].revision,
+    arenaId: snapshots[0].arenaId,
+    unitSlotCount: snapshots[0].players[0].units.length,
+    buildingSlotCount: snapshots[0].players[0].buildings.length,
     openingRevision: openingBatches[0][1].revision,
     acknowledgedCommandId: commandId,
     resultingRevision: turnBatches[0].revision

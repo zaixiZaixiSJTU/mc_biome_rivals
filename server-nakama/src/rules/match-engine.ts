@@ -94,7 +94,8 @@ namespace BiomeRivalsRules {
     playerId: string,
     startingCards: number,
     factionId: FactionId,
-    randomState: AuthoritativeRandomState
+    randomState: AuthoritativeRandomState,
+    arenaLayout: ArenaLayout
   ): PlayerState {
     const deck = prototypeDeck(FACTION_CARD_PREFIXES[factionId]!, randomState);
     const hand: string[] = [];
@@ -122,8 +123,8 @@ namespace BiomeRivalsRules {
       heroLifeLostThisTurn: false,
       triggeredEffectKeysThisTurn: [],
       statuses: [],
-      unitSlots: [null, null, null, null],
-      buildingSlots: [null, null, null],
+      unitSlots: new Array<string | null>(arenaLayout.unitSlotCount).fill(null),
+      buildingSlots: new Array<string | null>(arenaLayout.buildingSlotCount).fill(null),
       battlefield: []
     };
   }
@@ -132,10 +133,13 @@ namespace BiomeRivalsRules {
     matchId: string,
     playerIds: string[],
     factionIds: FactionId[] | undefined,
-    authoritativeRandomSeed: string
+    authoritativeRandomSeed: string,
+    arenaId: ArenaId = DEFAULT_ARENA_ID
   ): MatchState {
     if (!matchId) throw new Error('matchId is required');
     if (!authoritativeRandomSeed) throw new Error('authoritativeRandomSeed is required');
+    if (!isArenaId(arenaId)) throw new Error('arenaId is unsupported');
+    const arenaLayout = ARENA_LAYOUTS[arenaId]!;
     if (playerIds.length !== 2 || !playerIds[0] || !playerIds[1] || playerIds[0] === playerIds[1]) {
       throw new Error('exactly two unique player ids are required');
     }
@@ -153,6 +157,7 @@ namespace BiomeRivalsRules {
     const orderedFactions = initiativeSourceIndex === 0 ? selectedFactions : [selectedFactions[1]!, selectedFactions[0]!];
     const state: MatchState = {
       matchId: matchId,
+      arenaId: arenaId,
       authoritativeRandomSeed: randomState.authoritativeRandomSeed,
       authoritativeRandomCounter: randomState.authoritativeRandomCounter,
       protocolVersion: PROTOCOL_VERSION,
@@ -166,8 +171,8 @@ namespace BiomeRivalsRules {
       nextInstanceId: 1,
       nextHandCardInstanceId: 1,
       players: [
-        makePlayer(orderedPlayerIds[0]!, 3, orderedFactions[0]!, randomState),
-        makePlayer(orderedPlayerIds[1]!, 4, orderedFactions[1]!, randomState)
+        makePlayer(orderedPlayerIds[0]!, 3, orderedFactions[0]!, randomState, arenaLayout),
+        makePlayer(orderedPlayerIds[1]!, 4, orderedFactions[1]!, randomState, arenaLayout)
       ],
       pendingChoice: null,
       winnerPlayerId: null,
@@ -195,6 +200,7 @@ namespace BiomeRivalsRules {
     return {
       matchId: state.matchId,
       viewerPlayerId: viewerPlayerId,
+      arenaId: state.arenaId,
       protocolVersion: state.protocolVersion,
       rulesetVersion: state.rulesetVersion,
       revision: state.revision,
@@ -255,7 +261,7 @@ namespace BiomeRivalsRules {
           buildingSlots: player.buildingSlots.slice(),
           battlefield: player.battlefield.map(function (object): BattlefieldObjectState {
             return {
-              instanceId: object.instanceId, cardId: object.cardId, cardType: object.cardType,
+              instanceId: object.instanceId, ownerPlayerId: object.ownerPlayerId, cardId: object.cardId, cardType: object.cardType,
               attack: object.attack, health: object.health, maxHealth: object.maxHealth,
               adjacencyHealthModifier: object.adjacencyHealthModifier,
               slotKind: object.slotKind, slotIndex: object.slotIndex, occupiedSlots: object.occupiedSlots,
@@ -310,6 +316,7 @@ namespace BiomeRivalsRules {
     const projected: MatchEventBatch = {
       protocolVersion: batch.protocolVersion,
       rulesetVersion: batch.rulesetVersion,
+      arenaId: batch.arenaId,
       revision: batch.revision,
       acknowledgedCommandId: batch.acknowledgedCommandId,
       events: batch.events.map(function (event): MatchEvent {
@@ -343,6 +350,11 @@ namespace BiomeRivalsRules {
           payload.costModifier = null;
           payload.effectiveCost = null;
         }
+        if (event.type === 'OBJECT_RETURNED' && payload.ownerPlayerId !== viewerPlayerId && payload.destination === 'HAND') {
+          payload.returnedHandCardInstanceId = null;
+          payload.costModifier = null;
+          payload.expiresAtEndOfTurnPlayerId = null;
+        }
         return { eventId: event.eventId, type: event.type, payload: payload };
       })
     };
@@ -373,6 +385,7 @@ namespace BiomeRivalsRules {
   function cloneState(state: MatchState): MatchState {
     return {
       matchId: state.matchId,
+      arenaId: state.arenaId,
       authoritativeRandomSeed: state.authoritativeRandomSeed,
       authoritativeRandomCounter: state.authoritativeRandomCounter,
       protocolVersion: state.protocolVersion,
@@ -430,6 +443,7 @@ namespace BiomeRivalsRules {
           battlefield: player.battlefield.map(function (object): BattlefieldObjectState {
             return {
               instanceId: object.instanceId,
+              ownerPlayerId: object.ownerPlayerId,
               cardId: object.cardId,
               cardType: object.cardType,
               attack: object.attack,
@@ -645,26 +659,29 @@ namespace BiomeRivalsRules {
         redstoneCapacity: player.redstoneCapacity
       });
     }
-    function expireHandCardCostModifiers(player: PlayerState): void {
-      player.handCards.forEach(function (card): void {
-        if (card.costModifier === 0 || card.expiresAtEndOfTurnPlayerId !== player.playerId) return;
-        const expiredModifier = card.costModifier;
-        card.costModifier = 0;
-        card.expiresAtEndOfTurnPlayerId = null;
-        emit('HAND_CARD_COST_MODIFIER_EXPIRED', {
-          playerId: player.playerId,
-          handCardInstanceId: card.handCardInstanceId,
-          cardId: card.cardId,
-          expiredCostModifier: expiredModifier,
-          costModifier: 0,
-          effectiveCost: getEffectiveCardCost(player, getCardDefinition(card.cardId)!, card.handCardInstanceId)
+    function expireHandCardCostModifiers(expiringPlayerId: string): void {
+      next.players.forEach(function (handOwner): void {
+        handOwner.handCards.forEach(function (card): void {
+          if (card.costModifier === 0 || card.expiresAtEndOfTurnPlayerId !== expiringPlayerId) return;
+          const expiredModifier = card.costModifier;
+          card.costModifier = 0;
+          card.expiresAtEndOfTurnPlayerId = null;
+          emit('HAND_CARD_COST_MODIFIER_EXPIRED', {
+            playerId: handOwner.playerId,
+            expiredAtEndOfTurnPlayerId: expiringPlayerId,
+            handCardInstanceId: card.handCardInstanceId,
+            cardId: card.cardId,
+            expiredCostModifier: expiredModifier,
+            costModifier: 0,
+            effectiveCost: getEffectiveCardCost(handOwner, getCardDefinition(card.cardId)!, card.handCardInstanceId)
+          });
         });
       });
     }
     function emit(type: EventType, payload: { [key: string]: unknown }): void {
       if (type === 'MATCH_ENDED') {
         expireTemporaryRedstone(next.players[next.activePlayerIndex]!);
-        if (command.type === 'END_TURN') expireHandCardCostModifiers(next.players[actorIndex]!);
+        if (command.type === 'END_TURN') expireHandCardCostModifiers(next.players[actorIndex]!.playerId);
       }
       if (type === 'OBJECT_STATS_CHANGED' && typeof payload.playerId === 'string' && typeof payload.instanceId === 'string') {
         const eventPlayer = next.players.filter(function (candidate): boolean { return candidate.playerId === payload.playerId; })[0];
@@ -943,6 +960,7 @@ namespace BiomeRivalsRules {
       player.cardsPlayedThisTurn += 1;
       const battlefieldObject: BattlefieldObjectState = {
         instanceId: instanceId,
+        ownerPlayerId: player.playerId,
         cardId: cardId,
         cardType: objectCardType,
         attack: definition.attack + (paymentMethod === 'CRAFTING' ? definition.craftedAttackBonus : 0),
@@ -2157,6 +2175,7 @@ namespace BiomeRivalsRules {
       const summonedIntoCurrentEdge = slotIndex === leftmostEmptySlot || slotIndex === rightmostEmptySlot;
       const object: BattlefieldObjectState = {
         instanceId: 'object-' + next.nextInstanceId,
+        ownerPlayerId: player.playerId,
         cardId: cardId,
         cardType: 'UNIT',
         attack: definition.attack,
@@ -2652,11 +2671,15 @@ namespace BiomeRivalsRules {
 
     function finishForSelfDefeat(player: PlayerState, reason: string): boolean {
       if (player.life > 0) return false;
-      const winner = next.players[0]!.playerId === player.playerId ? next.players[1]! : next.players[0]!;
+      const opponent = next.players[0]!.playerId === player.playerId ? next.players[1]! : next.players[0]!;
+      const simultaneousDefeat = opponent.life <= 0;
       next.status = 'FINISHED';
       next.pendingChoice = null;
-      next.winnerPlayerId = winner.playerId;
-      emit('MATCH_ENDED', { winnerPlayerId: next.winnerPlayerId, reason: reason });
+      next.winnerPlayerId = simultaneousDefeat ? null : opponent.playerId;
+      emit('MATCH_ENDED', {
+        winnerPlayerId: next.winnerPlayerId,
+        reason: simultaneousDefeat ? 'SIMULTANEOUS_DEFEAT' : reason
+      });
       return true;
     }
 
@@ -2679,7 +2702,8 @@ namespace BiomeRivalsRules {
           effectId !== 'effect.pf_006.01' && effectId !== 'effect.pf_007.01' &&
           effectId !== 'effect.si_001.01' && effectId !== 'effect.si_006.01' && effectId !== 'effect.tk_005.01' &&
           effectId !== 'effect.tk_001.01' && effectId !== 'effect.tk_002.01' && effectId !== 'effect.tk_009.01' && effectId !== 'effect.tk_010.01' && effectId !== 'effect.tk_012.01' && effectId !== 'effect.or_006.01' &&
-          effectId !== 'effect.tk_013.01' && effectId !== 'effect.tk_016.01') {
+          effectId !== 'effect.tk_013.01' && effectId !== 'effect.tk_016.01' &&
+          effectId !== 'effect.ed_002.01' && effectId !== 'effect.ed_005.01') {
         return reject(state, 'EFFECT_NOT_IMPLEMENTED', 'effect handler is not registered');
       }
       const player = next.players[actorIndex]!;
@@ -2705,19 +2729,24 @@ namespace BiomeRivalsRules {
           if (left.slotIndex !== right.slotIndex) return left.slotIndex - right.slotIndex;
           return left.instanceId < right.instanceId ? -1 : left.instanceId > right.instanceId ? 1 : 0;
         });
-      } else if (effectId === 'effect.si_001.01' || effectId === 'effect.si_006.01' || effectId === 'effect.tk_013.01' ||
+      } else if (effectId === 'effect.ed_002.01' || effectId === 'effect.ed_005.01' ||
+          effectId === 'effect.si_001.01' || effectId === 'effect.si_006.01' || effectId === 'effect.tk_013.01' ||
           effectId === 'effect.tk_001.01' || effectId === 'effect.tk_002.01' || effectId === 'effect.tk_009.01' || effectId === 'effect.tk_012.01') {
         if (command.payload.targetType !== 'UNIT' || typeof command.payload.targetInstanceId !== 'string') {
           return reject(state, 'INVALID_TARGET', effectId === 'effect.tk_001.01' || effectId === 'effect.tk_002.01' || effectId === 'effect.tk_009.01' || effectId === 'effect.tk_012.01'
             ? 'material requires a friendly unit target'
             : effectId === 'effect.tk_013.01' ? 'blaze rod requires an enemy unit target' : 'snow spell requires an enemy unit target');
         }
-        targetedPlayer = effectId === 'effect.tk_001.01' || effectId === 'effect.tk_002.01' || effectId === 'effect.tk_009.01' || effectId === 'effect.tk_012.01' ? player : opponent;
+        targetedPlayer = effectId === 'effect.ed_002.01' || effectId === 'effect.ed_005.01' || effectId === 'effect.tk_001.01' || effectId === 'effect.tk_002.01' || effectId === 'effect.tk_009.01' || effectId === 'effect.tk_012.01' ? player : opponent;
         targetedObject = findObject(targetedPlayer, command.payload.targetInstanceId);
         if (targetedObject === null || targetedObject.cardType !== 'UNIT' || targetedObject.health <= 0) {
           return reject(state, 'INVALID_TARGET', effectId === 'effect.tk_001.01' || effectId === 'effect.tk_002.01' || effectId === 'effect.tk_009.01' || effectId === 'effect.tk_012.01'
             ? 'material target must be a living friendly unit'
             : effectId === 'effect.tk_013.01' ? 'blaze rod target must be a living enemy unit' : 'snow spell target must be a living enemy unit');
+        }
+        if ((effectId === 'effect.ed_005.01') && targetedObject.cardId === 'tk_017' &&
+            targetedPlayer.playerId === player.playerId) {
+          return reject(state, 'INVALID_TARGET', 'ender dragon avatar cannot be returned by its controller\'s spell');
         }
         if (effectId === 'effect.tk_012.01') {
           const hasAdjacentEmptySlot = [targetedObject.slotIndex - 1, targetedObject.slotIndex + 1].some(function (slotIndex): boolean {
@@ -2751,6 +2780,7 @@ namespace BiomeRivalsRules {
       });
       if (handIndex < 0) return reject(state, 'CARD_NOT_IN_HAND', 'card is not in the active players hand');
       const selectedHandCard = player.handCards[handIndex]!;
+      const sourceHandCardInstanceId = selectedHandCard.handCardInstanceId;
       const effectiveCost = getEffectiveCardCost(player, definition, selectedHandCard.handCardInstanceId);
       if (effectiveCost > getAvailableRedstone(player)) return reject(state, 'INSUFFICIENT_REDSTONE', 'not enough redstone');
 
@@ -2806,6 +2836,57 @@ namespace BiomeRivalsRules {
       const effectSourceInstanceId = 'effect-' + String(next.lastEventId);
 
       switch (effectId) {
+        case 'effect.ed_002.01':
+        case 'effect.ed_005.01': {
+          if (targetedObject === null || targetedPlayer === null) throw new Error('validated end return target was not resolved');
+          const currentTarget = targetedPlayer.battlefield.filter(function (object): boolean {
+            return object.instanceId === targetedObject!.instanceId && object.health > 0 && object.cardType === 'UNIT';
+          })[0];
+          if (!currentTarget) return completePlayedCard(player, opponent);
+          const owner = next.players.filter(function (candidate): boolean {
+            return candidate.playerId === currentTarget.ownerPlayerId;
+          })[0];
+          if (!owner) throw new Error('returned object owner is not a match player');
+          const row = currentTarget.slotKind === 'UNIT' ? targetedPlayer.unitSlots : targetedPlayer.buildingSlots;
+          for (let occupied = currentTarget.slotIndex; occupied < currentTarget.slotIndex + currentTarget.occupiedSlots; occupied += 1) {
+            if (row[occupied] === currentTarget.instanceId) row[occupied] = null;
+          }
+          targetedPlayer.battlefield = targetedPlayer.battlefield.filter(function (object): boolean {
+            return object.instanceId !== currentTarget.instanceId;
+          });
+          const returnedCardId = currentTarget.cardId;
+          const costModifier = effectId === 'effect.ed_002.01' ? -1 : -2;
+          let returnedHandCard: HandCardState | null = null;
+          let destination: 'HAND' | 'DISCARD' = 'HAND';
+          if (owner.hand.length < 7) {
+            returnedHandCard = appendHandCard(next, owner, returnedCardId, costModifier, player.playerId);
+          } else {
+            destination = 'DISCARD';
+            owner.discardPile.push(returnedCardId);
+          }
+          emit('OBJECT_RETURNED', {
+            instanceId: currentTarget.instanceId,
+            cardId: returnedCardId,
+            ownerPlayerId: owner.playerId,
+            controllerPlayerId: targetedPlayer.playerId,
+            sourcePlayerId: player.playerId,
+            sourceCardId: cardId,
+            sourceInstanceId: effectSourceInstanceId,
+            effectId: effectId,
+            fromSlotKind: currentTarget.slotKind,
+            fromSlotIndex: currentTarget.slotIndex,
+            destination: destination,
+            returnedHandCardInstanceId: returnedHandCard === null ? null : returnedHandCard.handCardInstanceId,
+            costModifier: returnedHandCard === null ? 0 : costModifier,
+            expiresAtEndOfTurnPlayerId: returnedHandCard === null ? null : player.playerId,
+            ownerHandCount: owner.hand.length,
+            ownerDiscardCount: owner.discardPile.length
+          });
+          recalculateAdjacencyHealthAuras();
+          settleDeaths(player, opponent);
+          if (next.status === 'FINISHED') return null;
+          return completePlayedCard(player, opponent);
+        }
         case 'effect.tk_001.01': {
           if (targetedObject === null || targetedPlayer === null) throw new Error('validated wool target was not resolved');
           targetedObject.maxHealth += 1;
@@ -3409,16 +3490,16 @@ namespace BiomeRivalsRules {
         }
       }
 
-      if (defenderPlayer.life <= 0 && next.status !== 'FINISHED') {
+      if ((defenderPlayer.life <= 0 || attackerPlayer.life <= 0) && next.status !== 'FINISHED') {
         next.status = 'FINISHED';
-        next.winnerPlayerId = attackerPlayer.playerId;
-        emit('MATCH_ENDED', { winnerPlayerId: next.winnerPlayerId, reason: 'HERO_DEFEATED' });
-      }
-      if (attackerPlayer.life <= 0 && next.status !== 'FINISHED') {
-        next.status = 'FINISHED';
-        next.winnerPlayerId = defenderPlayer.playerId;
         next.pendingChoice = null;
-        emit('MATCH_ENDED', { winnerPlayerId: next.winnerPlayerId, reason: 'HERO_DEFEATED' });
+        const simultaneousDefeat = defenderPlayer.life <= 0 && attackerPlayer.life <= 0;
+        next.winnerPlayerId = simultaneousDefeat ? null : defenderPlayer.life <= 0
+          ? attackerPlayer.playerId : defenderPlayer.playerId;
+        emit('MATCH_ENDED', {
+          winnerPlayerId: next.winnerPlayerId,
+          reason: simultaneousDefeat ? 'SIMULTANEOUS_DEFEAT' : 'HERO_DEFEATED'
+        });
       }
       return null;
     }
@@ -3505,7 +3586,7 @@ namespace BiomeRivalsRules {
         }
         expireTemporaryRedstone(next.players[actorIndex]!);
         const endingPlayer = next.players[actorIndex]!;
-        expireHandCardCostModifiers(endingPlayer);
+        expireHandCardCostModifiers(endingPlayer.playerId);
         next.players[actorIndex]!.excavatedThisTurn = false;
         next.players[actorIndex]!.cardsPlayedThisTurn = 0;
         next.players[actorIndex]!.hasTargetedEnemyObjectThisTurn = false;
@@ -3570,6 +3651,7 @@ namespace BiomeRivalsRules {
       batch: {
         protocolVersion: PROTOCOL_VERSION,
         rulesetVersion: next.rulesetVersion,
+        arenaId: next.arenaId,
         revision: next.revision,
         acknowledgedCommandId: command.commandId,
         events: events,

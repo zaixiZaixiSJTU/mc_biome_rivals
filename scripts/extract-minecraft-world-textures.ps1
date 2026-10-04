@@ -2,19 +2,27 @@
 param(
     [string]$MinecraftJar,
     [string]$SourceConfigPath = 'shared-schema\card-art\minecraft-asset-source.v1.json',
+    [string]$TextureRegistryPath = 'shared-schema\card-art\minecraft-world-texture-registry.v1.json',
     [string]$OutputDirectory = 'client-unity\Assets\Generated\MinecraftWorldTextures\Resources\DemoWorld'
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = [System.IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
 $sourceConfigFile = Join-Path $repoRoot $SourceConfigPath
+$textureRegistryFile = Join-Path $repoRoot $TextureRegistryPath
 $outputRoot = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $OutputDirectory))
 
 if (-not $outputRoot.StartsWith($repoRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
     throw "Output directory must stay inside the repository: $outputRoot"
 }
 if (-not (Test-Path -LiteralPath $sourceConfigFile)) { throw "Source config not found: $sourceConfigFile" }
+if (-not (Test-Path -LiteralPath $textureRegistryFile)) { throw "World texture registry not found: $textureRegistryFile" }
 $sourceConfig = Get-Content -LiteralPath $sourceConfigFile -Raw -Encoding UTF8 | ConvertFrom-Json
+$textureRegistry = Get-Content -LiteralPath $textureRegistryFile -Raw -Encoding UTF8 | ConvertFrom-Json
+if ([int]$textureRegistry.schemaVersion -ne 1 -or $textureRegistry.edition -ne 'Java' -or
+    $textureRegistry.textureRoot -cne 'assets/minecraft/textures/block') {
+    throw "Unsupported Minecraft world texture registry: $textureRegistryFile"
+}
 
 if (-not $MinecraftJar) {
     $versionFolder = [string]$sourceConfig.versionFolder
@@ -23,48 +31,18 @@ if (-not $MinecraftJar) {
 $MinecraftJar = [System.IO.Path]::GetFullPath($MinecraftJar)
 if (-not (Test-Path -LiteralPath $MinecraftJar)) { throw "Minecraft client JAR not found: $MinecraftJar" }
 
-$textures = [ordered]@{
-    dirt = 'assets/minecraft/textures/block/dirt.png'
-    grass_block_top = 'assets/minecraft/textures/block/grass_block_top.png'
-    mossy_stone_bricks = 'assets/minecraft/textures/block/mossy_stone_bricks.png'
-    oak_planks = 'assets/minecraft/textures/block/oak_planks.png'
-    dark_oak_planks = 'assets/minecraft/textures/block/dark_oak_planks.png'
-    oak_leaves = 'assets/minecraft/textures/block/oak_leaves.png'
-    cobblestone = 'assets/minecraft/textures/block/cobblestone.png'
-    stone_bricks = 'assets/minecraft/textures/block/stone_bricks.png'
-    polished_blackstone_bricks = 'assets/minecraft/textures/block/polished_blackstone_bricks.png'
-    nether_bricks = 'assets/minecraft/textures/block/nether_bricks.png'
-    netherrack = 'assets/minecraft/textures/block/netherrack.png'
-    basalt_top = 'assets/minecraft/textures/block/basalt_top.png'
-    water_still = 'assets/minecraft/textures/block/water_still.png'
-    magma = 'assets/minecraft/textures/block/magma.png'
-    red_sandstone = 'assets/minecraft/textures/block/red_sandstone.png'
-    sandstone = 'assets/minecraft/textures/block/sandstone.png'
-    cut_sandstone = 'assets/minecraft/textures/block/cut_sandstone.png'
-    chiseled_sandstone = 'assets/minecraft/textures/block/chiseled_sandstone.png'
-    orange_terracotta = 'assets/minecraft/textures/block/orange_terracotta.png'
-    cactus_side = 'assets/minecraft/textures/block/cactus_side.png'
-    cactus_top = 'assets/minecraft/textures/block/cactus_top.png'
-    packed_ice = 'assets/minecraft/textures/block/packed_ice.png'
-    snow_block = 'assets/minecraft/textures/block/snow.png'
-    deepslate_bricks = 'assets/minecraft/textures/block/deepslate_bricks.png'
-    sculk_sensor_bottom = 'assets/minecraft/textures/block/sculk_sensor_bottom.png'
-    sculk_sensor_side = 'assets/minecraft/textures/block/sculk_sensor_side.png'
-    sculk_sensor_top = 'assets/minecraft/textures/block/sculk_sensor_top.png'
-    sculk_sensor_tendril_inactive = 'assets/minecraft/textures/block/sculk_sensor_tendril_inactive.png'
-    prismarine_bricks = 'assets/minecraft/textures/block/prismarine_bricks.png'
-    dark_prismarine = 'assets/minecraft/textures/block/dark_prismarine.png'
-    sea_lantern = 'assets/minecraft/textures/block/sea_lantern.png'
-    tube_coral_block = 'assets/minecraft/textures/block/tube_coral_block.png'
-    purpur_block = 'assets/minecraft/textures/block/purpur_block.png'
-    obsidian = 'assets/minecraft/textures/block/obsidian.png'
-    oak_log = 'assets/minecraft/textures/block/oak_log.png'
-    gravel = 'assets/minecraft/textures/block/gravel.png'
-    glowstone = 'assets/minecraft/textures/block/glowstone.png'
-    bedrock = 'assets/minecraft/textures/block/bedrock.png'
-    respawn_anchor_side1 = 'assets/minecraft/textures/block/respawn_anchor_side1.png'
-    respawn_anchor_top = 'assets/minecraft/textures/block/respawn_anchor_top.png'
+$textures = [ordered]@{}
+foreach ($texture in $textureRegistry.entries) {
+    $key = [string]$texture.key
+    $sourcePath = [string]$texture.sourcePath
+    if ($key -notmatch '^[a-z0-9_]+$') { throw "Unsafe world texture key: $key" }
+    if ($textures.Contains($key)) { throw "Duplicate world texture key: $key" }
+    if ($sourcePath -notmatch '^assets/minecraft/textures/block/[A-Za-z0-9_./-]+\.png$') {
+        throw "Unsafe world texture source path for ${key}: $sourcePath"
+    }
+    $textures.Add($key, $sourcePath)
 }
+if ($textures.Count -eq 0) { throw 'Minecraft world texture registry is empty.' }
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 Add-Type -AssemblyName System.Drawing

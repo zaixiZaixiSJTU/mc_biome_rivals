@@ -10,6 +10,8 @@ namespace BiomeRivalsRules {
       violations.push('authoritative random counter is invalid');
     }
     if (state.protocolVersion !== PROTOCOL_VERSION) violations.push('protocolVersion is unsupported');
+    const arenaLayout = isArenaId(state.arenaId) ? ARENA_LAYOUTS[state.arenaId]! : null;
+    if (arenaLayout === null) violations.push('arenaId is unsupported');
     if (state.players.length !== 2) violations.push('exactly two players are required');
     if (state.players.length === 2 && state.players[0]!.playerId === state.players[1]!.playerId) {
       violations.push('player ids must be unique');
@@ -24,8 +26,13 @@ namespace BiomeRivalsRules {
     if (!Number.isInteger(state.nextHandCardInstanceId) || state.nextHandCardInstanceId < 1) {
       violations.push('nextHandCardInstanceId must be positive');
     }
-    if (state.status === 'FINISHED' && state.winnerPlayerId === null) {
-      violations.push('finished match requires a winner');
+    if (state.status === 'FINISHED' && state.winnerPlayerId === null &&
+        !(state.players.length === 2 && state.players[0]!.life <= 0 && state.players[1]!.life <= 0)) {
+      violations.push('finished match without a winner requires simultaneous hero defeat');
+    }
+    if (state.status === 'FINISHED' && state.winnerPlayerId !== null &&
+        !state.players.some(function (player): boolean { return player.playerId === state.winnerPlayerId; })) {
+      violations.push('finished match winner must be a participant');
     }
     if (state.status !== 'FINISHED' && state.winnerPlayerId !== null) {
       violations.push('unfinished match cannot have a winner');
@@ -152,6 +159,7 @@ namespace BiomeRivalsRules {
       violations.push('active match requires every opening hand to be confirmed');
     }
     const seenHandCardIds: { [instanceId: string]: boolean } = {};
+    const seenBattlefieldInstanceIds: string[] = [];
     for (let playerIndex = 0; playerIndex < state.players.length; playerIndex += 1) {
       const player = state.players[playerIndex]!;
       if (typeof player.excavatedThisTurn !== 'boolean') violations.push('player excavation turn marker is invalid');
@@ -217,8 +225,12 @@ namespace BiomeRivalsRules {
       if (player.temporaryRedstone > 0 && (state.status !== 'ACTIVE' || playerIndex !== state.activePlayerIndex)) {
         violations.push('temporary redstone belongs only to the active player turn');
       }
-      if (player.unitSlots.length !== 4) violations.push('each player requires four unit slots');
-      if (player.buildingSlots.length !== 3) violations.push('each player requires three building slots');
+      if (arenaLayout !== null && player.unitSlots.length !== arenaLayout.unitSlotCount) {
+        violations.push('player unit slots do not match the arena layout');
+      }
+      if (arenaLayout !== null && player.buildingSlots.length !== arenaLayout.buildingSlotCount) {
+        violations.push('player building slots do not match the arena layout');
+      }
       if (player.hand.length > 7) violations.push('hand cannot exceed seven cards');
       if (!Array.isArray(player.handCards) || player.handCards.length !== player.hand.length) {
         violations.push('hand instance records must align with hand slots');
@@ -275,7 +287,13 @@ namespace BiomeRivalsRules {
       const instances: { [instanceId: string]: BattlefieldObjectState } = {};
       for (let objectIndex = 0; objectIndex < player.battlefield.length; objectIndex += 1) {
         const object = player.battlefield[objectIndex]!;
-        if (!object.instanceId || instances[object.instanceId]) violations.push('battlefield instance ids must be unique per player');
+        if (!object.instanceId || seenBattlefieldInstanceIds.indexOf(object.instanceId) >= 0) {
+          violations.push('battlefield instance ids must be unique across the match');
+        }
+        seenBattlefieldInstanceIds.push(object.instanceId);
+        if (!state.players.some(function (candidate): boolean { return candidate.playerId === object.ownerPlayerId; })) {
+          violations.push('battlefield object owner must be a match player');
+        }
         instances[object.instanceId] = object;
         const definition = getCardDefinition(object.cardId);
         if (definition === null) violations.push('battlefield contains an unknown card');

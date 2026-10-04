@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["protocolVersion", "rulesetVersion", "commandId", "expectedRevision", "type", "payload"],
   "properties": {
-    "protocolVersion": { "const": 37 },
+    "protocolVersion": { "const": 40 },
     "rulesetVersion": { "type": "string", "minLength": 1 },
     "commandId": { "type": "string", "minLength": 1, "maxLength": 80 },
     "expectedRevision": { "type": "integer", "minimum": 0 },
@@ -25,7 +25,7 @@
             "properties": {
               "cardIndices": {
                 "type": "array", "maxItems": 4, "uniqueItems": true,
-                "items": { "type": "integer", "minimum": 0, "maximum": 3 }
+                "items": { "type": "integer", "minimum": 0, "maximum": 4 }
               }
             }
           }

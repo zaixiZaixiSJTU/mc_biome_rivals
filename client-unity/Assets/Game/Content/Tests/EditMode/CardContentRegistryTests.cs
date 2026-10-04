@@ -14,6 +14,8 @@ namespace BiomeRivals.Content.Tests
             Assert.That(registry.ThemeCount, Is.EqualTo(7));
             Assert.That(registry.DefinitionCount, Is.EqualTo(74));
             Assert.That(registry.TextCount, Is.EqualTo(74));
+            Assert.That(registry.ContentVersion, Is.EqualTo(42));
+            Assert.That(registry.ImplementedEffectRegistryVersion, Is.EqualTo(48));
             Assert.That(registry.TryGetName("pf_001", out var name), Is.True);
             Assert.That(name, Is.EqualTo("蜜蜂"));
             Assert.That(registry.TryGetTheme("nether", out _), Is.True);

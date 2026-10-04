@@ -4,11 +4,24 @@ using System.Threading;
 using System.Threading.Tasks;
 using BiomeRivals.Core;
 using Nakama;
+using UnityEngine;
 
 namespace BiomeRivals.Networking
 {
     public sealed class NakamaMatchTransport : IMatchTransport, IMatchReconnectDiagnostics
     {
+        private const string HealthRpcId = "biome_rivals_health";
+
+        [Serializable]
+        private sealed class ServerHealthResponse
+        {
+            public bool ok;
+            public int protocolVersion;
+            public string rulesetVersion;
+            public int cardContentVersion;
+            public int implementedEffectRegistryVersion;
+        }
+
         private readonly NakamaConnectionSettings _settings;
         private readonly MatchmakingPreferences _matchmakingPreferences;
         private readonly IPlayerAccountSessionProvider _accountSessionProvider;
@@ -36,12 +49,12 @@ namespace BiomeRivals.Networking
 
         public NakamaMatchTransport(
             NakamaConnectionSettings settings,
-            MatchmakingPreferences matchmakingPreferences = null,
+            MatchmakingPreferences matchmakingPreferences,
             IPlayerAccountSessionProvider accountSessionProvider = null)
         {
             _settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _settings.Validate();
-            _matchmakingPreferences = matchmakingPreferences ?? new MatchmakingPreferences(FactionIds.PlainsForest);
+            _matchmakingPreferences = matchmakingPreferences ?? throw new ArgumentNullException(nameof(matchmakingPreferences));
             if (accountSessionProvider == null)
             {
                 var ownedService = new PlayerAccountService(new NakamaPlayerAccountBackend(_settings));
@@ -75,7 +88,8 @@ namespace BiomeRivals.Networking
             }
             catch (Exception exception)
             {
-                Publish(new MatchConnectionStatus(MatchConnectionPhase.Failed, exception.Message));
+                Publish(new MatchConnectionStatus(MatchConnectionPhase.Failed, exception.Message,
+                    compatibilityFailure: (exception as ServerCompatibilityException)?.Failure));
                 Faulted?.Invoke(exception);
                 throw;
             }
@@ -148,6 +162,8 @@ namespace BiomeRivals.Networking
                 "The authenticated account session is not compatible with Nakama matchmaking.");
             cancellationToken.ThrowIfCancellationRequested();
 
+            await ValidateServerCompatibilityAsync(cancellationToken);
+
             ResetSocket();
             _socket = _client.NewSocket(useMainThread: true);
             AttachSocket();
@@ -188,6 +204,40 @@ namespace BiomeRivals.Networking
             _resumeMatchId = _match.Id;
             _expectedMatchId = _match.Id;
             Publish(new MatchConnectionStatus(MatchConnectionPhase.Ready, "Authoritative match ready.", _match.Id, reconnectAttempt));
+        }
+
+        private async Task ValidateServerCompatibilityAsync(CancellationToken cancellationToken)
+        {
+            Publish(new MatchConnectionStatus(
+                MatchConnectionPhase.Authenticating,
+                "Checking server gameplay and card data versions.",
+                _resumeMatchId));
+            var response = await _client.RpcAsync(_session, HealthRpcId);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (response == null || string.IsNullOrWhiteSpace(response.Payload))
+                throw new InvalidOperationException("Server health RPC returned an empty compatibility response.");
+
+            ServerHealthResponse health;
+            try
+            {
+                health = JsonUtility.FromJson<ServerHealthResponse>(response.Payload);
+            }
+            catch (Exception exception)
+            {
+                throw new InvalidOperationException("Server health RPC returned invalid compatibility JSON.", exception);
+            }
+
+            if (health == null || !health.ok || health.protocolVersion <= 0 ||
+                string.IsNullOrWhiteSpace(health.rulesetVersion) || health.cardContentVersion <= 0 ||
+                health.implementedEffectRegistryVersion <= 0)
+                throw new InvalidOperationException("Server health RPC is missing required compatibility versions.");
+
+            var failure = ServerCompatibilityFailure.Create(_settings, _matchmakingPreferences,
+                health.protocolVersion,
+                health.rulesetVersion,
+                health.cardContentVersion,
+                health.implementedEffectRegistryVersion);
+            if (failure != null) throw new ServerCompatibilityException(failure);
         }
 
         private void EnsureClient()
@@ -287,7 +337,8 @@ namespace BiomeRivals.Networking
                     {
                         Faulted?.Invoke(exception);
                         if (attempt == _settings.maxReconnectAttempts)
-                            Publish(new MatchConnectionStatus(MatchConnectionPhase.Failed, exception.Message, _resumeMatchId, attempt));
+                            Publish(new MatchConnectionStatus(MatchConnectionPhase.Failed, exception.Message, _resumeMatchId, attempt,
+                                (exception as ServerCompatibilityException)?.Failure));
                     }
                     finally
                     {

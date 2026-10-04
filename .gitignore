@@ -9,6 +9,8 @@ server-nakama/build/*
 server-nakama/.test-build/
 coverage/
 artifacts/
+# Root-level isolated Unity projects, captures, private probes and build evidence
+/Temp/
 *.tsbuildinfo
 npm-debug.log*
 
@@ -20,6 +22,8 @@ client-unity/[Bb]uild/
 client-unity/[Bb]uilds/
 client-unity/[Ll]ogs/
 client-unity/[Uu]ser[Ss]ettings/
+# Editor UI preferences; dependency versions remain in Packages/manifest and lockfile
+client-unity/ProjectSettings/PackageManagerSettings.asset
 client-unity/MemoryCaptures/
 client-unity/Recordings/
 client-unity/Assets/Generated/MinecraftCardIcons/*

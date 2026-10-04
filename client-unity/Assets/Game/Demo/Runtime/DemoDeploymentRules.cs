@@ -22,6 +22,25 @@ namespace BiomeRivals.Demo
 
     public static class DemoDeploymentRules
     {
+        public static int FindFirstEmptyUnitSlot(IReadOnlyList<DemoBattlefieldObject> battlefield, int unitSlotCount)
+        {
+            if (battlefield == null) throw new ArgumentNullException(nameof(battlefield));
+            if (unitSlotCount < 1) return -1;
+
+            var occupied = new bool[unitSlotCount];
+            foreach (var value in battlefield)
+            {
+                if (value == null || value.Health <= 0 || value.SlotKind != DemoSlotKind.Unit) continue;
+                var start = Math.Max(0, value.SlotIndex);
+                var end = Math.Min(unitSlotCount, start + Math.Max(1, value.OccupiedSlots));
+                for (var index = start; index < end; index++) occupied[index] = true;
+            }
+
+            for (var index = 0; index < occupied.Length; index++)
+                if (!occupied[index]) return index;
+            return -1;
+        }
+
         public static DemoDeploymentPreview Evaluate(
             IDemoMatchView match,
             CardDefinitionEntry definition,
@@ -86,6 +105,22 @@ namespace BiomeRivals.Demo
 
         private static DemoDeploymentPreview Reject(int occupiedSlots, string message) =>
             new DemoDeploymentPreview(false, occupiedSlots, message);
+
+        public static bool CanPayWithRedstoneOrCrafting(
+            IDemoMatchView match,
+            CardDefinitionEntry definition,
+            string handCardInstanceId = "")
+        {
+            if (match == null) throw new ArgumentNullException(nameof(match));
+            if (definition == null) return false;
+            if (match.GetEffectiveCost(definition, handCardInstanceId) <= match.Energy) return true;
+
+            var isDeployable = string.Equals(definition.cardType, "UNIT", StringComparison.Ordinal) ||
+                               string.Equals(definition.cardType, "BUILDING", StringComparison.Ordinal) ||
+                               string.Equals(definition.cardType, "STRUCTURE", StringComparison.Ordinal);
+            return isDeployable && definition.hasCraftingRecipe &&
+                   CanPayWithCrafting(match, definition, out _, handCardInstanceId);
+        }
 
         public static bool CanPayWithCrafting(
             IDemoMatchView match,
