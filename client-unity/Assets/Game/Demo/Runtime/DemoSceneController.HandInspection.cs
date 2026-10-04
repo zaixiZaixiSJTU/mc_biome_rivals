@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 using BiomeRivals.Content;
 using BiomeRivals.Core;
 
@@ -17,8 +18,18 @@ namespace BiomeRivals.Demo
         private CardDetailsView _handInspectionDetails;
         private Button _handInspectionButton;
         private Text _handInspectionPosition;
+        private Text _handInspectionRules;
+        private Text _handInspectionRulesTitle;
+        private Text _handInspectionPreviewHint;
+        private ScrollRect _handInspectionScroll;
+        private Button _handInspectionPrevious;
+        private Button _handInspectionNext;
+        private GameObject _handInspectionPreviousFocus;
+        private string _handInspectionRenderedInstance;
+        private string _choiceInspectionCardId;
+        private string _choiceInspectionChoiceId;
         private string _handInspectionInstanceId;
-        private bool IsHandInspectionOpen => !string.IsNullOrEmpty(_handInspectionInstanceId);
+        private bool IsHandInspectionOpen => !string.IsNullOrEmpty(_handInspectionInstanceId) || !string.IsNullOrEmpty(_choiceInspectionCardId);
 
         private void BuildHandInspection()
         {
@@ -30,23 +41,61 @@ namespace BiomeRivals.Demo
             var blocker = _handInspectionOverlay.gameObject.AddComponent<Image>();
             blocker.color = new Color(0f, 0f, 0f, 0.65f);
             blocker.raycastTarget = true;
-            var panel = CreateBasePanel(_handInspectionOverlay, "ReadingPanel", Vector2.zero, new Vector2(640, 700));
+            var panel = CreateBasePanel(_handInspectionOverlay, "ReadingPanel", Vector2.zero, new Vector2(1000, 700));
             panel.GetComponent<Image>().raycastTarget = true;
-            CreateText(panel, "Title", new Vector2(0, 307), new Vector2(370, 40), "手牌图鉴 · 只读", 23,
+            CreateText(panel, "Title", new Vector2(-75, 307), new Vector2(740, 40), "卡牌图鉴 · 只读", 23,
                 Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
-            var close = CreateSecondaryButton(panel, "Close", new Vector2(251, 307), new Vector2(85, 40), "关闭", 16);
+            var close = CreateSecondaryButton(panel, "Close", new Vector2(410, 307), new Vector2(110, 40), "返回", 18);
             close.onClick.AddListener(CloseHandInspection);
-            _handInspectionContent = CreateRect(panel, "CardContent", new Vector2(0, 25), new Vector2(360, 480));
+            _handInspectionContent = CreateRect(panel, "CardContent", new Vector2(-282, 25), new Vector2(360, 480));
             _handInspectionDetails = _handInspectionContent.gameObject.AddComponent<CardDetailsView>();
             _handInspectionDetails.Configure(_registry, UiFont);
+            _handInspectionPreviewHint = CreateText(panel, "PreviewHint", new Vector2(-282, -238), new Vector2(360, 30), string.Empty, 18,
+                Muted, TextAnchor.MiddleCenter, FontStyle.Normal);
+            _handInspectionPreviewHint.gameObject.AddComponent<DemoHudTypography>().Configure(18);
+            _handInspectionRulesTitle = CreateText(panel, "RulesTitle", new Vector2(207, 245), new Vector2(420, 36), "完整规则", 22,
+                Pale, TextAnchor.MiddleLeft, FontStyle.Bold);
+            _handInspectionRulesTitle.gameObject.AddComponent<DemoHudTypography>().Configure(22);
+            var viewport = CreateRect(panel, "RulesViewport", new Vector2(207, 17), new Vector2(430, 402));
+            viewport.gameObject.AddComponent<Image>().color = Color.clear;
+            viewport.gameObject.AddComponent<RectMask2D>();
+            _handInspectionRules = CreateText(viewport, "FullRules", Vector2.zero, new Vector2(406, 0), string.Empty, 24,
+                Pale, TextAnchor.UpperLeft, FontStyle.Normal);
+            _handInspectionRules.supportRichText = false;
+            _handInspectionRules.verticalOverflow = VerticalWrapMode.Overflow;
+            _handInspectionRules.lineSpacing = 1.2f;
+            var body = _handInspectionRules.rectTransform;
+            body.anchorMin = new Vector2(0f, 1f);
+            body.anchorMax = new Vector2(1f, 1f);
+            body.pivot = new Vector2(0.5f, 1f);
+            body.sizeDelta = new Vector2(-24f, 0f);
+            _handInspectionRules.gameObject.AddComponent<DemoHudTypography>().Configure(24);
+            body.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            _handInspectionScroll = viewport.gameObject.AddComponent<ScrollRect>();
+            _handInspectionScroll.viewport = viewport;
+            _handInspectionScroll.content = body;
+            _handInspectionScroll.horizontal = false;
+            _handInspectionScroll.movementType = ScrollRect.MovementType.Clamped;
+            _handInspectionScroll.scrollSensitivity = 36f;
+            var track = CreatePanel(panel, "RulesScrollTrack", new Vector2(443, 17), new Vector2(12, 402), Ink);
+            var handle = CreatePanel(track.transform, "Handle", Vector2.zero, new Vector2(12, 50), Muted);
+            handle.rectTransform.sizeDelta = Vector2.zero;
+            handle.rectTransform.anchorMin = Vector2.zero;
+            handle.rectTransform.anchorMax = Vector2.one;
+            var scrollbar = track.gameObject.AddComponent<Scrollbar>();
+            scrollbar.handleRect = handle.rectTransform;
+            scrollbar.targetGraphic = handle;
+            scrollbar.direction = Scrollbar.Direction.BottomToTop;
+            _handInspectionScroll.verticalScrollbar = scrollbar;
+            _handInspectionScroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHide;
             _handInspectionPosition = CreateText(panel, "Position", new Vector2(0, -254), new Vector2(360, 30),
                 string.Empty, 17, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
-            CreateText(panel, "ReadOnlyHint", new Vector2(0, -318), new Vector2(390, 28), "仅查看说明，不会出牌 · Esc 关闭", 15,
+            CreateText(panel, "ReadOnlyHint", new Vector2(0, -318), new Vector2(880, 32), "滚轮查看完整规则 · 仅阅读，不会出牌或确认待决选择 · Esc / 右键返回", 18,
                 Muted, TextAnchor.MiddleCenter, FontStyle.Normal);
-            var previous = CreateSecondaryButton(panel, "Previous", new Vector2(-203, -274), new Vector2(120, 42), "上一张", 16);
-            var next = CreateSecondaryButton(panel, "Next", new Vector2(203, -274), new Vector2(120, 42), "下一张", 16);
-            previous.onClick.AddListener(() => MoveHandInspection(-1));
-            next.onClick.AddListener(() => MoveHandInspection(1));
+            _handInspectionPrevious = CreateSecondaryButton(panel, "Previous", new Vector2(-203, -274), new Vector2(120, 42), "上一张", 18);
+            _handInspectionNext = CreateSecondaryButton(panel, "Next", new Vector2(203, -274), new Vector2(120, 42), "下一张", 18);
+            _handInspectionPrevious.onClick.AddListener(() => MoveHandInspection(-1));
+            _handInspectionNext.onClick.AddListener(() => MoveHandInspection(1));
             _handInspectionOverlay.gameObject.SetActive(false);
         }
 
@@ -55,14 +104,30 @@ namespace BiomeRivals.Demo
             var match = MatchView;
             if (IsReadOnlyOverlayOpen || match.IsMulligan || match.PendingChoice != null || match.HandCards.Count == 0) return;
             _handInspectionInstanceId = match.HandCards[0].handCardInstanceId;
+            _handInspectionPreviousFocus = EventSystem.current != null ? EventSystem.current.currentSelectedGameObject : null;
             _handInspectionOverlay.SetAsLastSibling();
             RefreshAllInternal(false);
+            EventSystem.current?.SetSelectedGameObject(_handInspectionOverlay.Find("ReadingPanel/Close").gameObject);
+        }
+
+        private void OpenChoiceRules(string cardId)
+        {
+            var choice = MatchView.PendingChoice;
+            if (IsReadOnlyOverlayOpen || MatchView.IsFinished || !MatchView.IsChoiceOwner || choice == null ||
+                !(choice.options ?? Array.Empty<PendingChoiceOptionDto>()).Any(option => option != null && option.cardId == cardId) ||
+                !_registry.TryGetText(cardId, out _)) return;
+            _choiceInspectionCardId = cardId;
+            _choiceInspectionChoiceId = choice.choiceId;
+            _handInspectionPreviousFocus = EventSystem.current != null ? EventSystem.current.currentSelectedGameObject : null;
+            _handInspectionOverlay.SetAsLastSibling();
+            RefreshAllInternal(false);
+            EventSystem.current?.SetSelectedGameObject(_handInspectionOverlay.Find("ReadingPanel/Close").gameObject);
         }
 
         private void MoveHandInspection(int offset)
         {
             var cards = MatchView.HandCards;
-            if (!IsHandInspectionOpen || cards.Count == 0) return;
+            if (!IsHandInspectionOpen || !string.IsNullOrEmpty(_choiceInspectionCardId) || cards.Count == 0) return;
             var index = cards.ToList().FindIndex(card => card.handCardInstanceId == _handInspectionInstanceId);
             if (index < 0) { CloseHandInspection(); return; }
             _handInspectionInstanceId = cards[(index + offset % cards.Count + cards.Count) % cards.Count].handCardInstanceId;
@@ -72,7 +137,14 @@ namespace BiomeRivals.Demo
         private void CloseHandInspection()
         {
             _handInspectionInstanceId = null;
+            _choiceInspectionCardId = null;
+            _choiceInspectionChoiceId = null;
+            _handInspectionRenderedInstance = null;
             RefreshAllInternal(false);
+            var focus = _handInspectionPreviousFocus != null ? _handInspectionPreviousFocus.GetComponent<Selectable>() : null;
+            EventSystem.current?.SetSelectedGameObject(focus != null && focus.IsActive() && focus.IsInteractable()
+                ? _handInspectionPreviousFocus : null);
+            _handInspectionPreviousFocus = null;
         }
 
         private void RefreshHandInspection()
@@ -82,15 +154,46 @@ namespace BiomeRivals.Demo
             _handInspectionButton.interactable = !_statusInspectionOpen && !match.IsMulligan && match.PendingChoice == null && match.HandCards.Count > 0;
             var card = match.HandCards.FirstOrDefault(value => value.handCardInstanceId == _handInspectionInstanceId);
             if (card == null || match.IsMulligan || match.PendingChoice != null) _handInspectionInstanceId = null;
+            var choice = match.PendingChoice;
+            if (!match.IsChoiceOwner || choice == null || choice.choiceId != _choiceInspectionChoiceId ||
+                !(choice.options ?? Array.Empty<PendingChoiceOptionDto>()).Any(option => option != null && option.cardId == _choiceInspectionCardId))
+            {
+                _choiceInspectionCardId = null;
+                _choiceInspectionChoiceId = null;
+            }
             _handInspectionOverlay.gameObject.SetActive(IsHandInspectionOpen);
-            foreach (Transform child in _handInspectionContent) child.gameObject.SetActive(false);
-            ClearChildren(_handInspectionContent);
-            _handInspectionDetails.Clear();
             if (!IsHandInspectionOpen) return;
-            if (!_registry.TryGetDefinition(card.cardId, out var definition)) throw new InvalidOperationException("Unregistered inspected hand card.");
-            _handInspectionDetails.ShowCard(card.cardId, new Vector2(360, 480), Vector2.zero,
-                match.GetEffectiveCost(definition, card.handCardInstanceId), card.handCardInstanceId);
-            _handInspectionPosition.text = $"{match.HandCards.ToList().FindIndex(value => value.handCardInstanceId == card.handCardInstanceId) + 1} / {match.HandCards.Count}";
+            var readingChoice = !string.IsNullOrEmpty(_choiceInspectionCardId);
+            var cardId = readingChoice ? _choiceInspectionCardId : card.cardId;
+            var instance = readingChoice ? "choice:" + _choiceInspectionChoiceId + ":" + cardId : card.handCardInstanceId;
+            if (!_registry.TryGetDefinition(cardId, out var definition) || !_registry.TryGetText(cardId, out var registered))
+                throw new InvalidOperationException("Unregistered inspected card.");
+            var cost = readingChoice ? definition.cost : match.GetEffectiveCost(definition, card.handCardInstanceId);
+            if (_handInspectionRenderedInstance != instance || _handInspectionDetails.CurrentCard == null ||
+                _handInspectionDetails.CurrentCard.DisplayedCost != cost)
+            {
+                foreach (Transform child in _handInspectionContent) child.gameObject.SetActive(false);
+                ClearChildren(_handInspectionContent);
+                _handInspectionDetails.Clear();
+                _handInspectionDetails.ShowCard(cardId, new Vector2(360, 480), Vector2.zero, cost,
+                    readingChoice ? string.Empty : card.handCardInstanceId, summarizeRules: true);
+            }
+            _handInspectionPrevious.gameObject.SetActive(!readingChoice);
+            _handInspectionNext.gameObject.SetActive(!readingChoice);
+            _handInspectionPosition.text = readingChoice ? "待决卡牌 · 只读" :
+                $"{match.HandCards.ToList().FindIndex(value => value.handCardInstanceId == card.handCardInstanceId) + 1} / {match.HandCards.Count}";
+            _handInspectionRulesTitle.text = registered.name + " · 完整规则";
+            _handInspectionPreviewHint.text = _handInspectionDetails.CurrentCard.HasRulesPreview
+                ? "卡面摘要 · 右侧保留完整规则" : "卡面预览 · 右侧为完整规则";
+            if (_handInspectionRenderedInstance != instance || _handInspectionRules.text != registered.rulesText)
+            {
+                _handInspectionRules.text = registered.rulesText;
+                _handInspectionRules.GetComponent<DemoHudTypography>().ApplyScale(_canvasRoot.GetComponent<Canvas>().scaleFactor);
+                LayoutRebuilder.ForceRebuildLayoutImmediate(_handInspectionRules.rectTransform);
+                _handInspectionScroll.StopMovement();
+                _handInspectionScroll.verticalNormalizedPosition = 1f;
+            }
+            _handInspectionRenderedInstance = instance;
         }
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -131,9 +234,9 @@ namespace BiomeRivals.Demo
                 var readingCard = _handInspectionDetails.CurrentCard;
                 var rules = readingCard.transform.Find("Rules").GetComponent<Text>();
                 _registry.TryGetText(longCardId, out var registered);
-                if (readingCard.CardId != longCardId || rules.text != registered.rulesText ||
-                    rules.preferredHeight > rules.rectTransform.rect.height)
-                    throw new InvalidOperationException($"Hand readability rules failed: card={readingCard.CardId}; expected={longCardId}; fullText={rules.text == registered.rulesText}; height={rules.preferredHeight}/{rules.rectTransform.rect.height}.");
+                if (readingCard.CardId != longCardId || readingCard.FullRulesText != registered.rulesText ||
+                    _handInspectionRules.text != registered.rulesText || !InspectedRulesFitPaper(readingCard))
+                    throw new InvalidOperationException($"Hand readability rules failed: card={readingCard.CardId}; expected={longCardId}; fullText={_handInspectionRules.text == registered.rulesText}; paperHeight={rules.rectTransform.rect.height}.");
                 var close = _handInspectionOverlay.Find("ReadingPanel/Close").GetComponent<Button>();
                 if (!ClickButtonThroughEventSystem(close)) throw new InvalidOperationException("Hand readability real close-button raycast failed.");
                 await Task.Yield();
@@ -230,14 +333,26 @@ namespace BiomeRivals.Demo
             var card = _handInspectionDetails.CurrentCard;
             var rules = card.transform.Find("Rules").GetComponent<Text>();
             _registry.TryGetText("ed_008", out var text);
-            var settled = instances.Length == 7 && card.CardId == "ed_008" && rules.text == text.rulesText &&
-                rules.preferredHeight <= rules.rectTransform.rect.height &&
+            var settled = instances.Length == 7 && card.CardId == "ed_008" && card.FullRulesText == text.rulesText &&
+                _handInspectionRules.text == text.rulesText && InspectedRulesFitPaper(card) &&
                 MatchView.Revision == revision && _selectedHandCardInstanceId == selected &&
                 MatchView.HandCards.Select(value => value.handCardInstanceId).SequenceEqual(instances) &&
                 !_handCanvasGroup.interactable && !_handCanvasGroup.blocksRaycasts && !_endTurnButton.interactable &&
                 GetComponent<DemoBattlefieldPointerController>()?.InputEnabled == false;
             Debug.Log($"Hand inspection preview settled: {settled} (cards=7; last=ed_008; full rules; actual UI clicks; gameplay locked).");
             if (!settled) throw new InvalidOperationException("Read-only hand inspection did not preserve full text and gameplay locks.");
+        }
+
+        private bool InspectedRulesFitPaper(CardUI card)
+        {
+            var rules = card.transform.Find("Rules").GetComponent<Text>();
+            var settings = rules.GetGenerationSettings(rules.rectTransform.rect.size);
+            settings.resizeTextForBestFit = false;
+            settings.fontSize = rules.resizeTextMinSize;
+            settings.verticalOverflow = VerticalWrapMode.Overflow;
+            return rules.rectTransform.rect.height <= card.RectTransform.rect.height * 0.201f &&
+                new TextGenerator().GetPreferredHeight(rules.text, settings) / rules.pixelsPerUnit <= rules.rectTransform.rect.height + 0.5f &&
+                _handInspectionRules.rectTransform.rect.height + 0.5f >= _handInspectionRules.preferredHeight;
         }
     }
 }

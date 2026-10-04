@@ -17,6 +17,8 @@ param(
     [switch]$PreviewStatusInspection,
     [switch]$PreviewHudResources,
     [switch]$PreviewCardNotes,
+    [switch]$PreviewCardPaper,
+    [switch]$PreviewChoiceRules,
     [ValidateSet('Compatibility','Deployment','Timeout')][string]$PreviewOnlineFeedback,
     [ValidateSet('opponent', 'win', 'loss')][string]$PreviewHandState,
     [switch]$PreviewGroundReturnPulse,
@@ -79,6 +81,8 @@ if ($PreviewResponsiveHandInspection) { $previewCount++ }
 if ($PreviewStatusInspection) { $previewCount++ }
 if ($PreviewHudResources) { $previewCount++ }
 if ($PreviewCardNotes) { $previewCount++ }
+if ($PreviewCardPaper) { $previewCount++ }
+if ($PreviewChoiceRules) { $previewCount++ }
 if ($PreviewOnlineFeedback) { $previewCount++ }
 if ($PreviewHandState) { $previewCount++ }
 foreach ($previewMode in @($PreviewHandHover, $PreviewUnaffordableCardSelection, $PreviewFullHand, $PreviewGroundReturnPulse, $PreviewWoodlandRally, $PreviewSummonReadiness, $PreviewEndReturnInteraction, $PreviewCombatInteraction, $PreviewStructureDragDeployment, $PreviewCraftingInteraction, $PreviewCardArrival, $PreviewChoiceInteraction, $PreviewArchaeologyChoice, $PreviewAttackFeedback, $PreviewButtonFeedback, $PreviewOpponentEnergy, $PreviewMatchOutcome, $PreviewTerminalWorld, $PreviewTntTrapOwnerWins, $PreviewOnlineStatus, $PreviewPolarBearWool, $PreviewDarknessTargeting, $PreviewTurnBanner)) {
@@ -141,6 +145,9 @@ if ($PreviewChoiceInteraction -and ($PlayerFaction -ne 'cave_dark_forest' -or $O
 if ($PreviewArchaeologyChoice -and $PlayerFaction -ne 'desert_badlands') {
     throw 'PreviewArchaeologyChoice requires -PlayerFaction desert_badlands.'
 }
+if ($PreviewChoiceRules -and $PlayerFaction -ne 'desert_badlands') {
+    throw 'PreviewChoiceRules requires -PlayerFaction desert_badlands.'
+}
 if ($PreviewWoodlandRally -and ($PreviewArena -ne 'deep_caverns' -or $PlayerFaction -ne 'plains_forest')) {
     throw 'PreviewWoodlandRally requires -PreviewArena deep_caverns and -PlayerFaction plains_forest.'
 }
@@ -151,6 +158,9 @@ if ($PreviewSummonReadiness -and ($PlayerFaction -ne 'cave_dark_forest' -or $Opp
 
 $manifestPath = "$executablePath.build-manifest.json"
 $buildManifest = & (Join-Path $PSScriptRoot 'assert-demo-player-source.ps1') -ExecutablePath $executablePath -ProjectPath $projectPath
+if (($PreviewCardPaper -or $PreviewChoiceRules) -and ($buildManifest.developmentBuild -isnot [bool] -or -not $buildManifest.developmentBuild)) {
+    throw 'Card paper and pending-rules captures require an explicitly verified Development Player.'
+}
 if ($PreviewOnlineFeedback -and ($buildManifest.developmentBuild -isnot [bool] -or -not $buildManifest.developmentBuild)) {
     throw 'PreviewOnlineFeedback requires an explicitly verified Development Player.'
 }
@@ -218,6 +228,8 @@ if ($PreviewResponsiveHandInspection) { $arguments += @('-previewFullHand', '-pr
 if ($PreviewStatusInspection) { $arguments += '-previewStatusInspection' }
 if ($PreviewHudResources) { $arguments += '-previewHudResources' }
 if ($PreviewCardNotes) { $arguments += '-previewCardNotes' }
+if ($PreviewCardPaper) { $arguments += '-previewCardPaper' }
+if ($PreviewChoiceRules) { $arguments += @('-previewArchaeology', '-previewChoiceRules') }
 if ($PreviewOnlineFeedback) { $arguments += @('-previewOnlineFeedback', $PreviewOnlineFeedback) }
 if ($PreviewHandState) { $arguments += @('-previewHandState', $PreviewHandState) }
 if ($PreviewGroundReturnPulse) { $arguments += '-previewGroundReturnPulse' }
@@ -270,6 +282,42 @@ if (-not (Test-Path -LiteralPath $logPath -PathType Leaf)) {
     throw "Demo Player did not create its requested log: $logPath"
 }
 $log = Get-Content -LiteralPath $logPath -Raw -Encoding UTF8
+if ($PreviewCardPaper -and -not $log.Contains('All-card paper settled: True; 74 registered cards; 7 themes; actual entry/pagination/return; full rules; unchanged reading state.')) {
+    throw 'Card paper coverage requires every registered card and actual read-only pagination.'
+}
+if ($PreviewChoiceRules -and -not $log.Contains('Pending rules reading settled: True; actual entry/return/reopen; full rules; unchanged choice/revision/energy/hand; gameplay locked.')) {
+    throw 'Pending rules reading must preserve the choice, full text and game state through actual UI clicks.'
+}
+if ($PreviewCardPaper) {
+    $galleryRoot = Join-Path (Split-Path -Parent $CapturePath) ([IO.Path]::GetFileNameWithoutExtension($CapturePath) + '-cards')
+    $coverage = Get-Content -LiteralPath (Join-Path $galleryRoot 'coverage.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    $definitions = Get-Content -LiteralPath (Join-Path $projectPath 'Assets/Game/Content/Resources/CardContent/card-definition-registry.v1.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    $expectedIds = @($definitions.entries.id | Sort-Object)
+    if ($coverage.success -isnot [bool] -or -not $coverage.success -or $coverage.registeredCards -ne 74 -or $coverage.visitedCards -ne 74 -or
+        $coverage.themes -ne 7 -or $coverage.screenWidth -ne $CaptureWidth -or $coverage.screenHeight -ne $CaptureHeight -or
+        @($coverage.cardIds).Count -ne 74 -or @($coverage.cardIds | Sort-Object -Unique).Count -ne 74 -or
+        @((Compare-Object $expectedIds @($coverage.cardIds | Sort-Object))).Count) { throw 'Card paper coverage differs from the registered set or actual requested window.' }
+    $expectedNames = @($expectedIds | ForEach-Object { $_ + '-reading.png' })
+    foreach ($theme in $definitions.entries | Group-Object themeId) {
+        for ($page = 1; $page -le [Math]::Ceiling($theme.Count / 7.0); $page++) { $expectedNames += $theme.Name + '-hand-' + $page + '.png' }
+    }
+    $actualFiles = @(Get-ChildItem -LiteralPath $galleryRoot -File -Filter '*.png')
+    if (@($coverage.screenshots).Count -ne $expectedNames.Count -or
+        @($coverage.screenshots | Sort-Object -Unique).Count -ne $expectedNames.Count -or
+        @((Compare-Object @($actualFiles.Name | Sort-Object) @($expectedNames | Sort-Object))).Count) { throw 'Card paper screenshots are missing, duplicate or unexpected.' }
+    $galleryPrefix = [IO.Path]::GetFullPath($galleryRoot).TrimEnd([char[]]@('\','/')) + [IO.Path]::DirectorySeparatorChar
+    foreach ($proof in $coverage.screenshots) {
+        $proofPath = [IO.Path]::GetFullPath($proof)
+        if (-not $proofPath.StartsWith($galleryPrefix, [StringComparison]::OrdinalIgnoreCase) -or
+            [IO.Path]::GetFileName($proofPath) -notin $expectedNames) { throw 'Card paper evidence path escaped its registered gallery.' }
+        $png = [IO.File]::ReadAllBytes($proofPath)
+        if ($png.Length -lt 24 -or [BitConverter]::ToString($png[0..7]) -ne '89-50-4E-47-0D-0A-1A-0A') { throw 'Invalid gallery PNG.' }
+        $widthBytes = [byte[]]$png[16..19]; [Array]::Reverse($widthBytes)
+        $heightBytes = [byte[]]$png[20..23]; [Array]::Reverse($heightBytes)
+        if ([BitConverter]::ToInt32($widthBytes, 0) -ne $CaptureWidth -or [BitConverter]::ToInt32($heightBytes, 0) -ne $CaptureHeight) { throw 'Gallery PNG dimensions are not the actual requested size.' }
+    }
+    Write-Output "Card paper gallery verified: 74 registered readers / 7 themes / $($actualFiles.Count) actual-size screenshots."
+}
 if (($PreviewHudResources -or $PreviewCardNotes) -and -not $log.Contains('HUD resource reading settled: True; equipped trident; temporary +2; buried 10; actual notes open/return; unchanged revision/hand; input restored.')) {
     throw 'HUD resource/card-notes capture requires actual rule state, reading clicks, unchanged gameplay and input restoration.'
 }
@@ -437,6 +485,8 @@ if ($PreviewResponsiveHandInspection) { $previewLabel = 'responsive-read-only-ha
 if ($PreviewStatusInspection) { $previewLabel = 'read-only-status-inspection' }
 if ($PreviewHudResources) { $previewLabel = 'equipped-temporary-buried-hud' }
 if ($PreviewCardNotes) { $previewLabel = 'read-only-card-notes' }
+if ($PreviewCardPaper) { $previewLabel = 'all-74-card-paper-readers' }
+if ($PreviewChoiceRules) { $previewLabel = 'read-only-pending-card-rules' }
 if ($PreviewOnlineFeedback) { $previewLabel = "local-online-feedback-$PreviewOnlineFeedback" }
 if ($PreviewHandState) { $previewLabel = "local-hand-state-$PreviewHandState" }
 if ($PreviewCaveSpiderPoison) { $previewLabel = 'spider-ui-deployment-attack-poison' }

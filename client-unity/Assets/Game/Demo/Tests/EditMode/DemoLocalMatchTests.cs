@@ -3733,17 +3733,17 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(themedRules.resizeTextMaxSize * themedCanvasScale, Is.GreaterThanOrEqualTo(15f));
                 Assert.That(themedRules.resizeTextMaxSize * themedCanvasScale, Is.LessThan(15.7f));
                 Assert.That(themedRules.rectTransform.sizeDelta.x,
-                    Is.EqualTo(themedCard.GetComponent<RectTransform>().sizeDelta.x - 28f).Within(0.01f));
+                    Is.EqualTo(themedCard.GetComponent<RectTransform>().sizeDelta.x * 158f / 218f).Within(0.01f));
                 Assert.That(themedRules.rectTransform.anchoredPosition.x, Is.Zero.Within(0.001f));
                 Assert.That(themedRules.rectTransform.anchoredPosition.y,
-                    Is.EqualTo(-themedCard.GetComponent<RectTransform>().sizeDelta.y * 0.224f).Within(0.01f));
+                    Is.EqualTo(themedCard.GetComponent<RectTransform>().sizeDelta.y * (145f / 520f - 0.5f)).Within(0.01f));
                 var themedArtRect = themedCard.transform.Find("ArtSurface").GetComponent<RectTransform>();
                 var themedTypeRect = themedCard.transform.Find("Type").GetComponent<RectTransform>();
                 Assert.That(themedRules.rectTransform.anchoredPosition.y + themedRules.rectTransform.sizeDelta.y * 0.5f,
                     Is.LessThan(themedArtRect.anchoredPosition.y - themedArtRect.sizeDelta.y * 0.5f),
                     "rules text must stay below the art surface");
                 Assert.That(themedRules.rectTransform.anchoredPosition.y - themedRules.rectTransform.sizeDelta.y * 0.5f,
-                    Is.LessThan(themedTypeRect.anchoredPosition.y + themedTypeRect.sizeDelta.y * 0.5f),
+                    Is.GreaterThan(themedTypeRect.anchoredPosition.y + themedTypeRect.sizeDelta.y * 0.5f),
                     "rules text must not collide with the type label");
                 var detailRules = detailCard.transform.Find("Rules").GetComponent<UnityEngine.UI.Text>();
                 Assert.That(detailRules.alignment, Is.EqualTo(UnityEngine.TextAnchor.MiddleCenter));
@@ -4524,7 +4524,10 @@ namespace BiomeRivals.Demo.Tests
                     settings.horizontalOverflow = HorizontalWrapMode.Wrap;
                     Assert.That(new TextGenerator().GetPreferredHeight(rules.text, settings),
                         Is.LessThanOrEqualTo(bounds.height + 0.5f),
-                        $"{definition.id} full rules must fit the 1280x720 detail card without vertical truncation");
+                        $"{definition.id} paper preview must fit without vertical truncation");
+                    registry.TryGetText(definition.id, out var registered);
+                    Assert.That(card.FullRulesText, Is.EqualTo(registered.rulesText), "Full rules are retained for the reading view.");
+                    Assert.That(rules.rectTransform.rect.height, Is.EqualTo(430f * 104f / 520f).Within(0.01f));
                 }
             }
             finally
@@ -4666,7 +4669,7 @@ namespace BiomeRivals.Demo.Tests
         {
             var registry = CardContentLoader.Load();
             Assert.That(registry.TryGetText("nt_002", out var longText), Is.True);
-            Assert.That(registry.TryGetText("pf_001", out var shortText), Is.True);
+            Assert.That(registry.TryGetText("pf_002", out var shortText), Is.True);
             var font = Font.CreateDynamicFontFromOSFont(
                 new[] { "Microsoft YaHei UI", "Microsoft YaHei", "SimHei", "Arial" }, 20);
             var compactRoot = new GameObject("CompactLongRulesCard", typeof(RectTransform), typeof(Image), typeof(CardUI));
@@ -4684,7 +4687,7 @@ namespace BiomeRivals.Demo.Tests
             try
             {
                 compactRoot.GetComponent<CardUI>().Bind(registry, "nt_002", new Vector2(166, 216), true, font, null);
-                shortRoot.GetComponent<CardUI>().Bind(registry, "pf_001", new Vector2(166, 216), true, font, null);
+                shortRoot.GetComponent<CardUI>().Bind(registry, "pf_002", new Vector2(166, 216), true, font, null);
                 detailRoot.GetComponent<CardUI>().Bind(registry, "nt_002", new Vector2(250, 430), false, font, null);
                 discountedRoot.GetComponent<CardUI>().Bind(registry, "ed_003", new Vector2(166, 216), true, font, null, 2);
 
@@ -4711,7 +4714,8 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(longText.rulesText.Length, Is.GreaterThan(compactRules.text.Length));
                 Assert.That(compactRules.text, Does.EndWith("…"));
                 Assert.That(shortRules.text, Is.EqualTo(shortText.rulesText), "fitting hand text stays complete");
-                Assert.That(detailRules.text, Is.EqualTo(longText.rulesText), "the selected detail card retains the full rules");
+                Assert.That(detailRules.text, Does.EndWith("…"), "long detail text is explicitly a paper-contained preview");
+                Assert.That(detailRoot.GetComponent<CardUI>().FullRulesText, Is.EqualTo(longText.rulesText));
 
                 var lateUpdate = typeof(CardUI).GetMethod("LateUpdate", BindingFlags.Instance | BindingFlags.NonPublic);
                 Assert.That(lateUpdate, Is.Not.Null);
@@ -4751,7 +4755,7 @@ namespace BiomeRivals.Demo.Tests
                 detailSettings.verticalOverflow = VerticalWrapMode.Overflow;
                 detailSettings.horizontalOverflow = HorizontalWrapMode.Wrap;
                 Assert.That(new TextGenerator().GetPreferredHeight(detailRules.text, detailSettings),
-                    Is.LessThanOrEqualTo(detailBounds.height + 0.5f), "the full rule text fits inside the detail card at its minimum readable size");
+                    Is.LessThanOrEqualTo(detailBounds.height + 0.5f), "the rule preview fits the real paper at its minimum readable size");
             }
             finally
             {

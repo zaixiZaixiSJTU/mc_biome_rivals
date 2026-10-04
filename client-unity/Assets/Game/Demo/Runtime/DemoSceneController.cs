@@ -3936,10 +3936,12 @@ namespace BiomeRivals.Demo
                 new[] { archaeologistDefinition.id },
                 new[] { "db_004", "tk_006", "db_001" },
                 new[] { "tk_006" });
+            _match.ResetPlayerRedstoneForScenario(archaeologistDefinition.cost, archaeologistDefinition.cost);
             _selectedCardId = archaeologistDefinition.id;
             var result = _match.ApplyDeploy(
                 archaeologistDefinition,
                 _match.CreateDeployCommand(archaeologistDefinition.id, DemoSlotKind.Unit, 0));
+            if (!result.Accepted) throw new InvalidOperationException("Archaeology reading fixture deployment failed: " + result.Message);
             SelectFirstHandCard();
             RefreshAll();
             var entranceTimeout = 0f;
@@ -4200,7 +4202,8 @@ namespace BiomeRivals.Demo
                 _selectedChoiceOptionIndex = -1;
                 BeginChoiceOverlayEntrance();
             }
-            _choiceOverlay.SetAsLastSibling();
+            if (!IsHandInspectionOpen) _choiceOverlay.SetAsLastSibling();
+            _choiceOverlayCanvasGroup.interactable = !_choiceOverlayEntranceActive && !IsHandInspectionOpen;
             ClearChildren(_choiceCardsRoot);
             var choiceOptions = (choice.options ?? Array.Empty<PendingChoiceOptionDto>())
                 .Where(option => option != null).ToArray();
@@ -4277,7 +4280,7 @@ namespace BiomeRivals.Demo
             _choiceOverlayEntranceActive = false;
             _choiceOverlayEntranceElapsed = 0f;
             _choiceOverlayCanvasGroup.alpha = 1f;
-            _choiceOverlayCanvasGroup.interactable = true;
+            _choiceOverlayCanvasGroup.interactable = !IsHandInspectionOpen;
             _choiceOverlayCanvasGroup.blocksRaycasts = true;
         }
 
@@ -4287,7 +4290,7 @@ namespace BiomeRivals.Demo
             _choiceOverlayEntranceElapsed = 0f;
             if (_choiceOverlayCanvasGroup == null) return;
             _choiceOverlayCanvasGroup.alpha = 1f;
-            _choiceOverlayCanvasGroup.interactable = true;
+            _choiceOverlayCanvasGroup.interactable = !IsHandInspectionOpen;
             _choiceOverlayCanvasGroup.blocksRaycasts = true;
         }
 
@@ -4334,7 +4337,10 @@ namespace BiomeRivals.Demo
                 option.selectable ? (Action)(() => SelectChoiceOption(optionIndex)) : null);
             card.RectTransform.anchoredPosition = new Vector2(0, 18);
             if (option.selectable) card.gameObject.AddComponent<DemoHoverScale>().Configure(1.045f, 16f);
-            CreateText(slot, "ChoiceLabel", new Vector2(0, fullChoiceCard ? -200 : -151),
+            var readRules = CreateSecondaryButton(slot, "ReadRules", new Vector2(0, fullChoiceCard ? -174 : -130),
+                new Vector2(160, 24), "查看完整规则", 14);
+            readRules.onClick.AddListener(() => OpenChoiceRules(option.cardId));
+            CreateText(slot, "ChoiceLabel", new Vector2(0, fullChoiceCard ? -204 : -158),
                 new Vector2(fullChoiceCard ? 248 : 188, 30),
                 topCardScry
                     ? selected ? "◆ 将置于牌库底" : "点击选择置底"
@@ -4357,6 +4363,7 @@ namespace BiomeRivals.Demo
 
         private void SelectChoiceOption(int optionIndex)
         {
+            if (IsReadOnlyOverlayOpen) return;
             var choice = MatchView.PendingChoice;
             if (MatchView.IsFinished || choice == null || !MatchView.IsChoiceOwner || (IsOnlineBoard && !_onlineSession.CanIssueCommand)) return;
             var option = (choice.options ?? Array.Empty<PendingChoiceOptionDto>())
@@ -4370,6 +4377,7 @@ namespace BiomeRivals.Demo
 
         private async void ConfirmChoice()
         {
+            if (IsReadOnlyOverlayOpen) return;
             var choice = MatchView.PendingChoice;
             if (MatchView.IsFinished || choice == null || !MatchView.IsChoiceOwner) return;
             var options = choice.options ?? Array.Empty<PendingChoiceOptionDto>();
@@ -7214,6 +7222,8 @@ namespace BiomeRivals.Demo
             if (HasCommandLineFlag("-previewResponsiveHandInspection")) yield return PrepareResponsiveHandInspectionCapture();
             if (HasCommandLineFlag("-previewStatusInspection")) yield return PrepareStatusInspectionCapture();
             if (HasCommandLineFlag("-previewOnlineFeedback")) yield return PrepareOnlineFeedbackCapture(GetCommandLineValue("-previewOnlineFeedback"));
+            if (HasCommandLineFlag("-previewCardPaper")) yield return PrepareCardPaperCapture();
+            if (HasCommandLineFlag("-previewChoiceRules")) yield return PrepareChoiceRulesCapture();
             if (HasCommandLineFlag("-previewHudResources") || HasCommandLineFlag("-previewCardNotes"))
                 yield return PrepareHudResourceCapture(HasCommandLineFlag("-previewCardNotes"));
             if (HasCommandLineFlag("-previewHandState")) yield return AuditHandReadabilityStateCapture(GetCommandLineValue("-previewHandState"));

@@ -23,8 +23,7 @@ namespace BiomeRivals.Demo
         private string _fullRulesText = string.Empty;
         private bool _compactRules;
         private bool _summarizeDetailRules;
-        private Vector2 _fullRulesSize;
-        private Vector2 _fullRulesPosition;
+        private bool _usesStudyFrame;
         private float _appliedCanvasScale;
         private Action _onDragBegin;
         private Action<Vector2> _onDragUpdate;
@@ -54,6 +53,8 @@ namespace BiomeRivals.Demo
         public string HandCardInstanceId { get; private set; } = string.Empty;
         public int BaseCost { get; private set; }
         public int DisplayedCost { get; private set; }
+        public string FullRulesText => _fullRulesText;
+        public bool HasRulesPreview => _rulesText != null && _rulesText.text != _fullRulesText;
         public RectTransform RectTransform => (RectTransform)transform;
 
         public void Bind(CardContentRegistry registry, string cardId, Vector2 size, bool compact, Font font, Action onClick,
@@ -85,6 +86,7 @@ namespace BiomeRivals.Demo
             var rootImage = GetComponent<Image>() ?? gameObject.AddComponent<Image>();
             var frameSprite = DemoCardFrameProvider.Load(definition.themeId);
             var usesStudyFrame = frameSprite != null;
+            _usesStudyFrame = usesStudyFrame;
             rootImage.sprite = frameSprite;
             rootImage.type = Image.Type.Simple;
             rootImage.preserveAspect = false;
@@ -171,11 +173,16 @@ namespace BiomeRivals.Demo
             var rulesWidth = usesStudyFrame ? w - (compact ? 28 : 38) : w - 30;
             var rulesHeightInset = usesStudyFrame ? (compact ? 14 : 15) : 8;
             var rules = CreateText("Rules", new Vector2(0, rulesY), new Vector2(rulesWidth, rulesHeight - rulesHeightInset), text.rulesText, compact ? 12 : 14, theme.BodyText, TextAnchor.MiddleCenter, FontStyle.Normal, font);
+            if (usesStudyFrame)
+            {
+                var paper = DemoCardFrameProvider.GetRulesPaperBounds(definition.themeId, size);
+                rules.rectTransform.sizeDelta = paper.size;
+                rules.rectTransform.anchoredPosition = paper.center;
+            }
             rules.alignByGeometry = usesStudyFrame;
+            rules.supportRichText = false;
             rules.resizeTextForBestFit = true;
             _rulesText = rules;
-            _fullRulesSize = rules.rectTransform.sizeDelta;
-            _fullRulesPosition = rules.rectTransform.anchoredPosition;
             _fullRulesText = text.rulesText;
             _compactRules = compact;
             _summarizeDetailRules = false;
@@ -348,42 +355,6 @@ namespace BiomeRivals.Demo
             return text;
         }
 
-        private static string CreateCompactRulesPreview(Text rules, string fullText)
-        {
-            if (string.IsNullOrEmpty(fullText) || rules.font == null) return fullText ?? string.Empty;
-
-            var rect = rules.rectTransform.rect;
-            if (rect.width <= 0f || rect.height <= 0f) return fullText;
-
-            var settings = rules.GetGenerationSettings(rect.size);
-            settings.resizeTextForBestFit = false;
-            settings.fontSize = rules.resizeTextMinSize;
-            settings.verticalOverflow = VerticalWrapMode.Overflow;
-            settings.horizontalOverflow = HorizontalWrapMode.Wrap;
-
-            var generator = new TextGenerator();
-            if (generator.GetPreferredHeight(fullText, settings) <= rect.height + 0.5f) return fullText;
-
-            var low = 0;
-            var high = fullText.Length;
-            while (low < high)
-            {
-                var middle = low + (high - low + 1) / 2;
-                var candidate = AddPreviewEllipsis(fullText, middle);
-                if (generator.GetPreferredHeight(candidate, settings) <= rect.height + 0.5f) low = middle;
-                else high = middle - 1;
-            }
-
-            return AddPreviewEllipsis(fullText, low);
-        }
-
-        private static string AddPreviewEllipsis(string fullText, int prefixLength)
-        {
-            var prefix = fullText.Substring(0, Mathf.Clamp(prefixLength, 0, fullText.Length))
-                .TrimEnd(' ', '，', '；', '。', '、', ',', ';', '.');
-            return prefix + "…";
-        }
-
         private static float GetCanvasScaleFactor(Graphic graphic)
         {
             var canvas = graphic != null ? graphic.canvas : null;
@@ -394,28 +365,11 @@ namespace BiomeRivals.Demo
 
         private void LateUpdate() => RefreshRuleTypography(false);
 
-        // The narrow inspector is a preview; the full-size reading view remains full text.
+        // No caller may enlarge the registered paper to force long text onto the frame.
+        // Full rules belong to the separate reading view, not to an oversized card Text Rect.
         public void SetRulesSummary(bool enabled)
         {
             _summarizeDetailRules = enabled;
-            if (_rulesText != null)
-            {
-                // The study frame's light paper is only ~23% of its height.
-                // Fitting the larger text Rect still painted dark ink outside that paper.
-                var frame = GetComponent<Image>().sprite;
-                if (enabled && !IsCompact && frame != null && frame.name.StartsWith("CardFrame_", StringComparison.Ordinal))
-                {
-                    _rulesText.rectTransform.sizeDelta = new Vector2(RectTransform.rect.width * 0.78f,
-                        Mathf.Max(1f, RectTransform.rect.height * 0.23f - 8f));
-                    _rulesText.rectTransform.anchoredPosition = new Vector2(0f, -RectTransform.rect.height * 0.224f);
-                }
-                else
-                {
-                    _rulesText.rectTransform.sizeDelta = _fullRulesSize;
-                    _rulesText.rectTransform.anchoredPosition = _fullRulesPosition;
-                }
-                _rulesText.text = _fullRulesText;
-            }
             RefreshRuleTypography(true);
         }
 
@@ -432,9 +386,9 @@ namespace BiomeRivals.Demo
                 _rulesText.resizeTextMinSize = Mathf.Max(1, Mathf.CeilToInt(minimumScreenFontSize / canvasScale));
                 _rulesText.resizeTextMaxSize = Mathf.Max(_rulesText.resizeTextMinSize,
                     Mathf.Max(1, Mathf.CeilToInt(RulesMaxScreenFontSize / canvasScale)));
-                if (_compactRules) _rulesText.text = CreateCompactRulesPreview(_rulesText, _fullRulesText);
-                else if (_summarizeDetailRules)
-                    _rulesText.text = DemoReadableSummary.FitPreview(_fullRulesText, _rulesText, _rulesText.resizeTextMinSize);
+                _rulesText.text = _usesStudyFrame || _compactRules || _summarizeDetailRules
+                    ? DemoReadableSummary.FitPreview(_fullRulesText, _rulesText, _rulesText.resizeTextMinSize)
+                    : _fullRulesText;
                 _rulesText.SetAllDirty();
             }
 
@@ -469,6 +423,7 @@ namespace BiomeRivals.Demo
             for (var index = transform.childCount - 1; index >= 0; index--)
             {
                 var child = transform.GetChild(index).gameObject;
+                child.SetActive(false);
                 if (Application.isPlaying) Destroy(child);
                 else DestroyImmediate(child);
             }

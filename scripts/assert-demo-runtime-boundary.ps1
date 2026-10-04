@@ -43,6 +43,7 @@ $developmentTypes = @(
     'BiomeRivals.Demo.DemoOnlinePendingProbe',
     'BiomeRivals.Demo.DemoOnlinePendingReport',
     'BiomeRivals.Demo.DemoSceneController/CompatibilityAuditReport',
+    'BiomeRivals.Demo.DemoSceneController/CardPaperAuditReport',
     'BiomeRivals.Demo.DemoSceneController/EntityCatalogueReport',
     'BiomeRivals.Demo.DemoSceneController/EntityCatalogueEntry'
 )
@@ -88,7 +89,7 @@ try {
     if (@($animator.Methods | Where-Object Name -eq 'SampleForAudit').Count -ne [int]$expectedDevelopment) {
         throw 'Deterministic entity sampler leaked or is missing.'
     }
-    foreach ($method in @('OpenHandInspection','CloseHandInspection','RefreshHandInspection','OpenStatusInspection','OpenCardNotes','CloseStatusInspection','RefreshStatusInspection','ShowCompatibilityFailure','ShowOnlineException','SetAgentPolicy')) {
+    foreach ($method in @('OpenHandInspection','CloseHandInspection','RefreshHandInspection','OpenChoiceRules','OpenStatusInspection','OpenCardNotes','CloseStatusInspection','RefreshStatusInspection','ShowCompatibilityFailure','ShowOnlineException','SetAgentPolicy')) {
         if (@($scene.Methods | Where-Object Name -eq $method).Count -ne 1) { throw "Production read-only card UI method is missing: $method" }
     }
     $statusCapture = @($scene.Methods | Where-Object Name -eq 'PrepareStatusInspectionCapture')
@@ -99,6 +100,13 @@ try {
     if ($feedbackCapture.Count -ne 1) { throw 'Online feedback capture gate is missing.' }
     $hasFeedbackIterator = @($feedbackCapture[0].CustomAttributes | Where-Object { $_.AttributeType.FullName -eq 'System.Runtime.CompilerServices.IteratorStateMachineAttribute' }).Count -eq 1
     if ($hasFeedbackIterator -ne $expectedDevelopment) { throw 'Online feedback reading diagnostics leaked or are missing.' }
+    foreach ($method in @('PrepareCardPaperCapture','PrepareChoiceRulesCapture')) {
+        $capture = @($scene.Methods | Where-Object Name -eq $method)
+        if ($capture.Count -ne 1) { throw "Card reading capture gate is missing: $method" }
+        $hasIterator = @($capture[0].CustomAttributes | Where-Object { $_.AttributeType.FullName -eq 'System.Runtime.CompilerServices.IteratorStateMachineAttribute' }).Count -eq 1
+        if ($hasIterator -ne $expectedDevelopment) { throw "Card reading diagnostic boundary failed: $method" }
+    }
+    if (@($scene.Methods | Where-Object Name -eq 'AuditSceneCardPaper').Count -ne [int]$expectedDevelopment) { throw 'Card paper diagnostic method boundary failed.' }
     $resourceCapture = @($scene.Methods | Where-Object Name -eq 'PrepareHudResourceCapture')
     if ($resourceCapture.Count -ne 1) { throw 'HUD resource capture gate is missing.' }
     $hasResourceIterator = @($resourceCapture[0].CustomAttributes | Where-Object { $_.AttributeType.FullName -eq 'System.Runtime.CompilerServices.IteratorStateMachineAttribute' }).Count -eq 1

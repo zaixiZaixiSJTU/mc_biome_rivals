@@ -44,6 +44,30 @@ namespace BiomeRivals.Demo
         private static readonly Rect[] AttackSocketRects = CreateBottomSocketRects(false);
         private static readonly Rect[] HealthSocketRects = CreateBottomSocketRects(true);
 
+        // Measured, ornament-free paper interiors in frame-local SOURCE pixels (bottom-left).
+        // Keep these beside the slice registration: changing a frame must review both registrations.
+        private static readonly Rect[] RulesPaperRects =
+        {
+            new Rect(30, 93, 158, 104),
+            new Rect(29, 93, 162, 104),
+            new Rect(32, 93, 156, 104),
+            new Rect(32, 93, 155, 104),
+            new Rect(32, 93, 157, 104),
+            new Rect(32, 93, 157, 104),
+            new Rect(31, 93, 160, 104)
+        };
+
+        public static Rect GetRulesPaperBounds(string themeId, Vector2 cardSize)
+        {
+            var index = Array.IndexOf(ThemeOrder, themeId);
+            if (index < 0) throw new ArgumentException("Unregistered study-frame paper: " + themeId);
+            var source = RulesPaperRects[index];
+            var frame = FrameRects[index];
+            return new Rect((source.x / frame.width - 0.5f) * cardSize.x,
+                (source.y / frame.height - 0.5f) * cardSize.y,
+                source.width / frame.width * cardSize.x, source.height / frame.height * cardSize.y);
+        }
+
         private static readonly Dictionary<string, Sprite> Cache = new Dictionary<string, Sprite>(StringComparer.Ordinal);
 
         public static Sprite Load(string themeId)

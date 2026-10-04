@@ -139,10 +139,11 @@ namespace BiomeRivals.Demo.Tests
                 foreach (var archaeologyCard in archaeologyCards)
                 {
                     Assert.That(archaeologyCard.IsCompact, Is.False,
-                        "Archaeology choices show complete rules instead of the hand-card ellipsis preview.");
+                        "Archaeology choices keep the detail card material layout.");
                     Assert.That(registry.TryGetText(archaeologyCard.CardId, out var cardText), Is.True);
-                    Assert.That(archaeologyCard.transform.Find("Rules").GetComponent<Text>().text,
-                        Is.EqualTo(cardText.rulesText));
+                    Assert.That(archaeologyCard.FullRulesText, Is.EqualTo(cardText.rulesText));
+                    Assert.That(archaeologyCard.transform.parent.Find("ReadRules").GetComponent<Button>(), Is.Not.Null,
+                        "Every visible pending card must have a full-rules entry, including non-selectable options.");
                 }
             }
             finally

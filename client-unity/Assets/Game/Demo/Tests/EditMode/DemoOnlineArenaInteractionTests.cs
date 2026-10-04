@@ -15,6 +15,34 @@ namespace BiomeRivals.Demo.Tests
     // The gateway deliberately rejects captured commands without changing the store.
     public sealed class DemoOnlineArenaInteractionTests
     {
+        [TestCase("alice", "nt_002", true)]
+        [TestCase("alice", "db_001", false)]
+        [TestCase("bob", "nt_002", false)]
+        public void AuthoritativePendingReaderRequiresOwnedVisibleCard(string owner, string requested, bool opens)
+        {
+            using (var scene = new OnlineScene("standard_meadow", "ed_002"))
+            {
+                var source = scene.AddObject(owner == "alice", "cd_001", DemoSlotKind.Unit, 0);
+                scene.Snapshot.activePlayerIndex = owner == "alice" ? 0 : 1;
+                scene.Snapshot.pendingChoice = new PendingChoiceDto { choiceId = "online-reader-choice", playerId = owner,
+                    sourceCardId = "cd_001", sourceInstanceId = source.instanceId, effectId = "effect.cd_001.01",
+                    kind = "TOP_CARD_SCRY", options = new[] { new PendingChoiceOptionDto { optionIndex = 0,
+                        cardId = owner == "alice" ? "nt_002" : string.Empty, selectable = owner == "alice" } } };
+                scene.Refresh();
+                Invoke(scene.Controller, "OpenChoiceRules", requested);
+                Assert.That(scene.Controller.transform.Find("DemoCanvas/HandInspectionOverlay").gameObject.activeSelf, Is.EqualTo(opens));
+                Assert.That(scene.Gateway.Commands, Is.Empty);
+                if (opens)
+                {
+                    Invoke(scene.Controller, "SelectChoiceOption", 0);
+                    Invoke(scene.Controller, "ConfirmChoice");
+                    Assert.That(scene.Gateway.Commands, Is.Empty, "Reading must not resolve the server choice.");
+                    Invoke(scene.Controller, "CloseHandInspection");
+                    Assert.That(scene.Snapshot.pendingChoice.choiceId, Is.EqualTo("online-reader-choice"));
+                }
+            }
+        }
+
         [TestCase("deep_caverns", "beyond-edge", false)]
         [TestCase("deep_caverns", "not-adjacent", false)]
         [TestCase("deep_caverns", "occupied-landing", false)]
@@ -401,7 +429,10 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(card.DisplayedCost, Is.EqualTo(card.BaseCost - 1));
                 var registry = (BiomeRivals.Content.CardContentRegistry)GetField(scene.Controller, "_registry");
                 Assert.That(registry.TryGetText("ed_008", out var text), Is.True);
-                Assert.That(card.transform.Find("Rules").GetComponent<Text>().text, Is.EqualTo(text.rulesText));
+                Assert.That(card.FullRulesText, Is.EqualTo(text.rulesText));
+                Assert.That(overlay.Find("ReadingPanel/RulesViewport/FullRules").GetComponent<Text>().text, Is.EqualTo(text.rulesText));
+                Assert.That(card.transform.Find("Rules").GetComponent<RectTransform>().rect.height,
+                    Is.EqualTo(card.RectTransform.rect.height * 0.2f).Within(0.01f));
                 var readingButton = card.GetComponent<Button>();
                 Assert.That(readingButton == null || !readingButton.IsInteractable(), Is.True);
                 Assert.That(GetField(scene.Controller, "_selectedHandCardInstanceId"), Is.EqualTo(beforeSelected));

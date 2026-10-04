@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Linq;
 using BiomeRivals.Bootstrap;
 using BiomeRivals.Content;
 using BiomeRivals.Core;
@@ -53,6 +54,103 @@ namespace BiomeRivals.Demo.Tests
         private void Invoke(string method, params object[] arguments) => typeof(DemoSceneController)
             .GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic).Invoke(_controller, arguments);
         private T Find<T>(string path) where T : Component => _root.transform.Find("DemoCanvas/" + path).GetComponent<T>();
+
+        [TestCase(1f)]
+        [TestCase(2f / 3f)]
+        [TestCase(1024f / 1920f)]
+        public void All74HandReadersKeepFullRulesAndStableDuplicateInstances(float scale)
+        {
+            _root.transform.Find("DemoCanvas").GetComponent<Canvas>().scaleFactor = scale;
+            var registry = Field<CardContentRegistry>("_registry");
+            var match = Field<DemoLocalMatch>("_match");
+            var document = JsonUtility.FromJson<CardDefinitionRegistryDocument>(Resources.Load<TextAsset>("CardContent/card-definition-registry.v1").text);
+            Assert.That(document.entries, Has.Length.EqualTo(74));
+            foreach (var definition in document.entries)
+            {
+                match.ResetHand(new[] { definition.id, definition.id });
+                Invoke("RefreshAll");
+                var revision = match.Revision;
+                var instances = match.HandCards.Select(card => card.handCardInstanceId).ToArray();
+                Invoke("OpenHandInspection");
+                var card = Field<CardDetailsView>("_handInspectionDetails").CurrentCard;
+                var first = card.HandCardInstanceId;
+                Invoke("MoveHandInspection", 1);
+                card = Field<CardDetailsView>("_handInspectionDetails").CurrentCard;
+                Assert.That(card.HandCardInstanceId, Is.Not.EqualTo(first), definition.id);
+                registry.TryGetText(definition.id, out var registered);
+                var body = Find<Text>("HandInspectionOverlay/ReadingPanel/RulesViewport/FullRules");
+                Assert.That(body.text, Is.EqualTo(registered.rulesText), definition.id);
+                Assert.That(card.FullRulesText, Is.EqualTo(registered.rulesText));
+                Assert.That(body.resizeTextForBestFit, Is.False);
+                Assert.That(body.supportRichText, Is.False);
+                Assert.That(body.fontSize * scale, Is.GreaterThanOrEqualTo(12f));
+                Canvas.ForceUpdateCanvases();
+                Assert.That(body.rectTransform.rect.height + 0.5f, Is.GreaterThanOrEqualTo(body.preferredHeight));
+                var scroll = Find<ScrollRect>("HandInspectionOverlay/ReadingPanel/RulesViewport");
+                Assert.That(scroll.movementType, Is.EqualTo(ScrollRect.MovementType.Clamped));
+                Assert.That(scroll.verticalScrollbarVisibility, Is.EqualTo(ScrollRect.ScrollbarVisibility.AutoHide));
+                Assert.That(Field<CanvasGroup>("_handCanvasGroup").interactable, Is.False);
+                Invoke("CloseHandInspection");
+                Assert.That(match.Revision, Is.EqualTo(revision));
+                Assert.That(match.HandCards.Select(value => value.handCardInstanceId), Is.EqualTo(instances));
+            }
+        }
+
+        [Test]
+        public void ArchaeologyReadingFixturePaysItsRealRegisteredCostBeforeShowingChoices()
+        {
+            var routine = (System.Collections.IEnumerator)typeof(DemoSceneController)
+                .GetMethod("SetupArchaeologyPreview", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(_controller, null);
+            Assert.That(routine.MoveNext(), Is.True);
+            var match = Field<DemoLocalMatch>("_match");
+            Assert.That(match.Energy, Is.Zero, "The fixture must pay the real cost, not bypass payment.");
+            Assert.That(match.PendingChoice?.kind, Is.EqualTo("ARCHAEOLOGY_TOP_3"));
+            Assert.That(match.PendingChoice.options, Has.Length.EqualTo(3));
+            Assert.That(match.GetObject(true, DemoSlotKind.Unit, 0)?.CardId, Is.EqualTo("db_003"));
+        }
+
+        [Test]
+        public void PendingCardReaderDoesNotSelectOrConfirmAndClosesWhenItsChoiceChanges()
+        {
+            var match = Field<DemoLocalMatch>("_match");
+            var pending = new PendingChoiceDto { choiceId = "reader-choice", playerId = "local-player", kind = "TOP_CARD_SCRY",
+                options = new[] { new PendingChoiceOptionDto { optionIndex = 0, cardId = "nt_002", selectable = true } } };
+            typeof(DemoLocalMatch).GetProperty("PendingChoice").GetSetMethod(true).Invoke(match, new object[] { pending });
+            Invoke("RefreshAll");
+            Invoke("AdvanceChoiceOverlayEntrance", 1f);
+            var revision = match.Revision;
+            var selected = Field<int>("_selectedChoiceOptionIndex");
+            Invoke("OpenChoiceRules", "nt_002");
+            Assert.That(Find<RectTransform>("HandInspectionOverlay").gameObject.activeSelf, Is.True);
+            var registry = Field<CardContentRegistry>("_registry");
+            registry.TryGetText("nt_002", out var cardText);
+            Assert.That(Find<Text>("HandInspectionOverlay/ReadingPanel/RulesViewport/FullRules").text, Is.EqualTo(cardText.rulesText));
+            Assert.That(Find<Button>("HandInspectionOverlay/ReadingPanel/Next").gameObject.activeSelf, Is.False);
+            Assert.That(Field<CanvasGroup>("_choiceOverlayCanvasGroup").interactable, Is.False);
+            Invoke("SelectChoiceOption", 0);
+            Invoke("ConfirmChoice");
+            Assert.That(Field<int>("_selectedChoiceOptionIndex"), Is.EqualTo(selected));
+            Assert.That(match.PendingChoice, Is.SameAs(pending));
+            Assert.That(match.Revision, Is.EqualTo(revision));
+            Invoke("CloseHandInspection");
+            Assert.That(Field<CanvasGroup>("_choiceOverlayCanvasGroup").interactable, Is.True);
+            Invoke("OpenChoiceRules", "nt_002");
+            pending.choiceId = "replacement-choice";
+            Invoke("RefreshAll");
+            Assert.That(Find<RectTransform>("HandInspectionOverlay").gameObject.activeSelf, Is.False);
+        }
+
+        [TestCase("local-player", "db_001")]
+        public void PendingReaderRejectsUnknownOptions(string owner, string requested)
+        {
+            var match = Field<DemoLocalMatch>("_match");
+            var pending = new PendingChoiceDto { choiceId = "private-choice", playerId = owner, kind = "TOP_CARD_SCRY",
+                options = new[] { new PendingChoiceOptionDto { optionIndex = 0, cardId = "nt_002", selectable = true } } };
+            typeof(DemoLocalMatch).GetProperty("PendingChoice").GetSetMethod(true).Invoke(match, new object[] { pending });
+            Invoke("RefreshAll");
+            Invoke("OpenChoiceRules", requested);
+            Assert.That(Find<RectTransform>("HandInspectionOverlay").gameObject.activeSelf, Is.False);
+        }
 
         [Test]
         public void FullTextIsLiteralAndUpdatingDoesNotKeepThePreviousMessage()
