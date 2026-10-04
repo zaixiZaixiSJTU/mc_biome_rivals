@@ -60,12 +60,13 @@ namespace BiomeRivals.Demo
         }
 
         // Preserve grapheme boundaries: a summary must not split surrogate pairs or combining marks.
-        public static string FitPreview(string value, Text text)
+        public static string FitPreview(string value, Text text, int? fontSize = null)
         {
             value = value ?? string.Empty;
             if (text.font == null || text.rectTransform.rect.width <= 0f || text.rectTransform.rect.height <= 0f) return value;
             var settings = text.GetGenerationSettings(text.rectTransform.rect.size);
             settings.resizeTextForBestFit = false;
+            if (fontSize.HasValue) settings.fontSize = fontSize.Value;
             settings.verticalOverflow = VerticalWrapMode.Overflow;
             var generator = new TextGenerator();
             bool Fits(string candidate) => generator.GetPreferredHeight(candidate, settings) / text.pixelsPerUnit <= text.rectTransform.rect.height + 0.5f;

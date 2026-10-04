@@ -4600,14 +4600,22 @@ namespace BiomeRivals.Demo.Tests
                 var energyPlate = root.transform.Find("DemoCanvas/EnergyPlate").GetComponent<RectTransform>();
                 var energyCorners = new Vector3[4];
                 energyPlate.GetWorldCorners(energyCorners);
-                var energyMaxY = energyCorners.Max(corner => handPlate.InverseTransformPoint(corner).y);
+                var energyBounds = new Rect(
+                    energyCorners.Min(corner => handPlate.InverseTransformPoint(corner).x),
+                    energyCorners.Min(corner => handPlate.InverseTransformPoint(corner).y),
+                    energyCorners.Max(corner => handPlate.InverseTransformPoint(corner).x) - energyCorners.Min(corner => handPlate.InverseTransformPoint(corner).x),
+                    energyCorners.Max(corner => handPlate.InverseTransformPoint(corner).y) - energyCorners.Min(corner => handPlate.InverseTransformPoint(corner).y));
                 foreach (var card in cards)
                 {
                     var corners = new Vector3[4];
                     card.RectTransform.GetWorldCorners(corners);
-                    var cardMinY = corners.Min(corner => handPlate.InverseTransformPoint(corner).y);
-                    Assert.That(cardMinY, Is.GreaterThanOrEqualTo(energyMaxY),
-                        "The energy plate must not cover the lower edge or stat socket of a full-hand card.");
+                    var cardBounds = new Rect(
+                        corners.Min(corner => handPlate.InverseTransformPoint(corner).x),
+                        corners.Min(corner => handPlate.InverseTransformPoint(corner).y),
+                        corners.Max(corner => handPlate.InverseTransformPoint(corner).x) - corners.Min(corner => handPlate.InverseTransformPoint(corner).x),
+                        corners.Max(corner => handPlate.InverseTransformPoint(corner).y) - corners.Min(corner => handPlate.InverseTransformPoint(corner).y));
+                    Assert.That(cardBounds.Overlaps(energyBounds), Is.False,
+                        "The energy plate must not cover any full-hand card or its stat sockets.");
                 }
 
                 var statusPlate = root.transform.Find("DemoCanvas/StatusPlate").GetComponent<RectTransform>();
@@ -6001,7 +6009,7 @@ namespace BiomeRivals.Demo.Tests
                 var canvas = root.transform.Find("DemoCanvas");
                 var paths = new[] { "OnlineStatusPanel/Account", "OnlineStatusPanel/Deck",
                     "OnlineStatusPanel/Status", "OpponentEnergyPlate/Resource", "OpponentEquipment/Label",
-                    "PlayerEquipment/Label", "RoundPlate/Round", "HandLabel", "InspectHand/Label",
+                    "PlayerEquipment/Label", "EnergyPlate/Energy", "RoundPlate/Round", "HandLabel", "InspectHand/Label",
                     "FactionRail/Faction_plains_forest/Label" };
                 foreach (var path in paths)
                 {
@@ -6017,7 +6025,9 @@ namespace BiomeRivals.Demo.Tests
                         : path == "HandLabel"
                             ? new[] { "手牌 7/7 · 牌库 25（掩埋 10）· 弃牌 99" }
                         : path.EndsWith("Equipment/Label")
-                            ? new[] { "装备槽 · 未装备", "激流三叉戟  ·  ⚔ 2  ◆ 3/3" }
+                            ? new[] { "装备槽 · 未装备", "激流三叉戟\n攻击 2 · 耐久 3/3" }
+                        : path == "EnergyPlate/Energy"
+                            ? new[] { "红石 ◆ 1/1", "红石 ◆ 12/10\n临时 +2" }
                         : new[] { text.text };
                     foreach (var message in messages)
                     {

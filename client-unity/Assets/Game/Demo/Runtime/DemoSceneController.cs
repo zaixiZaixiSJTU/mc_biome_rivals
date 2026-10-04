@@ -1560,14 +1560,14 @@ namespace BiomeRivals.Demo
             _inspectorRoot = CreateRect(panel, "InspectorContent", Vector2.zero, new Vector2(panelWidth - inset, 715f - inset));
             _cardDetailsView = _inspectorRoot.gameObject.AddComponent<CardDetailsView>();
             _cardDetailsView.Configure(_registry, UiFont);
-            _cardNotesButton = CreateSecondaryButton(panel, "ReadCardNotes", new Vector2(0, -325), new Vector2(248, 36), "查看操作说明", 15);
+            _cardNotesButton = CreateSecondaryButton(panel, "ReadCardNotes", new Vector2(0, -325), new Vector2(248, 36), "查看完整说明", 15);
             _cardNotesButton.onClick.AddListener(OpenCardNotes);
         }
 
         private void BuildTurnControls()
         {
-            var energyPlate = CreateBasePanel(_canvasRoot, "EnergyPlate", new Vector2(-570, -516), new Vector2(150, 34));
-            _energyText = CreateText(energyPlate, "Energy", Vector2.zero, new Vector2(130, 30), "\u25C6 1/1", 18, Cyan, TextAnchor.MiddleCenter, FontStyle.Bold);
+            var energyPlate = CreateBasePanel(_canvasRoot, "EnergyPlate", new Vector2(-782, -289), new Vector2(270, 64));
+            _energyText = CreateText(energyPlate, "Energy", Vector2.zero, new Vector2(248, 54), "红石 ◆ 1/1", 18, Cyan, TextAnchor.MiddleCenter, FontStyle.Bold);
 
             var roundPlate = CreateBasePanel(_canvasRoot, "RoundPlate", new Vector2(760, 472), new Vector2(250, 54));
             _roundText = CreateText(roundPlate, "Round", Vector2.zero, new Vector2(228, 38), "第 1 回合 · 主行动", 17, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
@@ -4122,8 +4122,8 @@ namespace BiomeRivals.Demo
             _battlefield.SyncPieces(match.PlayerBattlefield, match.OpponentBattlefield, _registry);
             RefreshInspector();
             _energyText.text = match.TemporaryEnergy > 0
-                ? $"◆ {match.Energy}/{match.MaxEnergy}\n临时 +{match.TemporaryEnergy}"
-                : $"◆ {match.Energy}/{match.MaxEnergy}";
+                ? $"红石 ◆ {match.Energy}/{match.MaxEnergy}\n临时 +{match.TemporaryEnergy}"
+                : $"红石 ◆ {match.Energy}/{match.MaxEnergy}";
             _opponentEnergyText.text = FormatOpponentEnergy(match);
             _titleText.text = IsOnlineBoard ? "群系竞逐  ·  权威联机对局"
                 : _previewOnlineStatus ? "群系竞逐  ·  联机状态预览" : "群系竞逐  ·  本地战场演示";
@@ -5011,7 +5011,7 @@ namespace BiomeRivals.Demo
                 : definition.cost;
             var isDiscounted = effectiveCost < definition.cost;
             _cardDetailsView.ShowCard(_selectedCardId, new Vector2(250, 430), new Vector2(0, 120), effectiveCost,
-                selectedHandCardInstanceId);
+                selectedHandCardInstanceId, summarizeRules: true);
             var deployType = definition.cardType == "UNIT" || definition.cardType == "BUILDING" || definition.cardType == "STRUCTURE";
             var pendingDeployEffect = deployType && definition.effectImplementationStatus == "PENDING";
             if (!hasSelectedHandCard)
@@ -5752,7 +5752,7 @@ namespace BiomeRivals.Demo
 
         private string FormatEquipment(DemoEquipment equipment) => equipment == null
             ? "装备槽 · 未装备"
-            : $"{GetCardName(equipment.CardId)}  ·  ⚔ {equipment.Attack}  ◆ {equipment.Durability}/{equipment.MaxDurability}";
+            : $"{GetCardName(equipment.CardId)}\n攻击 {equipment.Attack} · 耐久 {equipment.Durability}/{equipment.MaxDurability}";
 
         private string ReplaceCardIdsWithNames(string message, CardDefinitionEntry definition)
         {
@@ -7214,6 +7214,8 @@ namespace BiomeRivals.Demo
             if (HasCommandLineFlag("-previewHandInspection")) yield return PrepareHandInspectionCapture();
             if (HasCommandLineFlag("-previewResponsiveHandInspection")) yield return PrepareResponsiveHandInspectionCapture();
             if (HasCommandLineFlag("-previewStatusInspection")) yield return PrepareStatusInspectionCapture();
+            if (HasCommandLineFlag("-previewHudResources") || HasCommandLineFlag("-previewCardNotes"))
+                yield return PrepareHudResourceCapture(HasCommandLineFlag("-previewCardNotes"));
             if (HasCommandLineFlag("-previewHandState")) yield return AuditHandReadabilityStateCapture(GetCommandLineValue("-previewHandState"));
             WriteDemoScreenshot(path);
             Application.Quit(0);
@@ -7673,7 +7675,12 @@ namespace BiomeRivals.Demo
 
         private static void DestroyUiObject(GameObject target)
         {
-            if (Application.isPlaying) Destroy(target);
+            if (Application.isPlaying)
+            {
+                // Deferred destruction must not leave retired text/buttons active for this frame.
+                target.SetActive(false);
+                Destroy(target);
+            }
             else DestroyImmediate(target);
         }
 

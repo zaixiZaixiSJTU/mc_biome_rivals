@@ -22,6 +22,9 @@ namespace BiomeRivals.Demo
         private Text _costModifierText;
         private string _fullRulesText = string.Empty;
         private bool _compactRules;
+        private bool _summarizeDetailRules;
+        private Vector2 _fullRulesSize;
+        private Vector2 _fullRulesPosition;
         private float _appliedCanvasScale;
         private Action _onDragBegin;
         private Action<Vector2> _onDragUpdate;
@@ -171,8 +174,11 @@ namespace BiomeRivals.Demo
             rules.alignByGeometry = usesStudyFrame;
             rules.resizeTextForBestFit = true;
             _rulesText = rules;
+            _fullRulesSize = rules.rectTransform.sizeDelta;
+            _fullRulesPosition = rules.rectTransform.anchoredPosition;
             _fullRulesText = text.rulesText;
             _compactRules = compact;
+            _summarizeDetailRules = false;
             _appliedCanvasScale = 0f;
             RefreshRuleTypography(true);
 
@@ -388,6 +394,31 @@ namespace BiomeRivals.Demo
 
         private void LateUpdate() => RefreshRuleTypography(false);
 
+        // The narrow inspector is a preview; the full-size reading view remains full text.
+        public void SetRulesSummary(bool enabled)
+        {
+            _summarizeDetailRules = enabled;
+            if (_rulesText != null)
+            {
+                // The study frame's light paper is only ~23% of its height.
+                // Fitting the larger text Rect still painted dark ink outside that paper.
+                var frame = GetComponent<Image>().sprite;
+                if (enabled && !IsCompact && frame != null && frame.name.StartsWith("CardFrame_", StringComparison.Ordinal))
+                {
+                    _rulesText.rectTransform.sizeDelta = new Vector2(RectTransform.rect.width * 0.78f,
+                        Mathf.Max(1f, RectTransform.rect.height * 0.23f - 8f));
+                    _rulesText.rectTransform.anchoredPosition = new Vector2(0f, -RectTransform.rect.height * 0.224f);
+                }
+                else
+                {
+                    _rulesText.rectTransform.sizeDelta = _fullRulesSize;
+                    _rulesText.rectTransform.anchoredPosition = _fullRulesPosition;
+                }
+                _rulesText.text = _fullRulesText;
+            }
+            RefreshRuleTypography(true);
+        }
+
         private void RefreshRuleTypography(bool force)
         {
             if (_rulesText == null && _costModifierText == null) return;
@@ -402,6 +433,8 @@ namespace BiomeRivals.Demo
                 _rulesText.resizeTextMaxSize = Mathf.Max(_rulesText.resizeTextMinSize,
                     Mathf.Max(1, Mathf.CeilToInt(RulesMaxScreenFontSize / canvasScale)));
                 if (_compactRules) _rulesText.text = CreateCompactRulesPreview(_rulesText, _fullRulesText);
+                else if (_summarizeDetailRules)
+                    _rulesText.text = DemoReadableSummary.FitPreview(_fullRulesText, _rulesText, _rulesText.resizeTextMinSize);
                 _rulesText.SetAllDirty();
             }
 

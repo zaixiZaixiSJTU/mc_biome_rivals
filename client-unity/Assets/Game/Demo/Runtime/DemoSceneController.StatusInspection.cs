@@ -79,8 +79,19 @@ namespace BiomeRivals.Demo
         }
 
         private string CurrentReadingText => _readingCardNotes
-            ? string.Join("\n\n", _inspectorRoot.GetComponentsInChildren<DemoReadableSummary>().Select(summary => summary.FullText).Where(value => !string.IsNullOrWhiteSpace(value)))
+            ? GetCardNotesText()
             : _statusSummary.FullText;
+
+        private string GetCardNotesText()
+        {
+            var notes = string.Join("\n\n", _inspectorRoot.GetComponentsInChildren<DemoReadableSummary>()
+                .Where(summary => summary.name != "Header")
+                .Select(summary => summary.FullText).Where(value => !string.IsNullOrWhiteSpace(value)));
+            if (MatchView.Phase == DemoTurnPhase.Main && !MatchView.IsFinished &&
+                !string.IsNullOrWhiteSpace(_selectedCardId) && _registry.TryGetText(_selectedCardId, out var card))
+                return $"{card.name}\n\n{card.rulesText}\n\n{notes}";
+            return notes;
+        }
 
         private void OpenReadingPanel(bool cardNotes)
         {
@@ -118,7 +129,7 @@ namespace BiomeRivals.Demo
             _statusInspectionOverlay.gameObject.SetActive(_statusInspectionOpen);
             if (!_statusInspectionOpen) return;
             _statusInspectionBody.color = _readingCardNotes ? Pale : _statusText.color;
-            _statusInspectionTitle.text = _readingCardNotes ? "操作说明 · 完整内容" : "操作提示 · 完整说明";
+            _statusInspectionTitle.text = _readingCardNotes ? "卡牌与操作 · 完整说明" : "操作提示 · 完整说明";
             var fullMessage = CurrentReadingText;
             if (_statusInspectionDisplayed == fullMessage) return;
             _statusInspectionDisplayed = fullMessage;

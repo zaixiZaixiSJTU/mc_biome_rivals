@@ -15,6 +15,8 @@ param(
     [switch]$PreviewHandInspection,
     [switch]$PreviewResponsiveHandInspection,
     [switch]$PreviewStatusInspection,
+    [switch]$PreviewHudResources,
+    [switch]$PreviewCardNotes,
     [ValidateSet('opponent', 'win', 'loss')][string]$PreviewHandState,
     [switch]$PreviewGroundReturnPulse,
     [switch]$PreviewWoodlandRally,
@@ -74,6 +76,8 @@ if ($PreviewFullHandCombat) { $previewCount++ }
 if ($PreviewHandInspection) { $previewCount++ }
 if ($PreviewResponsiveHandInspection) { $previewCount++ }
 if ($PreviewStatusInspection) { $previewCount++ }
+if ($PreviewHudResources) { $previewCount++ }
+if ($PreviewCardNotes) { $previewCount++ }
 if ($PreviewHandState) { $previewCount++ }
 foreach ($previewMode in @($PreviewHandHover, $PreviewUnaffordableCardSelection, $PreviewFullHand, $PreviewGroundReturnPulse, $PreviewWoodlandRally, $PreviewSummonReadiness, $PreviewEndReturnInteraction, $PreviewCombatInteraction, $PreviewStructureDragDeployment, $PreviewCraftingInteraction, $PreviewCardArrival, $PreviewChoiceInteraction, $PreviewArchaeologyChoice, $PreviewAttackFeedback, $PreviewButtonFeedback, $PreviewOpponentEnergy, $PreviewMatchOutcome, $PreviewTerminalWorld, $PreviewTntTrapOwnerWins, $PreviewOnlineStatus, $PreviewPolarBearWool, $PreviewDarknessTargeting, $PreviewTurnBanner)) {
     if ($previewMode) { $previewCount++ }
@@ -145,6 +149,9 @@ if ($PreviewSummonReadiness -and ($PlayerFaction -ne 'cave_dark_forest' -or $Opp
 
 $manifestPath = "$executablePath.build-manifest.json"
 $buildManifest = & (Join-Path $PSScriptRoot 'assert-demo-player-source.ps1') -ExecutablePath $executablePath -ProjectPath $projectPath
+if (($PreviewHudResources -or $PreviewCardNotes) -and ($buildManifest.developmentBuild -isnot [bool] -or -not $buildManifest.developmentBuild)) {
+    throw 'HUD resource and card-notes captures require an explicitly verified Development Player.'
+}
 if ($PreviewStatusInspection -and ($buildManifest.developmentBuild -isnot [bool] -or -not $buildManifest.developmentBuild)) {
     throw 'PreviewStatusInspection requires an explicitly verified Development Player.'
 }
@@ -204,6 +211,8 @@ if ($PreviewFullHandCombat) { $arguments += @('-previewFullHand', '-previewFullH
 if ($PreviewHandInspection) { $arguments += @('-previewFullHand', '-previewFullHandCombat', '-previewHandInspection') }
 if ($PreviewResponsiveHandInspection) { $arguments += @('-previewFullHand', '-previewFullHandCombat', '-previewResponsiveHandInspection') }
 if ($PreviewStatusInspection) { $arguments += '-previewStatusInspection' }
+if ($PreviewHudResources) { $arguments += '-previewHudResources' }
+if ($PreviewCardNotes) { $arguments += '-previewCardNotes' }
 if ($PreviewHandState) { $arguments += @('-previewHandState', $PreviewHandState) }
 if ($PreviewGroundReturnPulse) { $arguments += '-previewGroundReturnPulse' }
 if ($PreviewWoodlandRally) { $arguments += '-previewWoodlandRally' }
@@ -255,6 +264,9 @@ if (-not (Test-Path -LiteralPath $logPath -PathType Leaf)) {
     throw "Demo Player did not create its requested log: $logPath"
 }
 $log = Get-Content -LiteralPath $logPath -Raw -Encoding UTF8
+if (($PreviewHudResources -or $PreviewCardNotes) -and -not $log.Contains('HUD resource reading settled: True; equipped trident; temporary +2; buried 10; actual notes open/return; unchanged revision/hand; input restored.')) {
+    throw 'HUD resource/card-notes capture requires actual rule state, reading clicks, unchanged gameplay and input restoration.'
+}
 if ($PreviewStatusInspection -and -not $log.Contains('Status inspection settled: True; actual entry/scroll/return/reopen; full message; unchanged revision/hand; gameplay locked.')) {
     throw 'Status inspection must prove actual entry/scroll/return/reopen and immutable gameplay before screenshot acceptance.'
 }
@@ -414,6 +426,8 @@ if ($PreviewFullHandCombat) { $previewLabel = 'full-hand-combat-readability' }
 if ($PreviewHandInspection) { $previewLabel = 'read-only-hand-inspection' }
 if ($PreviewResponsiveHandInspection) { $previewLabel = 'responsive-read-only-hand-inspection' }
 if ($PreviewStatusInspection) { $previewLabel = 'read-only-status-inspection' }
+if ($PreviewHudResources) { $previewLabel = 'equipped-temporary-buried-hud' }
+if ($PreviewCardNotes) { $previewLabel = 'read-only-card-notes' }
 if ($PreviewHandState) { $previewLabel = "local-hand-state-$PreviewHandState" }
 if ($PreviewCaveSpiderPoison) { $previewLabel = 'spider-ui-deployment-attack-poison' }
 if ($PreviewGuardianPose) { $previewLabel = 'guardian-source-pose-ui-interaction' }

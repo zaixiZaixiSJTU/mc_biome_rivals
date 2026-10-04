@@ -1,5 +1,7 @@
 using System.Reflection;
 using BiomeRivals.Bootstrap;
+using BiomeRivals.Content;
+using BiomeRivals.Core;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -123,13 +125,104 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(notes, Is.Not.Empty);
             Invoke("OpenCardNotes");
             Assert.That(Find<RectTransform>("StatusInspectionOverlay").gameObject.activeSelf, Is.True);
-            Assert.That(Find<Text>("StatusInspectionOverlay/ReadingPanel/Title").text, Is.EqualTo("操作说明 · 完整内容"));
+            Assert.That(Find<Text>("StatusInspectionOverlay/ReadingPanel/Title").text, Is.EqualTo("卡牌与操作 · 完整说明"));
             Assert.That(Find<Text>("StatusInspectionOverlay/ReadingPanel/Viewport/FullMessage").text, Is.Not.Empty);
             Assert.That(Find<CanvasGroup>("HandPlate/HandCards").interactable, Is.False);
             Assert.That(_root.GetComponent<DemoBattlefieldPointerController>().InputEnabled, Is.False);
             Invoke("CloseStatusInspection");
             Invoke("OpenStatusInspection");
             Assert.That(Find<Text>("StatusInspectionOverlay/ReadingPanel/Viewport/FullMessage").text, Is.EqualTo("当前对局提示"));
+        }
+
+        [TestCase(1f)]
+        [TestCase(2f / 3f)]
+        public void EquippedTemporaryResourceAndBuriedStateStayReadable(float scale)
+        {
+            _root.transform.Find("DemoCanvas").GetComponent<Canvas>().scaleFactor = scale;
+            Invoke("SetupHudResourceScenario");
+            Invoke("OpenCardNotes");
+            Assert.That(Find<Text>("StatusInspectionOverlay/ReadingPanel/Viewport/FullMessage").text, Does.StartWith("炽足兽\n\n"));
+            Invoke("CloseStatusInspection");
+            foreach (var typography in _root.GetComponentsInChildren<DemoHudTypography>()) typography.ApplyScale(scale);
+            foreach (var path in new[] { "EnergyPlate/Energy", "PlayerEquipment/Label", "HandLabel" })
+            {
+                var text = Find<Text>(path);
+                Assert.That(text.fontSize * scale, Is.GreaterThanOrEqualTo(12f), path);
+                Assert.That(text.preferredHeight, Is.LessThanOrEqualTo(text.rectTransform.rect.height + 0.5f), path);
+                Assert.That(text.resizeTextForBestFit, Is.False, path);
+            }
+            Assert.That(Find<Text>("EnergyPlate/Energy").text, Is.EqualTo("红石 ◆ 12/10\n临时 +2"));
+            Assert.That(Find<Text>("PlayerEquipment/Label").text, Is.EqualTo("激流三叉戟\n攻击 2 · 耐久 3/3"));
+            Assert.That(Find<Text>("HandLabel").text, Does.Contain("掩埋 10"));
+        }
+
+        private T Field<T>(string name) => (T)typeof(DemoSceneController)
+            .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(_controller);
+
+        [TestCase(1f)]
+        [TestCase(2f / 3f)]
+        public void NarrowCardPreviewFitsAndItsReadingEntryKeepsFullRules(float scale)
+        {
+            _root.transform.Find("DemoCanvas").GetComponent<Canvas>().scaleFactor = scale;
+            Invoke("SetupHudResourceScenario");
+            var view = Field<CardDetailsView>("_cardDetailsView");
+            var rules = view.CurrentCard.transform.Find("Rules").GetComponent<Text>();
+            Assert.That(view.CurrentCard.IsCompact, Is.False, "Preview must retain the detail card layout.");
+            Assert.That(rules.alignment, Is.EqualTo(TextAnchor.MiddleCenter));
+            Assert.That(rules.rectTransform.rect.height, Is.LessThan(view.CurrentCard.RectTransform.rect.height * 0.23f),
+                "The preview must fit the actual light-paper region, not just an oversized text Rect.");
+            Assert.That(rules.resizeTextMinSize * scale, Is.GreaterThanOrEqualTo(12f));
+            var settings = rules.GetGenerationSettings(rules.rectTransform.rect.size);
+            settings.resizeTextForBestFit = false;
+            settings.fontSize = rules.resizeTextMinSize;
+            settings.verticalOverflow = VerticalWrapMode.Overflow;
+            Assert.That(new TextGenerator().GetPreferredHeight(rules.text, settings) / rules.pixelsPerUnit,
+                Is.LessThanOrEqualTo(rules.rectTransform.rect.height + 0.5f));
+            if (scale < 1f) Assert.That(rules.text, Does.EndWith("…"));
+            var registry = Field<CardContentRegistry>("_registry");
+            Assert.That(registry.TryGetText("nt_004", out var card), Is.True);
+            Invoke("OpenCardNotes");
+            Assert.That(Find<Text>("StatusInspectionOverlay/ReadingPanel/Viewport/FullMessage").text, Does.Contain(card.rulesText));
+        }
+
+        [Test]
+        public void ClosingTerminalReadingDoesNotUnlockGameplay()
+        {
+            Invoke("SetupHudResourceScenario");
+            var match = Field<DemoLocalMatch>("_match");
+            match.ResetOpponentLife(2);
+            Assert.That(match.ApplyEnterCombat(match.CreateEnterCombatCommand()).Accepted, Is.True);
+            Assert.That(match.ApplyAttack(match.CreateAttackCommand(MatchAttackerIds.Hero, "HERO")).Accepted, Is.True);
+            Invoke("RefreshAll");
+            Assert.That(match.IsFinished, Is.True);
+            Invoke("OpenStatusInspection");
+            Assert.That(Find<Text>("StatusInspectionOverlay/ReadingPanel/Viewport/FullMessage").text, Does.Contain("所有操作已锁定"));
+            Invoke("CloseStatusInspection");
+            Assert.That(Find<CanvasGroup>("HandPlate/HandCards").interactable, Is.False);
+            Assert.That(Find<Button>("EndTurnButton").interactable, Is.False);
+            Assert.That(_root.GetComponent<DemoBattlefieldPointerController>().InputEnabled, Is.False);
+        }
+
+        [Test]
+        public void IncomingMovementChoiceClosesReadingAndCannotBeCoveredByIt()
+        {
+            Invoke("SetupHudResourceScenario");
+            var registry = Field<CardContentRegistry>("_registry");
+            Assert.That(registry.TryGetDefinition("si_005", out var bear), Is.True);
+            var match = Field<DemoLocalMatch>("_match");
+            match.ResetOpponent(new[] { bear });
+            Invoke("OpenStatusInspection");
+            Assert.That(match.ApplyEnterCombat(match.CreateEnterCombatCommand()).Accepted, Is.True);
+            var target = match.OpponentBattlefield[0];
+            Assert.That(match.ApplyAttack(match.CreateAttackCommand(MatchAttackerIds.Hero, "UNIT", target.InstanceId)).Accepted, Is.True);
+            Assert.That(match.PendingChoice, Is.Not.Null);
+            Invoke("RefreshAll");
+            Assert.That(Find<RectTransform>("StatusInspectionOverlay").gameObject.activeSelf, Is.False);
+            Invoke("OpenStatusInspection");
+            Invoke("OpenCardNotes");
+            Assert.That(Find<RectTransform>("StatusInspectionOverlay").gameObject.activeSelf, Is.False);
+            Assert.That(Find<CanvasGroup>("HandPlate/HandCards").interactable, Is.False);
+            Assert.That(Find<Button>("EndTurnButton").interactable, Is.False);
         }
 
         [TestCase(1f)]

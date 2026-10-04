@@ -2,7 +2,7 @@
 
 这是《Minecraft：群系争霸》的最小工程骨架。当前目标不是一次写完玩法，而是先建立一个可构建、可测试、可替换依赖的纵向切片：
 
-当前源码基线（2026-10-05）：Unity 726/726，服务端245/245；包含材质化UI、MC实体渲染修复、权威对局和可替换AI玩家操作接口。新增可读字号、状态摘要与全文阅读面板，以及详情操作说明入口；尚未完成的上架级UI项目见 [UI-089](docs/development/task-packets/UI-089.md) 与 [路线图](docs/development/task-roadmap.md)。接口与独立AI客户端启动见 [AI 玩家操作接口](docs/development/ai-player-operations.md)。这是源码原型，不是完整游戏发行包。
+当前源码基线（2026-10-05）：Unity 732/732，服务端245/245；包含材质化UI、MC实体渲染修复、权威对局和可替换AI玩家操作接口。新增可读字号、状态摘要与全文阅读面板、分层装备/临时红石显示，以及保留完整规则的卡牌说明入口；窄详情摘要限制在卡框纸面内。尚未完成的上架级UI项目见 [UI-089](docs/development/task-packets/UI-089.md) 与 [路线图](docs/development/task-roadmap.md)。接口与独立AI客户端启动见 [AI 玩家操作接口](docs/development/ai-player-operations.md)。这是源码原型，不是完整游戏发行包。
 
 仓库不包含 `Temp`/构建产物、私人联机日志、`.env` 或提取的Minecraft原版素材。取得源码后请使用自己的本地资源和下面的提取脚本重建素材；无素材时的通用占位外观不代表最终MC模型。不要把生成素材强制加入Git。
 

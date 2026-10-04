@@ -94,6 +94,13 @@ try {
     if ($statusCapture.Count -ne 1) { throw 'Status capture gate is missing.' }
     $hasStatusIterator = @($statusCapture[0].CustomAttributes | Where-Object { $_.AttributeType.FullName -eq 'System.Runtime.CompilerServices.IteratorStateMachineAttribute' }).Count -eq 1
     if ($hasStatusIterator -ne $expectedDevelopment) { throw 'Status capture implementation leaked or is missing for the selected mode.' }
+    $resourceCapture = @($scene.Methods | Where-Object Name -eq 'PrepareHudResourceCapture')
+    if ($resourceCapture.Count -ne 1) { throw 'HUD resource capture gate is missing.' }
+    $hasResourceIterator = @($resourceCapture[0].CustomAttributes | Where-Object { $_.AttributeType.FullName -eq 'System.Runtime.CompilerServices.IteratorStateMachineAttribute' }).Count -eq 1
+    if ($hasResourceIterator -ne $expectedDevelopment) { throw 'HUD resource capture implementation leaked or is missing.' }
+    foreach ($method in @('SetupHudResourceScenario','AuditHudResourceReading')) {
+        if (@($scene.Methods | Where-Object Name -eq $method).Count -ne [int]$expectedDevelopment) { throw "HUD resource diagnostic method boundary mismatch: $method" }
+    }
     # All Player modes must resolve packaged art without cwd/source search. Editor-only paths must be compiled out.
     foreach ($name in $compiledTypes.Keys | Where-Object { $_ -eq 'BiomeRivals.Demo.DemoCardArtProvider' -or $_.StartsWith('BiomeRivals.Demo.DemoCardArtProvider/') }) {
         foreach ($method in $compiledTypes[$name].Methods) {
