@@ -40,9 +40,11 @@ namespace BiomeRivals.Demo
         {
             switch (styleClass)
             {
-                case DemoUiStyleClass.SecondaryButton: return new Color32(126, 128, 118, 104);
-                case DemoUiStyleClass.PrimaryActionButton: return new Color32(125, 49, 31, 100);
-                default: return new Color32(111, 113, 105, 92);
+                // Opaque interior: stable text contrast on every biome, without
+                // compositing a second, stretched brick pattern underneath.
+                case DemoUiStyleClass.SecondaryButton: return new Color32(72, 76, 71, 255);
+                case DemoUiStyleClass.PrimaryActionButton: return new Color32(112, 45, 28, 255);
+                default: return new Color32(52, 57, 53, 255);
             }
         }
 

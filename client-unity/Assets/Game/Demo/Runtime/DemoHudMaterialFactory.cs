@@ -134,7 +134,9 @@ namespace BiomeRivals.Demo
         {
             var image = CreateSpritePanel(parent, name, position, size, sprite, tint);
             image.type = Image.Type.Sliced;
-            image.fillCenter = true;
+            // The stone frame owns only the border. Its stretched center must not
+            // bleed through the separately tiled blackstone reading surface.
+            image.fillCenter = false;
             image.pixelsPerUnitMultiplier = 1f;
             return image;
         }

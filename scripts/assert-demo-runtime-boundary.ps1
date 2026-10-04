@@ -54,6 +54,8 @@ $productionTypes = @(
     'BiomeRivals.Demo.DemoOnlineMatchSession',
     'BiomeRivals.Demo.DemoSceneController',
     'BiomeRivals.Demo.CardUI',
+    'BiomeRivals.Demo.DemoHudTypography',
+    'BiomeRivals.Demo.DemoReadableSummary',
     'BiomeRivals.Demo.DemoCardArtProvider',
     'BiomeRivals.Networking.IPlayerOperations',
     'BiomeRivals.Networking.PlayerActionRequest',
@@ -85,9 +87,13 @@ try {
     if (@($animator.Methods | Where-Object Name -eq 'SampleForAudit').Count -ne [int]$expectedDevelopment) {
         throw 'Deterministic entity sampler leaked or is missing.'
     }
-    foreach ($method in @('OpenHandInspection','CloseHandInspection','RefreshHandInspection','SetAgentPolicy')) {
+    foreach ($method in @('OpenHandInspection','CloseHandInspection','RefreshHandInspection','OpenStatusInspection','OpenCardNotes','CloseStatusInspection','RefreshStatusInspection','SetAgentPolicy')) {
         if (@($scene.Methods | Where-Object Name -eq $method).Count -ne 1) { throw "Production read-only card UI method is missing: $method" }
     }
+    $statusCapture = @($scene.Methods | Where-Object Name -eq 'PrepareStatusInspectionCapture')
+    if ($statusCapture.Count -ne 1) { throw 'Status capture gate is missing.' }
+    $hasStatusIterator = @($statusCapture[0].CustomAttributes | Where-Object { $_.AttributeType.FullName -eq 'System.Runtime.CompilerServices.IteratorStateMachineAttribute' }).Count -eq 1
+    if ($hasStatusIterator -ne $expectedDevelopment) { throw 'Status capture implementation leaked or is missing for the selected mode.' }
     # All Player modes must resolve packaged art without cwd/source search. Editor-only paths must be compiled out.
     foreach ($name in $compiledTypes.Keys | Where-Object { $_ -eq 'BiomeRivals.Demo.DemoCardArtProvider' -or $_.StartsWith('BiomeRivals.Demo.DemoCardArtProvider/') }) {
         foreach ($method in $compiledTypes[$name].Methods) {

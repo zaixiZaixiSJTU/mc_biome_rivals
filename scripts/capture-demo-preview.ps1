@@ -14,6 +14,7 @@ param(
     [switch]$PreviewFullHandCombat,
     [switch]$PreviewHandInspection,
     [switch]$PreviewResponsiveHandInspection,
+    [switch]$PreviewStatusInspection,
     [ValidateSet('opponent', 'win', 'loss')][string]$PreviewHandState,
     [switch]$PreviewGroundReturnPulse,
     [switch]$PreviewWoodlandRally,
@@ -72,6 +73,7 @@ if ($PreviewDesertVillagerSurface) { $previewCount++ }
 if ($PreviewFullHandCombat) { $previewCount++ }
 if ($PreviewHandInspection) { $previewCount++ }
 if ($PreviewResponsiveHandInspection) { $previewCount++ }
+if ($PreviewStatusInspection) { $previewCount++ }
 if ($PreviewHandState) { $previewCount++ }
 foreach ($previewMode in @($PreviewHandHover, $PreviewUnaffordableCardSelection, $PreviewFullHand, $PreviewGroundReturnPulse, $PreviewWoodlandRally, $PreviewSummonReadiness, $PreviewEndReturnInteraction, $PreviewCombatInteraction, $PreviewStructureDragDeployment, $PreviewCraftingInteraction, $PreviewCardArrival, $PreviewChoiceInteraction, $PreviewArchaeologyChoice, $PreviewAttackFeedback, $PreviewButtonFeedback, $PreviewOpponentEnergy, $PreviewMatchOutcome, $PreviewTerminalWorld, $PreviewTntTrapOwnerWins, $PreviewOnlineStatus, $PreviewPolarBearWool, $PreviewDarknessTargeting, $PreviewTurnBanner)) {
     if ($previewMode) { $previewCount++ }
@@ -143,6 +145,9 @@ if ($PreviewSummonReadiness -and ($PlayerFaction -ne 'cave_dark_forest' -or $Opp
 
 $manifestPath = "$executablePath.build-manifest.json"
 $buildManifest = & (Join-Path $PSScriptRoot 'assert-demo-player-source.ps1') -ExecutablePath $executablePath -ProjectPath $projectPath
+if ($PreviewStatusInspection -and ($buildManifest.developmentBuild -isnot [bool] -or -not $buildManifest.developmentBuild)) {
+    throw 'PreviewStatusInspection requires an explicitly verified Development Player.'
+}
 if ($PreviewBabySheepPose -and ($buildManifest.developmentBuild -isnot [bool] -or -not $buildManifest.developmentBuild)) {
     throw 'PreviewBabySheepPose requires an explicitly verified Development Player.'
 }
@@ -198,6 +203,7 @@ if ($PreviewFullHand) { $arguments += '-previewFullHand' }
 if ($PreviewFullHandCombat) { $arguments += @('-previewFullHand', '-previewFullHandCombat') }
 if ($PreviewHandInspection) { $arguments += @('-previewFullHand', '-previewFullHandCombat', '-previewHandInspection') }
 if ($PreviewResponsiveHandInspection) { $arguments += @('-previewFullHand', '-previewFullHandCombat', '-previewResponsiveHandInspection') }
+if ($PreviewStatusInspection) { $arguments += '-previewStatusInspection' }
 if ($PreviewHandState) { $arguments += @('-previewHandState', $PreviewHandState) }
 if ($PreviewGroundReturnPulse) { $arguments += '-previewGroundReturnPulse' }
 if ($PreviewWoodlandRally) { $arguments += '-previewWoodlandRally' }
@@ -249,6 +255,9 @@ if (-not (Test-Path -LiteralPath $logPath -PathType Leaf)) {
     throw "Demo Player did not create its requested log: $logPath"
 }
 $log = Get-Content -LiteralPath $logPath -Raw -Encoding UTF8
+if ($PreviewStatusInspection -and -not $log.Contains('Status inspection settled: True; actual entry/scroll/return/reopen; full message; unchanged revision/hand; gameplay locked.')) {
+    throw 'Status inspection must prove actual entry/scroll/return/reopen and immutable gameplay before screenshot acceptance.'
+}
 if ($PreviewBabySheepPose -and (-not $log.Contains('Baby sheep interaction preview settled: True (hand UI + original slot deployment/attacker/target raycasts).') -or
     -not $log.Contains('Baby sheep pose audit: True (both sides, 6 original cubes, source proportions/texture, dye mask, idle and original slots).'))) {
     throw 'Baby sheep source pose/UI interaction audit did not pass.'
@@ -404,6 +413,7 @@ if ($PreviewTurtlePose) { $previewLabel = 'turtle-source-binding-pose' }
 if ($PreviewFullHandCombat) { $previewLabel = 'full-hand-combat-readability' }
 if ($PreviewHandInspection) { $previewLabel = 'read-only-hand-inspection' }
 if ($PreviewResponsiveHandInspection) { $previewLabel = 'responsive-read-only-hand-inspection' }
+if ($PreviewStatusInspection) { $previewLabel = 'read-only-status-inspection' }
 if ($PreviewHandState) { $previewLabel = "local-hand-state-$PreviewHandState" }
 if ($PreviewCaveSpiderPoison) { $previewLabel = 'spider-ui-deployment-attack-poison' }
 if ($PreviewGuardianPose) { $previewLabel = 'guardian-source-pose-ui-interaction' }

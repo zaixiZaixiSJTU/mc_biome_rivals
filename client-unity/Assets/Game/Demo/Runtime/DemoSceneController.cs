@@ -336,6 +336,7 @@ namespace BiomeRivals.Demo
             TickAgent();
             AdvanceChoiceOverlayEntrance(Time.unscaledDeltaTime);
             if (!Input.GetKeyDown(KeyCode.Escape) && !Input.GetMouseButtonDown(1)) return;
+            if (_statusInspectionOpen) { CloseStatusInspection(); return; }
             if (IsHandInspectionOpen) { CloseHandInspection(); return; }
             if (MatchView.IsFinished || MatchView.PendingChoice != null) return;
             if (IsOnlineBoard && !_onlineSession.CanIssueCommand) return;
@@ -411,6 +412,7 @@ namespace BiomeRivals.Demo
             _playerHud.SetAsLastSibling();
             BuildMulliganOverlay();
             BuildChoiceOverlay();
+            BuildStatusInspection();
         }
 
         private void BuildTopChrome()
@@ -461,11 +463,8 @@ namespace BiomeRivals.Demo
             _previousOpponentFactionButton.onClick.AddListener(() => CycleOpponentFaction(-1));
             _nextOpponentFactionButton.onClick.AddListener(() => CycleOpponentFaction(1));
 
-            var opponentEnergyPlate = CreateBasePanel(_canvasRoot, "OpponentEnergyPlate", new Vector2(-520, 380), new Vector2(170, 38));
-            _opponentEnergyText = CreateText(opponentEnergyPlate, "Resource", Vector2.zero, new Vector2(154, 30), "敌方红石 · 下回合 1/1", 13, Hex("#D96A50"), TextAnchor.MiddleCenter, FontStyle.Bold);
-            _opponentEnergyText.resizeTextForBestFit = true;
-            _opponentEnergyText.resizeTextMinSize = 11;
-            _opponentEnergyText.resizeTextMaxSize = 13;
+            var opponentEnergyPlate = CreateBasePanel(_canvasRoot, "OpponentEnergyPlate", new Vector2(-520, 380), new Vector2(170, 54));
+            _opponentEnergyText = CreateText(opponentEnergyPlate, "Resource", Vector2.zero, new Vector2(154, 46), "敌方红石 · 下回合 1/1", 13, Hex("#D96A50"), TextAnchor.MiddleCenter, FontStyle.Bold);
             _opponentEnergyText.raycastTarget = false;
             opponentEnergyPlate.GetComponent<Image>().raycastTarget = false;
 
@@ -540,13 +539,14 @@ namespace BiomeRivals.Demo
 
         private void BuildOnlineStatus()
         {
-            var panel = CreateBasePanel(_canvasRoot, "OnlineStatusPanel", new Vector2(402, 456), new Vector2(286, 84));
-            _accountStatusText = CreateText(panel, "Account", new Vector2(-80, 18), new Vector2(120, 26), "游客 · 未登录", 15, Pale, TextAnchor.MiddleLeft, FontStyle.Bold);
-            _deckStatusText = CreateText(panel, "Deck", new Vector2(-80, -13), new Vector2(120, 22), "卡组 · 平原", 14, Muted, TextAnchor.MiddleLeft, FontStyle.Normal);
-            _onlineStatusText = CreateText(panel, "Status", new Vector2(28, 0), new Vector2(88, 58), "本地模式", 15, Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
+            var panel = CreateBasePanel(_canvasRoot, "OnlineStatusPanel", new Vector2(444, 456), new Vector2(358, 84));
+            _accountStatusText = CreateText(panel, "Account", new Vector2(-100, 18), new Vector2(150, 26), "游客 · 未登录", 15, Pale, TextAnchor.MiddleLeft, FontStyle.Bold);
+            _deckStatusText = CreateText(panel, "Deck", new Vector2(-100, -13), new Vector2(150, 26), "卡组 · 平原", 14, Muted, TextAnchor.MiddleLeft, FontStyle.Normal);
+            _onlineStatusText = CreateText(panel, "Status", new Vector2(43, 0), new Vector2(120, 58), "本地模式", 15, Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
+            _onlineStatusText.gameObject.AddComponent<DemoHudTypography>().Configure(15);
             // The narrow middle column uses deliberate phase/detail lines, never an isolated overflow glyph.
             _onlineStatusText.resizeTextForBestFit = false;
-            _onlineActionButton = CreateSecondaryButton(panel, "OnlineAction", new Vector2(105, 0), new Vector2(60, 46), "匹配", 14);
+            _onlineActionButton = CreateSecondaryButton(panel, "OnlineAction", new Vector2(145, 0), new Vector2(52, 46), "匹配", 14);
             _onlineActionLabel = _onlineActionButton.GetComponentInChildren<Text>();
             _onlineActionButton.onClick.AddListener(ToggleOnlineConnection);
             _accountService = GameCompositionRoot.Instance?.PlayerAccountService;
@@ -573,7 +573,7 @@ namespace BiomeRivals.Demo
                     _accountStatusText.text = "游客 · 退出中";
                     break;
                 case PlayerAccountPhase.Failed:
-                    _accountStatusText.text = "账户异常 · 可重试";
+                    _accountStatusText.text = "账户异常·重试";
                     break;
                 default:
                     _accountStatusText.text = "游客 · 未登录";
@@ -588,7 +588,7 @@ namespace BiomeRivals.Demo
         {
             if (string.IsNullOrWhiteSpace(value)) return "未命名";
             value = value.Trim();
-            return value.Length <= 8 ? value : value.Substring(0, 7) + "…";
+            return value.Length <= 4 ? value : value.Substring(0, 3) + "…";
         }
 
         private void RefreshDeckShell()
@@ -656,7 +656,7 @@ namespace BiomeRivals.Demo
                         : "身份认证中";
                     break;
                 case MatchConnectionPhase.Connecting:
-                    _onlineStatusText.text = "连接服务器";
+                    _onlineStatusText.text = "连接\n服务器";
                     break;
                 case MatchConnectionPhase.Matchmaking:
                     _onlineStatusText.text = "寻找对手中\n" + Factions.First(item => item.Id == _activeFaction).Label;
@@ -702,7 +702,7 @@ namespace BiomeRivals.Demo
             _onlineSession.CommandCompleted -= HandleOnlineCommandCompleted;
             _onlineSession.Dispose();
             _onlineSession = null;
-            GetComponent<DemoBattlefieldPointerController>()?.SetInputEnabled(true);
+            GetComponent<DemoBattlefieldPointerController>()?.SetInputEnabled(!IsReadOnlyOverlayOpen && !MatchView.IsFinished);
         }
 
         private void HandleOnlinePresentationSnapshot(MatchStateDto snapshot)
@@ -741,7 +741,7 @@ namespace BiomeRivals.Demo
 
         private void HandleOnlineCommandCompleted(MatchCommandDispatchResult result)
         {
-            GetComponent<DemoBattlefieldPointerController>()?.SetInputEnabled(!HasPendingOnlineCommand);
+            GetComponent<DemoBattlefieldPointerController>()?.SetInputEnabled(!HasPendingOnlineCommand && !IsReadOnlyOverlayOpen && !MatchView.IsFinished);
             if (result.Outcome == MatchCommandOutcome.Accepted)
             {
                 ShowStatus($"服务器已确认 · 状态 r{result.Revision}", false);
@@ -1548,7 +1548,7 @@ namespace BiomeRivals.Demo
             var handPlate = CreateBasePanel(_canvasRoot, "HandPlate", new Vector2(35, -418), new Vector2(1360, 232));
             _handRoot = CreateRect(handPlate, "HandCards", new Vector2(-20, 28), new Vector2(1250, 225));
             _handCanvasGroup = _handRoot.gameObject.AddComponent<CanvasGroup>();
-            _handLabel = CreateText(_canvasRoot, "HandLabel", new Vector2(-484, -508), new Vector2(330, 25), "手牌 5/7 · 牌库 25 · 弃牌 0", 13, Muted, TextAnchor.MiddleLeft, FontStyle.Bold);
+            _handLabel = CreateText(_canvasRoot, "HandLabel", new Vector2(-135, -508), new Vector2(700, 28), "手牌 5/7 · 牌库 25 · 弃牌 0", 14, Muted, TextAnchor.MiddleLeft, FontStyle.Bold);
             BuildHandInspection();
         }
 
@@ -1560,6 +1560,8 @@ namespace BiomeRivals.Demo
             _inspectorRoot = CreateRect(panel, "InspectorContent", Vector2.zero, new Vector2(panelWidth - inset, 715f - inset));
             _cardDetailsView = _inspectorRoot.gameObject.AddComponent<CardDetailsView>();
             _cardDetailsView.Configure(_registry, UiFont);
+            _cardNotesButton = CreateSecondaryButton(panel, "ReadCardNotes", new Vector2(0, -325), new Vector2(248, 36), "查看操作说明", 15);
+            _cardNotesButton.onClick.AddListener(OpenCardNotes);
         }
 
         private void BuildTurnControls()
@@ -1567,20 +1569,20 @@ namespace BiomeRivals.Demo
             var energyPlate = CreateBasePanel(_canvasRoot, "EnergyPlate", new Vector2(-570, -516), new Vector2(150, 34));
             _energyText = CreateText(energyPlate, "Energy", Vector2.zero, new Vector2(130, 30), "\u25C6 1/1", 18, Cyan, TextAnchor.MiddleCenter, FontStyle.Bold);
 
-            var roundPlate = CreateBasePanel(_canvasRoot, "RoundPlate", new Vector2(675, 472), new Vector2(230, 54));
-            _roundText = CreateText(roundPlate, "Round", Vector2.zero, new Vector2(208, 38), "第 1 回合 · 主行动", 17, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
+            var roundPlate = CreateBasePanel(_canvasRoot, "RoundPlate", new Vector2(760, 472), new Vector2(250, 54));
+            _roundText = CreateText(roundPlate, "Round", Vector2.zero, new Vector2(228, 38), "第 1 回合 · 主行动", 17, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
 
             _endTurnButton = CreatePrimaryActionButton(_canvasRoot, "EndTurnButton", new Vector2(786, -355), new Vector2(230, 86), "结束回合", 23);
             _endTurnLabel = _endTurnButton.GetComponentInChildren<Text>();
             _endTurnButton.onClick.AddListener(OnEndTurn);
             ConfigureHoverScale(_endTurnButton.gameObject, 1.04f, 16f);
 
-            var statusPlate = CreateBasePanel(_canvasRoot, "StatusPlate", new Vector2(810, -462), new Vector2(260, 94));
+            var statusPlate = CreateBasePanel(_canvasRoot, "StatusPlate", new Vector2(810, -458), new Vector2(260, 86));
             _statusText = CreateText(statusPlate, "Status", Vector2.zero, new Vector2(230, 70), string.Empty, 14, Pale, TextAnchor.MiddleCenter, FontStyle.Normal);
-            _statusText.resizeTextForBestFit = true;
-            _statusText.resizeTextMinSize = 16;
-            _statusText.resizeTextMaxSize = 18;
+            _statusSummary = _statusText.gameObject.AddComponent<DemoReadableSummary>();
+            _statusSummary.Configure(18);
             _statusText.lineSpacing = 0.92f;
+            _statusText.supportRichText = false;
         }
 
         private void BuildBanner()
@@ -4097,7 +4099,8 @@ namespace BiomeRivals.Demo
             var match = MatchView;
             SynchronizeArenaTopology(match.ArenaId);
             RefreshHandInspection();
-            GetComponent<DemoBattlefieldPointerController>()?.SetInputEnabled(!match.IsFinished && !HasPendingOnlineCommand && !IsHandInspectionOpen &&
+            RefreshStatusInspection();
+            GetComponent<DemoBattlefieldPointerController>()?.SetInputEnabled(!match.IsFinished && !HasPendingOnlineCommand && !IsReadOnlyOverlayOpen &&
                 !match.IsMulligan && (match.IsPlayerTurn || match.PendingChoice != null && match.IsChoiceOwner));
             if (match.IsFinished)
             {
@@ -4140,7 +4143,7 @@ namespace BiomeRivals.Demo
             _playerEquipmentText.color = match.PlayerEquipment == null ? Muted : Cyan;
             _opponentEquipmentText.text = FormatEquipment(match.OpponentEquipment);
             _opponentEquipmentText.color = match.OpponentEquipment == null ? Muted : Ember;
-            var canIssueOnlineCommand = !IsHandInspectionOpen && (!IsOnlineBoard || _onlineSession.CanIssueCommand);
+            var canIssueOnlineCommand = !IsReadOnlyOverlayOpen && (!IsOnlineBoard || _onlineSession.CanIssueCommand);
             _playerHeroButton.interactable = !match.IsFinished && canIssueOnlineCommand &&
                 match.Phase == DemoTurnPhase.Combat && match.CanAttackWithHero(out _);
             SetHeroHudControlAvailability(_playerHeroControlAlpha, _playerHeroButton.interactable);
@@ -4170,9 +4173,10 @@ namespace BiomeRivals.Demo
             if (match.IsFinished)
             {
                 var result = !match.HasWinner ? "平局" : match.IsPlayerWinner ? "胜利" : "战败";
-                _statusText.text = $"本局{result} · 所有操作已锁定。";
+                _statusSummary.SetFullText($"本局{result} · 所有操作已锁定。");
                 _statusText.color = !match.HasWinner ? Gold : match.IsPlayerWinner ? Cyan : Danger;
             }
+            RefreshStatusInspection();
         }
 
         private void RefreshPendingChoice()
@@ -4712,7 +4716,7 @@ namespace BiomeRivals.Demo
             var selectedAttackerCanAttack = attacker != null
                 ? match.CanAttackWith(attacker, out _)
                 : selectedHero && match.CanAttackWithHero(out _);
-            _opponentHeroTargetButton.interactable = !IsHandInspectionOpen && !match.IsFinished && match.Phase == DemoTurnPhase.Combat &&
+            _opponentHeroTargetButton.interactable = !IsReadOnlyOverlayOpen && !match.IsFinished && match.Phase == DemoTurnPhase.Combat &&
                 match.IsPlayerTurn && selectedAttackerCanAttack &&
                 (!IsOnlineBoard || _onlineSession.CanIssueCommand) && match.CanAttackTarget(null, "HERO", out _);
             SetHeroHudControlAvailability(_opponentHeroControlAlpha, _opponentHeroTargetButton.interactable);
@@ -5160,7 +5164,7 @@ namespace BiomeRivals.Demo
             }
             if (pendingDeployEffect)
             {
-                CreateText(_inspectorRoot, "PendingEffectNotice", new Vector2(0, -230), new Vector2(250, 38),
+                CreateText(_inspectorRoot, "PendingEffectNotice", new Vector2(0, -244), new Vector2(250, 52),
                     "仅基础属性可用 · 卡牌效果尚未接入", 12, Gold, TextAnchor.MiddleCenter, FontStyle.Bold);
             }
             if (_showRuleDiagnostics)
@@ -5305,7 +5309,7 @@ namespace BiomeRivals.Demo
 
         private void SelectHandCardInternal(string cardId, string handCardInstanceId, bool refreshHand)
         {
-            if (IsHandInspectionOpen) return;
+            if (IsReadOnlyOverlayOpen) return;
             if (HasPendingOnlineCommand || MatchView.IsFinished || MatchView.PendingChoice != null) return;
             var sameHandCard = _selectedCardId == cardId && _selectedHandCardInstanceId == handCardInstanceId;
             _pendingTargetCardId = null;
@@ -5328,7 +5332,7 @@ namespace BiomeRivals.Demo
 
         private void OnHandCardDragDropped(Vector2 screenPosition)
         {
-            if (IsHandInspectionOpen) return;
+            if (IsReadOnlyOverlayOpen) return;
             if (HasPendingOnlineCommand) return;
             var pointer = GetComponent<DemoBattlefieldPointerController>();
             if (pointer == null)
@@ -5382,7 +5386,7 @@ namespace BiomeRivals.Demo
 
         private async void OnSlotClicked(bool player, DemoSlotKind kind, int index)
         {
-            if (IsHandInspectionOpen) return;
+            if (IsReadOnlyOverlayOpen) return;
             if (HasPendingOnlineCommand) return;
             if (MatchView.IsFinished)
             {
@@ -5541,7 +5545,7 @@ namespace BiomeRivals.Demo
 
         private void SelectHeroAttacker()
         {
-            if (IsHandInspectionOpen) return;
+            if (IsReadOnlyOverlayOpen) return;
             if (HasPendingOnlineCommand) return;
             if (MatchView.IsFinished) return;
             if (MatchView.Phase != DemoTurnPhase.Combat) return;
@@ -6812,7 +6816,7 @@ namespace BiomeRivals.Demo
 
         private async void OnEndTurn()
         {
-            if (IsHandInspectionOpen) return;
+            if (IsReadOnlyOverlayOpen) return;
             if (HasPendingOnlineCommand) return;
             var match = MatchView;
             if (match.IsFinished) return;
@@ -7209,6 +7213,7 @@ namespace BiomeRivals.Demo
             }
             if (HasCommandLineFlag("-previewHandInspection")) yield return PrepareHandInspectionCapture();
             if (HasCommandLineFlag("-previewResponsiveHandInspection")) yield return PrepareResponsiveHandInspectionCapture();
+            if (HasCommandLineFlag("-previewStatusInspection")) yield return PrepareStatusInspectionCapture();
             if (HasCommandLineFlag("-previewHandState")) yield return AuditHandReadabilityStateCapture(GetCommandLineValue("-previewHandState"));
             WriteDemoScreenshot(path);
             Application.Quit(0);
@@ -7339,8 +7344,11 @@ namespace BiomeRivals.Demo
         private void ShowStatus(string value, bool error)
         {
             if (_statusText == null) return;
-            _statusText.text = value;
+            // Event playback may use a lightweight view before the full HUD is built.
+            if (_statusSummary != null) _statusSummary.SetFullText(value);
+            else _statusText.text = value;
             _statusText.color = error ? Danger : Pale;
+            RefreshStatusInspection();
         }
 
         private void ShowLocalCommandResultStatus(DemoCommandResult result, string displayMessage = null)
@@ -7605,6 +7613,16 @@ namespace BiomeRivals.Demo
             text.horizontalOverflow = HorizontalWrapMode.Wrap;
             text.verticalOverflow = VerticalWrapMode.Truncate;
             text.raycastTarget = false;
+            if (parent == _inspectorRoot && name != "Implementation")
+            {
+                root.gameObject.AddComponent<DemoReadableSummary>().Configure(fontSize);
+                return text;
+            }
+            if (name == "Account" || name == "Deck" || name == "Name" || name == "Health" ||
+                name == "Resource" || name == "Energy" || name == "Round" || name == "HandLabel" ||
+                name == "FactionLabel" || name == "Header" || name == "ReadOnlyHint" || name == "Position" ||
+                (name == "Label" && parent.GetComponent<DemoUiStyleComponent>() != null))
+                root.gameObject.AddComponent<DemoHudTypography>().Configure(fontSize);
             return text;
         }
 

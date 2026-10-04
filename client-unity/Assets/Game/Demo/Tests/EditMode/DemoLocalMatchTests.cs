@@ -3572,19 +3572,18 @@ namespace BiomeRivals.Demo.Tests
                     "the complete UI must fit the same centered reference aspect as the battlefield");
                 Assert.That(scaler.referencePixelsPerUnit, Is.EqualTo(DemoUiMetrics.PixelsPerUnit));
                 var statusText = root.transform.Find("DemoCanvas/StatusPlate/Status").GetComponent<UnityEngine.UI.Text>();
-                Assert.That(statusText.resizeTextForBestFit, Is.True);
-                Assert.That(statusText.resizeTextMinSize, Is.EqualTo(16));
-                Assert.That(statusText.resizeTextMaxSize, Is.EqualTo(18));
+                Assert.That(statusText.resizeTextForBestFit, Is.False);
+                Assert.That(statusText.GetComponent<DemoReadableSummary>(), Is.Not.Null);
                 Assert.That(GameObject.Find("EndTurnButton"), Is.Not.Null);
                 Assert.That(GameObject.Find("Faction_plains_forest"), Is.Not.Null);
                 Assert.That(root.transform.Find("DemoCanvas/OnlineStatusPanel/Status").GetComponent<UnityEngine.UI.Text>().text, Is.EqualTo("本地模式"));
                 var onlineStatusPanel = root.transform.Find("DemoCanvas/OnlineStatusPanel").GetComponent<RectTransform>();
-                Assert.That(onlineStatusPanel.anchoredPosition, Is.EqualTo(new Vector2(402, 456)));
-                Assert.That(onlineStatusPanel.sizeDelta, Is.EqualTo(new Vector2(286, 84)));
+                Assert.That(onlineStatusPanel.anchoredPosition, Is.EqualTo(new Vector2(444, 456)));
+                Assert.That(onlineStatusPanel.sizeDelta, Is.EqualTo(new Vector2(358, 84)));
                 Assert.That(onlineStatusPanel.anchoredPosition.x - onlineStatusPanel.sizeDelta.x * 0.5f,
                     Is.GreaterThan(255f), "online status must not overlap the centered title plate");
                 Assert.That(onlineStatusPanel.anchoredPosition.x + onlineStatusPanel.sizeDelta.x * 0.5f,
-                    Is.LessThan(560f), "online status must leave space before the round plate");
+                    Is.LessThan(635f), "online status must leave space before the round plate");
                 var onlineStatus = root.transform.Find("DemoCanvas/OnlineStatusPanel/Status").GetComponent<UnityEngine.UI.Text>();
                 Assert.That(onlineStatus.fontSize, Is.EqualTo(15));
                 Assert.That(onlineStatus.resizeTextForBestFit, Is.False,
@@ -3640,6 +3639,8 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(materialFill.sprite.pixelsPerUnit, Is.EqualTo(DemoUiMetrics.PixelsPerUnit));
                 Assert.That(frameSlice, Is.Not.Null);
                 Assert.That(frameSlice.type, Is.EqualTo(UnityEngine.UI.Image.Type.Sliced));
+                Assert.That(frameSlice.fillCenter, Is.False, "Border must not stretch a second stone texture behind the reading surface.");
+                Assert.That(materialFill.color.a, Is.EqualTo(1f), "World and frame textures must not bleed into the reading surface.");
                 Assert.That(frameSlice.pixelsPerUnitMultiplier, Is.EqualTo(1f));
                 Assert.That(frameSlice.sprite.pixelsPerUnit, Is.EqualTo(DemoUiMetrics.PixelsPerUnit));
                 Assert.That(frameSlice.sprite.border, Is.EqualTo(Vector4.one * DemoUiMetrics.FrameBorderPixels));
@@ -5966,6 +5967,87 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(DemoUiMetrics.GetScreenReadableFontSize(15, 12f, 1f), Is.EqualTo(15));
             Assert.That(DemoUiMetrics.GetScreenReadableFontSize(15, 12f, 2f / 3f), Is.EqualTo(18));
             Assert.That(DemoUiMetrics.GetScreenReadableFontSize(15, 12f, 0.5f), Is.EqualTo(24));
+        }
+
+        [TestCase(1f, 14)]
+        [TestCase(2f / 3f, 18)]
+        [TestCase(0.5f, 24)]
+        public void HudTypographyUsesScreenPixelsAndRestoresAuthoredSize(float scale, int expectedSize)
+        {
+            var root = new GameObject("ResponsiveHudText", typeof(RectTransform), typeof(Text));
+            try
+            {
+                var text = root.GetComponent<Text>();
+                var typography = root.AddComponent<DemoHudTypography>();
+                typography.Configure(14);
+                typography.ApplyScale(scale);
+                Assert.That(text.fontSize, Is.EqualTo(expectedSize));
+                Assert.That(text.fontSize * scale, Is.GreaterThanOrEqualTo(12f));
+                Assert.That(text.resizeTextForBestFit, Is.False);
+                typography.ApplyScale(1f);
+                Assert.That(text.fontSize, Is.EqualTo(14), "Resize must not accumulate font inflation.");
+            }
+            finally { Object.DestroyImmediate(root); }
+        }
+
+        [TestCase(1f)]
+        [TestCase(2f / 3f)]
+        public void HudEssentialLabelsFitAtReferenceAnd720pFontSizes(float scale)
+        {
+            var root = new GameObject("HudLabelReadingTest");
+            try
+            {
+                root.AddComponent<DemoSceneController>().BuildNow();
+                var canvas = root.transform.Find("DemoCanvas");
+                var paths = new[] { "OnlineStatusPanel/Account", "OnlineStatusPanel/Deck",
+                    "OnlineStatusPanel/Status", "OpponentEnergyPlate/Resource", "OpponentEquipment/Label",
+                    "PlayerEquipment/Label", "RoundPlate/Round", "HandLabel", "InspectHand/Label",
+                    "FactionRail/Faction_plains_forest/Label" };
+                foreach (var path in paths)
+                {
+                    var text = canvas.Find(path).GetComponent<Text>();
+                    var typography = text.GetComponent<DemoHudTypography>();
+                    Assert.That(typography, Is.Not.Null, path);
+                    typography.ApplyScale(scale);
+                    Assert.That(text.fontSize * scale, Is.GreaterThanOrEqualTo(12f), path);
+                    var messages = path == "OnlineStatusPanel/Status"
+                        ? new[] { "本地模式", "连接\n服务器", "寻找对手中\n沙漠", "正在重连\n第 999 次", "版本不兼容\n检查两端" }
+                        : path == "OnlineStatusPanel/Account"
+                            ? new[] { "游客 · 未登录", "游客 · 守护者…", "账户异常·重试" }
+                        : path == "HandLabel"
+                            ? new[] { "手牌 7/7 · 牌库 25（掩埋 10）· 弃牌 99" }
+                        : path.EndsWith("Equipment/Label")
+                            ? new[] { "装备槽 · 未装备", "激流三叉戟  ·  ⚔ 2  ◆ 3/3" }
+                        : new[] { text.text };
+                    foreach (var message in messages)
+                    {
+                        text.text = message;
+                        var settings = text.GetGenerationSettings(text.rectTransform.rect.size);
+                        settings.verticalOverflow = VerticalWrapMode.Overflow;
+                        var requiredHeight = new TextGenerator().GetPreferredHeight(message, settings) / text.pixelsPerUnit;
+                        Assert.That(requiredHeight, Is.LessThanOrEqualTo(text.rectTransform.rect.height + 0.5f), path + ": " + message);
+                    }
+                }
+                var stats = canvas.Find("HandLabel").GetComponent<RectTransform>();
+                var energy = canvas.Find("EnergyPlate").GetComponent<RectTransform>();
+                Assert.That(stats.anchoredPosition.x - stats.sizeDelta.x / 2f,
+                    Is.GreaterThan(energy.anchoredPosition.x + energy.sizeDelta.x / 2f));
+            }
+            finally { Object.DestroyImmediate(root); }
+        }
+
+        [TestCase(DemoUiStyleClass.BasePanel)]
+        [TestCase(DemoUiStyleClass.SecondaryButton)]
+        [TestCase(DemoUiStyleClass.PrimaryActionButton)]
+        public void HudReadingSurfacesAreOpaqueAndKeepActionHierarchy(DemoUiStyleClass style)
+        {
+            Assert.That(DemoUiStyleCatalog.GetBodyTint(style).a, Is.EqualTo(1f));
+            Assert.That(DemoUiStyleCatalog.GetFrameTextureKey(style), Is.EqualTo("stone_bricks"));
+            var neutral = DemoUiStyleCatalog.GetBodyTint(DemoUiStyleClass.BasePanel);
+            var secondary = DemoUiStyleCatalog.GetBodyTint(DemoUiStyleClass.SecondaryButton);
+            var primary = DemoUiStyleCatalog.GetBodyTint(DemoUiStyleClass.PrimaryActionButton);
+            Assert.That(secondary.grayscale, Is.GreaterThan(neutral.grayscale));
+            Assert.That(primary.r, Is.GreaterThan(primary.g * 2f));
         }
 
         [TestCase(1, 29, 0)]

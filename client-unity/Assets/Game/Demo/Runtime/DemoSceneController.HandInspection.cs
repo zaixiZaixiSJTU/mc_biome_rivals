@@ -53,7 +53,7 @@ namespace BiomeRivals.Demo
         private void OpenHandInspection()
         {
             var match = MatchView;
-            if (match.IsMulligan || match.PendingChoice != null || match.HandCards.Count == 0) return;
+            if (IsReadOnlyOverlayOpen || match.IsMulligan || match.PendingChoice != null || match.HandCards.Count == 0) return;
             _handInspectionInstanceId = match.HandCards[0].handCardInstanceId;
             _handInspectionOverlay.SetAsLastSibling();
             RefreshAllInternal(false);
@@ -79,7 +79,7 @@ namespace BiomeRivals.Demo
         {
             if (_handInspectionOverlay == null) return;
             var match = MatchView;
-            _handInspectionButton.interactable = !match.IsMulligan && match.PendingChoice == null && match.HandCards.Count > 0;
+            _handInspectionButton.interactable = !_statusInspectionOpen && !match.IsMulligan && match.PendingChoice == null && match.HandCards.Count > 0;
             var card = match.HandCards.FirstOrDefault(value => value.handCardInstanceId == _handInspectionInstanceId);
             if (card == null || match.IsMulligan || match.PendingChoice != null) _handInspectionInstanceId = null;
             _handInspectionOverlay.gameObject.SetActive(IsHandInspectionOpen);

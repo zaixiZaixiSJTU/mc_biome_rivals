@@ -23,6 +23,7 @@ namespace BiomeRivals.Demo.Tests
                 instance.GetSetMethod(true).Invoke(null, new object[] { null });
                 var controller = root.AddComponent<DemoSceneController>();
                 controller.BuildNow();
+                UseCanvasScale(root, 1f);
                 var failure = ServerCompatibilityFailure.Create(
                     new NakamaConnectionSettings { host = "localhost", port = 17350, serverKey = "test-key" },
                     new MatchmakingPreferences(BiomeRivals.Core.FactionIds.PlainsForest, 42, 48), protocol, ruleset, cards, effects);
@@ -49,7 +50,7 @@ namespace BiomeRivals.Demo.Tests
             }
         }
 
-        [TestCase("权威对局已连接")]
+        [TestCase("权威对局已连接正在等待同步")]
         [TestCase("权威对局\n已连接\n多余\n一行")]
         public void LayoutVerifierRejectsOriginalOrVerticallyTruncatedText(string overflowingText)
         {
@@ -61,6 +62,7 @@ namespace BiomeRivals.Demo.Tests
                 instance.GetSetMethod(true).Invoke(null, new object[] { null });
                 var controller = root.AddComponent<DemoSceneController>();
                 controller.BuildNow();
+                UseCanvasScale(root, 1f);
                 root.transform.Find("DemoCanvas/OnlineStatusPanel/Status").GetComponent<Text>().text = overflowingText;
                 Assert.That((bool)typeof(DemoSceneController).GetMethod("VerifyOnlineStatusTextLayout", BindingFlags.Instance | BindingFlags.NonPublic)
                     .Invoke(controller, null), Is.False, "The gate must reject original automatic wrap and vertical truncation, not merely nonempty text.");
@@ -75,7 +77,7 @@ namespace BiomeRivals.Demo.Tests
         [TestCase(MatchConnectionPhase.Offline, "", 0, "本地模式", "匹配")]
         [TestCase(MatchConnectionPhase.Authenticating, "", 0, "身份认证中", "取消")]
         [TestCase(MatchConnectionPhase.Authenticating, "Checking server gameplay", 0, "校验客户端\n版本", "取消")]
-        [TestCase(MatchConnectionPhase.Connecting, "", 0, "连接服务器", "取消")]
+        [TestCase(MatchConnectionPhase.Connecting, "", 0, "连接\n服务器", "取消")]
         [TestCase(MatchConnectionPhase.Matchmaking, "", 0, "寻找对手中\n平原", "取消")]
         [TestCase(MatchConnectionPhase.Joining, "", 0, "进入\n权威对局", "取消")]
         [TestCase(MatchConnectionPhase.Ready, "", 0, "权威对局\n已连接", "断开")]
@@ -96,6 +98,7 @@ namespace BiomeRivals.Demo.Tests
                 instance.GetSetMethod(true).Invoke(null, new object[] { null });
                 try { controller.BuildNow(); }
                 finally { instance.GetSetMethod(true).Invoke(null, new[] { previous }); }
+                UseCanvasScale(root, 1f);
                 typeof(DemoSceneController).GetMethod("HandleOnlineConnectionState", BindingFlags.Instance | BindingFlags.NonPublic)
                     .Invoke(controller, new object[] { new MatchConnectionStatus(phase, detail, "match-test", attempt) });
                 var panel = root.transform.Find("DemoCanvas/OnlineStatusPanel");
@@ -105,7 +108,9 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(button.GetComponentInChildren<Text>().text, Is.EqualTo(action));
                 Assert.That((bool)typeof(DemoSceneController).GetMethod("VerifyOnlineStatusTextLayout", BindingFlags.Instance | BindingFlags.NonPublic)
                     .Invoke(controller, null), Is.True, "Every explicit line must fit with no automatic extra line or hidden text.");
-                Assert.That(status.fontSize, Is.EqualTo(15));
+                var canvas = root.transform.Find("DemoCanvas").GetComponent<Canvas>();
+                Assert.That(status.fontSize, Is.EqualTo(DemoUiMetrics.GetScreenReadableFontSize(
+                    15, DemoHudTypography.MinimumScreenFontSize, canvas.scaleFactor)));
                 Assert.That(status.resizeTextForBestFit, Is.False);
                 var statusRect = status.rectTransform;
                 var accountRect = panel.Find("Account").GetComponent<RectTransform>();
@@ -116,6 +121,47 @@ namespace BiomeRivals.Demo.Tests
                     Is.LessThan(actionRect.anchoredPosition.x - actionRect.rect.width / 2));
             }
             finally { Object.DestroyImmediate(root); }
+        }
+
+        [TestCase("身份认证中")]
+        [TestCase("校验客户端\n版本")]
+        [TestCase("寻找对手中\n平原")]
+        [TestCase("正在重连\n第 999 次")]
+        [TestCase("版本不兼容\n检查两端")]
+        public void StatusRemainsReadableAndUntruncatedAt720p(string message)
+        {
+            var root = new GameObject("OnlineStatus720pTest");
+            var instance = typeof(GameCompositionRoot).GetProperty("Instance");
+            var previous = instance.GetValue(null);
+            try
+            {
+                instance.GetSetMethod(true).Invoke(null, new object[] { null });
+                var controller = root.AddComponent<DemoSceneController>();
+                controller.BuildNow();
+                UseCanvasScale(root, 2f / 3f);
+                var status = root.transform.Find("DemoCanvas/OnlineStatusPanel/Status").GetComponent<Text>();
+                status.text = message;
+                Assert.That((bool)typeof(DemoSceneController).GetMethod("VerifyOnlineStatusTextLayout", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .Invoke(controller, null), Is.True);
+                Assert.That(status.fontSize, Is.EqualTo(18));
+                Assert.That(status.fontSize * 2f / 3f, Is.EqualTo(12f));
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+                instance.GetSetMethod(true).Invoke(null, new[] { previous });
+            }
+        }
+
+        private static void UseCanvasScale(GameObject root, float scale)
+        {
+            // Batchmode's default Game View is 640x480, not the 1080p reference
+            // this fixture verifies. Pin the scale explicitly; 720p is separate.
+            var canvas = root.transform.Find("DemoCanvas").GetComponent<Canvas>();
+            canvas.GetComponent<CanvasScaler>().enabled = false;
+            canvas.scaleFactor = scale;
+            foreach (var typography in root.GetComponentsInChildren<DemoHudTypography>(true))
+                typography.ApplyScale(scale);
         }
     }
 }

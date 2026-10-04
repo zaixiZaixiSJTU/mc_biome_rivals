@@ -46,6 +46,17 @@ namespace BiomeRivals.Demo
         {
             var canvas = _canvasRoot.GetComponent<Canvas>();
             var expectedScale = Mathf.Min(Screen.width / ReferenceWidth, Screen.height / ReferenceHeight);
+            if (Screen.width >= 1280 && Screen.height >= 720)
+            {
+                foreach (var typography in _canvasRoot.GetComponentsInChildren<DemoHudTypography>())
+                {
+                    var text = typography.GetComponent<Text>();
+                    if (text.fontSize * canvas.scaleFactor < DemoHudTypography.MinimumScreenFontSize - 0.01f ||
+                        text.resizeTextForBestFit || text.preferredHeight > text.rectTransform.rect.height + 0.5f)
+                        throw new InvalidOperationException($"HUD reading gate failed: {text.transform.parent.name}/{text.name}; font={text.fontSize}; scale={canvas.scaleFactor}; height={text.preferredHeight}/{text.rectTransform.rect.height}.");
+                }
+                Debug.Log($"HUD reading gate passed: screen={Screen.width}x{Screen.height}; selected labels >=12px; full text height; no auto-shrink.");
+            }
             if (canvas.renderMode != RenderMode.ScreenSpaceOverlay ||
                 _canvasRoot.GetComponent<CanvasScaler>().screenMatchMode != CanvasScaler.ScreenMatchMode.Expand ||
                 Mathf.Abs(canvas.scaleFactor - expectedScale) > 0.001f)
