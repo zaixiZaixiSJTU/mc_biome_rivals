@@ -134,12 +134,19 @@ $argumentsA += @('-onlineExpectedArena',$ExpectedArena)
 $argumentsB += @('-onlineExpectedArena',$ExpectedArena)
 if ($UiDeployment) { $argumentsA += '-onlineUiDeploy'; $argumentsB += '-onlineUiDeploy' }
 if ($RenderOnlineUi) {
-    $argumentsA = @($argumentsA | Where-Object { $_ -ne '-nographics' })
-    $argumentsB = @($argumentsB | Where-Object { $_ -ne '-nographics' })
-    $argumentsA += @('-screen-width','1280','-screen-height','720','-captureOnline',('"{0}"' -f (Join-Path $OutputDirectory 'online-arena-a.png')),
-        '-captureWidth','1920','-captureHeight','1080')
-    $argumentsB += @('-screen-width','1280','-screen-height','720','-captureOnline',('"{0}"' -f (Join-Path $OutputDirectory 'online-arena-b.png')),
-        '-captureWidth','1920','-captureHeight','1080')
+    function Remove-OldWindowArguments([string[]]$PlayerArguments) {
+        for ($index = 0; $index -lt $PlayerArguments.Length; $index++) {
+            if ($PlayerArguments[$index] -eq '-nographics') { continue }
+            if ($PlayerArguments[$index] -in @('-screen-width','-screen-height')) { $index++; continue }
+            $PlayerArguments[$index]
+        }
+    }
+    $argumentsA = @(Remove-OldWindowArguments $argumentsA)
+    $argumentsB = @(Remove-OldWindowArguments $argumentsB)
+    $argumentsA += @('-screen-width',"$CaptureWidth",'-screen-height',"$CaptureHeight",'-captureOnline',('"{0}"' -f (Join-Path $OutputDirectory 'online-arena-a.png')),
+        '-captureWidth',"$CaptureWidth",'-captureHeight',"$CaptureHeight")
+    $argumentsB += @('-screen-width',"$CaptureWidth",'-screen-height',"$CaptureHeight",'-captureOnline',('"{0}"' -f (Join-Path $OutputDirectory 'online-arena-b.png')),
+        '-captureWidth',"$CaptureWidth",'-captureHeight',"$CaptureHeight")
 }
 
 $proxyVariables = @('HTTP_PROXY','HTTPS_PROXY','ALL_PROXY')
@@ -253,6 +260,8 @@ try {
         endpoint = "${ServerScheme}://${ServerHost}:${ServerPort}"
         sourceFileCount = $buildManifest.inputs.Count
         unityVersion = $buildManifest.unityVersion
+        captureWidth = $(if ($RenderOnlineUi) { $CaptureWidth } else { $null })
+        captureHeight = $(if ($RenderOnlineUi) { $CaptureHeight } else { $null })
         scenario = $(if ($PendingReadability) { 'ordinary-pending-readability' } elseif ($SimultaneousDraw) { 'simultaneous-draw' } elseif ($ReturnCardId) { "end-return-$ReturnCardId" } elseif ($DeploymentRejections) { 'deployment-atomic-rejections' } elseif ($GoatMovement) { 'ui-goat-movement' } elseif ($BuildingDeployment) { 'ui-building-footprints' } elseif ($UiDeployment) { 'ui-final-unit-deployment' } else { 'basic-actions' })
         expectedArena = $ExpectedArena
         readableHand = [bool]$DrawReadability
@@ -270,10 +279,10 @@ try {
             }
             $widthBytes = [byte[]]$pngBytes[16..19]; [Array]::Reverse($widthBytes)
             $heightBytes = [byte[]]$pngBytes[20..23]; [Array]::Reverse($heightBytes)
-            $expectedWidth = if ($RenderDrawUi -or $PendingReadability) { $CaptureWidth } else { 1920 }
-            $expectedHeight = if ($RenderDrawUi -or $PendingReadability) { $CaptureHeight } else { 1080 }
+            $expectedWidth = if ($RenderOnlineUi -or $RenderDrawUi -or $PendingReadability) { $CaptureWidth } else { 1920 }
+            $expectedHeight = if ($RenderOnlineUi -or $RenderDrawUi -or $PendingReadability) { $CaptureHeight } else { 1080 }
             if ([BitConverter]::ToInt32($widthBytes,0) -ne $expectedWidth -or [BitConverter]::ToInt32($heightBytes,0) -ne $expectedHeight) {
-                throw 'Online draw screenshot dimensions are incorrect.'
+                throw 'Online screenshot dimensions differ from the requested validation size.'
             }
         }
         $evidence['screenshotHashes'] = @($screenshots | ForEach-Object { (Get-FileHash -LiteralPath $_).Hash })

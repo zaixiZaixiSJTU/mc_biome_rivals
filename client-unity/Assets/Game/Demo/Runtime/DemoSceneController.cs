@@ -614,6 +614,7 @@ namespace BiomeRivals.Demo
                 {
                     _onlineStatusText.text = "联机底座\n未启动";
                     _onlineStatusText.color = Danger;
+                    ShowStatus("联机系统尚未启动。请重新打开游戏，再尝试匹配。", true);
                     return;
                 }
                 if (_onlineGateway != null) _onlineGateway.ConnectionStateChanged -= HandleOnlineConnectionState;
@@ -641,7 +642,8 @@ namespace BiomeRivals.Demo
                     _onlineStatusText.text = "连接失败";
                     _onlineStatusText.color = Danger;
                 }
-                Debug.LogWarning("Online connection failed: " + exception.Message, this);
+                ShowOnlineException(exception, connecting: true);
+                Debug.LogWarning($"Online connection failed ({exception.GetType().Name}).", this);
             }
         }
 
@@ -687,8 +689,13 @@ namespace BiomeRivals.Demo
             _onlineActionLabel.text = ready ? "断开" : idle ? "匹配" : "取消";
             _onlineStatusText.color = status.Phase == MatchConnectionPhase.Failed ? Danger : ready ? Cyan : Muted;
             RefreshAll();
-            if (status.Phase == MatchConnectionPhase.Failed && status.CompatibilityFailure != null)
-                ShowStatus(status.CompatibilityFailure.UserSummary, true);
+            if (status.Phase == MatchConnectionPhase.Failed)
+            {
+                if (status.CompatibilityFailure != null) ShowCompatibilityFailure(status.CompatibilityFailure);
+                else ShowStatus(DemoOnlineFeedback.ConnectionFailureText, true);
+            }
+            else if (!MatchView.IsFinished && !MatchView.IsMulligan && MatchView.PendingChoice == null && !HasPendingOnlineCommand)
+                ShowStatus(DemoOnlineFeedback.FormatConnectionPhase(status), status.Phase == MatchConnectionPhase.Reconnecting);
         }
 
         private void DisposeOnlineSession()
@@ -742,15 +749,7 @@ namespace BiomeRivals.Demo
         private void HandleOnlineCommandCompleted(MatchCommandDispatchResult result)
         {
             GetComponent<DemoBattlefieldPointerController>()?.SetInputEnabled(!HasPendingOnlineCommand && !IsReadOnlyOverlayOpen && !MatchView.IsFinished);
-            if (result.Outcome == MatchCommandOutcome.Accepted)
-            {
-                ShowStatus($"服务器已确认 · 状态 r{result.Revision}", false);
-            }
-            else
-            {
-                var detail = string.IsNullOrEmpty(result.Message) ? result.Code : $"{result.Code} · {result.Message}";
-                ShowStatus($"命令未生效：{detail}", true);
-            }
+            ShowStatus(DemoOnlineFeedback.FormatCommand(result), result.Outcome != MatchCommandOutcome.Accepted);
             RefreshAll();
         }
 
@@ -6071,8 +6070,8 @@ namespace BiomeRivals.Demo
             }
             catch (Exception exception)
             {
-                ShowStatus("联机命令失败：" + exception.Message, true);
-                Debug.LogWarning("Online command failed: " + exception, this);
+                ShowOnlineException(exception, connecting: false);
+                Debug.LogWarning($"Online command failed ({exception.GetType().Name}).", this);
                 RefreshAll();
                 return null;
             }
@@ -7214,6 +7213,7 @@ namespace BiomeRivals.Demo
             if (HasCommandLineFlag("-previewHandInspection")) yield return PrepareHandInspectionCapture();
             if (HasCommandLineFlag("-previewResponsiveHandInspection")) yield return PrepareResponsiveHandInspectionCapture();
             if (HasCommandLineFlag("-previewStatusInspection")) yield return PrepareStatusInspectionCapture();
+            if (HasCommandLineFlag("-previewOnlineFeedback")) yield return PrepareOnlineFeedbackCapture(GetCommandLineValue("-previewOnlineFeedback"));
             if (HasCommandLineFlag("-previewHudResources") || HasCommandLineFlag("-previewCardNotes"))
                 yield return PrepareHudResourceCapture(HasCommandLineFlag("-previewCardNotes"));
             if (HasCommandLineFlag("-previewHandState")) yield return AuditHandReadabilityStateCapture(GetCommandLineValue("-previewHandState"));

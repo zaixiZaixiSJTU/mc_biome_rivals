@@ -2,6 +2,7 @@ using System.Reflection;
 using BiomeRivals.Bootstrap;
 using BiomeRivals.Content;
 using BiomeRivals.Core;
+using BiomeRivals.Networking;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -67,7 +68,25 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(body.text, Is.EqualTo("新的提示全文"));
             Assert.That(body.color, Is.EqualTo(Find<Text>("StatusPlate/Status").color));
             Invoke("ShowStatus", "新的提示全文", true);
-            Assert.That(body.color, Is.EqualTo(Find<Text>("StatusPlate/Status").color), "Severity must update even when text is identical.");
+            Assert.That(Find<Text>("StatusInspectionOverlay/ReadingPanel/Title").color,
+                Is.EqualTo(Find<Text>("StatusPlate/Status").color), "Severity must update even when text is identical.");
+            Assert.That(body.color, Is.Not.EqualTo(Find<Text>("StatusPlate/Status").color), "Long-body ink must stay neutral.");
+        }
+
+        [Test]
+        public void ShortReadingUsesAutoHideAndQuietNeutralBody()
+        {
+            Invoke("ShowStatus", "红石不足，请选择其他卡牌。", true);
+            Invoke("OpenStatusInspection");
+            Canvas.ForceUpdateCanvases();
+            var scroll = Find<ScrollRect>("StatusInspectionOverlay/ReadingPanel/Viewport");
+            scroll.Rebuild(CanvasUpdate.PostLayout);
+            Assert.That(scroll.verticalScrollbarVisibility, Is.EqualTo(ScrollRect.ScrollbarVisibility.AutoHide));
+            // UGUI vScrollingNeeded deliberately returns true outside play mode.
+            // The live Player capture asserts actual visible/hidden state for short and long bodies.
+            Assert.That(scroll.content.rect.height, Is.LessThan(scroll.viewport.rect.height));
+            Assert.That(Find<Text>("StatusInspectionOverlay/ReadingPanel/Viewport/FullMessage").color,
+                Is.Not.EqualTo(Find<Text>("StatusPlate/Status").color));
         }
 
         [Test]
@@ -158,6 +177,75 @@ namespace BiomeRivals.Demo.Tests
 
         private T Field<T>(string name) => (T)typeof(DemoSceneController)
             .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(_controller);
+
+        [TestCase(1f)]
+        [TestCase(2f / 3f)]
+        public void CompatibilityFullReadingKeepsRemedyWhileItsThreeLinePreviewSurvivesResize(float scale)
+        {
+            _root.transform.Find("DemoCanvas").GetComponent<Canvas>().scaleFactor = scale;
+            var failure = ServerCompatibilityFailure.Create(new NakamaConnectionSettings { host = "localhost", port = 17350, serverKey = "private-key" },
+                new MatchmakingPreferences(FactionIds.PlainsForest, 42, 48), 39, "prototype-0.64", 41, 47);
+            Invoke("HandleOnlineConnectionState", new MatchConnectionStatus(MatchConnectionPhase.Failed,
+                "Bearer private-token", compatibilityFailure: failure));
+            var summary = Field<DemoReadableSummary>("_statusSummary");
+            summary.Refresh();
+            Assert.That(Find<Text>("StatusPlate/Status").text, Is.EqualTo(failure.UserSummary));
+            Assert.That(summary.FullText, Is.EqualTo(failure.UserDetails));
+            Invoke("OpenStatusInspection");
+            Assert.That(Find<Text>("StatusInspectionOverlay/ReadingPanel/Viewport/FullMessage").text,
+                Is.EqualTo(failure.UserDetails).And.Not.Contain("private-token").And.Not.Contain("private-key"));
+            Invoke("CloseStatusInspection");
+            Invoke("ShowStatus", "后续对局提示", false);
+            Assert.That(summary.FullText, Is.EqualTo("后续对局提示"));
+            Assert.That(Find<Text>("StatusPlate/Status").text, Is.EqualTo("后续对局提示"));
+        }
+
+        [TestCase(MatchCommandOutcome.Accepted)]
+        [TestCase(MatchCommandOutcome.Rejected)]
+        [TestCase(MatchCommandOutcome.TimedOut)]
+        [TestCase(MatchCommandOutcome.TransportFailed)]
+        public void CompletedCommandReadingUsesSafePlayerTextWithoutChangingGameState(MatchCommandOutcome outcome)
+        {
+            var match = Field<DemoLocalMatch>("_match");
+            var beforeRevision = match.Revision;
+            var beforeHand = match.HandCards.Count;
+            var result = new MatchCommandDispatchResult("private-command", outcome, "INVALID_TARGET", "Bearer private-token", 100000);
+            Invoke("HandleOnlineCommandCompleted", result);
+            var expected = DemoOnlineFeedback.FormatCommand(result);
+            Assert.That(Field<DemoReadableSummary>("_statusSummary").FullText, Is.EqualTo(expected));
+            Invoke("OpenStatusInspection");
+            Assert.That(Find<Text>("StatusInspectionOverlay/ReadingPanel/Viewport/FullMessage").text,
+                Is.EqualTo(expected).And.Not.Contain("private-token").And.Not.Contain("100000"));
+            Assert.That(Find<CanvasGroup>("HandPlate/HandCards").interactable, Is.False);
+            Invoke("CloseStatusInspection");
+            Assert.That(match.Revision, Is.EqualTo(beforeRevision));
+            Assert.That(match.HandCards.Count, Is.EqualTo(beforeHand));
+        }
+
+        [Test]
+        public void ExternalTextReplacementClearsCustomPreviewAndOldFullMessage()
+        {
+            var summary = Field<DemoReadableSummary>("_statusSummary");
+            summary.SetFullText("原完整版本说明", "原三行摘要");
+            Find<Text>("StatusPlate/Status").text = "外部新提示";
+            Assert.That(summary.FullText, Is.EqualTo("外部新提示"));
+            summary.Refresh();
+            Assert.That(Find<Text>("StatusPlate/Status").text, Is.EqualTo("外部新提示"));
+        }
+
+        [TestCase(MatchConnectionPhase.Ready)]
+        [TestCase(MatchConnectionPhase.Authenticating)]
+        [TestCase(MatchConnectionPhase.Offline)]
+        [TestCase(MatchConnectionPhase.Reconnecting)]
+        public void NewConnectionPhaseDoesNotKeepAnOldFailureInTheReadingPanel(MatchConnectionPhase phase)
+        {
+            Invoke("HandleOnlineConnectionState", new MatchConnectionStatus(MatchConnectionPhase.Failed, "Bearer private-token"));
+            Invoke("OpenStatusInspection");
+            var status = new MatchConnectionStatus(phase, "Bearer another-private-token", phase == MatchConnectionPhase.Ready ? "private-match" : "");
+            Invoke("HandleOnlineConnectionState", status);
+            Assert.That(Find<Text>("StatusInspectionOverlay/ReadingPanel/Viewport/FullMessage").text,
+                Is.EqualTo(DemoOnlineFeedback.FormatConnectionPhase(status)).And.Not.Contain("private-token"));
+        }
 
         [TestCase(1f)]
         [TestCase(2f / 3f)]

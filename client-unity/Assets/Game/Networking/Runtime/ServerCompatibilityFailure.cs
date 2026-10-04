@@ -1,4 +1,5 @@
 using System;
+using System.Text.RegularExpressions;
 using BiomeRivals.Core;
 
 namespace BiomeRivals.Networking
@@ -11,7 +12,7 @@ namespace BiomeRivals.Networking
         public readonly ServerCompatibilityFailureKind Kind;
         public readonly string Endpoint, ClientRuleset, ServerRuleset;
         public readonly int ClientProtocol, ServerProtocol, ClientCardVersion, ServerCardVersion, ClientEffectVersion, ServerEffectVersion;
-        public readonly string DiagnosticText, UserSummary;
+        public readonly string DiagnosticText, UserSummary, UserDetails;
 
         private ServerCompatibilityFailure(NakamaConnectionSettings settings, MatchmakingPreferences preferences,
             int protocol, string ruleset, int cards, int effects, string mismatch)
@@ -36,8 +37,19 @@ namespace BiomeRivals.Networking
                 Kind == ServerCompatibilityFailureKind.Ruleset ? "规则版本不匹配" :
                 Kind == ServerCompatibilityFailureKind.CardData ? $"卡牌：服务{cards} / 客户端{ClientCardVersion}" :
                 $"效果：服务{effects} / 客户端{ClientEffectVersion}";
-            UserSummary = $"{target}\n{reason}\n更新两端，详情见诊断日志";
+            UserSummary = $"{target}\n{reason}\n更新两端后重试";
+            UserDetails = $"无法连接：客户端与服务器版本不兼容。\n\n服务器地址：{Endpoint}\n\n" +
+                $"客户端：通信 {ClientProtocol} · 规则 {ReadableRuleset(ClientRuleset)}\n卡牌 {ClientCardVersion} · 效果 {ClientEffectVersion}\n\n" +
+                $"服务器：通信 {ServerProtocol} · 规则 {ReadableRuleset(ServerRuleset)}\n卡牌 {ServerCardVersion} · 效果 {ServerEffectVersion}\n\n" +
+                "请更新客户端与服务器，使通信、规则、卡牌和效果版本一致，再点击匹配重试。\n" +
+                "版本校验未通过，当前连接不能发送战场操作。\n" +
+                "若正在恢复已有对局，请先完成更新，再重新连接查看对局状态。";
         }
+
+        // Health metadata is untrusted; arbitrary labels are diagnostic data, not player copy.
+        private static string ReadableRuleset(string value) => Regex.IsMatch(value ?? string.Empty,
+            @"\A(?:prototype|release)-[0-9]{1,6}(?:\.[0-9]{1,6}){0,3}\z", RegexOptions.CultureInvariant)
+            ? value : "未识别的版本标签";
 
         public static ServerCompatibilityFailure Create(NakamaConnectionSettings settings, MatchmakingPreferences preferences,
             int protocol, string ruleset, int cards, int effects)

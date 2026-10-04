@@ -56,6 +56,7 @@ $productionTypes = @(
     'BiomeRivals.Demo.CardUI',
     'BiomeRivals.Demo.DemoHudTypography',
     'BiomeRivals.Demo.DemoReadableSummary',
+    'BiomeRivals.Demo.DemoOnlineFeedback',
     'BiomeRivals.Demo.DemoCardArtProvider',
     'BiomeRivals.Networking.IPlayerOperations',
     'BiomeRivals.Networking.PlayerActionRequest',
@@ -87,13 +88,17 @@ try {
     if (@($animator.Methods | Where-Object Name -eq 'SampleForAudit').Count -ne [int]$expectedDevelopment) {
         throw 'Deterministic entity sampler leaked or is missing.'
     }
-    foreach ($method in @('OpenHandInspection','CloseHandInspection','RefreshHandInspection','OpenStatusInspection','OpenCardNotes','CloseStatusInspection','RefreshStatusInspection','SetAgentPolicy')) {
+    foreach ($method in @('OpenHandInspection','CloseHandInspection','RefreshHandInspection','OpenStatusInspection','OpenCardNotes','CloseStatusInspection','RefreshStatusInspection','ShowCompatibilityFailure','ShowOnlineException','SetAgentPolicy')) {
         if (@($scene.Methods | Where-Object Name -eq $method).Count -ne 1) { throw "Production read-only card UI method is missing: $method" }
     }
     $statusCapture = @($scene.Methods | Where-Object Name -eq 'PrepareStatusInspectionCapture')
     if ($statusCapture.Count -ne 1) { throw 'Status capture gate is missing.' }
     $hasStatusIterator = @($statusCapture[0].CustomAttributes | Where-Object { $_.AttributeType.FullName -eq 'System.Runtime.CompilerServices.IteratorStateMachineAttribute' }).Count -eq 1
     if ($hasStatusIterator -ne $expectedDevelopment) { throw 'Status capture implementation leaked or is missing for the selected mode.' }
+    $feedbackCapture = @($scene.Methods | Where-Object Name -eq 'PrepareOnlineFeedbackCapture')
+    if ($feedbackCapture.Count -ne 1) { throw 'Online feedback capture gate is missing.' }
+    $hasFeedbackIterator = @($feedbackCapture[0].CustomAttributes | Where-Object { $_.AttributeType.FullName -eq 'System.Runtime.CompilerServices.IteratorStateMachineAttribute' }).Count -eq 1
+    if ($hasFeedbackIterator -ne $expectedDevelopment) { throw 'Online feedback reading diagnostics leaked or are missing.' }
     $resourceCapture = @($scene.Methods | Where-Object Name -eq 'PrepareHudResourceCapture')
     if ($resourceCapture.Count -ne 1) { throw 'HUD resource capture gate is missing.' }
     $hasResourceIterator = @($resourceCapture[0].CustomAttributes | Where-Object { $_.AttributeType.FullName -eq 'System.Runtime.CompilerServices.IteratorStateMachineAttribute' }).Count -eq 1

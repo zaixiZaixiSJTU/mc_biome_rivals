@@ -36,6 +36,7 @@ try {
     Invoke-ValidationStage -Name 'Card content' -Command { & (Join-Path $PSScriptRoot 'validate-card-content.ps1') }
     Invoke-ValidationStage -Name 'Extracted Minecraft asset provenance control' -Command { & (Join-Path $PSScriptRoot 'test-extracted-minecraft-assets.ps1') }
     Invoke-ValidationStage -Name 'Card-frame copy drift control' -Command { & (Join-Path $PSScriptRoot 'test-card-frame-sync.ps1') }
+    Invoke-ValidationStage -Name 'Player feedback reason contract' -Command { & (Join-Path $PSScriptRoot 'test-player-feedback-contract.ps1') }
     Invoke-ValidationStage -Name 'Online return report positive/negative controls' -Command { & (Join-Path $PSScriptRoot 'test-online-return-report.ps1') }
     Invoke-ValidationStage -Name 'Online draw report positive/negative controls' -Command { & (Join-Path $PSScriptRoot 'test-online-draw-report.ps1') }
     Invoke-ValidationStage -Name 'Online pending report positive/negative controls' -Command { & (Join-Path $PSScriptRoot 'test-online-pending-report.ps1') }

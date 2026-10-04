@@ -12,6 +12,7 @@ namespace BiomeRivals.Demo
         private Canvas _canvas;
         private string _fullText = string.Empty;
         private string _preview = string.Empty;
+        private string _preferredPreview;
         private int _authoredSize;
         private float _lastScale = -1f;
         private Vector2 _lastBounds;
@@ -27,9 +28,10 @@ namespace BiomeRivals.Demo
             SetFullText(_text.text);
         }
 
-        public void SetFullText(string value)
+        public void SetFullText(string value, string preferredPreview = null)
         {
             _fullText = value ?? string.Empty;
+            _preferredPreview = preferredPreview;
             _dirty = true;
             Refresh();
         }
@@ -39,6 +41,7 @@ namespace BiomeRivals.Demo
             if (_text != null && _text.text != _preview)
             {
                 _fullText = _text.text;
+                _preferredPreview = null;
                 _dirty = true;
             }
         }
@@ -55,7 +58,7 @@ namespace BiomeRivals.Demo
             _text.resizeTextForBestFit = false;
             _text.supportRichText = false;
             _text.fontSize = DemoUiMetrics.GetScreenReadableFontSize(_authoredSize, 12f, scale);
-            _preview = FitPreview(_fullText, _text);
+            _preview = FitPreview(_preferredPreview ?? _fullText, _text);
             _text.text = _preview;
         }
 

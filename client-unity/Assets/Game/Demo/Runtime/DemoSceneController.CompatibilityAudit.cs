@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using BiomeRivals.Bootstrap;
 using BiomeRivals.Networking;
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 namespace BiomeRivals.Demo
 {
@@ -16,6 +17,8 @@ namespace BiomeRivals.Demo
         {
             public bool success, authoritativeStateAbsent, realtimeSocketAbsent, matchmakerAbsent, matchAbsent;
             public bool canSendCommands, canIssueCommand, localStateUnchanged, headerLayoutValid, hintLayoutValid;
+            public bool fullReadingValid, fullReadingReadOnly, fullReadingReturnValid;
+            public bool fullReadingScrollRequired, fullReadingScrollValid;
             public string phase, kind, endpoint, clientRuleset, serverRuleset, header, hint;
             public int clientProtocol, serverProtocol, clientCards, serverCards, clientEffects, serverEffects;
             public int localRevisionBefore, localRevisionAfter, screenWidth, screenHeight;
@@ -70,9 +73,36 @@ namespace BiomeRivals.Demo
                     _statusText.preferredHeight <= _statusText.rectTransform.rect.height,
                 screenWidth = Screen.width, screenHeight = Screen.height
             };
+            if (!ClickButtonThroughEventSystem(_statusInspectionButton)) throw new InvalidOperationException("Real compatibility reading entry failed.");
+            frame = Time.frameCount;
+            while (Time.frameCount < frame + 2) await Task.Yield();
+            Canvas.ForceUpdateCanvases();
+            report.fullReadingValid = _statusSummary.FullText == failure.UserDetails && _statusInspectionBody.text == failure.UserDetails;
+            report.fullReadingReadOnly = _statusInspectionOpen && !_handCanvasGroup.interactable &&
+                !GetComponent<DemoBattlefieldPointerController>().InputEnabled && _match.Revision == revision;
+            report.fullReadingScrollRequired = _statusInspectionScroll.content.rect.height > _statusInspectionScroll.viewport.rect.height;
+            report.fullReadingScrollValid = !report.fullReadingScrollRequired;
+            if (report.fullReadingScrollRequired)
+            {
+                var before = _statusInspectionScroll.verticalNormalizedPosition;
+                ExecuteEvents.Execute(_statusInspectionScroll.gameObject, new PointerEventData(EventSystem.current)
+                    { scrollDelta = new Vector2(0f, -5f) }, ExecuteEvents.scrollHandler);
+                frame = Time.frameCount;
+                while (Time.frameCount < frame + 2) await Task.Yield();
+                report.fullReadingScrollValid = _statusInspectionScroll.verticalNormalizedPosition < before;
+            }
+            if (!ClickButtonThroughEventSystem(_statusInspectionClose)) throw new InvalidOperationException("Real compatibility reading return failed.");
+            frame = Time.frameCount;
+            while (Time.frameCount < frame + 2) await Task.Yield();
+            report.fullReadingReturnValid = !_statusInspectionOpen && _handCanvasGroup.interactable &&
+                GetComponent<DemoBattlefieldPointerController>().InputEnabled && _match.Revision == revision;
             report.success = report.authoritativeStateAbsent && report.realtimeSocketAbsent && report.matchmakerAbsent && report.matchAbsent &&
-                !report.canSendCommands && !report.canIssueCommand && report.localStateUnchanged && report.headerLayoutValid && report.hintLayoutValid;
+                !report.canSendCommands && !report.canIssueCommand && report.localStateUnchanged && report.headerLayoutValid && report.hintLayoutValid &&
+                report.fullReadingValid && report.fullReadingReadOnly && report.fullReadingReturnValid && report.fullReadingScrollValid;
             if (!report.success) throw new InvalidOperationException("Compatibility preflight/UI invariants failed: " + JsonUtility.ToJson(report));
+            if (!ClickButtonThroughEventSystem(_statusInspectionButton)) throw new InvalidOperationException("Real compatibility reading reopen failed.");
+            frame = Time.frameCount;
+            while (Time.frameCount < frame + 2) await Task.Yield();
             WriteDemoScreenshot(capturePath);
             File.WriteAllText(reportPath, JsonUtility.ToJson(report, true));
             Debug.Log("Unity expected compatibility failure audit passed: " + failure.Endpoint);

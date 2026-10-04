@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Linq;
+using BiomeRivals.Networking;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -9,6 +10,21 @@ namespace BiomeRivals.Demo
 {
     public sealed partial class DemoSceneController
     {
+        private void ShowCompatibilityFailure(ServerCompatibilityFailure failure)
+        {
+            if (_statusText == null) return;
+            if (_statusSummary != null) _statusSummary.SetFullText(failure.UserDetails, failure.UserSummary);
+            else _statusText.text = failure.UserSummary;
+            _statusText.color = Danger;
+            RefreshStatusInspection();
+        }
+
+        private void ShowOnlineException(Exception exception, bool connecting)
+        {
+            if (exception is ServerCompatibilityException compatibility) ShowCompatibilityFailure(compatibility.Failure);
+            else ShowStatus(DemoOnlineFeedback.FormatException(exception, connecting), true);
+        }
+
         private RectTransform _statusInspectionOverlay;
         private Text _statusInspectionBody;
         private Button _statusInspectionButton;
@@ -64,6 +80,7 @@ namespace BiomeRivals.Demo
             scrollbar.targetGraphic = handle;
             scrollbar.direction = Scrollbar.Direction.BottomToTop;
             _statusInspectionScroll.verticalScrollbar = scrollbar;
+            _statusInspectionScroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHide;
             CreateText(panel, "ReadOnlyHint", new Vector2(0, -270), new Vector2(770, 34), "滚轮或右侧滑块查看全文 · Esc / 右键返回 · 阅读时不会出牌", 18, Muted, TextAnchor.MiddleCenter, FontStyle.Normal);
             _statusInspectionOverlay.gameObject.SetActive(false);
         }
@@ -128,7 +145,8 @@ namespace BiomeRivals.Demo
             _statusInspectionButton.gameObject.SetActive(!MatchView.IsMulligan && MatchView.PendingChoice == null);
             _statusInspectionOverlay.gameObject.SetActive(_statusInspectionOpen);
             if (!_statusInspectionOpen) return;
-            _statusInspectionBody.color = _readingCardNotes ? Pale : _statusText.color;
+            _statusInspectionBody.color = Pale;
+            _statusInspectionTitle.color = _readingCardNotes ? Pale : _statusText.color;
             _statusInspectionTitle.text = _readingCardNotes ? "卡牌与操作 · 完整说明" : "操作提示 · 完整说明";
             var fullMessage = CurrentReadingText;
             if (_statusInspectionDisplayed == fullMessage) return;
