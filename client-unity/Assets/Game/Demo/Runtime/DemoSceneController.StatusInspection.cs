@@ -81,7 +81,9 @@ namespace BiomeRivals.Demo
             scrollbar.direction = Scrollbar.Direction.BottomToTop;
             _statusInspectionScroll.verticalScrollbar = scrollbar;
             _statusInspectionScroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHide;
-            CreateText(panel, "ReadOnlyHint", new Vector2(0, -270), new Vector2(770, 34), "滚轮或右侧滑块查看全文 · Esc / 右键返回 · 阅读时不会出牌", 18, Muted, TextAnchor.MiddleCenter, FontStyle.Normal);
+            CreateText(panel, "ReadOnlyHint", new Vector2(0, -270), new Vector2(770, 34),
+                "↑/↓/PgUp/PgDn 滚动 · Home/End 首尾 · Esc / 右键返回（只读）", 15, Muted, TextAnchor.MiddleCenter, FontStyle.Normal);
+            DemoUiNavigation.DisableDirectionalNavigation(_statusInspectionClose, _statusInspectionScroll.verticalScrollbar);
             _statusInspectionOverlay.gameObject.SetActive(false);
         }
 
@@ -128,8 +130,8 @@ namespace BiomeRivals.Demo
             if (!_statusInspectionOpen) return;
             _statusInspectionOpen = false;
             RefreshAllInternal(false);
-            var selectable = _statusPreviousFocus != null ? _statusPreviousFocus.GetComponent<Selectable>() : null;
-            EventSystem.current?.SetSelectedGameObject(selectable != null && selectable.IsActive() && selectable.IsInteractable() ? _statusPreviousFocus : null);
+            DemoUiNavigation.RestoreFocus(EventSystem.current, _statusPreviousFocus,
+                _readingCardNotes ? _cardNotesButton : _statusInspectionButton, _statusInspectionButton);
             _statusPreviousFocus = null;
         }
 

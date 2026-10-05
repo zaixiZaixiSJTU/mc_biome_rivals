@@ -28,6 +28,8 @@ namespace BiomeRivals.Demo
         private string _handInspectionRenderedInstance;
         private string _choiceInspectionCardId;
         private string _choiceInspectionChoiceId;
+        private int _choiceInspectionOptionIndex = -1;
+        private bool _handInspectionRestoreFocusPending;
         private string _handInspectionInstanceId;
         private bool IsHandInspectionOpen => !string.IsNullOrEmpty(_handInspectionInstanceId) || !string.IsNullOrEmpty(_choiceInspectionCardId);
 
@@ -90,12 +92,14 @@ namespace BiomeRivals.Demo
             _handInspectionScroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHide;
             _handInspectionPosition = CreateText(panel, "Position", new Vector2(0, -254), new Vector2(360, 30),
                 string.Empty, 17, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
-            CreateText(panel, "ReadOnlyHint", new Vector2(0, -318), new Vector2(880, 32), "滚轮查看完整规则 · 仅阅读，不会出牌或确认待决选择 · Esc / 右键返回", 18,
+            CreateText(panel, "ReadOnlyHint", new Vector2(0, -318), new Vector2(880, 32),
+                "Tab 焦点 · ←/→ 翻牌 · ↑/↓ 滚动 · Esc 返回（只读）", 15,
                 Muted, TextAnchor.MiddleCenter, FontStyle.Normal);
             _handInspectionPrevious = CreateSecondaryButton(panel, "Previous", new Vector2(-203, -274), new Vector2(120, 42), "上一张", 18);
             _handInspectionNext = CreateSecondaryButton(panel, "Next", new Vector2(203, -274), new Vector2(120, 42), "下一张", 18);
             _handInspectionPrevious.onClick.AddListener(() => MoveHandInspection(-1));
             _handInspectionNext.onClick.AddListener(() => MoveHandInspection(1));
+            DemoUiNavigation.DisableDirectionalNavigation(close, _handInspectionPrevious, _handInspectionNext, scrollbar);
             _handInspectionOverlay.gameObject.SetActive(false);
         }
 
@@ -112,12 +116,19 @@ namespace BiomeRivals.Demo
 
         private void OpenChoiceRules(string cardId)
         {
+            var option = MatchView.PendingChoice?.options?.FirstOrDefault(value => value != null && value.cardId == cardId);
+            if (option != null) OpenChoiceRulesForOption(cardId, option.optionIndex);
+        }
+
+        private void OpenChoiceRulesForOption(string cardId, int optionIndex)
+        {
             var choice = MatchView.PendingChoice;
             if (IsReadOnlyOverlayOpen || MatchView.IsFinished || !MatchView.IsChoiceOwner || choice == null ||
-                !(choice.options ?? Array.Empty<PendingChoiceOptionDto>()).Any(option => option != null && option.cardId == cardId) ||
+                !(choice.options ?? Array.Empty<PendingChoiceOptionDto>()).Any(option => option != null && option.cardId == cardId && option.optionIndex == optionIndex) ||
                 !_registry.TryGetText(cardId, out _)) return;
             _choiceInspectionCardId = cardId;
             _choiceInspectionChoiceId = choice.choiceId;
+            _choiceInspectionOptionIndex = optionIndex;
             _handInspectionPreviousFocus = EventSystem.current != null ? EventSystem.current.currentSelectedGameObject : null;
             _handInspectionOverlay.SetAsLastSibling();
             RefreshAllInternal(false);
@@ -136,36 +147,47 @@ namespace BiomeRivals.Demo
 
         private void CloseHandInspection()
         {
+            var choiceId = _choiceInspectionChoiceId;
+            var optionIndex = _choiceInspectionOptionIndex;
             _handInspectionInstanceId = null;
             _choiceInspectionCardId = null;
             _choiceInspectionChoiceId = null;
+            _choiceInspectionOptionIndex = -1;
             _handInspectionRenderedInstance = null;
             RefreshAllInternal(false);
-            var focus = _handInspectionPreviousFocus != null ? _handInspectionPreviousFocus.GetComponent<Selectable>() : null;
-            EventSystem.current?.SetSelectedGameObject(focus != null && focus.IsActive() && focus.IsInteractable()
-                ? _handInspectionPreviousFocus : null);
+            var choiceEntry = choiceId != null && MatchView.PendingChoice?.choiceId == choiceId
+                ? _choiceCardsRoot.Find("ChoiceSlot" + optionIndex + "/ReadRules")?.GetComponent<Button>() : null;
+            DemoUiNavigation.RestoreFocus(EventSystem.current, _handInspectionPreviousFocus,
+                choiceEntry, _handInspectionButton, _statusInspectionButton);
             _handInspectionPreviousFocus = null;
         }
 
         private void RefreshHandInspection()
         {
             if (_handInspectionOverlay == null) return;
+            var wasOpen = IsHandInspectionOpen;
             var match = MatchView;
             _handInspectionButton.interactable = !_statusInspectionOpen && !match.IsMulligan && match.PendingChoice == null && match.HandCards.Count > 0;
             var card = match.HandCards.FirstOrDefault(value => value.handCardInstanceId == _handInspectionInstanceId);
             if (card == null || match.IsMulligan || match.PendingChoice != null) _handInspectionInstanceId = null;
             var choice = match.PendingChoice;
             if (!match.IsChoiceOwner || choice == null || choice.choiceId != _choiceInspectionChoiceId ||
-                !(choice.options ?? Array.Empty<PendingChoiceOptionDto>()).Any(option => option != null && option.cardId == _choiceInspectionCardId))
+                !(choice.options ?? Array.Empty<PendingChoiceOptionDto>()).Any(option => option != null && option.cardId == _choiceInspectionCardId && option.optionIndex == _choiceInspectionOptionIndex))
             {
                 _choiceInspectionCardId = null;
                 _choiceInspectionChoiceId = null;
+                _choiceInspectionOptionIndex = -1;
             }
             _handInspectionOverlay.gameObject.SetActive(IsHandInspectionOpen);
-            if (!IsHandInspectionOpen) return;
+            if (!IsHandInspectionOpen)
+            {
+                _handInspectionRenderedInstance = null;
+                if (wasOpen) _handInspectionRestoreFocusPending = true;
+                return;
+            }
             var readingChoice = !string.IsNullOrEmpty(_choiceInspectionCardId);
             var cardId = readingChoice ? _choiceInspectionCardId : card.cardId;
-            var instance = readingChoice ? "choice:" + _choiceInspectionChoiceId + ":" + cardId : card.handCardInstanceId;
+            var instance = readingChoice ? "choice:" + _choiceInspectionChoiceId + ":" + _choiceInspectionOptionIndex + ":" + cardId : card.handCardInstanceId;
             if (!_registry.TryGetDefinition(cardId, out var definition) || !_registry.TryGetText(cardId, out var registered))
                 throw new InvalidOperationException("Unregistered inspected card.");
             var cost = readingChoice ? definition.cost : match.GetEffectiveCost(definition, card.handCardInstanceId);

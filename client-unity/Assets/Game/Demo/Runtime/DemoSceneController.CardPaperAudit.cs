@@ -105,6 +105,29 @@ namespace BiomeRivals.Demo
         private void AuditSceneCardPaper(CardUI card)
         {
             _registry.TryGetDefinition(card.CardId, out var definition);
+            _registry.TryGetText(card.CardId, out var registered);
+            var scale = _canvasRoot.GetComponent<Canvas>().scaleFactor;
+            foreach (var key in new[] { "Name", "Cost", "Type", "Attack", "Health", "Durability", "CostModifier" })
+            {
+                var child = card.transform.Find(key);
+                if (child == null) continue;
+                var label = child.GetComponent<Text>();
+                var fontSize = label.resizeTextForBestFit ? label.resizeTextMinSize : label.fontSize;
+                var minimum = key == "Name" || key == "Type" || key == "CostModifier" ? 12f : 14f;
+                var settings = label.GetGenerationSettings(label.rectTransform.rect.size);
+                settings.fontSize = fontSize;
+                settings.resizeTextForBestFit = false;
+                settings.verticalOverflow = VerticalWrapMode.Overflow;
+                if (key != "Name") settings.horizontalOverflow = HorizontalWrapMode.Overflow;
+                var generator = new TextGenerator();
+                if (fontSize * scale < minimum || label.supportRichText ||
+                    generator.GetPreferredHeight(label.text, settings) / label.pixelsPerUnit > label.rectTransform.rect.height + 0.5f ||
+                    (key != "Name" && generator.GetPreferredWidth(label.text, settings) / label.pixelsPerUnit > label.rectTransform.rect.width + 0.5f))
+                    throw new InvalidOperationException("Rendered card identity is unreadable or clipped: " + card.CardId + "/" + key);
+            }
+            if (card.transform.Find("Name").GetComponent<Text>().text != registered.name ||
+                card.transform.Find("Type").GetComponent<Text>().text != registered.typeLabel)
+                throw new InvalidOperationException("Card identity lost registered text.");
             var text = card.transform.Find("Rules").GetComponent<Text>();
             var bounds = DemoCardFrameProvider.GetRulesPaperBounds(definition.themeId, card.RectTransform.rect.size);
             if (Vector2.Distance(text.rectTransform.sizeDelta, bounds.size) > 0.01f ||

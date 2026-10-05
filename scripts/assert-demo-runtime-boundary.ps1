@@ -56,6 +56,8 @@ $productionTypes = @(
     'BiomeRivals.Demo.DemoSceneController',
     'BiomeRivals.Demo.CardUI',
     'BiomeRivals.Demo.DemoHudTypography',
+    'BiomeRivals.Demo.DemoUiFocusIndicator',
+    'BiomeRivals.Demo.DemoUiNavigation',
     'BiomeRivals.Demo.DemoReadableSummary',
     'BiomeRivals.Demo.DemoOnlineFeedback',
     'BiomeRivals.Demo.DemoCardArtProvider',
@@ -89,7 +91,7 @@ try {
     if (@($animator.Methods | Where-Object Name -eq 'SampleForAudit').Count -ne [int]$expectedDevelopment) {
         throw 'Deterministic entity sampler leaked or is missing.'
     }
-    foreach ($method in @('OpenHandInspection','CloseHandInspection','RefreshHandInspection','OpenChoiceRules','OpenStatusInspection','OpenCardNotes','CloseStatusInspection','RefreshStatusInspection','ShowCompatibilityFailure','ShowOnlineException','SetAgentPolicy')) {
+    foreach ($method in @('OpenHandInspection','CloseHandInspection','RefreshHandInspection','OpenChoiceRules','OpenChoiceRulesForOption','HandleReadingKey','OpenStatusInspection','OpenCardNotes','CloseStatusInspection','RefreshStatusInspection','ShowCompatibilityFailure','ShowOnlineException','SetAgentPolicy')) {
         if (@($scene.Methods | Where-Object Name -eq $method).Count -ne 1) { throw "Production read-only card UI method is missing: $method" }
     }
     $statusCapture = @($scene.Methods | Where-Object Name -eq 'PrepareStatusInspectionCapture')

@@ -4475,13 +4475,15 @@ namespace BiomeRivals.Demo.Tests
             Assert.That(titleMinX, Is.GreaterThanOrEqualTo(socketMaxX + 4f),
                 $"{cardId} title must have a visible gap after the cost socket in {(compact ? "hand" : "detail")} view");
             Assert.That(title.text, Is.EqualTo(expectedName), $"{cardId} must retain its complete registered name");
+            Assert.That(title.resizeTextMinSize * root.GetComponentInParent<Canvas>().scaleFactor,
+                Is.GreaterThanOrEqualTo(12f), "Full names must not fit by becoming unreadably small.");
 
             var settings = title.GetGenerationSettings(titleRect.rect.size);
             settings.resizeTextForBestFit = false;
             settings.fontSize = title.resizeTextMinSize;
             settings.horizontalOverflow = HorizontalWrapMode.Wrap;
             settings.verticalOverflow = VerticalWrapMode.Overflow;
-            Assert.That(new TextGenerator().GetPreferredHeight(title.text, settings),
+            Assert.That(new TextGenerator().GetPreferredHeight(title.text, settings) / title.pixelsPerUnit,
                 Is.LessThanOrEqualTo(titleRect.rect.height + 0.5f),
                 $"{cardId} full registered title must fit without vertical truncation in {(compact ? "hand" : "detail")} view");
         }
@@ -4705,11 +4707,11 @@ namespace BiomeRivals.Demo.Tests
                 Assert.That(detailRules.resizeTextMinSize * scaledCanvas.scaleFactor, Is.LessThan(12.7f),
                     "detail card rules must not overshoot the intended minimum by a full pixel");
                 Assert.That(discountText.text, Is.EqualTo("-1"));
-                Assert.That(discountBadge.sizeDelta, Is.EqualTo(new Vector2(32f, 24f)),
+                Assert.That(discountBadge.sizeDelta, Is.EqualTo(new Vector2(42f, 32f)),
                     "the compact discount badge needs enough material area to hold readable text");
-                Assert.That(discountText.resizeTextMinSize, Is.EqualTo(15));
-                Assert.That(discountText.resizeTextMinSize * scaledCanvas.scaleFactor, Is.EqualTo(10f).Within(0.01f),
-                    "the cost change must preserve a 10px screen-space minimum at 2/3 scale");
+                Assert.That(discountText.resizeTextMinSize, Is.EqualTo(18));
+                Assert.That(discountText.resizeTextMinSize * scaledCanvas.scaleFactor, Is.EqualTo(12f).Within(0.01f),
+                    "the cost change must preserve a 12px screen-space minimum at 2/3 scale");
                 Assert.That(discountText.resizeTextMaxSize * scaledCanvas.scaleFactor, Is.EqualTo(12f).Within(0.01f));
                 Assert.That(longText.rulesText.Length, Is.GreaterThan(compactRules.text.Length));
                 Assert.That(compactRules.text, Does.EndWith("…"));
@@ -4726,7 +4728,7 @@ namespace BiomeRivals.Demo.Tests
                 lateUpdate.Invoke(discountedRoot.GetComponent<CardUI>(), null);
                 Assert.That(compactRules.resizeTextMinSize, Is.EqualTo(24));
                 Assert.That(detailRules.resizeTextMinSize, Is.EqualTo(24));
-                Assert.That(discountText.resizeTextMinSize, Is.EqualTo(20));
+                Assert.That(discountText.resizeTextMinSize, Is.EqualTo(24));
                 Assert.That(discountText.resizeTextMaxSize, Is.EqualTo(24));
                 Assert.That(compactRules.text.Length, Is.LessThanOrEqualTo(previewAtTwoThirds.Length),
                     "the preview must be remeasured when the screen scale changes");
@@ -4736,7 +4738,7 @@ namespace BiomeRivals.Demo.Tests
                 lateUpdate.Invoke(discountedRoot.GetComponent<CardUI>(), null);
                 Assert.That(compactRules.resizeTextMinSize, Is.EqualTo(12));
                 Assert.That(detailRules.resizeTextMinSize, Is.EqualTo(12));
-                Assert.That(discountText.resizeTextMinSize, Is.EqualTo(10));
+                Assert.That(discountText.resizeTextMinSize, Is.EqualTo(12));
                 Assert.That(discountText.resizeTextMaxSize, Is.EqualTo(12));
 
                 var bounds = compactRules.rectTransform.rect;

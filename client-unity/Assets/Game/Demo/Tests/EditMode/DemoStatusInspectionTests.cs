@@ -55,6 +55,124 @@ namespace BiomeRivals.Demo.Tests
             .GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic).Invoke(_controller, arguments);
         private T Find<T>(string path) where T : Component => _root.transform.Find("DemoCanvas/" + path).GetComponent<T>();
 
+        private bool ReadingKey(KeyCode key, bool reverse = false) => (bool)typeof(DemoSceneController)
+            .GetMethod("HandleReadingKey", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(_controller, new object[] { key, reverse });
+
+        [Test]
+        public void ReadingKeysStayInsideModalAndPageDuplicateInstancesWithoutGameplayChanges()
+        {
+            var match = Field<DemoLocalMatch>("_match");
+            match.ResetHand(new[] { "nt_002", "nt_002" }); Invoke("RefreshAll");
+            var entry = Find<Button>("InspectHand"); EventSystem.current.SetSelectedGameObject(entry.gameObject);
+            var revision = match.Revision; var energy = match.Energy;
+            var instances = match.HandCards.Select(card => card.handCardInstanceId).ToArray();
+            Invoke("OpenHandInspection");
+            var close = Find<Button>("HandInspectionOverlay/ReadingPanel/Close");
+            var previous = Find<Button>("HandInspectionOverlay/ReadingPanel/Previous");
+            var next = Find<Button>("HandInspectionOverlay/ReadingPanel/Next");
+            Assert.That(ReadingKey(KeyCode.Tab), Is.True);
+            Assert.That(EventSystem.current.currentSelectedGameObject, Is.EqualTo(previous.gameObject));
+            ReadingKey(KeyCode.Tab); Assert.That(EventSystem.current.currentSelectedGameObject, Is.EqualTo(next.gameObject));
+            ReadingKey(KeyCode.Tab); Assert.That(EventSystem.current.currentSelectedGameObject, Is.EqualTo(close.gameObject));
+            ReadingKey(KeyCode.Tab, true); Assert.That(EventSystem.current.currentSelectedGameObject, Is.EqualTo(next.gameObject));
+            Assert.That(close.navigation.mode, Is.EqualTo(Navigation.Mode.None));
+            Assert.That(next.navigation.mode, Is.EqualTo(Navigation.Mode.None));
+            ReadingKey(KeyCode.RightArrow);
+            Assert.That(Field<CardDetailsView>("_handInspectionDetails").CurrentCard.HandCardInstanceId, Is.EqualTo(instances[1]));
+            ReadingKey(KeyCode.LeftArrow);
+            Assert.That(Field<CardDetailsView>("_handInspectionDetails").CurrentCard.HandCardInstanceId, Is.EqualTo(instances[0]));
+            ExecuteEvents.Execute(next.gameObject, new BaseEventData(EventSystem.current), ExecuteEvents.submitHandler);
+            Assert.That(Field<CardDetailsView>("_handInspectionDetails").CurrentCard.HandCardInstanceId, Is.EqualTo(instances[1]));
+            Assert.That(Field<CanvasGroup>("_handCanvasGroup").interactable, Is.False);
+            ReadingKey(KeyCode.Escape);
+            Assert.That(EventSystem.current.currentSelectedGameObject, Is.EqualTo(entry.gameObject));
+            Assert.That(match.Revision, Is.EqualTo(revision)); Assert.That(match.Energy, Is.EqualTo(energy));
+            Assert.That(match.HandCards.Select(card => card.handCardInstanceId), Is.EqualTo(instances));
+            Assert.That(ReadingKey(KeyCode.RightArrow), Is.False);
+        }
+
+        [Test]
+        public void StatusKeysScrollLongBodyAndTabCannotReachGameplay()
+        {
+            Invoke("ShowStatus", string.Join("\n", Enumerable.Repeat("完整消息与操作说明", 100)), false);
+            Invoke("OpenStatusInspection"); Canvas.ForceUpdateCanvases();
+            var scroll = Find<ScrollRect>("StatusInspectionOverlay/ReadingPanel/Viewport");
+            var close = Find<Button>("StatusInspectionOverlay/ReadingPanel/Close");
+            ReadingKey(KeyCode.Tab); ReadingKey(KeyCode.Tab, true);
+            Assert.That(EventSystem.current.currentSelectedGameObject, Is.EqualTo(close.gameObject));
+            ReadingKey(KeyCode.End); Assert.That(scroll.verticalNormalizedPosition, Is.EqualTo(0f).Within(0.01f));
+            ReadingKey(KeyCode.Home); Assert.That(scroll.verticalNormalizedPosition, Is.EqualTo(1f).Within(0.01f));
+            ReadingKey(KeyCode.DownArrow); Assert.That(scroll.verticalNormalizedPosition, Is.LessThan(1f));
+            ReadingKey(KeyCode.UpArrow); Assert.That(scroll.verticalNormalizedPosition, Is.EqualTo(1f).Within(0.01f));
+            ReadingKey(KeyCode.PageDown); Assert.That(scroll.verticalNormalizedPosition, Is.LessThan(1f));
+            ReadingKey(KeyCode.PageUp); Assert.That(scroll.verticalNormalizedPosition, Is.EqualTo(1f).Within(0.01f));
+            Assert.That(Find<Button>("EndTurnButton").interactable, Is.False);
+            ReadingKey(KeyCode.Escape);
+            Assert.That(Find<RectTransform>("StatusInspectionOverlay").gameObject.activeSelf, Is.False);
+        }
+
+        [Test]
+        public void ChoiceReaderRestoresTheExactDuplicateOptionAfterUiRebuildWithoutConfirming()
+        {
+            var match = Field<DemoLocalMatch>("_match");
+            var pending = new PendingChoiceDto { choiceId = "duplicate-reader", playerId = "local-player", kind = "ARCHAEOLOGY_TOP_3",
+                options = new[] { new PendingChoiceOptionDto { optionIndex = 0, cardId = "nt_002", selectable = true },
+                    new PendingChoiceOptionDto { optionIndex = 1, cardId = "nt_002", selectable = true } } };
+            typeof(DemoLocalMatch).GetProperty("PendingChoice").GetSetMethod(true).Invoke(match, new object[] { pending });
+            Invoke("RefreshAll"); Invoke("AdvanceChoiceOverlayEntrance", 1f);
+            var root = Field<RectTransform>("_choiceCardsRoot");
+            var entry = root.Find("ChoiceSlot1/ReadRules").GetComponent<Button>();
+            EventSystem.current.SetSelectedGameObject(entry.gameObject);
+            var revision = match.Revision; var energy = match.Energy; var selected = Field<int>("_selectedChoiceOptionIndex");
+            entry.onClick.Invoke();
+            Assert.That(Field<int>("_choiceInspectionOptionIndex"), Is.EqualTo(1));
+            ReadingKey(KeyCode.RightArrow); ReadingKey(KeyCode.Tab); ReadingKey(KeyCode.Tab, true);
+            Assert.That(Field<int>("_choiceInspectionOptionIndex"), Is.EqualTo(1));
+            Assert.That(EventSystem.current.currentSelectedGameObject, Is.EqualTo(Find<Button>("HandInspectionOverlay/ReadingPanel/Close").gameObject));
+            ReadingKey(KeyCode.Escape);
+            var rebuilt = root.Find("ChoiceSlot1/ReadRules").GetComponent<Button>();
+            Assert.That(rebuilt, Is.Not.SameAs(entry));
+            Assert.That(EventSystem.current.currentSelectedGameObject, Is.EqualTo(rebuilt.gameObject));
+            Assert.That(match.PendingChoice, Is.SameAs(pending));
+            Assert.That(Field<int>("_selectedChoiceOptionIndex"), Is.EqualTo(selected));
+            Assert.That(match.Revision, Is.EqualTo(revision)); Assert.That(match.Energy, Is.EqualTo(energy));
+        }
+
+        [Test]
+        public void ChoiceReaderClosesWhenItsExactOptionDisappearsEvenIfSameCardRemains()
+        {
+            var match = Field<DemoLocalMatch>("_match");
+            var pending = new PendingChoiceDto { choiceId = "duplicate-retired", playerId = "local-player", kind = "ARCHAEOLOGY_TOP_3",
+                options = new[] { new PendingChoiceOptionDto { optionIndex = 0, cardId = "nt_002", selectable = true },
+                    new PendingChoiceOptionDto { optionIndex = 1, cardId = "nt_002", selectable = true } } };
+            typeof(DemoLocalMatch).GetProperty("PendingChoice").GetSetMethod(true).Invoke(match, new object[] { pending });
+            Invoke("RefreshAll"); Invoke("AdvanceChoiceOverlayEntrance", 1f);
+            Invoke("OpenChoiceRulesForOption", "nt_002", 1);
+            pending.options = new[] { pending.options[0] }; Invoke("RefreshAll");
+            Assert.That(Find<RectTransform>("HandInspectionOverlay").gameObject.activeSelf, Is.False);
+            Assert.That(Field<int>("_choiceInspectionOptionIndex"), Is.EqualTo(-1));
+            Assert.That(EventSystem.current.currentSelectedGameObject == null || EventSystem.current.currentSelectedGameObject.activeInHierarchy, Is.True);
+            Assert.That(match.PendingChoice, Is.SameAs(pending));
+        }
+
+        [TestCase(1f)]
+        [TestCase(2f / 3f)]
+        [TestCase(1024f / 1920f)]
+        public void ReadingKeyHintsRemainReadableAndFitAtWindowScales(float scale)
+        {
+            _root.transform.Find("DemoCanvas").GetComponent<Canvas>().scaleFactor = scale;
+            foreach (var typography in _root.GetComponentsInChildren<DemoHudTypography>(true)) typography.ApplyScale(scale);
+            foreach (var overlay in new[] { "HandInspectionOverlay", "StatusInspectionOverlay" })
+            {
+                var hint = Find<Text>(overlay + "/ReadingPanel/ReadOnlyHint");
+                Assert.That(hint.fontSize * scale, Is.GreaterThanOrEqualTo(12f));
+                // Text.preferredHeight/Width already convert TextGenerator pixels to UI units.
+                Assert.That(hint.preferredHeight, Is.LessThanOrEqualTo(hint.rectTransform.rect.height + 0.5f), overlay);
+                Assert.That(hint.preferredWidth, Is.LessThanOrEqualTo(hint.rectTransform.rect.width + 0.5f), overlay);
+                Assert.That(hint.text, Does.Contain("只读"));
+            }
+        }
+
         [TestCase(1f)]
         [TestCase(2f / 3f)]
         [TestCase(1024f / 1920f)]

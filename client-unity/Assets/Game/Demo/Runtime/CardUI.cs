@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using BiomeRivals.Content;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -12,7 +13,9 @@ namespace BiomeRivals.Demo
         private const float CompactRulesMinScreenFontSize = 12f;
         private const float DetailRulesMinScreenFontSize = 12f;
         private const float RulesMaxScreenFontSize = 15f;
-        private const float CostModifierMinScreenFontSize = 10f;
+        private const float IdentityMinScreenFontSize = 12f;
+        private const float NumericMinScreenFontSize = 14f;
+        private const float CostModifierMinScreenFontSize = 12f;
         private const float CostModifierMaxScreenFontSize = 12f;
         private const float UnaffordableCardAlpha = 0.8f;
         private const float DefaultArrivalAnimationDuration = 0.24f;
@@ -20,6 +23,10 @@ namespace BiomeRivals.Demo
         private static readonly Color Pale = Hex("#F1E6CB");
         private Text _rulesText;
         private Text _costModifierText;
+        private Text _nameText;
+        private Text _costText;
+        private Text _typeText;
+        private readonly List<Text> _statTexts = new List<Text>();
         private string _fullRulesText = string.Empty;
         private bool _compactRules;
         private bool _summarizeDetailRules;
@@ -69,6 +76,8 @@ namespace BiomeRivals.Demo
                 throw new InvalidOperationException("Card content is not registered: " + cardId);
             registry.TryGetTheme(definition.themeId, out var theme);
             ClearChildren();
+            _costModifierText = null;
+            _statTexts.Clear();
             CardId = cardId;
             IsCompact = compact;
             HandCardInstanceId = handCardInstanceId ?? string.Empty;
@@ -109,10 +118,20 @@ namespace BiomeRivals.Demo
 
             var h = size.y;
             var w = size.x;
-            var titleHeight = compact ? 31f : 39f;
-            var titleY = h * 0.5f - titleHeight * 0.72f;
+            var titleHeight = compact ? 60f : 39f;
+            var titleY = compact ? h * 0.5f - 40f : h * 0.5f - titleHeight * 0.72f;
             var artHeight = compact ? h * 0.34f : h * 0.33f;
             var artY = compact ? h * 0.11f : h * 0.11f;
+            if (compact)
+            {
+                var paperTop = usesStudyFrame
+                    ? DemoCardFrameProvider.GetRulesPaperBounds(definition.themeId, size).yMax
+                    : -h * 0.08f;
+                var artTop = titleY - titleHeight * 0.5f - 5f;
+                var artBottom = paperTop + 6f;
+                artHeight = Mathf.Max(16f, artTop - artBottom);
+                artY = (artTop + artBottom) * 0.5f;
+            }
 
             if (!usesStudyFrame)
             {
@@ -144,18 +163,26 @@ namespace BiomeRivals.Demo
             var titleLeft = costPosition.x + costVisualSize * 0.5f + (compact ? 5f : 8f);
             var titleRight = w * 0.5f - (compact ? 8f : 10f);
             var titleWidth = Mathf.Max(1f, titleRight - titleLeft);
+            if (compact && usesStudyFrame)
+            {
+                var titleSurface = CreateImage("NameSurface", new Vector2((titleLeft + titleRight) * 0.5f, titleY),
+                    new Vector2(titleWidth + 4f, titleHeight + 2f), Color.Lerp(Color.white, theme.FrameDark, 0.45f));
+                titleSurface.sprite = DemoCardFrameProvider.LoadTitleSurface(definition.themeId);
+                titleSurface.type = Image.Type.Simple;
+            }
             var titleName = CreateText("Name", new Vector2((titleLeft + titleRight) * 0.5f, titleY),
                 new Vector2(titleWidth, titleHeight - 2f), text.name, compact ? 15 : 20, theme.TitleText,
                 TextAnchor.MiddleCenter, FontStyle.Bold, font);
+            _nameText = titleName;
             titleName.resizeTextForBestFit = true;
-            titleName.resizeTextMinSize = compact ? 14 : 18;
-            titleName.resizeTextMaxSize = compact ? 15 : 20;
+            AddInkOutline(titleName);
             var isDiscounted = DisplayedCost < BaseCost;
-            CreateText("Cost", costPosition, new Vector2(costSize, costSize), DisplayedCost.ToString(), compact ? 18 : 23, isDiscounted ? Hex("#9CDC72") : usesStudyFrame ? Pale : Ink, TextAnchor.MiddleCenter, FontStyle.Bold, font);
+            _costText = CreateText("Cost", costPosition, new Vector2(costSize, costSize), DisplayedCost.ToString(), compact ? 18 : 23, isDiscounted ? Hex("#9CDC72") : usesStudyFrame ? Pale : Ink, TextAnchor.MiddleCenter, FontStyle.Bold, font);
+            AddInkOutline(_costText);
             if (isDiscounted)
             {
-                var modifierPosition = costPosition + new Vector2(costVisualSize * 0.35f, -costVisualSize * 0.34f);
-                var modifierSize = new Vector2(compact ? 32f : 40f, compact ? 24f : 26f);
+                var modifierPosition = costPosition + new Vector2(0f, -costVisualSize * 0.55f);
+                var modifierSize = new Vector2(42f, 32f);
                 var reduction = BaseCost - DisplayedCost;
                 var modifierLabel = "-" + reduction;
                 var badge = CreateImage("CostModifierBadge", modifierPosition, modifierSize, Hex("#173821"));
@@ -187,17 +214,30 @@ namespace BiomeRivals.Demo
             _compactRules = compact;
             _summarizeDetailRules = false;
             _appliedCanvasScale = 0f;
-            RefreshRuleTypography(true);
 
             var typeY = -h * 0.5f + (compact ? 20f : 24f);
-            CreateText("Type", new Vector2(0, typeY), new Vector2(w - 54, compact ? 20 : 24), text.typeLabel, compact ? 10 : 12, theme.TitleText, TextAnchor.MiddleCenter, FontStyle.Bold, font);
             var statSocketSize = costSize * 1.35f;
+            var hasStats = definition.hasAttack || definition.hasHealth || definition.hasDurability;
+            var typeWidth = w - (hasStats ? 50f + statSocketSize * 0.82f : 32f);
+            if (!hasStats && usesStudyFrame)
+            {
+                // Empty stat gems are decoration, not combat values. A material label must not
+                // paint across them; reuse the approved frame material as a complete footer plate.
+                var footer = CreateImage("TypeSurface", new Vector2(0f, typeY), new Vector2(w - 10f, 32f),
+                    Color.Lerp(Color.white, theme.FrameDark, 0.55f));
+                footer.sprite = DemoCardFrameProvider.LoadTitleSurface(definition.themeId);
+                footer.type = Image.Type.Simple;
+            }
+            _typeText = CreateText("Type", new Vector2(0, typeY), new Vector2(typeWidth, 30f), text.typeLabel, compact ? 14 : 16, theme.TitleText, TextAnchor.MiddleCenter, FontStyle.Bold, font);
+            AddInkOutline(_typeText);
             if (definition.hasAttack)
                 CreateStat("Attack", new Vector2(-w * 0.5f + 22, -h * 0.5f + 21), definition.attack.ToString(), statSocketSize, DemoCardFrameProvider.LoadAttackSocket(definition.themeId), theme.Accent, compact, font);
             if (definition.hasHealth)
                 CreateStat("Health", new Vector2(w * 0.5f - 22, -h * 0.5f + 21), definition.health.ToString(), statSocketSize, DemoCardFrameProvider.LoadHealthSocket(definition.themeId), theme.Accent, compact, font);
             if (definition.hasDurability)
                 CreateStat("Durability", new Vector2(w * 0.5f - 22, -h * 0.5f + 21), definition.durability.ToString(), statSocketSize, DemoCardFrameProvider.LoadHealthSocket(definition.themeId), theme.Accent, compact, font);
+            RefreshRuleTypography(true);
+            if (onClick != null) DemoUiFocusIndicator.Attach(button);
         }
 
         public void SetResourceAffordable(bool affordable)
@@ -318,7 +358,16 @@ namespace BiomeRivals.Demo
         private void CreateStat(string prefix, Vector2 position, string value, float size, Sprite socket, Color fallbackTint, bool compact, Font font)
         {
             CreateSocket(prefix + "SocketFrame", position, size, socket, fallbackTint);
-            CreateText(prefix, position, new Vector2(size * 0.72f, size * 0.72f), value, compact ? 15 : 20, Pale, TextAnchor.MiddleCenter, FontStyle.Bold, font);
+            var text = CreateText(prefix, position, new Vector2(size * 0.82f, size * 0.82f), value, compact ? 18 : 22, Pale, TextAnchor.MiddleCenter, FontStyle.Bold, font);
+            AddInkOutline(text);
+            _statTexts.Add(text);
+        }
+
+        private static void AddInkOutline(Text text)
+        {
+            var outline = text.gameObject.AddComponent<Outline>();
+            outline.effectColor = new Color(0.035f, 0.04f, 0.035f, 0.95f);
+            outline.effectDistance = new Vector2(1f, -1f);
         }
 
         private Image CreateSocket(string name, Vector2 position, float size, Sprite sprite, Color fallbackTint)
@@ -352,6 +401,7 @@ namespace BiomeRivals.Demo
             text.horizontalOverflow = HorizontalWrapMode.Wrap;
             text.verticalOverflow = VerticalWrapMode.Truncate;
             text.raycastTarget = false;
+            text.supportRichText = false;
             return text;
         }
 
@@ -380,6 +430,17 @@ namespace BiomeRivals.Demo
             var canvasScale = GetCanvasScaleFactor(scaleReference);
             if (!force && Mathf.Abs(canvasScale - _appliedCanvasScale) < 0.001f) return;
 
+            if (_nameText != null)
+            {
+                _nameText.resizeTextMinSize = Mathf.CeilToInt(IdentityMinScreenFontSize / canvasScale);
+                _nameText.resizeTextMaxSize = Mathf.Max(_nameText.resizeTextMinSize, IsCompact ? 15 : 20);
+                _nameText.SetAllDirty();
+            }
+            ApplyIdentityTypography(_costText, IsCompact ? 18 : 23, NumericMinScreenFontSize, canvasScale);
+            ApplyIdentityTypography(_typeText, IsCompact ? 14 : 16, IdentityMinScreenFontSize, canvasScale);
+            foreach (var stat in _statTexts)
+                ApplyIdentityTypography(stat, IsCompact ? 18 : 22, NumericMinScreenFontSize, canvasScale);
+
             if (_rulesText != null)
             {
                 var minimumScreenFontSize = _compactRules ? CompactRulesMinScreenFontSize : DetailRulesMinScreenFontSize;
@@ -402,6 +463,13 @@ namespace BiomeRivals.Demo
             }
 
             _appliedCanvasScale = canvasScale;
+        }
+
+        private static void ApplyIdentityTypography(Text text, int authoredSize, float minimumScreenSize, float scale)
+        {
+            if (text == null) return;
+            text.resizeTextForBestFit = false;
+            text.fontSize = DemoUiMetrics.GetScreenReadableFontSize(authoredSize, minimumScreenSize, scale);
         }
 
         private RectTransform CreateRect(string name, Vector2 position, Vector2 size)

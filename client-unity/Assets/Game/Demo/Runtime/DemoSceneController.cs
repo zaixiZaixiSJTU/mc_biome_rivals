@@ -335,12 +335,24 @@ namespace BiomeRivals.Demo
         {
             TickAgent();
             AdvanceChoiceOverlayEntrance(Time.unscaledDeltaTime);
-            if (!Input.GetKeyDown(KeyCode.Escape) && !Input.GetMouseButtonDown(1)) return;
-            if (_statusInspectionOpen) { CloseStatusInspection(); return; }
-            if (IsHandInspectionOpen) { CloseHandInspection(); return; }
-            if (MatchView.IsFinished || MatchView.PendingChoice != null) return;
-            if (IsOnlineBoard && !_onlineSession.CanIssueCommand) return;
-            CancelCurrentInteraction();
+            if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
+            {
+                if (HandleReadingKey(KeyCode.Escape)) return;
+                if (MatchView.IsFinished || MatchView.PendingChoice != null) return;
+                if (IsOnlineBoard && !_onlineSession.CanIssueCommand) return;
+                CancelCurrentInteraction();
+                return;
+            }
+            if (Input.GetKeyDown(KeyCode.Tab))
+            {
+                var reverse = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+                if (!HandleReadingKey(KeyCode.Tab, reverse) && _canvasRoot != null)
+                    DemoUiNavigation.FocusNext(EventSystem.current, _canvasRoot.GetComponentsInChildren<Selectable>(), reverse);
+                return;
+            }
+            if (!IsReadOnlyOverlayOpen) return;
+            foreach (var key in ReadingKeys)
+                if (Input.GetKeyDown(key)) { HandleReadingKey(key); return; }
         }
 
         public void BuildNow()
@@ -4178,6 +4190,13 @@ namespace BiomeRivals.Demo
                 _statusText.color = !match.HasWinner ? Gold : match.IsPlayerWinner ? Cyan : Danger;
             }
             RefreshStatusInspection();
+            if (_handInspectionRestoreFocusPending)
+            {
+                _handInspectionRestoreFocusPending = false;
+                DemoUiNavigation.RestoreFocus(EventSystem.current, _handInspectionPreviousFocus,
+                    _handInspectionButton, _statusInspectionButton);
+                _handInspectionPreviousFocus = null;
+            }
         }
 
         private void RefreshPendingChoice()
@@ -4339,7 +4358,7 @@ namespace BiomeRivals.Demo
             if (option.selectable) card.gameObject.AddComponent<DemoHoverScale>().Configure(1.045f, 16f);
             var readRules = CreateSecondaryButton(slot, "ReadRules", new Vector2(0, fullChoiceCard ? -174 : -130),
                 new Vector2(160, 24), "查看完整规则", 14);
-            readRules.onClick.AddListener(() => OpenChoiceRules(option.cardId));
+            readRules.onClick.AddListener(() => OpenChoiceRulesForOption(option.cardId, optionIndex));
             CreateText(slot, "ChoiceLabel", new Vector2(0, fullChoiceCard ? -204 : -158),
                 new Vector2(fullChoiceCard ? 248 : 188, 30),
                 topCardScry
@@ -7589,6 +7608,7 @@ namespace BiomeRivals.Demo
             ConfigureButtonColors(button, DemoUiStyleCatalog.GetFrameTint(styleClass), DemoUiStyleCatalog.GetInteractionTint(styleClass));
             ConfigureHoverScale(root.gameObject, 1.035f, 16f);
             CreateText(root, "Label", Vector2.zero, size - new Vector2(12, 8), label, fontSize, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
+            DemoUiFocusIndicator.Attach(button);
             return button;
         }
 

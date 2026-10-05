@@ -43,6 +43,7 @@ namespace BiomeRivals.Demo
 
         private static readonly Rect[] AttackSocketRects = CreateBottomSocketRects(false);
         private static readonly Rect[] HealthSocketRects = CreateBottomSocketRects(true);
+        private static readonly Rect[] TitleSurfaceRects = CreateTitleSurfaceRects();
 
         // Measured, ornament-free paper interiors in frame-local SOURCE pixels (bottom-left).
         // Keep these beside the slice registration: changing a frame must review both registrations.
@@ -85,6 +86,20 @@ namespace BiomeRivals.Demo
 
         public static Sprite LoadHealthSocket(string themeId) =>
             LoadSlice(themeId, HealthSocketRects, "CardHealthSocket_", "_health");
+
+        public static Sprite LoadTitleSurface(string themeId) =>
+            LoadSlice(themeId, TitleSurfaceRects, "CardTitleSurface_", "_title");
+
+        private static Rect[] CreateTitleSurfaceRects()
+        {
+            var rects = new Rect[FrameRects.Length];
+            for (var index = 0; index < rects.Length; index++)
+            {
+                var frame = FrameRects[index];
+                rects[index] = new Rect(frame.x + 82f, frame.y + 451f, frame.width - 98f, 44f);
+            }
+            return rects;
+        }
 
         private static Rect[] CreateBottomSocketRects(bool right)
         {
